@@ -4,29 +4,17 @@
 
 package fibmap
 
-// #include <fcntl.h>
-// #include <linux/fiemap.h>
-// #include <linux/fs.h>
-// #include <sys/ioctl.h>
-//
-// void figetbsz() {
-//     int fd, blocksize;
-//     ioctl(fd, FIGETBSZ, &blocksize);
-// }
-//
-// void fibmap() {
-//     int fd, block;
-//     ioctl(fd, FIBMAP, &block);
-// }
-//
-// void fiemap() {
-//     int fd, fiemap;
-//     ioctl(fd, FS_IOC_FIEMAP, &fiemap);
-// }
+// #include "fibmap.h"
 import "C"
 
 func Fibmap() {
+	C.fibmap()
 }
 
 func Fiemap() {
+	C.fiemap()
+}
+
+func Figetbsz() {
+	C.figetbsz()
 }
