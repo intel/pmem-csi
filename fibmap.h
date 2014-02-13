@@ -6,7 +6,7 @@
 #include <linux/fs.h>
 #include <sys/ioctl.h>
 
-extern void fibmap();
+extern int fibmap(int, int, int*);
 extern void fiemap();
 extern int figetbsz(int, int*);
 

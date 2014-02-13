@@ -7,8 +7,9 @@ package fibmap
 // #include "fibmap.h"
 import "C"
 
-func Fibmap() {
-	C.fibmap()
+func Fibmap(fd uintptr, block int) (int, int) {
+	var err C.int
+	return int(C.fibmap(C.int(fd), C.int(block), &err)), int(err)
 }
 
 func Fiemap() {

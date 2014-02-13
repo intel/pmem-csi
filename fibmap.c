@@ -5,10 +5,9 @@
 #include "fibmap.h"
 #include <stdio.h>
 
-void fibmap() {
-   int fd, block;
-   ioctl(fd, FIBMAP, &block);
-   printf("this is fibmap in C\n");
+int fibmap(int fd, int block, int* err) {
+    (*err) = ioctl(fd, FIBMAP, &block);
+    return block;
 }
 
 void fiemap() {
