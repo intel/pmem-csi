@@ -17,8 +17,8 @@ void fiemap() {
    printf("this is fiemap in C\n");
 }
 
-void figetbsz() {
-   int fd, blocksize;
-   ioctl(fd, FIGETBSZ, &blocksize);
-   printf("this is figetbsz in C\n");
+int figetbsz(int fd, int* err) {
+    int blocksize = 0;
+    (*err) = ioctl(fd, FIGETBSZ, &blocksize);
+    return blocksize;
 }

@@ -15,6 +15,7 @@ func Fiemap() {
 	C.fiemap()
 }
 
-func Figetbsz() {
-	C.figetbsz()
+func Figetbsz(fd uintptr) (int, int) {
+	var err C.int
+	return int(C.figetbsz(C.int(fd), &err)), int(err)
 }

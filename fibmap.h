@@ -8,6 +8,6 @@
 
 extern void fibmap();
 extern void fiemap();
-extern void figetbsz();
+extern int figetbsz(int, int*);
 
 #endif // _FS1UP_FIBMAP_H
