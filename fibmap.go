@@ -67,12 +67,23 @@ type Extent struct {
 	Reserved   [3]uint32
 }
 
-func Fibmap(fd uintptr, block uint) (uint, syscall.Errno) {
-	_, _, err := syscall.Syscall(syscall.SYS_IOCTL, fd, FIBMAP, uintptr(unsafe.Pointer(&block)))
+type FibmapFile struct {
+	*os.File
+}
+
+// return a new FibmapFile
+func NewFibmapFile(f *os.File) FibmapFile {
+	return FibmapFile{f}
+}
+
+// call FIBMAP ioctl
+func (f FibmapFile) Fibmap(block uint) (uint, syscall.Errno) {
+	_, _, err := syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), FIBMAP, uintptr(unsafe.Pointer(&block)))
 	return block, err
 }
 
-func Fiemap(fd uintptr, size uint32) ([]Extent, syscall.Errno) {
+// call FIEMAP ioctl
+func (f FibmapFile) Fiemap(size uint32) ([]Extent, syscall.Errno) {
 	extents := make([]Extent, size+1)
 	ptr := unsafe.Pointer(uintptr(unsafe.Pointer(&extents[1])) - FIEMAP_SIZE)
 
@@ -82,21 +93,21 @@ func Fiemap(fd uintptr, size uint32) ([]Extent, syscall.Errno) {
 	t.Flags = FIEMAP_FLAG_SYNC
 	t.Extent_count = size
 
-	_, _, err := syscall.Syscall(syscall.SYS_IOCTL, fd, FS_IOC_FIEMAP, uintptr(ptr))
+	_, _, err := syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), FS_IOC_FIEMAP, uintptr(ptr))
 
 	return extents[1 : 1+t.Mapped_extents], err
 }
 
-func Figetbsz(fd uintptr) (int, syscall.Errno) {
+// call FIGETBSZ ioctl
+func (f FibmapFile) Figetbsz() (int, syscall.Errno) {
 	bsz := int(0)
-	_, _, err := syscall.Syscall(syscall.SYS_IOCTL, fd, FIGETBSZ, uintptr(unsafe.Pointer(&bsz)))
+	_, _, err := syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), FIGETBSZ, uintptr(unsafe.Pointer(&bsz)))
 	return bsz, err
 }
 
 // use SEEK_DATA, SEEK_HOLE to find allocated data ranges in a file
-func Datahole(f *os.File) []int64 {
+func (f FibmapFile) SeekDataHole() []int64 {
 	old, _ := f.Seek(0, os.SEEK_CUR)
-	f.Seek(0, os.SEEK_SET)
 
 	var data, hole int64
 	var datahole []int64
