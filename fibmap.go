@@ -82,6 +82,67 @@ func (f FibmapFile) Fibmap(block uint) (uint, syscall.Errno) {
 	return block, err
 }
 
+// emulate FIEMAP with FIBMAP
+func (f FibmapFile) FibmapExtents() ([]Extent, syscall.Errno) {
+	result := make([]Extent, 0)
+
+	bsz, err := f.Figetbsz()
+	if err != 0 {
+		return nil, err
+	}
+
+	stat, _ := f.Stat()
+	size := stat.Size()
+	if size == 0 {
+		return result, syscall.Errno(0)
+	}
+
+	blocks := uint((size-1)/int64(bsz)) + 1
+	var block, physical, length uint
+	var e Extent
+
+	for i := uint(0); i < blocks; i++ {
+		block = i
+		_, _, err = syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), FIBMAP, uintptr(unsafe.Pointer(&block)))
+		if block == 0 && physical == 0 {
+			// hole
+			continue
+		}
+
+		if block == 0 {
+			// hole after extent
+			e.Length = uint64(length) * uint64(bsz)
+			result = append(result, e)
+			length = 0
+			physical = 0
+			continue
+		}
+
+		if block == physical {
+			// segment
+			length++
+			physical++
+			continue
+		}
+
+		// new extent
+		e = Extent{}
+		e.Logical = uint64(i) * uint64(bsz)
+		e.Physical = uint64(block) * uint64(bsz)
+
+		length = 1
+		physical = block + 1
+	}
+
+	if length > 0 {
+		// final extent
+		e.Length = uint64(length) * uint64(bsz)
+		result = append(result, e)
+	}
+
+	return result, err
+}
+
 // call FIEMAP ioctl
 func (f FibmapFile) Fiemap(size uint32) ([]Extent, syscall.Errno) {
 	extents := make([]Extent, size+1)
