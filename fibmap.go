@@ -44,6 +44,11 @@ const (
 	FIEMAP_EXTENT_UNWRITTEN      = 0x0800 // Space allocated, but no data (i.e. zero).
 	FIEMAP_EXTENT_MERGED         = 0x1000 // File does not natively support extents. Result merged for efficiency.
 	FIEMAP_EXTENT_SHARED         = 0x2000 // Space shared with other files.
+
+	// Defined in <linux/falloc.h>:
+	FALLOC_FL_KEEP_SIZE    = 0x01 // default is extend size
+	FALLOC_FL_PUNCH_HOLE   = 0x02 // de-allocates range
+	FALLOC_FL_NO_HIDE_STAE = 0x04 // reserved codepoint
 )
 
 // based on struct fiemap from <linux/fiemap.h>
@@ -190,4 +195,14 @@ func (f FibmapFile) SeekDataHole() []int64 {
 	f.Seek(old, os.SEEK_SET)
 
 	return datahole
+}
+
+// allocate using fallocate
+func (f FibmapFile) Fallocate(offset int64, length int64) error {
+	return syscall.Fallocate(int(f.Fd()), 0, offset, length)
+}
+
+// punch hole using fallocate
+func (f FibmapFile) PunchHole(offset int64, length int64) error {
+	return syscall.Fallocate(int(f.Fd()), FALLOC_FL_KEEP_SIZE|FALLOC_FL_PUNCH_HOLE, offset, length)
 }
