@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	FIEMAP_EXTENT_SIZE = 56 // sizeof(struct fiemap_extent)
-	FIEMAP_SIZE        = 32 // sizeof(struct fiemap)
+	FiemapExtentSize = 56 // sizeof(struct fiemap_extent)
+	FiemapSize       = 32 // sizeof(struct fiemap)
 
 	// Defined in <linux/fs.h>:
 	SEEK_SET      = 0 // seek relative to beginning of file
@@ -151,7 +151,7 @@ func (f FibmapFile) FibmapExtents() ([]Extent, syscall.Errno) {
 // call FIEMAP ioctl
 func (f FibmapFile) Fiemap(size uint32) ([]Extent, syscall.Errno) {
 	extents := make([]Extent, size+1)
-	ptr := unsafe.Pointer(uintptr(unsafe.Pointer(&extents[1])) - FIEMAP_SIZE)
+	ptr := unsafe.Pointer(uintptr(unsafe.Pointer(&extents[1])) - FiemapSize)
 
 	t := (*fiemap)(ptr)
 	t.Start = 0
