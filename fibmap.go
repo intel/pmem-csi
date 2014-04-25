@@ -1,6 +1,5 @@
-// This file is part of fs1up.
 // Copyright (C) 2014 Andreas Klauer <Andreas.Klauer@metamorpher.de>
-// License: GPL-2
+// License: MIT
 
 // Package fibmap implements FIBMAP/FIEMAP and related Linux ioctl
 // for dealing with low level file allocation.
