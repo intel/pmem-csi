@@ -129,6 +129,12 @@ func (f FibmapFile) FibmapExtents() ([]Extent, syscall.Errno) {
 			continue
 		}
 
+		if block != physical && physical != 0 {
+			//not continuous segment
+			e.Length = uint64(length) * uint64(bsz)
+			result = append(result, e)
+		}
+		
 		// new extent
 		e = Extent{}
 		e.Logical = uint64(i) * uint64(bsz)
