@@ -7,26 +7,27 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
+	"encoding/json"
 	"fmt"
 
-        "github.com/golang/glog"
-	"github.com/pborman/uuid"
+	"github.com/golang/glog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
 
-	"github.com/intel/pmem-csi/pkg/pmem-common"
 	"github.com/intel/pmem-csi/pkg/ndctl"
+	"github.com/intel/pmem-csi/pkg/pmem-common"
 )
 
 const (
-        deviceID           = "deviceID"
+	deviceID = "deviceID"
 )
 
 type controllerServer struct {
- 	*DefaultControllerServer
+	*DefaultControllerServer
+	ctx *ndctl.Context
 }
 
 func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
@@ -35,26 +36,27 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		return nil, err
 	}
 
-        volName := req.GetName()
-	glog.Infof("CreateVolume: Name: %v", volName)
+	volName := req.GetName()
+	asked := uint64(req.GetCapacityRange().GetRequiredBytes())
+	glog.Infof("CreateVolume: Name: %v, Size: %v", volName, asked)
 	// Check arguments
 	if len(volName) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Name missing in request")
 	}
 	if req.GetVolumeCapabilities() == nil {
 		return nil, status.Error(codes.InvalidArgument, "Volume Capabilities missing in request")
-	} 
+	}
 	// Check for existing volume. If found, check does this fit into already allocated capacity
-        asked := uint64(req.GetCapacityRange().GetRequiredBytes())
-	if exVol, VolSize, err := ndctl.GetBlockDevByName(volName); err == nil {
+
+	if ns, err := cs.ctx.GetNamespaceByName(volName); err == nil {
 		// Check if the size of exisiting volume new can cover the new request
-	        glog.Infof("CreateVolume: Vol %s exists, Size: %v", exVol, VolSize)
-		if VolSize >= asked {
+		glog.Infof("CreateVolume: Vol %s exists, Size: %v", ns.Name(), ns.Size())
+		if ns.Size() >= asked {
 			// exisiting volume is compatible with new request and should be reused.
 			return &csi.CreateVolumeResponse{
 				Volume: &csi.Volume{
 					Id:            volName,
-					CapacityBytes: int64(VolSize),
+					CapacityBytes: int64(ns.Size()),
 					Attributes:    req.GetParameters(),
 				},
 			}, nil
@@ -62,26 +64,32 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		return nil, status.Error(codes.AlreadyExists, fmt.Sprintf("Volume with the same name: %s but with different size already exist", volName))
 	}
 	// Check for available unallocated capacity
-	available_size, err := ndctl.GetAvailableSize() 
-	if err != nil {
-		pmemcommon.Infof(3, ctx, "failed to get AvailSize: %v", err)
- 		return nil, err
-	}
-	glog.Infof("CreateVolume: AvailableSize:  %v", available_size)
-	glog.Infof("CreateVolume: Asked capacity: %v", asked)
-	if asked > available_size {
-		return nil, status.Errorf(codes.OutOfRange, "Requested capacity %d exceeds available capacity %d", asked, available_size)
-	}
+	// available_size, err := ndctl.GetAvailableSize()
+	// if err != nil {
+	// 	pmemcommon.Infof(3, ctx, "failed to get AvailSize: %v", err)
+	// 	return nil, err
+	// }
+	//glog.Infof("CreateVolume: AvailableSize:  %v", available_size)
+	//glog.Infof("CreateVolume: Asked capacity: %v", asked)
+	// if asked > available_size {
+	// 	return nil, status.Errorf(codes.OutOfRange, "Requested capacity %d exceeds available capacity %d", asked, available_size)
+	// }
 	// Create namespace
-	err = ndctl.CreateNamespace(asked, volName)
+	ns, err := cs.ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
+		Size: asked,
+		Name: volName,
+	})
 	if err != nil {
 		pmemcommon.Infof(3, ctx, "failed to create namespace: %v", err)
- 		return nil, err
+		return nil, err
 	}
-        // TODO: do we need to create this uuid here, can we use something else as volumeID?
+	data, _ := ns.MarshalJSON()
+	glog.Infof("Namespace crated: %v", data)
+	// TODO: do we need to create this uuid here, can we use something else as volumeID?
 	// I think this volumeID has been inherited here from hostpath driver
-        volumeID := uuid.NewUUID().String()
-        return &csi.CreateVolumeResponse{
+	// volumeID := ns.UUID().String()
+	volumeID := ns.Name()
+	return &csi.CreateVolumeResponse{
 		Volume: &csi.Volume{
 			Id:            volumeID,
 			CapacityBytes: int64(asked),
@@ -104,10 +112,10 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 	volumeID := req.VolumeId
 	glog.Infof("DeleteVolume: volumeID: %v", volumeID)
 	pmemcommon.Infof(4, ctx, "deleting volume %s", volumeID)
-        // TODO: should we wipe the space here+?
+	// TODO: should we wipe the space here+?
 	// for privacy, somewhere we need to wipe. But where, and what about performance hit.
-        if err := ndctl.DeleteNamespace(volumeID); err != nil {
-	        return nil, err
+	if err := cs.ctx.DestroyNamespaceByName(volumeID); err != nil {
+		return nil, err
 	}
 	return &csi.DeleteVolumeResponse{}, nil
 }
@@ -132,31 +140,31 @@ func (cs *controllerServer) ValidateVolumeCapabilities(ctx context.Context, req 
 
 func (cs *controllerServer) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
 
-        // List namespaces
-	err, names, sizes := ndctl.ListNamespaces() 
-	if err != nil {
-		pmemcommon.Infof(3, ctx, "failed to list namespaces: %v", err)
- 		return nil, err
-	}
+	// List namespaces
+	nss := cs.ctx.GetAllNamesapaces()
 
-        var entries []*csi.ListVolumesResponse_Entry
-        for i := range names {
-                //glog.Infof("name[%d] is: %v", i, names[i])
-                //glog.Infof("size[%d] is: %v", i, sizes[i])
-                info := &csi.Volume{
-			Id:            names[i],
-			CapacityBytes: int64(sizes[i]),
+	var entries []*csi.ListVolumesResponse_Entry
+	for _, ns := range nss {
+		data, _ := json.MarshalIndent(ns, "", " ")
+		glog.Info("Namespace:", string(data[:]))
+		//glog.Infof("namespace BlockDevName: %v, Size: %v", ns.BlockDeviceName(), ns.Size())
+		info := &csi.Volume{
+			Id:            ns.Name(),
+			CapacityBytes: int64(ns.Size()),
 			Attributes:    nil,
-                }
-                entry := &csi.ListVolumesResponse_Entry{info,*new(struct {}),nil,0}
-                entries = append(entries, entry)
-        }
-        response := &csi.ListVolumesResponse{
-                entries,
-                "",
-		*new(struct {}),
-		nil,
-		0,
-        }
-        return response, nil
+		}
+		entry := &csi.ListVolumesResponse_Entry{
+			Volume:               info,
+			XXX_NoUnkeyedLiteral: *new(struct{}),
+			XXX_unrecognized:     nil,
+			XXX_sizecache:        0,
+		}
+		entries = append(entries, entry)
+	}
+	response := &csi.ListVolumesResponse{
+		Entries:              entries,
+		NextToken:            "",
+		XXX_NoUnkeyedLiteral: *new(struct{}),
+	}
+	return response, nil
 }

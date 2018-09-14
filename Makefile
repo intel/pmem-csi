@@ -26,7 +26,7 @@ test:
 	go vet $(IMPORT_PATH)/pkg/...
 
 pmem-csi-driver:
-	CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-extldflags "-static"' -o _output/$@ ./cmd/$@
+	GOOS=linux go build -a -o _output/$@ ./cmd/$@
 
 %-container: %
 	docker build -t $(IMAGE_TAG) -f ./cmd/$*/Dockerfile .

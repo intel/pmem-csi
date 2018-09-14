@@ -58,13 +58,6 @@ package ndctl
 //     default_options.align = SZ_2M;
 //}
 //
-//static int _is_namespace_active(struct ndctl_namespace *ndns) {
-//     return ndns && (ndctl_namespace_is_enabled(ndns)
-// 		            || ndctl_namespace_get_pfn(ndns)
-// 		            || ndctl_namespace_get_dax(ndns)
-// 		            || ndctl_namespace_get_btt(ndns));
-//}
-//
 //int ndctl_region_create_namespace(struct ndctl_region *region,
 //         struct ndctl_namespace_create_opts *opts,
 //         struct ndctl_namespace **ndns_out) {
@@ -97,7 +90,7 @@ package ndctl
 //  }
 //
 //  ndns = ndctl_region_get_namespace_seed(region);
-//  if (!ndns || _is_namespace_active(ndns)) {
+//  if (!ndns || ndctl_namespace_is_active(ndns)) {
 //		warn("No available namespace found in region %s\n", region_name);
 //		return -EAGAIN;
 //	}
@@ -383,15 +376,26 @@ func (b *Bus) Dimms() []*Dimm {
 	return dimms
 }
 
-//Regions returns regions available in bus
-func (b *Bus) Regions() []*Region {
+func (b *Bus) regions(onlyActive bool) []*Region {
 	var regions []*Region
 	ndbus := (*C.struct_ndctl_bus)(b)
 	for ndr := C.ndctl_region_get_first(ndbus); ndr != nil; ndr = C.ndctl_region_get_next(ndr) {
-		regions = append(regions, (*Region)(ndr))
+		if !onlyActive || int(C.ndctl_region_is_enabled(ndr)) == 1 {
+			regions = append(regions, (*Region)(ndr))
+		}
 	}
 
 	return regions
+}
+
+//ActiveRegions returns all active regions in the bus
+func (b *Bus) ActiveRegions() []*Region {
+	return b.regions(true)
+}
+
+//AllRegions returns all regions in the bus including disabled regions
+func (b *Bus) AllRegions() []*Region {
+	return b.regions(false)
 }
 
 //GetRegionByPhysicalAddress Find region by physical address
@@ -406,7 +410,7 @@ func (b *Bus) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]interface{}{
 		"provider": b.Provider(),
 		"dev":      b.DeviceName(),
-		"regions":  b.Regions(),
+		"regions":  b.ActiveRegions(),
 		"dimms":    b.Dimms(),
 	})
 }
@@ -500,16 +504,27 @@ func (r *Region) Type() string {
 	return C.GoString(C.ndctl_region_get_type_name(ndr))
 }
 
-//Namespaces returns available namespaces in the region
-func (r *Region) Namespaces() []*Namespace {
+func (r *Region) namespaces(onlyActive bool) []*Namespace {
 	var namespaces []*Namespace
 	ndr := (*C.struct_ndctl_region)(r)
 
 	for ndns := C.ndctl_namespace_get_first(ndr); ndns != nil; ndns = C.ndctl_namespace_get_next(ndns) {
-		namespaces = append(namespaces, (*Namespace)(ndns))
+		if !onlyActive || C.ndctl_namespace_is_active(ndns) == true {
+			namespaces = append(namespaces, (*Namespace)(ndns))
+		}
 	}
 
 	return namespaces
+}
+
+//ActiveNamespaces returns all active namespaces in the region
+func (r *Region) ActiveNamespaces() []*Namespace {
+	return r.namespaces(true)
+}
+
+//AllNamespaces returns all namespaces in the region
+func (r *Region) AllNamespaces() []*Namespace {
+	return r.namespaces(false)
 }
 
 //Bus get assosiated bus
@@ -534,7 +549,7 @@ func (r *Region) DestroyNamespace(ns *Namespace, force bool) error {
 	ndr := (*C.struct_ndctl_region)(r)
 	ndns := (*C.struct_ndctl_namespace)(ns)
 	if ndns == nil {
-		return fmt.Errorf("invalid null namespace")
+		return fmt.Errorf("null namespace")
 	}
 	rc := C.ndctl_region_destroy_namespace(ndr, ndns, C.bool(force))
 	if int(rc) != 0 {
@@ -552,7 +567,7 @@ func (r *Region) MarshalJSON() ([]byte, error) {
 		"size":                 r.Size(),
 		"available_size":       r.AvailableSize(),
 		"max_available_extent": r.MaxAvailabeExtent(),
-		"namespaces":           r.Namespaces(),
+		"namespaces":           r.ActiveNamespaces(),
 		"mappings":             r.Mappings(),
 	})
 }
@@ -581,13 +596,52 @@ func (ns *Namespace) DeviceName() string {
 //BlockDeviceName return namespace block device name
 func (ns *Namespace) BlockDeviceName() string {
 	ndns := (*C.struct_ndctl_namespace)(ns)
-	return C.GoString(C.ndctl_namespace_get_block_device(ndns))
+	if dax := C.ndctl_namespace_get_dax(ndns); dax != nil {
+		/* Chardevice */
+		return ""
+	}
+	var dev *C.char
+	btt := C.ndctl_namespace_get_btt(ndns)
+	pfn := C.ndctl_namespace_get_pfn(ndns)
+
+	if btt != nil {
+		dev = C.ndctl_btt_get_block_device(btt)
+	} else if pfn != nil {
+		dev = C.ndctl_pfn_get_block_device(pfn)
+	} else {
+		dev = C.ndctl_namespace_get_block_device(ndns)
+	}
+
+	return C.GoString(dev)
 }
 
 //Size returns size of the namespace
 func (ns *Namespace) Size() uint64 {
+	var size C.ulonglong
+
 	ndns := (*C.struct_ndctl_namespace)(ns)
-	return uint64(C.ndctl_namespace_get_size(ndns))
+	cmode := C.ndctl_namespace_get_mode(ndns)
+
+	switch cmode {
+	case C.NDCTL_NS_MODE_MEMORY:
+		if pfn := C.ndctl_namespace_get_pfn(ndns); pfn != nil {
+			size = C.ndctl_pfn_get_size(pfn)
+		} else {
+			size = C.ndctl_namespace_get_size(ndns)
+		}
+	case C.NDCTL_NS_MODE_DAX:
+		if dax := C.ndctl_namespace_get_dax(ndns); dax != nil {
+			size = C.ndctl_dax_get_size(dax)
+		}
+	case C.NDCTL_NS_MODE_SAFE:
+		if btt := C.ndctl_namespace_get_btt(ndns); btt != nil {
+			size = C.ndctl_btt_get_size(btt)
+		}
+	case C.NDCTL_NS_MODE_RAW:
+		size = C.ndctl_namespace_get_size(ndns)
+	}
+
+	return uint64(size)
 }
 
 //Mode returns namesapce mode
@@ -613,7 +667,19 @@ func (ns *Namespace) UUID() uuid.UUID {
 	ndns := (*C.struct_ndctl_namespace)(ns)
 	var cuid C.uuid_t
 
-	C.ndctl_namespace_get_uuid(ndns, &cuid[0])
+	btt := C.ndctl_namespace_get_btt(ndns)
+	dax := C.ndctl_namespace_get_dax(ndns)
+	pfn := C.ndctl_namespace_get_pfn(ndns)
+
+	if btt != nil {
+		C.ndctl_btt_get_uuid(btt, &cuid[0])
+	} else if pfn != nil {
+		C.ndctl_pfn_get_uuid(pfn, &cuid[0])
+	} else if dax != nil {
+		C.ndctl_dax_get_uuid(dax, &cuid[0])
+	} else if C.ndctl_namespace_get_type(ndns) != C.ND_DEVICE_NAMESPACE_IO {
+		C.ndctl_namespace_get_uuid(ndns, &cuid[0])
+	}
 	uidbytes := C.GoBytes(unsafe.Pointer(&cuid[0]), C.sizeof_uuid_t)
 	_uuid, err := uuid.FromBytes(uidbytes)
 	if err != nil {
@@ -624,16 +690,60 @@ func (ns *Namespace) UUID() uuid.UUID {
 	return _uuid
 }
 
+//Location returns namesapce mapping location
+func (ns *Namespace) Location() string {
+	ndns := (*C.struct_ndctl_namespace)(ns)
+	locations := map[uint32]string{
+		C.NDCTL_PFN_LOC_NONE: "none",
+		C.NDCTL_PFN_LOC_RAM:  "mem",
+		C.NDCTL_PFN_LOC_PMEM: "dev",
+	}
+	mode := C.ndctl_namespace_get_mode(ndns)
+
+	switch mode {
+	case C.NDCTL_NS_MODE_MEMORY:
+		if pfn := C.ndctl_namespace_get_pfn(ndns); pfn != nil {
+			return locations[C.ndctl_pfn_get_location(pfn)]
+		} else {
+			return locations[C.NDCTL_PFN_LOC_RAM]
+		}
+	case C.NDCTL_NS_MODE_DAX:
+		if dax := C.ndctl_namespace_get_dax(ndns); dax != nil {
+			return locations[C.ndctl_dax_get_location(dax)]
+		}
+	}
+
+	return locations[C.NDCTL_PFN_LOC_NONE]
+}
+
+//Region returns referenct to Region that this namespace is part of
+func (ns *Namespace) Region() *Region {
+	ndns := (*C.struct_ndctl_namespace)(ns)
+	return (*Region)(C.ndctl_namespace_get_region(ndns))
+
+}
+
 //MarshalJSON returns json encoding of namespace
 func (ns *Namespace) MarshalJSON() ([]byte, error) {
-	return json.Marshal(map[string]interface{}{
-		"id":       ns.ID(),
-		"dev":      ns.DeviceName(),
-		"mode":     ns.Mode(),
-		"size":     ns.Size(),
-		"blockdev": ns.BlockDeviceName(),
-		"enabled":  ns.Enabled(),
-	})
+
+	props := map[string]interface{}{
+		"id":      ns.ID(),
+		"dev":     ns.DeviceName(),
+		"mode":    ns.Mode(),
+		"size":    ns.Size(),
+		"enabled": ns.Enabled(),
+		"uuid":    ns.UUID(),
+	}
+
+	if mode := ns.Mode(); mode != DAX {
+		props["blockdev"] = ns.BlockDeviceName()
+	}
+
+	if location := ns.Location(); location != "none" {
+		props["map"] = location
+	}
+
+	return json.Marshal(props)
 }
 
 //NamespaceMode represetns mode of the namespace
@@ -762,18 +872,18 @@ func (ctx *Context) Free() {
 }
 
 // GetBuses returns available buses
-func (ctx *Context) GetBuses() ([]*Bus, error) {
+func (ctx *Context) GetBuses() []*Bus {
 	var buses []*Bus
 	ndctx := (*C.struct_ndctl_ctx)(ctx)
 
 	for ndbus := C.ndctl_bus_get_first(ndctx); ndbus != nil; ndbus = C.ndctl_bus_get_next(ndbus) {
 		buses = append(buses, (*Bus)(ndbus))
 	}
-	return buses, nil
+	return buses
 }
 
 //CreateNamespace create new namespace with given opts
-func (ctx *Context) CreateNamespace(opts *CreateNamespaceOpts) (*Namespace, error) {
+func (ctx *Context) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 	var ndns *C.struct_ndctl_namespace
 
 	copts := opts.toCOptions()
@@ -788,17 +898,55 @@ func (ctx *Context) CreateNamespace(opts *CreateNamespaceOpts) (*Namespace, erro
 	return (*Namespace)(ndns), nil
 }
 
-//GetBlockDevByName gets namespace details for given name volName
-func (ctx *Context) GetNamespaceByName(volName string) (*Namespace, error) {
+//DestroyNamespaceByName deletes namespace with given name
+func (ctx *Context) DestroyNamespaceByName(name string) error {
+	ns, err := ctx.GetNamespaceByName(name)
+	if err != nil {
+		return err
+	}
+
+	r := ns.Region()
+	return r.DestroyNamespace(ns, true)
+}
+
+//GetNamespaceByName gets namespace details for given name
+func (ctx *Context) GetNamespaceByName(name string) (*Namespace, error) {
 	for _, bus := range ctx.GetBuses() {
-		for _, r := range bus.Regions() {
-			for _, ns := range r.Namespaces()
-				if ns.BlockDeviceName == volName {
-					return ns, nil;
+		for _, r := range bus.AllRegions() {
+			for _, ns := range r.AllNamespaces() {
+				if ns.Name() == name {
+					return ns, nil
 				}
+			}
 		}
 	}
 	return nil, fmt.Errorf("Not found")
+}
+
+//GetActiveNamesapaces returns list of all active namespaces in all regions
+func (ctx *Context) GetActiveNamesapaces() []*Namespace {
+	var list []*Namespace
+	for _, bus := range ctx.GetBuses() {
+		for _, r := range bus.ActiveRegions() {
+			nss := r.ActiveNamespaces()
+			list = append(list, nss...)
+		}
+	}
+
+	return list
+}
+
+//GetAllNamesapaces returns list of all namespaces in all regions including idle namespaces
+func (ctx *Context) GetAllNamesapaces() []*Namespace {
+	var list []*Namespace
+	for _, bus := range ctx.GetBuses() {
+		for _, r := range bus.AllRegions() {
+			nss := r.AllNamespaces()
+			list = append(list, nss...)
+		}
+	}
+
+	return list
 }
 
 type MapLocation string
@@ -823,11 +971,7 @@ type CreateNamespaceOpts struct {
 	Location   MapLocation
 }
 
-func (opts *CreateNamespaceOpts) toCOptions() *C.struct_ndctl_namespace_create_opts {
-	if opts == nil {
-		return nil
-	}
-
+func (opts CreateNamespaceOpts) toCOptions() *C.struct_ndctl_namespace_create_opts {
 	copts := C.struct_ndctl_namespace_create_opts{}
 
 	if opts.Name != "" {
@@ -857,26 +1001,28 @@ func (opts *CreateNamespaceOpts) toCOptions() *C.struct_ndctl_namespace_create_o
 	return &copts
 }
 
-/*
- * CSI APIs
- */
+var gConext *Context
+var gContexRefCount int
 
-//GetAvailableSize Check for available capacity
-func GetAvailableSize() (uint64, error) {
-	return 0, fmt.Errorf("Not supported")
+func GetContext() (*Context, error) {
+	var err error
+	if gConext == nil {
+		gConext, err = NewContext()
+		if err != nil {
+			return nil, err
+		}
+	}
+	gContexRefCount++
+
+	return gConext, nil
 }
 
-//ListNamespaces returns avilable namesapce names and sizes
-func ListNamespaces() ([]string, []uint64, error) {
-	return []string{}, []uint64{}, fmt.Errorf("Not supported")
-}
+func UnrefContext() {
+	gContexRefCount--
 
-//CreateNamespace creates a new namespace with given name and size
-func CreateNamespace(size uint64, volname string) error {
-	return fmt.Errorf("Not supported")
-}
-
-//DeleteNamespace delete namespace with given name
-func DeleteNamespace(volname string) error {
-	return fmt.Errorf("Not supported")
+	if gContexRefCount <= 0 {
+		gConext.Free()
+		gConext = nil
+		gContexRefCount = 0
+	}
 }

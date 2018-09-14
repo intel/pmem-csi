@@ -8,9 +8,9 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
-
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
 	"github.com/golang/glog"
+	"github.com/intel/pmem-csi/pkg/ndctl"
 )
 
 /* these came with some example, but not used currently
@@ -24,13 +24,14 @@ const (
 )
 */
 type pmemDriver struct {
-        driverName         string
-	nodeID             string
-	driver *CSIDriver
+	driverName string
+	nodeID     string
+	driver     *CSIDriver
 
 	ids *identityServer
 	ns  *nodeServer
 	cs  *controllerServer
+	ctx *ndctl.Context
 
 	cap   []*csi.VolumeCapability_AccessMode
 	cscap []*csi.ControllerServiceCapability
@@ -40,6 +41,7 @@ var (
 	//	pmemDriver     *pmemd
 	vendorVersion = "0.0.1"
 )
+
 /*
 TODO: commenting this out for now.
 idea is that it's safer to avoid maintaining state in driver.
@@ -88,32 +90,38 @@ func NewIdentityServer(pmemd *pmemDriver) *identityServer {
 func NewControllerServer(pmemd *pmemDriver) *controllerServer {
 	return &controllerServer{
 		DefaultControllerServer: NewDefaultControllerServer(pmemd.driver),
+		ctx: pmemd.ctx,
 	}
 }
 
 func NewNodeServer(pmemd *pmemDriver) *nodeServer {
 	return &nodeServer{
 		DefaultNodeServer: NewDefaultNodeServer(pmemd.driver),
+		ctx:               pmemd.ctx,
 	}
 }
 
 func (pmemd *pmemDriver) Run(driverName, nodeID, endpoint string) {
-        //s, err := pmemd.Start(driverName, nodeID, endpoint)
-        pmemd.driver = NewCSIDriver(driverName, vendorVersion, nodeID)
-        if pmemd.driver == nil {
-                glog.Fatalln("Failed to initialize CSI Driver.")
-        }
-        pmemd.driver.AddControllerServiceCapabilities([]csi.ControllerServiceCapability_RPC_Type{csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME})
+	//s, err := pmemd.Start(driverName, nodeID, endpoint)
+	pmemd.driver = NewCSIDriver(driverName, vendorVersion, nodeID)
+	if pmemd.driver == nil {
+		glog.Fatalln("Failed to initialize CSI Driver.")
+	}
+	pmemd.driver.AddControllerServiceCapabilities([]csi.ControllerServiceCapability_RPC_Type{csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME})
 	pmemd.driver.AddNodeServiceCapabilities([]csi.NodeServiceCapability_RPC_Type{csi.NodeServiceCapability_RPC_STAGE_UNSTAGE_VOLUME})
-        pmemd.driver.AddVolumeCapabilityAccessModes([]csi.VolumeCapability_AccessMode_Mode{csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER})
+	pmemd.driver.AddVolumeCapabilityAccessModes([]csi.VolumeCapability_AccessMode_Mode{csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER})
 
-        // Create GRPC servers
-        pmemd.ids = NewIdentityServer(pmemd)
-        pmemd.ns = NewNodeServer(pmemd)
-        pmemd.cs = NewControllerServer(pmemd)
+	ctx, err := ndctl.NewContext()
+	if err != nil {
+		glog.Fatalln("Failed to initialize pmem context: %s", err.Error())
+	}
+	pmemd.ctx = ctx
+	// Create GRPC servers
+	pmemd.ids = NewIdentityServer(pmemd)
+	pmemd.ns = NewNodeServer(pmemd)
+	pmemd.cs = NewControllerServer(pmemd)
 
-        s := NewNonBlockingGRPCServer()
+	s := NewNonBlockingGRPCServer()
 	s.Start(endpoint, pmemd.ids, pmemd.cs, pmemd.ns)
-        s.Wait()
+	s.Wait()
 }
-
