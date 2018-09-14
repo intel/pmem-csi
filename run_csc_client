@@ -4,18 +4,18 @@ export CSI_ENDPOINT=tcp://127.0.0.1:10000
 # verified on Qemu-based single NVDIMM (512 MB)
 # Succeeds repeatedly for one namespace , request 32 MB, actual 28 MB
 
-~/go/bin/csc controller create-volume --req-bytes 33554432 --cap MULTI_NODE_MULTI_WRITER,block nspace1
-~/go/bin/csc controller list-volumes
-~/go/bin/csc node stage nspace1 --cap MULTI_NODE_MULTI_WRITER,mount,xfs --staging-target-path /tmp/stage1
-~/go/bin/csc node publish nspace1 --cap MULTI_NODE_MULTI_WRITER,mount,xfs --staging-target-path /tmp/stage1 --target-path /tmp/target1
-~/go/bin/csc node unpublish nspace1 --target-path /tmp/target1
-~/go/bin/csc node unstage nspace1 --staging-target-path /tmp/stage1
-~/go/bin/csc controller delete-volume nspace1
+$GOPATH/bin/csc controller create-volume --req-bytes 33554432 --cap MULTI_NODE_MULTI_WRITER,block nspace1
+$GOPATH/bin/csc controller list-volumes
+$GOPATH/bin/csc node stage nspace1 --cap MULTI_NODE_MULTI_WRITER,mount,xfs --staging-target-path /tmp/stage1
+$GOPATH/bin/csc node publish nspace1 --cap MULTI_NODE_MULTI_WRITER,mount,xfs --staging-target-path /tmp/stage1 --target-path /tmp/target1
+$GOPATH/bin/csc node unpublish nspace1 --target-path /tmp/target1
+$GOPATH/bin/csc node unstage nspace1 --staging-target-path /tmp/stage1
+$GOPATH/bin/csc controller delete-volume nspace1
 
 ### just as example what else is implemented in driver,
 ### the 2 commands below are not part of above lifecycle.
 ### anyhow, it does not harm to run this whole file as one script
 
 # Check driver-reported capabilities
-~/go/bin/csc controller get-capabilities
-~/go/bin/csc node get-capabilities
+$GOPATH/bin/csc controller get-capabilities
+$GOPATH/bin/csc node get-capabilities
