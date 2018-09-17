@@ -141,7 +141,7 @@ func (cs *controllerServer) ValidateVolumeCapabilities(ctx context.Context, req 
 func (cs *controllerServer) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
 
 	// List namespaces
-	nss := cs.ctx.GetAllNamesapaces()
+	nss := cs.ctx.GetActiveNamespaces()
 
 	var entries []*csi.ListVolumesResponse_Entry
 	for _, ns := range nss {
