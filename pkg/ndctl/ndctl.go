@@ -15,20 +15,30 @@ package ndctl
 //#include <ndctl/ndctl.h>
 //
 //#define debug(fmt, ...) \
-//		fprintf(stderr, "%s:%d: " fmt, __func__, __LINE__, ##__VA_ARGS__)
+//		fprintf(stderr, "[DBG] %s:%d: " fmt, __func__, __LINE__, ##__VA_ARGS__)
 //
 //#define warn(fmt, ...) \
-//     fprintf(stderr, "%s:%d: " fmt, __func__, __LINE__, ##__VA_ARGS__)
+//     fprintf(stderr, "[WARN] %s:%d: " fmt, __func__, __LINE__, ##__VA_ARGS__)
 //
-//#define FAIL_IF(rc) if ((rc)) return rc
+//#define try(prefix, action, ...) \
+//do { \
+//	int _rc = prefix##_##action(__VA_ARGS__); \
+//	if (_rc) { \
+//		warn(#prefix"_"#action ": failed with error : %s\n", strerror(-_rc)); \
+//		return rc; \
+//	} else { \
+//		debug(#prefix "_" #action " : success\n"); \
+//	} \
+//}while(0);
+//
 //#define SZ_4K (4 * 1024)
 //#define SZ_1M (1024 * 1024)
 //#define SZ_2M (2 * SZ_1M)
 //#define SZ_1G (1024 * SZ_1M)
 //
 //enum ndctl_namespace_type {
-//     NDCTL_NS_TYPE_UNKNOWN = 0,
-//     NDCTL_NS_TYPE_PMEM = ND_DRIVER_REGION_PMEM,
+//     NDCTL_NS_TYPE_UNKNOWN,
+//     NDCTL_NS_TYPE_PMEM = ND_DEVICE_REGION_PMEM,
 //     NDCTL_NS_TYPE_BLK = ND_DRIVER_REGION_BLK,
 //};
 //
@@ -72,9 +82,11 @@ package ndctl
 //  int rc;
 //
 //  if (!ndctl_region_is_enabled(region)) {
+//		warn("Region '%s' not enabled, hence ignoring\n", region_name);
 //  	return -EAGAIN;
 //  }
 //  if (ndctl_region_get_ro(region)) {
+//		warn("Readonly region: %s\n", region_name);
 //  	return -EAGAIN;
 //  }
 //
@@ -98,12 +110,14 @@ package ndctl
 //	if (opts->map_location) {
 //		pfn_loc = !strcmp("mem", opts->map_location) ? NDCTL_PFN_LOC_RAM : NDCTL_PFN_LOC_PMEM;
 //		if (opts->mode != NDCTL_NS_MODE_MEMORY
-//       || opts->mode != NDCTL_NS_MODE_DAX) {
-//			warn("%s: --map= only valid for fsdax mode namespace\n", region_name);
+//       && opts->mode != NDCTL_NS_MODE_DAX) {
+//			warn("%s: pfn map location(%s) only valid for fsdax mode namespace\n", \
+//                region_name, opts->map_location);
 //			return -EINVAL;
 //		}
 //	} else if (opts->mode == NDCTL_NS_MODE_MEMORY
 //          || opts->mode == NDCTL_NS_MODE_DAX) {
+//		debug("Using NDCTL_PFN_LOC_PMEM pfn location");
 //		pfn_loc = NDCTL_PFN_LOC_PMEM;
 //	}
 //
@@ -111,7 +125,7 @@ package ndctl
 //		if (opts->mode == NDCTL_NS_MODE_MEMORY && opts->align != SZ_2M) {
 //			struct ndctl_pfn *pfn = ndctl_region_get_pfn_seed(region);
 //			if (!pfn || !ndctl_pfn_has_align(pfn)) {
-//				debug("%s not support 'align' for fsdax mode\n", region_name);
+//				warn("%s not support 'align' for fsdax mode\n", region_name);
 //				return -EINVAL;
 //			}
 //		} else if (opts->mode == NDCTL_NS_MODE_DAX) {
@@ -138,7 +152,7 @@ package ndctl
 //			case SZ_1G:
 //				break;
 //			default:
-//				debug("unsupported align");
+//				warn("unsupported align");
 //				return -ENXIO;
 //		}
 //		if (opts->mode == NDCTL_NS_MODE_MEMORY
@@ -185,9 +199,9 @@ package ndctl
 //	/* setup_namespace */
 //	if (ndctl_namespace_get_type(ndns) != ND_DEVICE_NAMESPACE_IO) {
 //		uuid_generate(uid);
-//		FAIL_IF(ndctl_namespace_set_alt_name(ndns, opts->name));
-//		FAIL_IF(ndctl_namespace_set_uuid(ndns, uid));
-//		FAIL_IF(ndctl_namespace_set_size(ndns, opts->size));
+//		try(ndctl_namespace, set_alt_name, ndns, opts->name);
+//		try(ndctl_namespace, set_uuid, ndns, uid);
+//		try(ndctl_namespace, set_size, ndns, opts->size);
 //	}
 //
 //	ndctl_namespace_set_enforce_mode(ndns, opts->mode);
@@ -198,28 +212,28 @@ package ndctl
 //   && pfn_loc == NDCTL_PFN_LOC_PMEM) {
 //		struct ndctl_pfn *pfn = ndctl_region_get_pfn_seed(region);
 //
-//		FAIL_IF(ndctl_pfn_set_uuid(pfn, uid));
-//		FAIL_IF(ndctl_pfn_set_location(pfn, pfn_loc));
+//		try(ndctl_pfn, set_uuid, pfn, uid);
+//		try(ndctl_pfn, set_location, pfn, pfn_loc);
 //		if (ndctl_pfn_has_align(pfn))
-//			FAIL_IF(ndctl_pfn_set_align(pfn, opts->align));
-//		FAIL_IF(ndctl_pfn_set_namespace(pfn, ndns));
+//			try(ndctl_pfn, set_align, pfn, opts->align);
+//		try(ndctl_pfn, set_namespace, pfn, ndns);
 //		rc = ndctl_pfn_enable(pfn);
 //	} else if (opts->mode == NDCTL_NS_MODE_DAX) {
 //		struct ndctl_dax *dax = ndctl_region_get_dax_seed(region);
 //
-//		FAIL_IF(ndctl_dax_set_uuid(dax, uid));
-//		FAIL_IF(ndctl_dax_set_location(dax, pfn_loc));
-//		FAIL_IF(ndctl_dax_set_align(dax, opts->align));
-//		FAIL_IF(ndctl_dax_set_namespace(dax, ndns));
+//		try(ndctl_dax, set_uuid, dax, uid);
+//		try(ndctl_dax, set_location, dax, pfn_loc);
+//		try(ndctl_dax, set_align, dax, opts->align);
+//		try(ndctl_dax, set_namespace, dax, ndns);
 //		rc = ndctl_dax_enable(dax);
 //	} else if (opts->mode == NDCTL_NS_MODE_SAFE) {
 //		struct ndctl_btt *btt = ndctl_region_get_btt_seed(region);
 //
 //		unsigned long sector_size = 0;
 //		sector_size = opts->sector_size == UINT_MAX ? 4096 : opts->sector_size;
-//		FAIL_IF(ndctl_btt_set_uuid(btt, uid));
-//		FAIL_IF(ndctl_btt_set_sector_size(btt, sector_size));
-//		FAIL_IF(ndctl_btt_set_namespace(btt, ndns));
+//		try(ndctl_btt, set_uuid, btt, uid);
+//		try(ndctl_btt, set_sector_size, btt, sector_size);
+//		try(ndctl_btt, set_namespace, btt, ndns);
 //		rc = ndctl_btt_enable(btt);
 //	} else {
 //		rc = ndctl_namespace_enable(ndns);
@@ -233,40 +247,60 @@ package ndctl
 //}
 //
 //int ndctl_bus_create_namespace(struct ndctl_bus *bus, struct ndctl_namespace_create_opts *opts,
-//     struct ndctl_namespace **ndns) {
-//     struct ndctl_region *region;
+//	struct ndctl_namespace **ndns) {
+//	struct ndctl_region *region;
 //
-//     ndctl_region_foreach(bus, region) {
-//         debug("Opts Type :%d, region type: %d\n",
-//             opts->ns_type, ndctl_region_get_type(region));
-//         if (opts->ns_type != NDCTL_NS_TYPE_UNKNOWN
-//          && opts->ns_type != ndctl_region_get_type(region)) {
-//             continue;
-//         }
-//         if (opts->size) {
-//             unsigned long long available = ndctl_region_get_max_available_extent(region);
-//             if (available == ULLONG_MAX)
-//                 available = ndctl_region_get_available_size(region);
-//             if (opts->size > available)
-//                 continue;
-//         }
-//         return ndctl_region_create_namespace(region, opts, ndns);
-//     }
+//	ndctl_region_foreach(bus, region) {
+//		const char *name = ndctl_region_get_devname(region);
+//		if (opts->ns_type != NDCTL_NS_TYPE_UNKNOWN
+//       && opts->ns_type != ndctl_region_get_type(region)) {
+//          debug("Region '%s' type: %d, requested namesapce type: %d\n", name, \
+//                ndctl_region_get_type(region), opts->ns_type);\
+//      	continue;
+//      }
+//      if (opts->size) {
+//      	unsigned long long available = ndctl_region_get_max_available_extent(region);
+//          if (available == ULLONG_MAX)
+//          	available = ndctl_region_get_available_size(region);
+//			debug("Region: %s, available size: %lld\n",
+//                name, available);
+//          if (opts->size > available)
+//          	continue;
+//      }
+//		return ndctl_region_create_namespace(region, opts, ndns);
+//  }
 //
-//     return -ENXIO;
+//	debug("No valid region found with size %lld\n", opts->size);
+//
+//	return -ENXIO;
 //}
 //
 //int ndctl_context_create_namesapce(struct ndctl_ctx *ctx, struct ndctl_namespace_create_opts *opts,
 //      struct ndctl_namespace **ndns) {
-//     struct ndctl_bus *bus;
+//	struct ndctl_bus *bus;
 //
-//     if (!opts) {
-//         _reset_default_options();
-//         opts = &default_options;
-//     }
+//	if (!opts) {
+//  	_reset_default_options();
+//      opts = &default_options;
+//	} else {
+//		if (opts->ns_type == NDCTL_NS_TYPE_UNKNOWN) {
+//			opts->ns_type = NDCTL_NS_TYPE_PMEM;
+//		}
+//		if (opts->mode == NDCTL_NS_MODE_UNKNOWN) {
+//			opts->mode = NDCTL_NS_MODE_MEMORY;
+//		}
+//		if (opts->map_location == NULL) {
+//	    	opts->map_location = "dev";
+//		}
+//		if (opts->align == 0) {
+//     		opts->align = SZ_2M;
+//		}
+//	}
+//	debug("name: %s, type: %d, mode: %d, size: %lld, algin: %ld, map location: %s\n",
+//        opts->name, opts->ns_type, opts->mode, opts->size, opts->align, opts->map_location);
 //
-//     bus = ndctl_bus_get_first(ctx);
-//     return ndctl_bus_create_namespace(bus, opts, ndns);
+//	bus = ndctl_bus_get_first(ctx);
+//	return ndctl_bus_create_namespace(bus, opts, ndns);
 //}
 //
 //static int _zero_info_block(struct ndctl_namespace *ndns)
@@ -348,7 +382,7 @@ import (
 	"fmt"
 	"unsafe"
 
-	uuid "github.com/satori/go.uuid"
+	guuid "github.com/google/uuid"
 )
 
 //Bus go wrapper for ndctl_bus
@@ -663,7 +697,7 @@ func (ns *Namespace) Enabled() bool {
 }
 
 //UUID returns uuid of the namespace
-func (ns *Namespace) UUID() uuid.UUID {
+func (ns *Namespace) UUID() guuid.UUID {
 	ndns := (*C.struct_ndctl_namespace)(ns)
 	var cuid C.uuid_t
 
@@ -680,11 +714,12 @@ func (ns *Namespace) UUID() uuid.UUID {
 	} else if C.ndctl_namespace_get_type(ndns) != C.ND_DEVICE_NAMESPACE_IO {
 		C.ndctl_namespace_get_uuid(ndns, &cuid[0])
 	}
+
 	uidbytes := C.GoBytes(unsafe.Pointer(&cuid[0]), C.sizeof_uuid_t)
-	_uuid, err := uuid.FromBytes(uidbytes)
+	_uuid, err := guuid.FromBytes(uidbytes)
 	if err != nil {
 		fmt.Printf("WARN: worng uuid: %s", err.Error())
-		return uuid.UUID{}
+		return guuid.UUID{}
 	}
 
 	return _uuid
@@ -733,6 +768,7 @@ func (ns *Namespace) MarshalJSON() ([]byte, error) {
 		"size":    ns.Size(),
 		"enabled": ns.Enabled(),
 		"uuid":    ns.UUID(),
+		"name":    ns.Name(),
 	}
 
 	if mode := ns.Mode(); mode != DAX {
@@ -891,8 +927,8 @@ func (ctx *Context) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error
 	rc := C.ndctl_context_create_namesapce((*C.struct_ndctl_ctx)(ctx),
 		copts, &ndns)
 	if rc != 0 {
-		return nil, fmt.Errorf("failed to create namespace: %s",
-			C.GoString(C.strerror(-rc)))
+		return nil, fmt.Errorf("failed to create namespace: %s(%d)",
+			C.GoString(C.strerror(-rc)), -rc)
 	}
 
 	return (*Namespace)(ndns), nil
@@ -923,8 +959,8 @@ func (ctx *Context) GetNamespaceByName(name string) (*Namespace, error) {
 	return nil, fmt.Errorf("Not found")
 }
 
-//GetActiveNamesapaces returns list of all active namespaces in all regions
-func (ctx *Context) GetActiveNamesapaces() []*Namespace {
+//GetActiveNamespaces returns list of all active namespaces in all regions
+func (ctx *Context) GetActiveNamespaces() []*Namespace {
 	var list []*Namespace
 	for _, bus := range ctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
@@ -936,8 +972,8 @@ func (ctx *Context) GetActiveNamesapaces() []*Namespace {
 	return list
 }
 
-//GetAllNamesapaces returns list of all namespaces in all regions including idle namespaces
-func (ctx *Context) GetAllNamesapaces() []*Namespace {
+//GetAllNamespaces returns list of all namespaces in all regions including idle namespaces
+func (ctx *Context) GetAllNamespaces() []*Namespace {
 	var list []*Namespace
 	for _, bus := range ctx.GetBuses() {
 		for _, r := range bus.AllRegions() {
