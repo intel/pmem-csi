@@ -1,83 +1,98 @@
 # PMEM CSI Driver
 
 This is a draft version of the PMEM CSI driver.
-Code is based on early OIM-CSI driver which in turn
+
+## NOTE!! The repository name differs from used path name
+
+Paths of this package written in the code, are lowercase-only
+so please be aware that code of this driver should reside
+on the path `github.com/intel/pmem-csi/`
+
+Either specify a different destination path when cloning:
+
+`git clone .../Pmem-CSI pmem-csi`
+
+or rename the directory from `Pmem-CSI` to `pmem-csi` after cloning.
+
+## Based on
+
+The driver code is based on early OIM-CSI driver which in turn
 was mostly based on the hostpath driver.
 
-Current down-interface is ndctl commands.
+## Development stages and corresponding code branches
 
-Some early design ideas, some of which may need changing:
+### First proof-of-concept trial
 
-- Driver does not maintain state, i.e. state of objects is looked up using down-interface,
-which is currently ndctl.
-- The "name" field used by ndctl is used as primary key and VolumeID.
-- The "name" field value for a new namespace originates from csc CLI commands.
-- Mount point path names originate from csc CLI commands.
+- was implemented in branch:devel, with down-interface as ndctl commands. ndctl command is performed, it's JSON-format output is unmarshalled into structured data.
+- The driver does not maintain state, i.e. state of objects is looked up using down-interface.
+- The "name" field is used as primary key and VolumeID.
+- The "name" field value for a new namespace and mount point path names originate from csc CLI commands.
+- ext4 or xfs is supported as file system type
+- This trial had limited functionality and was used to demonstrate simple life cycle, and to verify dev.path on emulated NVDIMMs
+- This method can remain as another method for cross-checking, but interface to the rest of driver should be unified then, which is not in short-term plans
 
-```
-ndctl create-namespace -s 29360128 -n nspace4
-{
-  "dev":"namespace0.4",
-  "mode":"fsdax",
-  "map":"dev",
-  "size":"24.00 MiB (25.17 MB)",
-  "uuid":"40fd7022-134f-48a5-8a70-3ea6222e34d7",
-  "raw_uuid":"d90be3c8-1f40-4e00-89fb-67332b4e3325",
-  "sector_size":512,
-  "blockdev":"pmem0.4",
-  "name":"nspace4",       <--------------------- key used as VolumeID
-  "numa_node":0
-}
-```
+### ndctl CLI interface replaced by Go-language interface to libndctl, using cgo
 
-For operations on devices, driver looks up namespace entry by walking
-all namespace entries reported by ndctl, then uses
-"dev", "size", "blockdev" values for actual operations.
+- Go interface that uses #cgo and linkage to libndctl, replaces ndctl CLI layer
+- This code resides in branch:gondctl/devel
+- Uses full power of libndctl
+- This is considered path forward for development
 
-Current code likely contains leftovers, unused parts, things to fix and clean up.
-There are some TODOs marked in the code, and some more are needed.
+### Semantics
 
-The code builds, runs as standalone (see `run_driver`)
+Some sane, data-preserving semantics rules need to be agreed on. For example, some scenarios:
+  - Server reboots and driver starts again. The namespaces with contents are expected to be preserved, but mounts are gone, and mount points may exist or may be gone as well. Driver should work so that requests by volume names that have existed before, do not destroy/recreate file systems but try to reach the same state that was active before reboot.
+
+## State
+
+The code builds, runs as standalone, see `run_driver`
 and responds to API use on TCP or Unix socket.
 
-# Development system config
+# Development system configuration
+
+So far, the development and verification has been carried out on qemu-emulated NVDIMMs.
 
 Build has been verified on a system described below.
 
-Running the steps forming a simple volume lifecycle (see steps using 'csc' in `run_csc_client`) has been verified on same system.
+Running the steps forming a simple volume lifecycle has been verified using csc on same system. See steps using 'csc' in `run_client_csc`.
 
 - Host: Dell Poweredge R620, distro: openSUSE Tumbleweed, kernel 4.18.5, qemu 2.12.1
-- Guest: VM: 8G RAM, 8 vCPUs, Ubuntu 18.04.1 server, kernel 4.15.0
-- VM config originally created by libvirt, with these additions to emulate 512 MB NVDIMM backed by host file:
+- Guest: VM: 16GB RAM, 8 vCPUs, Ubuntu 18.04.1 server, kernel 4.15.0
+- VM config originally created by libvirt/GUI (also doable using virt-install CLI), with additions below to emulate 2x 1 GB NVDIMM backed by host file:
 
+## Guest config additions, made directly in xml file
 
-## maxMemory
+### NOTE about hugepages:
+
+Emulated nvdimm does not fully work if VM is configured to use Hugepages. It seems to be bug or limitation in qemu. With Hugepages configured, no data survives guest reboots, nothing is ever written into backing store file in host. Configured backing store file is not even part of command line options to qemu. Instead of that, there is some dev/hugepages/libvirt/... path which in reality remains empty in host.
+
+### maxMemory
 
 ```
-  <maxMemory slots='16' unit='KiB'>16777216</maxMemory>
+  <maxMemory slots='16' unit='KiB'>33554432</maxMemory>
 ```
 
-## numa config
+### NUMA config, 2 nodes with 8GB mem in both
 
 ```
   <cpu ...>
     <...>
     <numa>
-      <cell id='0' cpus='0-7' memory='8388608' unit='KiB'/>
+      <cell id='0' cpus='0-3' memory='8388608' unit='KiB'/>
+      <cell id='1' cpus='4-7' memory='8388608' unit='KiB'/>
     </numa>
   </cpu>
 ```
 
-
-## emulated NVDIMM with labels support
+### Emulated 2x 1G NVDIMM with labels support
 
 ```
     <memory model='nvdimm' access='shared'>
       <source>
-        <path>/var/lib/libvirt/images/nvdimm.0</path>
+        <path>/var/lib/libvirt/images/nvdimm0</path>
       </source>
       <target>
-        <size unit='KiB'>524288</size>
+        <size unit='KiB'>1048576</size>
         <node>0</node>
         <label>
           <size unit='KiB'>2048</size>
@@ -85,17 +100,54 @@ Running the steps forming a simple volume lifecycle (see steps using 'csc' in `r
       </target>
       <address type='dimm' slot='0'/>
     </memory>
+    <memory model='nvdimm' access='shared'>
+      <source>
+        <path>/var/lib/libvirt/images/nvdimm1</path>
+      </source>
+      <target>
+        <size unit='KiB'>1048576</size>
+        <node>1</node>
+        <label>
+          <size unit='KiB'>2048</size>
+        </label>
+      </target>
+      <address type='dimm' slot='1'/>
+    </memory>
 ```
 
+### 2x 1 GB NVDIMM backing file creation example on Host
 
+```
+dd if=/dev/zero of=/var/lib/libvirt/images/nvdimm0 bs=4K count=262144
+dd if=/dev/zero of=/var/lib/libvirt/images/nvdimm1 bs=4K count=262144
+```
 
-Software on the guest:
+### Labels initialization is needed once per emulated NVDIMM
+
+The default startup emulated NVDIMM creates one device-size pmem region
+and ndctl would show zero available space, so labels init. step is required once.
+This has to be repeated if device backing file(s) start from scratch.
+
+For example, these commands for set of 2 NVDIMMs:
+(can be re-written as loop for more devices)
+
+```
+ndctl disable-region region0
+ndctl init-labels nmem0
+ndctl enable-region region0
+
+ndctl disable-region region1
+ndctl init-labels nmem1
+ndctl enable-region region1
+```
+
+## Software on the guest:
 - Go: version 1.10.1
-- ndctl: version 62
+- ndctl: version 62, built on same host via autogen,configure,make,install steps as per instruction in README.md
 - csc: built from github.com/rexray/gocsi 0.5.0
 - Docker-ce: version 18.06.1
 
-vendor/ directory has been updated on 2018-09-11
+vendor/ directory should stay up-to-date.
 
 # Build
 
@@ -118,100 +170,14 @@ Further container-based use scenarios have not been explored yet.
 
 `make test`
 
-TODO: this does not succeed yet
+This does not succeed yet
 
 # Run
 
-1. start driver (as root) as in `run_driver`
-2. Run client-side commands (as user) as in `run_csc_client`
+1. start driver (as user:root) as in `run_driver`
+2. Run client-side commands (as regular user) as in `run_client_csc`
 
 The client-side endpoint can be specified either:
 
 - with each csc command as `--endpoint tcp://127.0.0.1:10000` 
-- export endpoint as env.variable, see `run_csc_client`
-
-# Questions, limitations, issues
-
-We should turn (some of) those into issue entries in repository after code check-in
-
-## Sizes delta issue
-
-Seems because of space used by labels (?), the resulting namespace size is smaller than request by 4 * 1024 * 1024 bytes
-
-Example: Request is 32MB, actual namespace size will be 32-4=28 MB
-
-How to handle next request with same size?
-
-Currently, a next request with same size responds:
-
-`Volume with the same name: nspace1 but with different size already exist`
-
-While user expectation is:
-
-Next request with same size should return same namespace as from user POV same thing is asked.
-
-How to solve: Should we compensate the diff internally, i.e. always create REQUEST+4M space?
-That leads to state that one can't create as large namespace as the largest free area.
-
-
-## Single region limitation
-
-Current early-draft driver code operates without regions knowledge, assuming single region.
-Driver does not specify any region options to it's down-interface.
-ndctl can display multiple regions (if multiple DIMMs are emulated).
-TODO: Try multi-regions in qemu-based dev.model by specifying multiple emulated NVDIMMs.
-
-## Numa aspects
-
-NUMA-locality should be taken into account, for example when
-selecting region, the NUMA-local will provide the best performance.
-Also, a namespace should not span to different NUMA nodes,
-or perhaps even safer, not to span to different regions at all?
-
-TODO: try to use multi-numa-node setup in qemu-based version
-
-## Missing namespaces case
-
-if there is no namespaces yet (first use):
-"ndctl list --namespaces" returns empty,
-but the 'run' function in PMEM CSI driver expects json output which it tries to parse.
-This causes following error returned to `~/go/bin/csc controller list-volumes`:
-```
-E0912 13:15:22.196783   31982 ndctl.go:159] run: unexpected end of JSON input: []
-E0912 13:15:22.196802   31982 tracing.go:33] GRPC error: unexpected end of JSON input: []
-```
-
-The caller of run() could avoid parsing by omitting interface in args,
-but caller does not know if the response will be empty or contain JSON.
-
-## Fragmentation
-
-The space will get fragmented. Driver should be prepared to handle this.
-
-NVDIMM Namespace spec 
-https://pmem.io/documents/NVDIMM_Namespace_Spec.pdf
-
-mentions on page 16 possibility to combine multiple ranges of DPA  into one namespace (means fragmentation risk was known),
-but ndctl seems to have no such method supported.
-
-Should look into: pmempool, libpmempool
-
-## Data privacy
-
-Should the driver erase data after volume/namespace gets to end-of-life?
-If yes, where should this happen, in unstage or delete-volume ?
-What about performance implication?
-Is there efficient ways to perform erase/wipe on device?
-Idea: To make visible erase penalty smaller, do erase on async fashion in background?
-(But that risks to lead into more complex cases and possible failure, race etc. scenarios)
-
-## Kernel BUG, qemu-based use
-
-With multiple namespaces, and multiple deletions, kernel BUG happens:
-```
-[  583.026321] Call Trace:
-[  583.026345]  devm_memremap_pages_release+0x10f/0x240
-[  583.026374]  release_nodes+0x110/0x1f0
-[  583.026396]  devres_release_all+0x3c/0x50
-[  583.026422]  device_release_driver_internal+0x173/0x220
-```
+- export endpoint as env.variable, see `run_client_csc`
