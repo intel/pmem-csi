@@ -1,13 +1,11 @@
 export CSI_ENDPOINT=tcp://127.0.0.1:10000
 
 # Below are simple "namespace lifecycle" steps for one namespace,
-# verified on Qemu-based single NVDIMM (512 MB)
-# Succeeds repeatedly for one namespace , request 32 MB, actual 28 MB
 
-$GOPATH/bin/csc controller create-volume --req-bytes 33554432 --cap MULTI_NODE_MULTI_WRITER,block nspace1
+$GOPATH/bin/csc controller create-volume --req-bytes 33554432 --cap SINGLE_NODE_WRITER,block nspace1
 $GOPATH/bin/csc controller list-volumes
-$GOPATH/bin/csc node stage nspace1 --cap MULTI_NODE_MULTI_WRITER,mount,xfs --staging-target-path /tmp/stage1
-$GOPATH/bin/csc node publish nspace1 --cap MULTI_NODE_MULTI_WRITER,mount,xfs --staging-target-path /tmp/stage1 --target-path /tmp/target1
+$GOPATH/bin/csc node stage nspace1 --cap SINGLE_NODE_WRITER,mount,xfs --staging-target-path /tmp/stage1
+$GOPATH/bin/csc node publish nspace1 --cap SINGLE_NODE_WRITER,mount,xfs --staging-target-path /tmp/stage1 --target-path /tmp/target1
 $GOPATH/bin/csc node unpublish nspace1 --target-path /tmp/target1
 $GOPATH/bin/csc node unstage nspace1 --staging-target-path /tmp/stage1
 $GOPATH/bin/csc controller delete-volume nspace1
