@@ -141,8 +141,15 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	glog.Infof("NodeStageVolume: blockdev is %v with size %v", namespace.BlockDeviceName(), namespace.Size())
 	devicepath := "/dev/" + namespace.BlockDeviceName()
 
-	// TODO: check is devicepath already mounted, return from here if mounted
-	// (happens when stage is asked repeatedly for already staged namespace)
+	// TODO: This code here in current form
+	// will re-create file system even if there already was a file system,
+	// breaking the semantics and destroying existing data.
+	// Instead, we need to check few things here:
+	// 1. does devicepath already contain a filesystem, if yes, skip mkfs step and continue
+	//    (happens when system boots with existing namespaces which have formatted file systems)
+	// There is example of such check on LV-CSI driver, using file and blkid commands
+	// 2. same as 1, but is also mounted (can this happen?)
+	//    if yes, we need to skip mkfs and mount, and just continue (returning OK) right?
 	var output []byte
 	if fsType == "ext4" {
 		glog.Infof("NodeStageVolume: mkfs.ext4 -F %s", devicepath)
