@@ -1,0 +1,191 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: csi-pmem-sc
+provisioner: csi-pmem
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: csi-service-account
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: csi-cluster-role
+rules:
+- apiGroups: [ "" ]
+  resources: [ "persistentvolumes" ]
+  verbs: [ "create", "delete", "get", "list", "watch", "update" ]
+- apiGroups: [ "" ]
+  resources: [ "secrets" ]
+  verbs: [ "get", "list" ]
+- apiGroups: [ "" ]
+  resources: [ "persistentvolumeclaims" ]
+  verbs: [ "get", "list", "watch", "update" ]
+- apiGroups: [ "" ]
+  resources: [ "nodes" ]
+  verbs: [ "get", "list", "watch", "update" ]
+- apiGroups: [ "storage.k8s.io" ]
+  resources: [ "volumeattachments" ]
+  verbs: [ "get", "list", "watch", "update" ]
+- apiGroups: [ "storage.k8s.io" ]
+  resources: [ "storageclasses" ]
+  verbs: [ "get", "list", "watch" ]
+- apiGroups: [ "" ]
+  resources: [ "events" ]
+  verbs: [ "list", "watch", "create", "update", "patch" ]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: csi-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: csi-cluster-role
+subjects:
+- kind: ServiceAccount
+  name: csi-service-account
+  namespace: default
+---
+kind: DaemonSet
+apiVersion: apps/v1beta2
+metadata:
+  name: csi-pmem
+spec:
+  selector:
+    matchLabels:
+      app: csi-pmem
+  template:
+    metadata:
+      labels:
+        app: csi-pmem
+    spec:
+      serviceAccount: csi-service-account
+      hostNetwork: true
+      containers:
+         ## driver-registrar:
+         # 1) registers the CSI driver with kubelet
+         # 2) adds the driver's custom nodeId
+       - name: driver-registrar
+         imagePullPolicy: Always
+         image: quay.io/k8scsi/driver-registrar:v0.3.0
+         args: [ "--v=5" , "--csi-address=\"$(ADDRESS)\"" ]
+         env:
+           - name: ADDRESS
+             value: /csi/csi.sock
+           - name: KUBE_NODE_NAME
+             valueFrom:
+               fieldRef:
+                 fieldPath: spec.nodeName
+         volumeMounts:
+           - mountPath: /csi
+             name: socket-dir
+         ## pmem-driver:
+         #
+       - name: pmem-driver
+         imagePullPolicy: Always
+         image: avalluriGigabyte.fi.intel.com/pmem-csi-driver:canary
+         args: [ "--v=5", "--endpoint=$(CSI_ENDPOINT)", "--nodeid=$(KUBE_NODE_NAME)" ]
+         securityContext:
+           privileged: true
+         env:
+           - name: CSI_ENDPOINT
+             value: unix:///csi/csi.sock
+           - name: KUBE_NODE_NAME
+             valueFrom:
+               fieldRef:
+                 apiVersion: v1
+                 fieldPath: spec.nodeName
+         volumeMounts:
+           - name: socket-dir
+             mountPath: /csi
+           - name: mountpoint-dir
+             mountPath: /var/lib/kubelet/pods
+             mountPropagation: Bidirectional
+      volumes:
+        - name: socket-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/csi-pmem
+            type: DirectoryOrCreate
+        - name: mountpoint-dir
+          hostPath:
+            path: /var/lib/kubelet/pods
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: pmem-driver
+  name: csi-pmem-controller
+  namespace: default
+spec:
+  serviceAccount: csi-service-account
+  containers:
+    ## external-provisioner:
+    #    Watches PVClaim objects and triggers Create/DeleteVolume
+  - name: external-provisioner
+    imagePullPolicy: Always
+    image: quay.io/k8scsi/csi-provisioner:v0.3.0
+    args:
+      - --v=5
+      - --provisioner=csi-pmem
+      - --csi-address=$(ADDRESS)
+    env:
+    - name: ADDRESS
+      value: /csi/csi.sock
+    volumeMounts:
+    - mountPath: /csi
+      name: socket-dir
+    ## external-attacher: sidecar
+    #    Watches VolumeAttachment objects and triggers
+    #    ControllerPublish/Unpublish
+  - name: external-attacher
+    imagePullPolicy: Always
+    image: quay.io/k8scsi/csi-attacher:v0.3.0
+    args:
+    - --v=5
+    - --csi-address=$(ADDRESS)
+    env:
+    - name: ADDRESS
+      value: /csi/csi.sock
+    volumeMounts:
+    - mountPath: /csi
+      name: socket-dir
+  - name: pmem-driver
+    image: avalluriGigabyte.fi.intel.com/pmem-csi-driver:canary
+    imagePullPolicy: Always
+    args:
+    - --v=5
+    - --endpoint=$(CSI_ENDPOINT)
+    - --nodeid=$(KUBE_NODE_NAME)
+    env:
+    - name: CSI_ENDPOINT
+      value: unix:///csi/csi.sock
+    - name: KUBE_NODE_NAME
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: spec.nodeName
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - mountPath: /csi
+      name: socket-dir
+    - mountPath: /var/lib/kubelet/pods
+      mountPropagation: Bidirectional
+      name: mountpoint-dir
+  volumes:
+  - name: socket-dir
+    hostPath:
+      path: /var/lib/kubelet/plugins/csi-pmem
+      type: DirectoryOrCreate
+  - name: mountpoint-dir
+    hostPath:
+      path: /var/lib/kubelet/pods
+      type: DirectoryOrCreate
