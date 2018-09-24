@@ -7,10 +7,10 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
+	"golang.org/x/net/context"
 	"os"
 	"os/exec"
-
-	"golang.org/x/net/context"
+	"strings"
 
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
 	"google.golang.org/grpc/codes"
@@ -127,49 +127,66 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	}
 
 	//volumeId := req.GetVolumeId()
-	fsType := req.GetVolumeCapability().GetMount().GetFsType()
+	requestedFsType := req.GetVolumeCapability().GetMount().GetFsType()
 	// showing for debug:
 	glog.Infof("NodeStageVolume: VolumeID is %v", req.GetVolumeId())
 	glog.Infof("NodeStageVolume: Staging target path is %v", stagingtargetPath)
-	glog.Infof("NodeStageVolume: fsType is %v", fsType)
+	glog.Infof("NodeStageVolume: Requested fsType is %v", requestedFsType)
 
 	namespace, err := ns.ctx.GetNamespaceByName(req.GetVolumeId())
 	if err != nil {
 		pmemcommon.Infof(3, ctx, "NodeStageVolume: did not find volume %s", req.GetVolumeId())
 		return nil, err
 	}
-	glog.Infof("NodeStageVolume: blockdev is %v with size %v", namespace.BlockDeviceName(), namespace.Size())
+	glog.Infof("NodeStageVolume: Existing namespace: blockdev is %v with size %v", namespace.BlockDeviceName(), namespace.Size())
 	devicepath := "/dev/" + namespace.BlockDeviceName()
 
-	// TODO: This code here in current form
-	// will re-create file system even if there already was a file system,
-	// breaking the semantics and destroying existing data.
-	// Instead, we need to check few things here:
-	// 1. does devicepath already contain a filesystem, if yes, skip mkfs step and continue
-	//    (happens when system boots with existing namespaces which have formatted file systems)
-	// There is example of such check on LV-CSI driver, using file and blkid commands
-	// 2. same as 1, but is also mounted (can this happen?)
-	//    if yes, we need to skip mkfs and mount, and just continue (returning OK) right?
-	var output []byte
-	if fsType == "ext4" {
-		glog.Infof("NodeStageVolume: mkfs.ext4 -F %s", devicepath)
-		output, err = exec.Command("mkfs.ext4", "-F", devicepath).CombinedOutput()
-	} else if fsType == "xfs" {
-		glog.Infof("NodeStageVolume: mkfs.xfs -f %s", devicepath)
-		output, err = exec.Command("mkfs.xfs", "-f", devicepath).CombinedOutput()
-	} else {
-		return nil, status.Error(codes.InvalidArgument, "xfs, ext4 are supported as file system types")
-	}
+	// Check does devicepath already contain a filesystem?
+	existingFsType, err := determineFilesystemType(devicepath)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "mkfs failed"+string(output))
+		return nil, err
 	}
 
-	glog.Infof("NodeStageVolume: mkdir %s", stagingtargetPath)
+	// what to do if existing file system is detected and is different from request;
+	// TODO: Is the current decision to error-out here OK?
+	// forced re-format would lead to loss of previous data, so we refuse.
+	if existingFsType != "" {
+		glog.Infof("NodeStageVolume: Found existing %v filesystem", existingFsType)
+		// Is existing filesystem type same as requested?
+		if existingFsType == requestedFsType {
+			glog.Infof("Skip mkfs as %v file system already exists on %v", existingFsType, devicepath)
+		} else {
+			pmemcommon.Infof(3, ctx, "NodeStageVolume: File system with different type %v exist on %v",
+				existingFsType, devicepath)
+			return nil, status.Error(codes.InvalidArgument, "File system with different type exists")
+		}
+	} else {
+		// no existing file system, make fs
+		var output []byte
+		if requestedFsType == "ext4" {
+			glog.Infof("NodeStageVolume: mkfs.ext4 -F %s", devicepath)
+			output, err = exec.Command("mkfs.ext4", "-F", devicepath).CombinedOutput()
+		} else if requestedFsType == "xfs" {
+			glog.Infof("NodeStageVolume: mkfs.xfs -f %s", devicepath)
+			output, err = exec.Command("mkfs.xfs", "-f", devicepath).CombinedOutput()
+		} else {
+			return nil, status.Error(codes.InvalidArgument, "xfs, ext4 are supported as file system types")
+		}
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, "mkfs failed"+string(output))
+		}
+	}
+
+	// MkdirAll is equal to mkdir -p i.e. it creates parent dirs if needed, and is no-op if dir exists
+	glog.Infof("NodeStageVolume: mkdir -p %s", stagingtargetPath)
 	err = os.MkdirAll(stagingtargetPath, 0777)
 	if err != nil {
 		pmemcommon.Infof(3, ctx, "failed to create volume: %v", err)
 		return nil, err
 	}
+	// If file system is already mounted, can happen if out-of-sync "stage" is asked again without unstage
+	// then the mount here will fail. I guess it's ok to not check explicitly for existing mount,
+	// as end result after mount attempt will be same: no new mount and existing mount remains.
 	glog.Infof("NodeStageVolume: mount %s %s", devicepath, stagingtargetPath)
 	options := []string{""}
 	mounter := mount.New("")
@@ -213,4 +230,39 @@ func RemoveDir(ctx context.Context, Path string) error {
 		return err
 	}
 	return nil
+}
+
+// There is based on function used in LV-CSI driver
+func determineFilesystemType(devicePath string) (string, error) {
+	// Use `file -bsL` to determine whether any filesystem type is detected.
+	// If a filesystem is detected (ie., the output is not "data", we use
+	// `blkid` to determine what the filesystem is. We use `blkid` as `file`
+	// has inconvenient output.
+	// We do *not* use `lsblk` as that requires udev to be up-to-date which
+	// is often not the case when a device is erased using `dd`.
+	output, err := exec.Command("file", "-bsL", devicePath).CombinedOutput()
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(string(output)) == "data" {
+		// No filesystem detected.
+		return "", nil
+	}
+	// Some filesystem was detected, use blkid to figure out what it is.
+	output, err = exec.Command("blkid", "-c", "/dev/null", "-o", "export", devicePath).CombinedOutput()
+	if err != nil {
+		return "", err
+	}
+	parseErr := status.Error(codes.InvalidArgument, "Can not parse blkid output")
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		fields := strings.Split(strings.TrimSpace(line), "=")
+		if len(fields) != 2 {
+			return "", parseErr
+		}
+		if fields[0] == "TYPE" {
+			return fields[1], nil
+		}
+	}
+	return "", parseErr
 }
