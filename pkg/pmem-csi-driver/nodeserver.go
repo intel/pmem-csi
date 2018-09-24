@@ -199,7 +199,6 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolumeRequest) (*csi.NodeUnstageVolumeResponse, error) {
 
 	// Check arguments
-	// TODO: volumeID is not really used in that function, can we stop its print and leave it out from checking here?
 	if len(req.GetVolumeId()) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Volume ID missing in request")
 	}
@@ -211,13 +210,36 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	// showing for debug:
 	glog.Infof("NodeUnStageVolume: VolumeID is %v", req.GetVolumeId())
 	glog.Infof("NodeUnStageVolume: Staging target path is %v", stagingtargetPath)
-
 	glog.Infof("NodeUnStageVolume: umount %s", stagingtargetPath)
-	mounter := mount.New("")
-	if err := mounter.Unmount(stagingtargetPath); err != nil {
+
+	// by spec, we have to return OK if asked volume is not mounted on asked path,
+	// so we look up the current device by volumeID and see is that device
+	// mounted on staging target path
+	namespace, err := ns.ctx.GetNamespaceByName(req.GetVolumeId())
+	if err != nil {
+		pmemcommon.Infof(3, ctx, "NodeUnstageVolume: did not find volume %s", req.GetVolumeId())
 		return nil, err
 	}
-	RemoveDir(ctx, stagingtargetPath)
+	glog.Infof("NodeUnstageVolume: Existing namespace: blockdev: %v with size %v", namespace.BlockDeviceName(), namespace.Size())
+	devicepath := "/dev/" + namespace.BlockDeviceName()
+
+	// check all mountpoints
+	mounter := mount.New("")
+	mountPoints, mountPointsErr := mounter.List()
+	if mountPointsErr != nil {
+		return nil, mountPointsErr
+	}
+	for _, mp := range mountPoints {
+		if mp.Device == devicepath && mp.Path == stagingtargetPath {
+			glog.Infof("NodeUnstageVolume: Found matching mount: dev: %v path: %v", mp.Device, mp.Path)
+			umounter := mount.New("")
+			if err := umounter.Unmount(stagingtargetPath); err != nil {
+				glog.Infof("NodeUnstageVolume: Umount failed: %v", err)
+				return nil, err
+			}
+			RemoveDir(ctx, stagingtargetPath)
+		}
+	}
 	return &csi.NodeUnstageVolumeResponse{}, nil
 }
 
