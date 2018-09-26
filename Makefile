@@ -18,6 +18,8 @@ IMPORT_PATH=github.com/intel/pmem-csi
 REGISTRY_NAME=localhost:5000
 IMAGE_VERSION_pmem-csi-driver=canary
 IMAGE_TAG=$(REGISTRY_NAME)/$*:$(IMAGE_VERSION_$*)
+IMAGE_BUILD_ARGS=
+BUILD_ARGS=--build-arg http_proxy=${http_proxy} --build-arg https_proxy=${https_proxy} --build-arg no_proxy=${no_proxy}
 
 all: pmem-csi-driver
 
@@ -28,8 +30,8 @@ test:
 pmem-csi-driver:
 	GOOS=linux go build -a -o _output/$@ ./cmd/$@
 
-%-container: %
-	docker build -t $(IMAGE_TAG) -f ./cmd/$*/Dockerfile .
+%-image:
+	docker build ${BUILD_ARGS} ${IMAGE_BUILD_ARGS} -t $(IMAGE_TAG) -f ./cmd/$*/Dockerfile .
 
 push-%: %-container
 	docker push $(IMAGE_TAG)
