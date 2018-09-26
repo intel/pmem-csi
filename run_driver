@@ -1,2 +1,3 @@
 # Example how to run the PMEM-CSI driver as standalone (run as root)
-./_output/pmem-csi-driver --endpoint tcp://127.0.0.1:10000
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
+$DIR/_output/pmem-csi-driver --endpoint tcp://127.0.0.1:10000
