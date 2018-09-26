@@ -140,6 +140,10 @@ func (cs *controllerServer) ValidateVolumeCapabilities(ctx context.Context, req 
 
 func (cs *controllerServer) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
 
+	if err := cs.Driver.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_LIST_VOLUMES); err != nil {
+		pmemcommon.Infof(3, ctx, "invalid list volumes req: %v", req)
+		return nil, err
+	}
 	// List namespaces
 	nss := cs.ctx.GetActiveNamespaces()
 
