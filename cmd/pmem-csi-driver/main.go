@@ -21,7 +21,7 @@ func init() {
 }
 
 var (
-	endpoint   = flag.String("endpoint", "unix://tmp/pmem-csi.sock", "PMEM CSI endpoint")
+	endpoint   = flag.String("endpoint", "unix:///tmp/pmem-csi.sock", "PMEM CSI endpoint")
 	driverName = flag.String("drivername", "pmem-csi-driver", "name of the driver")
 	nodeID     = flag.String("nodeid", "nodeid", "node id")
 )
@@ -38,4 +38,3 @@ func main() {
 	driver := pmemcsidriver.GetPMEMDriver()
 	driver.Run(*driverName, *nodeID, *endpoint)
 }
-
