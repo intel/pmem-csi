@@ -133,13 +133,21 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	glog.Infof("NodeStageVolume: Staging target path is %v", stagingtargetPath)
 	glog.Infof("NodeStageVolume: Requested fsType is %v", requestedFsType)
 
-	namespace, err := ns.ctx.GetNamespaceByName(req.GetVolumeId())
-	if err != nil {
-		pmemcommon.Infof(3, ctx, "NodeStageVolume: did not find volume %s", req.GetVolumeId())
-		return nil, err
+	var devicepath string
+	if lvmode() == true {
+		// using shortcut: don't look it up, just compose LV device path is
+		devicepath = "/dev/" + lvgroup + "/" + req.GetVolumeId()
+		glog.Infof("NodeStageVolume: devicepath: %v", devicepath)
+	} else {
+		namespace, err := ns.ctx.GetNamespaceByName(req.GetVolumeId())
+		if err != nil {
+			pmemcommon.Infof(3, ctx, "NodeStageVolume: did not find volume %s", req.GetVolumeId())
+			return nil, err
+		}
+		glog.Infof("NodeStageVolume: Existing namespace: blockdev is %v with size %v", namespace.BlockDeviceName(), namespace.Size())
+		devicepath = "/dev/" + namespace.BlockDeviceName()
 	}
-	glog.Infof("NodeStageVolume: Existing namespace: blockdev is %v with size %v", namespace.BlockDeviceName(), namespace.Size())
-	devicepath := "/dev/" + namespace.BlockDeviceName()
+
 
 	// Check does devicepath already contain a filesystem?
 	existingFsType, err := determineFilesystemType(devicepath)
@@ -215,13 +223,21 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	// by spec, we have to return OK if asked volume is not mounted on asked path,
 	// so we look up the current device by volumeID and see is that device
 	// mounted on staging target path
-	namespace, err := ns.ctx.GetNamespaceByName(req.GetVolumeId())
-	if err != nil {
-		pmemcommon.Infof(3, ctx, "NodeUnstageVolume: did not find volume %s", req.GetVolumeId())
-		return nil, err
+	var devicepath string
+	if lvmode() == true {
+		// use shortcut: dont look it up, compose as we know what LV device path is.
+		// Note different form than in NodeStageVolume
+		devicepath = "/dev/mapper/" + lvgroup + "-" + req.GetVolumeId()
+		glog.Infof("NodeUnstageVolume: devicepath: %v", devicepath)
+	} else {
+		namespace, err := ns.ctx.GetNamespaceByName(req.GetVolumeId())
+		if err != nil {
+			pmemcommon.Infof(3, ctx, "NodeUnstageVolume: did not find volume %s", req.GetVolumeId())
+			return nil, err
+		}
+		glog.Infof("NodeUnstageVolume: Existing namespace: blockdev: %v with size %v", namespace.BlockDeviceName(), namespace.Size())
+		devicepath = "/dev/" + namespace.BlockDeviceName()
 	}
-	glog.Infof("NodeUnstageVolume: Existing namespace: blockdev: %v with size %v", namespace.BlockDeviceName(), namespace.Size())
-	devicepath := "/dev/" + namespace.BlockDeviceName()
 
 	// check all mountpoints
 	mounter := mount.New("")
@@ -254,7 +270,7 @@ func RemoveDir(ctx context.Context, Path string) error {
 	return nil
 }
 
-// There is based on function used in LV-CSI driver
+// This is based on function used in LV-CSI driver
 func determineFilesystemType(devicePath string) (string, error) {
 	// Use `file -bsL` to determine whether any filesystem type is detected.
 	// If a filesystem is detected (ie., the output is not "data", we use
@@ -287,4 +303,22 @@ func determineFilesystemType(devicePath string) (string, error) {
 		}
 	}
 	return "", parseErr
+}
+
+var lvMode bool = false
+var lvModeSet bool = false
+func lvmode() (bool) {
+	if lvModeSet == false {
+		lvModeSet = true
+		glog.Infof("LVmode not set, try to determine...")
+		_, err := exec.Command("vgdisplay", lvgroup).CombinedOutput()
+		if err != nil {
+			lvMode = false
+			glog.Infof("No LV group: %v found, LV mode false", lvgroup)
+		} else {
+			lvMode = true
+			glog.Infof("LV group: %v is found, LV mode is true", lvgroup)
+		}
+	}
+	return lvMode
 }
