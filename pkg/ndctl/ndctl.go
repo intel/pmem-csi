@@ -254,7 +254,7 @@ package ndctl
 //		const char *name = ndctl_region_get_devname(region);
 //		if (opts->ns_type != NDCTL_NS_TYPE_UNKNOWN
 //       && opts->ns_type != ndctl_region_get_type(region)) {
-//          debug("Region '%s' type: %d, requested namesapce type: %d\n", name, \
+//          debug("Region '%s' type: %d, requested namespace type: %d\n", name, \
 //                ndctl_region_get_type(region), opts->ns_type);\
 //      	continue;
 //      }
@@ -275,7 +275,7 @@ package ndctl
 //	return -ENXIO;
 //}
 //
-//int ndctl_context_create_namesapce(struct ndctl_ctx *ctx, struct ndctl_namespace_create_opts *opts,
+//int ndctl_context_create_namespace(struct ndctl_ctx *ctx, struct ndctl_namespace_create_opts *opts,
 //      struct ndctl_namespace **ndns) {
 //	struct ndctl_bus *bus;
 //
@@ -678,13 +678,13 @@ func (ns *Namespace) Size() uint64 {
 	return uint64(size)
 }
 
-//Mode returns namesapce mode
+//Mode returns namespace mode
 func (ns *Namespace) Mode() NamespaceMode {
 	ndns := (*C.struct_ndctl_namespace)(ns)
 	return toNamespaceMode(C.ndctl_namespace_get_mode(ndns))
 }
 
-//Type returns namesapce type
+//Type returns namespace type
 func (ns *Namespace) Type() NamespaceType {
 	ndns := (*C.struct_ndctl_namespace)(ns)
 	return NamespaceType(C.ndctl_namespace_get_type(ndns))
@@ -725,7 +725,7 @@ func (ns *Namespace) UUID() guuid.UUID {
 	return _uuid
 }
 
-//Location returns namesapce mapping location
+//Location returns namespace mapping location
 func (ns *Namespace) Location() string {
 	ndns := (*C.struct_ndctl_namespace)(ns)
 	locations := map[uint32]string{
@@ -822,7 +822,7 @@ func (nsmode NamespaceMode) toCMode() C.enum_ndctl_namespace_mode {
 	return C.NDCTL_NS_MODE_UNKNOWN
 }
 
-//NamespaceType type to represent namesapce type
+//NamespaceType type to represent namespace type
 type NamespaceType string
 
 const (
@@ -924,7 +924,7 @@ func (ctx *Context) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error
 
 	copts := opts.toCOptions()
 
-	rc := C.ndctl_context_create_namesapce((*C.struct_ndctl_ctx)(ctx),
+	rc := C.ndctl_context_create_namespace((*C.struct_ndctl_ctx)(ctx),
 		copts, &ndns)
 	if rc != 0 {
 		return nil, fmt.Errorf("failed to create namespace: %s(%d)",
