@@ -61,28 +61,28 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		return &csi.NodePublishVolumeResponse{}, nil
 	}
 
-	fsType := req.GetVolumeCapability().GetMount().GetFsType()
+	//fsType := req.GetVolumeCapability().GetMount().GetFsType()
 
 	// TODO: check and clean this, deviceId empty and not used here?
-	deviceId := ""
-	if req.GetPublishInfo() != nil {
-		deviceId = req.GetPublishInfo()[deviceID]
-	}
+	//deviceId := ""
+	//if req.GetPublishInfo() != nil {
+	//	deviceId = req.GetPublishInfo()[deviceID]
+	//}
 
 	readOnly := req.GetReadonly()
-	volumeId := req.GetVolumeId()
-	attrib := req.GetVolumeAttributes()
-	mountFlags := req.GetVolumeCapability().GetMount().GetMountFlags()
+	//volumeId := req.GetVolumeId()
+	//attrib := req.GetVolumeAttributes()
+	//mountFlags := req.GetVolumeCapability().GetMount().GetMountFlags()
 
-	glog.Infof("NodePublishVolume: targetpath %v\nStagingtargetpath %v\nfstype %v\ndevice %v\nreadonly %v\nattributes %v\n mountflags %v\n",
-		targetPath, stagingtargetPath, fsType, deviceId, readOnly, volumeId, attrib, mountFlags)
+	//glog.Infof("NodePublishVolume: targetpath %v\nStagingtargetpath %v\nfstype %v\ndevice %v\nreadonly %v\nattributes %v\n mountflags %v\n",
+	//	targetPath, stagingtargetPath, fsType, deviceId, readOnly, volumeId, attrib, mountFlags)
 
 	options := []string{"bind"}
 	if readOnly {
 		options = append(options, "ro")
 	}
-	mounter := mount.New("")
 	glog.Infof("NodePublishVolume: bind-mount %s %s", stagingtargetPath, targetPath)
+	mounter := mount.New("")
 	if err := mounter.Mount(stagingtargetPath, targetPath, "", options); err != nil {
 		return nil, err
 	}
@@ -117,6 +117,7 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 
 func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
 
+	var output []byte
 	// Check arguments
 	if len(req.GetVolumeId()) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Volume ID missing in request")
@@ -134,10 +135,14 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	glog.Infof("NodeStageVolume: Requested fsType is %v", requestedFsType)
 
 	var devicepath string
+	var err error
 	if lvmode() == true {
-		// using shortcut: don't look it up, just compose LV device path is
-		devicepath = "/dev/" + lvgroup + "/" + req.GetVolumeId()
-		glog.Infof("NodeStageVolume: devicepath: %v", devicepath)
+		devicepath, err = lvPath(req.GetVolumeId())
+		if err == nil {
+			glog.Infof("NodeStageVolume: devicepath: %v", devicepath)
+		} else {
+			return nil, status.Error(codes.InvalidArgument, "No such volume")
+		}
 	} else {
 		namespace, err := ns.ctx.GetNamespaceByName(req.GetVolumeId())
 		if err != nil {
@@ -152,11 +157,11 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	// Check does devicepath already contain a filesystem?
 	existingFsType, err := determineFilesystemType(devicepath)
 	if err != nil {
+		glog.Infof("NodeStageVolume: determine failed: %v", err)
 		return nil, err
 	}
 
 	// what to do if existing file system is detected and is different from request;
-	// TODO: Is the current decision to error-out here OK?
 	// forced re-format would lead to loss of previous data, so we refuse.
 	if existingFsType != "" {
 		glog.Infof("NodeStageVolume: Found existing %v filesystem", existingFsType)
@@ -170,7 +175,6 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		}
 	} else {
 		// no existing file system, make fs
-		var output []byte
 		if requestedFsType == "ext4" {
 			glog.Infof("NodeStageVolume: mkfs.ext4 -F %s", devicepath)
 			output, err = exec.Command("mkfs.ext4", "-F", devicepath).CombinedOutput()
@@ -195,11 +199,22 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	// If file system is already mounted, can happen if out-of-sync "stage" is asked again without unstage
 	// then the mount here will fail. I guess it's ok to not check explicitly for existing mount,
 	// as end result after mount attempt will be same: no new mount and existing mount remains.
+	// TODO: cleaner is to explicitly check (although CSI spec may tell that out-of-order call is illegal (check it))
 	glog.Infof("NodeStageVolume: mount %s %s", devicepath, stagingtargetPath)
-	options := []string{""}
+
+	/* THIS is how it could go with using "mount" package
+        options := []string{""}
 	mounter := mount.New("")
 	if err := mounter.Mount(devicepath, stagingtargetPath, "", options); err != nil {
 		return nil, err
+	}*/
+	// ... but it seems not supporting -c "canonical" option, so do it with exec
+	// added -c makes canonical mount, resulting in mounted path matching what LV thinks is lvpath.
+	// Without -c mounted path will look like /dev/mapper/... and its more difficult to match it to lvpath when unmounting
+	// TODO: perhaps this thing can be revisited-cleaned somehow
+	output, err = exec.Command("mount", "-c", devicepath, stagingtargetPath).CombinedOutput()
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "mount failed"+string(output))
 	}
 	return &csi.NodeStageVolumeResponse{}, nil
 }
@@ -218,17 +233,20 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	// showing for debug:
 	glog.Infof("NodeUnStageVolume: VolumeID is %v", req.GetVolumeId())
 	glog.Infof("NodeUnStageVolume: Staging target path is %v", stagingtargetPath)
-	glog.Infof("NodeUnStageVolume: umount %s", stagingtargetPath)
 
 	// by spec, we have to return OK if asked volume is not mounted on asked path,
 	// so we look up the current device by volumeID and see is that device
 	// mounted on staging target path
 	var devicepath string
+	var err error
 	if lvmode() == true {
-		// use shortcut: dont look it up, compose as we know what LV device path is.
-		// Note different form than in NodeStageVolume
-		devicepath = "/dev/mapper/" + lvgroup + "-" + req.GetVolumeId()
-		glog.Infof("NodeUnstageVolume: devicepath: %v", devicepath)
+		devicepath, err = lvPath(req.GetVolumeId())
+		//devicepath = "/dev/mapper/" + lvgroup + "-" + req.GetVolumeId()
+		if err == nil {
+                        glog.Infof("NodeUnstageVolume: devicepath: %v", devicepath)
+                } else {
+                        return nil, status.Error(codes.InvalidArgument, "No such volume")
+                }
 	} else {
 		namespace, err := ns.ctx.GetNamespaceByName(req.GetVolumeId())
 		if err != nil {
@@ -239,23 +257,23 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 		devicepath = "/dev/" + namespace.BlockDeviceName()
 	}
 
-	// check all mountpoints
+	// Find out device name for mounted path
 	mounter := mount.New("")
-	mountPoints, mountPointsErr := mounter.List()
-	if mountPointsErr != nil {
-		return nil, mountPointsErr
+	mountedDev, _, err := mount.GetDeviceNameFromMount(mounter, stagingtargetPath)
+	if err != nil {
+		pmemcommon.Infof(3, ctx, "NodeUnstageVolume: Error getting device name for mount")
+		return nil, err
 	}
-	for _, mp := range mountPoints {
-		if mp.Device == devicepath && mp.Path == stagingtargetPath {
-			glog.Infof("NodeUnstageVolume: Found matching mount: dev: %v path: %v", mp.Device, mp.Path)
-			umounter := mount.New("")
-			if err := umounter.Unmount(stagingtargetPath); err != nil {
-				glog.Infof("NodeUnstageVolume: Umount failed: %v", err)
-				return nil, err
-			}
-			RemoveDir(ctx, stagingtargetPath)
-		}
+	if mountedDev == "" {
+		pmemcommon.Infof(3, ctx, "NodeUnstageVolume: No device name for mount point")
+		return nil, status.Error(codes.InvalidArgument, "No device found for mount point")
 	}
+	glog.Infof("NodeUnstageVolume: detected mountedDev: [%v]", mountedDev)
+	if err := mounter.Unmount(stagingtargetPath); err != nil {
+		glog.Infof("NodeUnstageVolume: Umount failed: %v", err)
+		return nil, err
+	}
+	RemoveDir(ctx, stagingtargetPath)
 	return &csi.NodeUnstageVolumeResponse{}, nil
 }
 
@@ -305,10 +323,20 @@ func determineFilesystemType(devicePath string) (string, error) {
 	return "", parseErr
 }
 
-var lvMode bool = false
-var lvModeSet bool = false
+// TODO: clean this up, likely can be deleted.
+// This is method to determine "LV mode" dynamically in a setup where
+// we want run-time detection.
+// It was implemented when we faked LVs on top of regular block device in VM-devel mode.
+// Right now lvMode=true is had-coded here and all lvmode checks in code will return true
+// The code in else-parts of these blocks would serve ndctl-managed namespaces directly,
+// but this seems not viable way forward, and is incomplete and nto in good shape.
+// For now, keeping the code in else-parts for historic reference.
+
+//var lvMode bool = false
+var lvMode bool = true
+//var lvModeSet bool = false
 func lvmode() (bool) {
-	if lvModeSet == false {
+/*	if lvModeSet == false {
 		lvModeSet = true
 		glog.Infof("LVmode not set, try to determine...")
 		_, err := exec.Command("vgdisplay", lvgroup).CombinedOutput()
@@ -319,6 +347,6 @@ func lvmode() (bool) {
 			lvMode = true
 			glog.Infof("LV group: %v is found, LV mode is true", lvgroup)
 		}
-	}
+	}*/
 	return lvMode
 }

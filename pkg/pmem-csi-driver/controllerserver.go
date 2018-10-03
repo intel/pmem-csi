@@ -28,7 +28,7 @@ const (
 	deviceID = "deviceID"
 	// LV mode in emulated case: if LV Group named nvdimm exists, we use Lvolumes instead of libndctl
 	// to achieve stable emulated env. LV storage is set up outside of this driver
-	lvgroup  = "nvdimm"
+	//lvgroup  = "ndbus0region0"
 )
 
 type controllerServer struct {
@@ -88,12 +88,44 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 	var volumeID string
 	if lvmode() == true {
 		volumeID = volName
-		// lvcreate takes size in MBytes if no unit
-		askedM := int(asked/(1024*1024))
-		sz := strconv.Itoa(askedM)
-		output, err := exec.Command("lvcreate", "-L", sz, "-n", volumeID, lvgroup).CombinedOutput()
-		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "lvcreate failed"+string(output))
+		// pick a region, few possible strategies:
+		// 1. pick first with enough available space: simplest, regions get filled in order;
+		// 2. pick first with largest available space: regions get used round-robin, i.e. load-balanced, but does not leave large unused;
+		// 3. pick first with smallest available which satisfies the request: ordered initially, but later leaves bigger free available;
+		// Let's implement strategy 1 for now, simplest to code as no need to compare sizes in all regions
+		// NOTE: We walk buses and regions in ndctl context, but avail.size we check in LV context
+		for _, bus := range cs.ctx.GetBuses() {
+			glog.Infof("CreateVolume: Bus: %v", bus.DeviceName())
+			for _, r := range bus.ActiveRegions() {
+				glog.Infof("CreateVolume: Region: %v", r.DeviceName())
+				vgName := VGName(bus, r)
+				glog.Infof("CreateVolume: vgName: %v", vgName)
+				output, err := exec.Command("vgs", "--noheadings", "--nosuffix", "--options", "vg_free", "--units", "B", vgName).CombinedOutput()
+				if err != nil {
+					return nil, status.Error(codes.InvalidArgument, "vgs failed"+string(output))
+				}
+				vgAvailStr := strings.TrimSpace(string(output))
+				vgAvail, _ := strconv.Atoi(vgAvailStr)
+				glog.Infof("CreateVolume: vgAvail in %v: [%v]", vgName, vgAvail)
+				if uint64(vgAvail) >= asked {
+					// lvcreate takes size in MBytes if no unit
+					askedM := int(asked/(1024*1024))
+					sz := strconv.Itoa(askedM)
+					output, err := exec.Command("lvcreate", "-L", sz, "-n", volumeID, vgName).CombinedOutput()
+					if err != nil {
+						return nil, status.Error(codes.InvalidArgument, "lvcreate failed"+string(output))
+					} else {
+						// return here to avoid double action and multi-level break out of for loops
+						return &csi.CreateVolumeResponse{
+							Volume: &csi.Volume{
+								Id:            volumeID,
+								CapacityBytes: int64(asked),
+								Attributes:    req.GetParameters(),
+							},
+						}, nil
+					}
+				}
+			}
 		}
 	} else {
 		ns, err := cs.ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
@@ -111,13 +143,27 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		// volumeID := ns.UUID().String()
 		volumeID = ns.Name()
 	}
-	return &csi.CreateVolumeResponse{
-		Volume: &csi.Volume{
-			Id:            volumeID,
-			CapacityBytes: int64(asked),
-			Attributes:    req.GetParameters(),
-		},
-	}, nil
+	// if we reach here then no suitable region was found
+	return nil, status.Error(codes.InvalidArgument, "No suitable region found")
+}
+
+func lvPath(volumeID string) (string, error) {
+	output, err := exec.Command("lvs", "--noheadings", "--options", "lv_name,lv_path").CombinedOutput()
+	if err != nil {
+		return "", status.Error(codes.InvalidArgument, "lvs failed"+string(output))
+	}
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		// we have a trimmed line like this here: [nspace4 ndbus0region0]
+		glog.Infof("lvPath: Line from lvs: [%v]", line)
+		fields := strings.Fields(line)
+		if len(fields) == 2 {
+			if volumeID == fields[0] {
+				return fields[1], nil
+			}
+		}
+	}
+	return "", status.Error(codes.InvalidArgument, "no such volume")
 }
 
 func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
@@ -137,18 +183,24 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 	// TODO: should we wipe the space here?
 	// For privacy, somewhere we may have to wipe. But where, and what about performance hit.
 	if lvmode() == true {
-		//lv := fmt.Sprintf("%s/%s", lvgroup, volumeID)
-		lv := lvgroup + "/" + volumeID
-		output, err := exec.Command("lvremove", "-f", lv).CombinedOutput()
-		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "lvremove failed"+string(output))
+		lvpath, err := lvPath(volumeID)
+		if err == nil {
+			glog.Infof("DeleteVolume: Matching LVpath: %v", lvpath)
+			output, err := exec.Command("lvremove", "-f", lvpath).CombinedOutput()
+			if err != nil {
+				return nil, status.Error(codes.InvalidArgument, "lvremove failed"+string(output))
+			} else {
+				// return in success case, volume found and removed
+				return &csi.DeleteVolumeResponse{}, nil
+			}
 		}
 	} else {
 		if err := cs.ctx.DestroyNamespaceByName(volumeID); err != nil {
 			return nil, err
 		}
 	}
-	return &csi.DeleteVolumeResponse{}, nil
+	// if we reach here, there was no matching volume
+	return nil, status.Error(codes.InvalidArgument, "No such volume")
 }
 
 func (cs *controllerServer) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
@@ -180,11 +232,11 @@ func (cs *controllerServer) ListVolumes(ctx context.Context, req *csi.ListVolume
 	if lvmode() == true {
 		output, err := exec.Command("lvs", "--noheadings", "--nosuffix", "--options", "lv_name,lv_size", "--units", "B").CombinedOutput()
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "lvcreate failed"+string(output))
+			return nil, status.Error(codes.InvalidArgument, "lvs failed"+string(output))
 		}
 		lines := strings.Split(string(output), "\n")
 		for _, line := range lines {
-			fields := strings.Split(strings.TrimSpace(line), " ")
+			fields := strings.Fields(line)
 			if len(fields) == 2 {
 				sz, _ := strconv.Atoi(fields[1])
 				info := &csi.Volume{

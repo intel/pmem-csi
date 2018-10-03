@@ -47,7 +47,7 @@ func (cs *DefaultControllerServer) ValidateVolumeCapabilities(ctx context.Contex
 				Message:   "Driver doesnot support mode:" + c.GetAccessMode().GetMode().String(),
 			}, status.Error(codes.InvalidArgument, "Driver doesnot support mode:"+c.GetAccessMode().GetMode().String())
 		}
-		// TODO: Ignoring mount & block tyeps for now.
+		// TODO: Ignoring mount & block types for now.
 	}
 
 	return &csi.ValidateVolumeCapabilitiesResponse{

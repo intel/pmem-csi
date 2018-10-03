@@ -24,6 +24,7 @@ var (
 	endpoint   = flag.String("endpoint", "unix:///tmp/pmem-csi.sock", "PMEM CSI endpoint")
 	driverName = flag.String("drivername", "pmem-csi-driver", "name of the driver")
 	nodeID     = flag.String("nodeid", "nodeid", "node id")
+	namespacesize  = flag.Int("namespacesize", 32, "NVDIMM namespace size in GB")
 )
 
 func main() {
@@ -36,5 +37,5 @@ func main() {
 	defer closer.Close()
 
 	driver := pmemcsidriver.GetPMEMDriver()
-	driver.Run(*driverName, *nodeID, *endpoint)
+	driver.Run(*driverName, *nodeID, *endpoint, *namespacesize)
 }
