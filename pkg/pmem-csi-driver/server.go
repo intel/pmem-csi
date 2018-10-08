@@ -8,27 +8,16 @@ package pmemcsidriver
 
 import (
 	"fmt"
-	"net"
-	"os"
-	"strings"
 	"sync"
 
-	"github.com/golang/glog"
+	"github.com/intel/pmem-csi/pkg/pmem-grpc"
 	"google.golang.org/grpc"
-
-	"github.com/container-storage-interface/spec/lib/go/csi/v0"
-
-	"github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
-	"github.com/opentracing/opentracing-go"
-
-	"github.com/intel/pmem-csi/pkg/pmem-common"
 )
 
 // Defines Non blocking GRPC server interfaces
 type NonBlockingGRPCServer interface {
 	// Start services at the endpoint
-	Start(endpoint string, ids csi.IdentityServer, cs csi.ControllerServer, ns csi.NodeServer)
+	Start(endpoint string, register pmemgrpc.RegisterService) error
 	// Waits for the service to stop
 	Wait()
 	// Stops the service gracefully
@@ -43,17 +32,16 @@ func NewNonBlockingGRPCServer() NonBlockingGRPCServer {
 
 // NonBlocking server
 type nonBlockingGRPCServer struct {
-	wg     sync.WaitGroup
-	server *grpc.Server
+	wg      sync.WaitGroup
+	servers []*grpc.Server
 }
 
-func (s *nonBlockingGRPCServer) Start(endpoint string, ids csi.IdentityServer, cs csi.ControllerServer, ns csi.NodeServer) {
-
+func (s *nonBlockingGRPCServer) Start(endpoint string, register pmemgrpc.RegisterService) error {
+	if endpoint == "" {
+		return fmt.Errorf("endpoint cannot be empty")
+	}
 	s.wg.Add(1)
-
-	go s.serve(endpoint, ids, cs, ns)
-
-	return
+	return pmemgrpc.StartNewServer(endpoint, register)
 }
 
 func (s *nonBlockingGRPCServer) Wait() {
@@ -61,64 +49,13 @@ func (s *nonBlockingGRPCServer) Wait() {
 }
 
 func (s *nonBlockingGRPCServer) Stop() {
-	s.server.GracefulStop()
+	for _, s := range s.servers {
+		s.GracefulStop()
+	}
 }
 
 func (s *nonBlockingGRPCServer) ForceStop() {
-	s.server.Stop()
-}
-
-func parseEndpoint(ep string) (string, string, error) {
-	if strings.HasPrefix(strings.ToLower(ep), "unix://") || strings.HasPrefix(strings.ToLower(ep), "tcp://") {
-		s := strings.SplitN(ep, "://", 2)
-		if s[1] != "" {
-			return s[0], s[1], nil
-		}
+	for _, s := range s.servers {
+		s.Stop()
 	}
-	return "", "", fmt.Errorf("Invalid endpoint: %v", ep)
-}
-
-func (s *nonBlockingGRPCServer) serve(endpoint string, ids csi.IdentityServer, cs csi.ControllerServer, ns csi.NodeServer) {
-
-	proto, addr, err := parseEndpoint(endpoint)
-	if err != nil {
-		glog.Fatal(err.Error())
-	}
-
-	if proto == "unix" {
-		if err := os.Remove(addr); err != nil && !os.IsNotExist(err) {
-			glog.Fatalf("Failed to remove %s, error: %s", addr, err.Error())
-		}
-	}
-
-	listener, err := net.Listen(proto, addr)
-	if err != nil {
-		glog.Fatalf("Failed to listen: %v", err)
-	}
-
-	interceptor := grpc_middleware.ChainUnaryServer(
-		otgrpc.OpenTracingServerInterceptor(
-			opentracing.GlobalTracer(),
-			otgrpc.SpanDecorator(pmemcommon.TraceGRPCPayload)),
-		pmemcommon.LogGRPCServer)
-	opts := []grpc.ServerOption{
-		grpc.UnaryInterceptor(interceptor),
-	}
-	server := grpc.NewServer(opts...)
-	s.server = server
-
-	if ids != nil {
-		csi.RegisterIdentityServer(server, ids)
-	}
-	if cs != nil {
-		csi.RegisterControllerServer(server, cs)
-	}
-	if ns != nil {
-		csi.RegisterNodeServer(server, ns)
-	}
-
-	glog.Infof("Listening for connections on address: %#v", listener.Addr())
-
-	server.Serve(listener)
-
 }

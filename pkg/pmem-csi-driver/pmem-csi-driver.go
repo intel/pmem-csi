@@ -11,6 +11,7 @@ import (
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
 	"github.com/golang/glog"
 	"github.com/intel/pmem-csi/pkg/ndctl"
+	"google.golang.org/grpc"
 	"os/exec"
 	"strings"
 )
@@ -103,7 +104,7 @@ func NewNodeServer(pmemd *pmemDriver) *nodeServer {
 	}
 }
 
-func (pmemd *pmemDriver) Run(driverName, nodeID, endpoint string, namespacesize int) {
+func (pmemd *pmemDriver) Run(driverName, nodeID, endpoint string) {
 	//s, err := pmemd.Start(driverName, nodeID, endpoint)
 	pmemd.driver = NewCSIDriver(driverName, vendorVersion, nodeID)
 	if pmemd.driver == nil {
@@ -128,7 +129,13 @@ func (pmemd *pmemDriver) Run(driverName, nodeID, endpoint string, namespacesize 
 	InitNVdimms(ctx, namespacesize)
 
 	s := NewNonBlockingGRPCServer()
-	s.Start(endpoint, pmemd.ids, pmemd.cs, pmemd.ns)
+	if err = s.Start(endpoint, func(server *grpc.Server) {
+		csi.RegisterIdentityServer(server, pmemd.ids)
+		csi.RegisterControllerServer(server, pmemd.cs)
+		csi.RegisterNodeServer(server, pmemd.ns)
+	}); err != nil {
+		glog.Fatalln("Failed to initialize CSI Driver.")
+	}
 	s.Wait()
 }
 
