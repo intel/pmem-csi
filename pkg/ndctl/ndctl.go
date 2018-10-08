@@ -985,6 +985,19 @@ func (ctx *Context) GetAllNamespaces() []*Namespace {
 	return list
 }
 
+//IsSpaceAvailable checks if a region available with given free size
+func (ctx *Context) IsSpaceAvailable(size uint64) bool {
+	for _, bus := range ctx.GetBuses() {
+		for _, r := range bus.ActiveRegions() {
+			if r.MaxAvailabeExtent() >= size && NamespaceType(r.Type()) == Pmem {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 type MapLocation string
 
 func (m MapLocation) toCMapLocation() *C.char {
@@ -1035,30 +1048,4 @@ func (opts CreateNamespaceOpts) toCOptions() *C.struct_ndctl_namespace_create_op
 	}
 
 	return &copts
-}
-
-var gConext *Context
-var gContexRefCount int
-
-func GetContext() (*Context, error) {
-	var err error
-	if gConext == nil {
-		gConext, err = NewContext()
-		if err != nil {
-			return nil, err
-		}
-	}
-	gContexRefCount++
-
-	return gConext, nil
-}
-
-func UnrefContext() {
-	gContexRefCount--
-
-	if gContexRefCount <= 0 {
-		gConext.Free()
-		gConext = nil
-		gContexRefCount = 0
-	}
 }
