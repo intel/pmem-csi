@@ -21,10 +21,15 @@ func init() {
 }
 
 var (
-	endpoint   = flag.String("endpoint", "unix:///tmp/pmem-csi.sock", "PMEM CSI endpoint")
-	driverName = flag.String("drivername", "pmem-csi-driver", "name of the driver")
-	nodeID     = flag.String("nodeid", "nodeid", "node id")
-	namespacesize  = flag.Int("namespacesize", 32, "NVDIMM namespace size in GB")
+	/* generic options */
+	driverName       = flag.String("drivername", "csi-pmem", "name of the driver")
+	nodeID           = flag.String("nodeid", "nodeid", "node id")
+	endpoint         = flag.String("endpoint", "unix:///tmp/pmem-csi.sock", "PMEM CSI endpoint")
+	mode             = flag.String("mode", "unified", "driver run mode : controller, node or unified")
+	registryEndpoint = flag.String("registryEndpoint", "", "endpoint to connect/listen resgistery server")
+	/* node mode options */
+	controllerEndpoint = flag.String("controllerEndpoint", "", "internal node controller endpoint")
+	namespacesize      = flag.Int("namespacesize", 32, "NVDIMM namespace size in GB")
 )
 
 func main() {
@@ -36,6 +41,22 @@ func main() {
 	}
 	defer closer.Close()
 
-	driver := pmemcsidriver.GetPMEMDriver()
-	driver.Run(*driverName, *nodeID, *endpoint, *namespacesize)
+	driver, err := pmemcsidriver.GetPMEMDriver(pmemcsidriver.Config{
+		DriverName:         *driverName,
+		NodeID:             *nodeID,
+		Endpoint:           *endpoint,
+		Mode:               pmemcsidriver.DriverMode(*mode),
+		RegistryEndpoint:   *registryEndpoint,
+		ControllerEndpoint: *controllerEndpoint,
+		NamespaceSize:      *namespacesize,
+	})
+	if err != nil {
+		fmt.Printf("Failed to Initialized driver: %s", err.Error())
+		os.Exit(1)
+	}
+
+	if err = driver.Run(); err != nil {
+		fmt.Printf("Failed to run driver: %s", err.Error())
+		os.Exit(1)
+	}
 }

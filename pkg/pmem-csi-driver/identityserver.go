@@ -9,3 +9,11 @@ package pmemcsidriver
 type identityServer struct {
 	*DefaultIdentityServer
 }
+
+func NewIdentityServer(pmemd *pmemDriver) *identityServer {
+	return &identityServer{
+		DefaultIdentityServer: NewDefaultIdentityServer(pmemd.driver),
+	}
+}
+
+

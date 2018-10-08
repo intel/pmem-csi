@@ -8,142 +8,204 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
+	"context"
+	"fmt"
+	"time"
+
+	"os/exec"
+	"strings"
+
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
 	"github.com/golang/glog"
 	"github.com/intel/pmem-csi/pkg/ndctl"
+	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
+	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
 	"google.golang.org/grpc"
-	"os/exec"
-	"strings"
 )
 
-/* these came with some example, but not used currently
 const (
-	kib    int64 = 1024
-	mib    int64 = kib * 1024
-	gib    int64 = mib * 1024
-	gib100 int64 = gib * 100
-	tib    int64 = gib * 1024
-	tib100 int64 = tib * 100
+	vendorVersion     string        = "0.0.1"
+	connectionTimeout time.Duration = 10 * time.Second
+	retryTimeout      time.Duration = 10 * time.Second
+	requestTimeout    time.Duration = 10 * time.Second
 )
-*/
+
+type DriverMode string
+
+const (
+	//Controller defintion for controller driver mode
+	Controller DriverMode = "controller"
+	//Node defintion for noder driver mode
+	Node DriverMode = "node"
+	//Unified defintion for unified driver mode
+	Unified DriverMode = "unified"
+)
+
+//Config type for driver configuration
+type Config struct {
+	//DriverName name of the csi driver
+	DriverName string
+	//NodeID node id on which this csi driver is running
+	NodeID string
+	//Endpoint exported csi driver endpoint
+	Endpoint string
+	//Mode mode fo the driver
+	Mode DriverMode
+	//RegistryEndpoint exported registry server endpoint
+	RegistryEndpoint string
+	//ControllerEndpoint exported node controller endpoint
+	ControllerEndpoint string
+	//NamespaceSize size(in GB) of namespace block
+	NamespaceSize int
+}
+
 type pmemDriver struct {
-	driverName string
-	nodeID     string
-	driver     *CSIDriver
-
-	ids *identityServer
-	ns  *nodeServer
-	cs  *controllerServer
-	ctx *ndctl.Context
-
-	cap   []*csi.VolumeCapability_AccessMode
-	cscap []*csi.ControllerServiceCapability
+	driver *CSIDriver
+	cfg    Config
+	ctx    *ndctl.Context
+	ids    csi.IdentityServer
+	ns     csi.NodeServer
+	cs     csi.ControllerServer
+	rs     *registryServer
 }
 
-var (
-	//	pmemDriver     *pmemd
-	vendorVersion = "0.0.1"
-)
-
-/*
-TODO: commenting this out for now.
-idea is that it's safer to avoid maintaining state in driver.
-Instead, we always look it up from lower side.
-Let's see can we keep it that way...
-
-type pmemVolume struct {
-	VolName string `json:"volName"`
-	VolID   string `json:"volID"`
-	VolSize int64  `json:"volSize"`
-	VolPath string `json:"volPath"`
-}
-
-var pmemVolumes map[string]pmemVolume
-
-func init() {
-	pmemVolumes = map[string]pmemVolume{}
-}
-func getVolumeByID(volumeID string) (pmemVolume, error) {
-	if pmemVol, ok := pmemVolumes[volumeID]; ok {
-		return pmemVol, nil
+func GetPMEMDriver(cfg Config) (*pmemDriver, error) {
+	validModes := map[DriverMode]struct{}{
+		Controller: struct{}{},
+		Node:       struct{}{},
+		Unified:    struct{}{},
 	}
-	return pmemVolume{}, fmt.Errorf("volume id %s does not exit in the volumes list", volumeID)
-}
-
-func getVolumeByName(volName string) (pmemVolume, error) {
-	for _, pmemVol := range pmemVolumes {
-		if pmemVol.VolName == volName {
-			return pmemVol, nil
-		}
+	if _, ok := validModes[cfg.Mode]; !ok {
+		return nil, fmt.Errorf("Invalid driver mode: %s", string(cfg.Mode))
 	}
-	return pmemVolume{}, fmt.Errorf("volume name %s does not exit in the volumes list", volName)
-}
-
-*/
-func GetPMEMDriver() *pmemDriver {
-	return &pmemDriver{}
-}
-
-func NewIdentityServer(pmemd *pmemDriver) *identityServer {
-	return &identityServer{
-		DefaultIdentityServer: NewDefaultIdentityServer(pmemd.driver),
+	if cfg.DriverName == "" || cfg.NodeID == "" || cfg.Endpoint == "" {
+		return nil, fmt.Errorf("One of mandatory(Drivername Node id or Endpoint) configuration option missing")
 	}
-}
-
-func NewControllerServer(pmemd *pmemDriver) *controllerServer {
-	return &controllerServer{
-		DefaultControllerServer: NewDefaultControllerServer(pmemd.driver),
-		ctx: pmemd.ctx,
+	if cfg.RegistryEndpoint == "" {
+		cfg.RegistryEndpoint = cfg.Endpoint
 	}
-}
-
-func NewNodeServer(pmemd *pmemDriver) *nodeServer {
-	return &nodeServer{
-		DefaultNodeServer: NewDefaultNodeServer(pmemd.driver),
-		ctx:               pmemd.ctx,
+	if cfg.ControllerEndpoint == "" {
+		cfg.ControllerEndpoint = cfg.Endpoint
 	}
-}
 
-func (pmemd *pmemDriver) Run(driverName, nodeID, endpoint string) {
-	//s, err := pmemd.Start(driverName, nodeID, endpoint)
-	pmemd.driver = NewCSIDriver(driverName, vendorVersion, nodeID)
-	if pmemd.driver == nil {
-		glog.Fatalln("Failed to initialize CSI Driver.")
+	driver, err := NewCSIDriver(cfg.DriverName, vendorVersion, cfg.NodeID)
+	if err != nil {
+		return nil, err
 	}
-	pmemd.driver.AddControllerServiceCapabilities([]csi.ControllerServiceCapability_RPC_Type{
-		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
-		csi.ControllerServiceCapability_RPC_LIST_VOLUMES})
-	pmemd.driver.AddNodeServiceCapabilities([]csi.NodeServiceCapability_RPC_Type{csi.NodeServiceCapability_RPC_STAGE_UNSTAGE_VOLUME})
-	pmemd.driver.AddVolumeCapabilityAccessModes([]csi.VolumeCapability_AccessMode_Mode{csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER})
+	driver.AddVolumeCapabilityAccessModes([]csi.VolumeCapability_AccessMode_Mode{
+		csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+	})
 
 	ctx, err := ndctl.NewContext()
 	if err != nil {
-		glog.Fatalln("Failed to initialize pmem context: %s", err.Error())
+		return nil, fmt.Errorf("Failed to initialize pmem context: %s", err.Error())
 	}
-	pmemd.ctx = ctx
+
+	return &pmemDriver{
+		cfg:    cfg,
+		driver: driver,
+		ctx:    ctx,
+	}, nil
+}
+
+func (pmemd *pmemDriver) Run() error {
 	// Create GRPC servers
 	pmemd.ids = NewIdentityServer(pmemd)
-	pmemd.ns = NewNodeServer(pmemd)
-	pmemd.cs = NewControllerServer(pmemd)
-
-	InitNVdimms(ctx, namespacesize)
-
 	s := NewNonBlockingGRPCServer()
-	if err = s.Start(endpoint, func(server *grpc.Server) {
-		csi.RegisterIdentityServer(server, pmemd.ids)
-		csi.RegisterControllerServer(server, pmemd.cs)
-		csi.RegisterNodeServer(server, pmemd.ns)
-	}); err != nil {
-		glog.Fatalln("Failed to initialize CSI Driver.")
+
+	if pmemd.cfg.Mode == Controller {
+		pmemd.rs = NewRegistryServer()
+		pmemd.cs = NewControllerServer(pmemd.driver, pmemd.cfg.Mode, pmemd.rs, pmemd.ctx)
+		pmemd.driver.AddControllerServiceCapabilities([]csi.ControllerServiceCapability_RPC_Type{
+			csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
+			csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
+			csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
+		})
+
+		if pmemd.cfg.Endpoint != pmemd.cfg.RegistryEndpoint {
+			if err := s.Start(pmemd.cfg.Endpoint, func(server *grpc.Server) {
+				csi.RegisterIdentityServer(server, pmemd.ids)
+				csi.RegisterControllerServer(server, pmemd.cs)
+			}); err != nil {
+				return err
+			}
+			if err := s.Start(pmemd.cfg.RegistryEndpoint, func(server *grpc.Server) {
+				registry.RegisterRegistryServer(server, pmemd.rs)
+			}); err != nil {
+				return err
+			}
+		} else {
+			if err := s.Start(pmemd.cfg.Endpoint, func(server *grpc.Server) {
+				csi.RegisterIdentityServer(server, pmemd.ids)
+				csi.RegisterControllerServer(server, pmemd.cs)
+				registry.RegisterRegistryServer(server, pmemd.rs)
+			}); err != nil {
+				return err
+			}
+		}
+	} else {
+		pmemd.ns = NewNodeServer(pmemd.driver, pmemd.ctx)
+		pmemd.cs = NewControllerServer(pmemd.driver, pmemd.cfg.Mode, nil, pmemd.ctx)
+		pmemd.driver.AddControllerServiceCapabilities([]csi.ControllerServiceCapability_RPC_Type{
+			csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
+			csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
+		})
+		pmemd.driver.AddNodeServiceCapabilities([]csi.NodeServiceCapability_RPC_Type{
+			csi.NodeServiceCapability_RPC_STAGE_UNSTAGE_VOLUME,
+		})
+
+		if pmemd.cfg.Mode == Node {
+			if pmemd.cfg.Endpoint != pmemd.cfg.ControllerEndpoint {
+				if err := s.Start(pmemd.cfg.Endpoint, func(server *grpc.Server) {
+					csi.RegisterIdentityServer(server, pmemd.ids)
+					csi.RegisterNodeServer(server, pmemd.ns)
+				}); err != nil {
+					return err
+				}
+				if err := s.Start(pmemd.cfg.ControllerEndpoint, func(server *grpc.Server) {
+					csi.RegisterControllerServer(server, pmemd.cs)
+					//registry.RegisterNodeControllerServer(server, pmemd.ncs)
+				}); err != nil {
+					return err
+				}
+			} else {
+				if err := s.Start(pmemd.cfg.Endpoint, func(server *grpc.Server) {
+					csi.RegisterIdentityServer(server, pmemd.ids)
+					csi.RegisterControllerServer(server, pmemd.cs)
+					csi.RegisterNodeServer(server, pmemd.ns)
+				}); err != nil {
+					return err
+				}
+			}
+			if err := pmemd.registerNodeController(); err != nil {
+				return err
+			}
+		} else /* if pmemd.cfg.Mode == Unified */ {
+			pmemd.driver.AddControllerServiceCapabilities([]csi.ControllerServiceCapability_RPC_Type{
+				csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
+			})
+			if err := s.Start(pmemd.cfg.Endpoint, func(server *grpc.Server) {
+				csi.RegisterIdentityServer(server, pmemd.ids)
+				csi.RegisterControllerServer(server, pmemd.cs)
+				csi.RegisterNodeServer(server, pmemd.ns)
+			}); err != nil {
+				return err
+			}
+		}
+		InitNVdimms(pmemd.ctx, pmemd.cfg.NamespaceSize)
 	}
+
+	defer s.Stop()
 	s.Wait()
+
+	return nil
 }
 
 const (
 	// we get this as argument 'namespacesize'
 	//namespaceSize uint64 = (4*1024*1024*1024)
 	// TODO: try to get rid of hard-coded overhead
-	namespaceOverhead = (4*1024*1024)
+	namespaceOverhead = (4 * 1024 * 1024)
 	// smaller namespace size (in GB) for devel mode in VM
 	namespacesizeVM = 2
 )
@@ -153,12 +215,12 @@ const (
 // - Check available size, if bigger than one NS size, create one more, repeat this in loop
 func CreateNamespaces(ctx *ndctl.Context, namespacesize int) {
 
-	var nsSize uint64 = (uint64(namespacesize)*1024*1024*1024)
-        for _, bus := range ctx.GetBuses() {
-                for _, r := range bus.ActiveRegions() {
+	var nsSize uint64 = (uint64(namespacesize) * 1024 * 1024 * 1024)
+	for _, bus := range ctx.GetBuses() {
+		for _, r := range bus.ActiveRegions() {
 			glog.Infof("CreateNamespaces in %v with %v bytes available", r.DeviceName(), r.AvailableSize())
 			availSize := r.AvailableSize()
-			for availSize > nsSize + namespaceOverhead {
+			for availSize > nsSize+namespaceOverhead {
 				glog.Info("Available is greater than one NS size, try to create a Namespace")
 				_, err := ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
 					Size: nsSize,
@@ -171,8 +233,8 @@ func CreateNamespaces(ctx *ndctl.Context, namespacesize int) {
 				glog.Infof("Remaining Available in %v is %v", r.DeviceName(), availSize)
 			}
 			glog.Infof("avail_size in %v not enough for adding more namespaces", r.DeviceName())
-                }
-        }
+		}
+	}
 }
 
 func VGName(bus *ndctl.Bus, region *ndctl.Region) string {
@@ -189,9 +251,9 @@ func VGName(bus *ndctl.Bus, region *ndctl.Region) string {
 // Edge cases are when no PVol or VG structures (or partially) dont exist yet
 func CheckVG(ctx *ndctl.Context) {
 	var vgMissing bool = false
-        for _, bus := range ctx.GetBuses() {
+	for _, bus := range ctx.GetBuses() {
 		glog.Infof("CheckVG: Bus: %v", bus.DeviceName())
-                for _, r := range bus.ActiveRegions() {
+		for _, r := range bus.ActiveRegions() {
 			glog.Infof("CheckVG: Region: %v", r.DeviceName())
 			vgName := VGName(bus, r)
 			_, err := exec.Command("vgdisplay", vgName).CombinedOutput()
@@ -205,7 +267,7 @@ func CheckVG(ctx *ndctl.Context) {
 				glog.Infof("CheckVG: VolGroup %v exists", vgName)
 				vgMissing = false
 			}
-                        nss := r.ActiveNamespaces()
+			nss := r.ActiveNamespaces()
 			for _, ns := range nss {
 				devicepath := "/dev/" + ns.BlockDeviceName()
 				output, err := exec.Command("pvs", "--noheadings", "-o", "vg_name", devicepath).CombinedOutput()
@@ -254,8 +316,8 @@ func CheckVG(ctx *ndctl.Context) {
 					}
 				}
 			}
-                }
-        }
+		}
+	}
 }
 
 func InitNVdimms(ctx *ndctl.Context, namespacesize int) {
@@ -285,13 +347,43 @@ func InitNVdimms(ctx *ndctl.Context, namespacesize int) {
 	CreateNamespaces(ctx, namespacesize)
 	CheckVG(ctx)
 	/* for debug
-	nss := ctx.GetActiveNamespaces()
-        glog.Info("elems in Namespaces:", len(nss))
-        for _, ns := range nss {
-                glog.Info("Namespace Name:", ns.Name())
-                glog.Info("    Size:", ns.Size())
-                glog.Info("    Device:", ns.DeviceName())
-                glog.Info("    Mode:", ns.Mode())
-                glog.Info("    BlockDevice:", ns.BlockDeviceName())
-	}*/
+		nss := ctx.GetActiveNamespaces()
+	        glog.Info("elems in Namespaces:", len(nss))
+	        for _, ns := range nss {
+	                glog.Info("Namespace Name:", ns.Name())
+	                glog.Info("    Size:", ns.Size())
+	                glog.Info("    Device:", ns.DeviceName())
+	                glog.Info("    Mode:", ns.Mode())
+	                glog.Info("    BlockDevice:", ns.BlockDeviceName())
+		}*/
+}
+
+func (pmemd *pmemDriver) registerNodeController() error {
+	fmt.Printf("Connecting to Registry at : %s\n", pmemd.cfg.RegistryEndpoint)
+	var err error
+	var conn *grpc.ClientConn
+
+	for true {
+		conn, err = pmemgrpc.Connect(pmemd.cfg.RegistryEndpoint, connectionTimeout)
+		if err == nil {
+			glog.Infof("Conneted to RegistryServer!!!")
+			break
+		}
+		/* TODO: Retry loop */
+		glog.Infof("Failed to connect RegistryServer : %s, retrying after 10 seconds...", err.Error())
+		time.Sleep(10 * time.Second)
+	}
+	client := registry.NewRegistryClient(conn)
+	req := registry.RegisterControllerRequest{
+		NodeId:   pmemd.driver.nodeID,
+		Endpoint: pmemd.cfg.ControllerEndpoint,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	if _, err = client.RegisterController(ctx, &req); err != nil {
+		return fmt.Errorf("Fail to register with server at '%s' : %s", pmemd.cfg.RegistryEndpoint, err.Error())
+	}
+
+	return nil
 }

@@ -52,77 +52,22 @@ subjects:
   name: csi-service-account
   namespace: default
 ---
-kind: DaemonSet
-apiVersion: apps/v1beta2
+apiVersion: v1
+kind: Service
 metadata:
-  name: csi-pmem
+  name: pmem-controller
 spec:
   selector:
-    matchLabels:
-      app: csi-pmem
-  template:
-    metadata:
-      labels:
-        app: csi-pmem
-    spec:
-      serviceAccount: csi-service-account
-      hostNetwork: true
-      containers:
-         ## driver-registrar:
-         # 1) registers the CSI driver with kubelet
-         # 2) adds the driver's custom nodeId
-       - name: driver-registrar
-         imagePullPolicy: Always
-         image: quay.io/k8scsi/driver-registrar:v0.3.0
-         args: [ "--v=5" , "--csi-address=\"$(ADDRESS)\"" ]
-         env:
-           - name: ADDRESS
-             value: /csi/csi.sock
-           - name: KUBE_NODE_NAME
-             valueFrom:
-               fieldRef:
-                 fieldPath: spec.nodeName
-         volumeMounts:
-           - mountPath: /csi
-             name: socket-dir
-         ## pmem-driver:
-         #
-       - name: pmem-driver
-         imagePullPolicy: Always
-         image: avalluriGigabyte.fi.intel.com/pmem-csi-driver:canary
-         args: [ "--v=5", "--endpoint=$(CSI_ENDPOINT)", "--nodeid=$(KUBE_NODE_NAME)" ]
-         securityContext:
-           privileged: true
-         env:
-           - name: CSI_ENDPOINT
-             value: unix:///csi/csi.sock
-           - name: KUBE_NODE_NAME
-             valueFrom:
-               fieldRef:
-                 apiVersion: v1
-                 fieldPath: spec.nodeName
-         volumeMounts:
-           - name: socket-dir
-             mountPath: /csi
-           - name: mountpoint-dir
-             mountPath: /var/lib/kubelet/pods
-             mountPropagation: Bidirectional
-      volumes:
-        - name: socket-dir
-          hostPath:
-            path: /var/lib/kubelet/plugins/csi-pmem
-            type: DirectoryOrCreate
-        - name: mountpoint-dir
-          hostPath:
-            path: /var/lib/kubelet/pods
-            type: DirectoryOrCreate
+    app: pmem-csi-controller
+  ports:
+  - port: 10000
 ---
 apiVersion: v1
 kind: Pod
 metadata:
   labels:
-    app: pmem-driver
-  name: csi-pmem-controller
+    app: pmem-csi-controller
+  name: pmem-csi-controller
   namespace: default
 spec:
   serviceAccount: csi-service-account
@@ -132,41 +77,31 @@ spec:
   - name: external-provisioner
     imagePullPolicy: Always
     image: quay.io/k8scsi/csi-provisioner:v0.3.0
-    args:
-      - --v=5
-      - --provisioner=csi-pmem
-      - --csi-address=$(ADDRESS)
+    args: [ "--v=5", "--provisioner=csi-pmem", "--csi-address=$(ADDRESS)" ]
     env:
     - name: ADDRESS
-      value: /csi/csi.sock
-    volumeMounts:
-    - mountPath: /csi
-      name: socket-dir
+      value: "0.0.0.0:10000"
     ## external-attacher: sidecar
     #    Watches VolumeAttachment objects and triggers
     #    ControllerPublish/Unpublish
   - name: external-attacher
     imagePullPolicy: Always
     image: quay.io/k8scsi/csi-attacher:v0.3.0
-    args:
-    - --v=5
-    - --csi-address=$(ADDRESS)
+    args: [ "--v=5", "--csi-address=$(ADDRESS)" ]
     env:
     - name: ADDRESS
-      value: /csi/csi.sock
-    volumeMounts:
-    - mountPath: /csi
-      name: socket-dir
+      value: "0.0.0.0:10000"
   - name: pmem-driver
     image: avalluriGigabyte.fi.intel.com/pmem-csi-driver:canary
     imagePullPolicy: Always
-    args:
-    - --v=5
-    - --endpoint=$(CSI_ENDPOINT)
-    - --nodeid=$(KUBE_NODE_NAME)
+    args:  [ "-v=5",
+             "-drivername=csi-pmem",
+             "-mode=controller",
+             "-endpoint=$(CSI_ENDPOINT)",
+             "-nodeid=$(KUBE_NODE_NAME)" ]
     env:
     - name: CSI_ENDPOINT
-      value: unix:///csi/csi.sock
+      value: "tcp://0.0.0.0:10000"
     - name: KUBE_NODE_NAME
       valueFrom:
         fieldRef:
@@ -174,18 +109,76 @@ spec:
           fieldPath: spec.nodeName
     securityContext:
       privileged: true
-    volumeMounts:
-    - mountPath: /csi
-      name: socket-dir
-    - mountPath: /var/lib/kubelet/pods
-      mountPropagation: Bidirectional
-      name: mountpoint-dir
-  volumes:
-  - name: socket-dir
-    hostPath:
-      path: /var/lib/kubelet/plugins/csi-pmem
-      type: DirectoryOrCreate
-  - name: mountpoint-dir
-    hostPath:
-      path: /var/lib/kubelet/pods
-      type: DirectoryOrCreate
+---
+kind: DaemonSet
+apiVersion: apps/v1beta2
+metadata:
+  name: pmem-csi
+spec:
+  selector:
+    matchLabels:
+      app: pmem-csi
+  template:
+    metadata:
+      labels:
+        app: pmem-csi
+    spec:
+      serviceAccount: csi-service-account
+      nodeSelector:
+         storage: nvdimm
+      hostNetwork: true
+      containers:
+         ## driver-registrar:
+         # 1) registers the CSI driver with kubelet
+         # 2) adds the driver's custom nodeId
+        - name: driver-registrar
+          imagePullPolicy: Always
+          image: quay.io/k8scsi/driver-registrar:v0.3.0
+          args: [ "--v=5" , "--csi-address=$(ADDRESS)" ]
+          env:
+           - name: ADDRESS
+             value: /csi/csi.sock
+           - name: KUBE_NODE_NAME
+             valueFrom:
+               fieldRef:
+                 apiVersion: v1
+                 fieldPath: spec.nodeName
+          volumeMounts:
+           - mountPath: /csi
+             name: socket-dir
+         ## pmem-driver:
+         #
+        - name: pmem-driver
+          imagePullPolicy: Always
+          image: avalluriGigabyte.fi.intel.com/pmem-csi-driver:canary
+          args: [ "-v=5",
+                  "-drivername=csi-pmem",
+                  "-mode=node",
+                  "-endpoint=$(CSI_ENDPOINT)",
+                  "-nodeid=$(KUBE_NODE_NAME)",
+                  "-controllerEndpoint=tcp://$(KUBE_POD_IP):10001",
+                  "-registryEndpoint=$(PMEM_CONTROLLER_PORT_10000_TCP)" ]
+          securityContext:
+            privileged: true
+          env:
+           - name: CSI_ENDPOINT
+             value: unix:///csi/csi.sock
+           - name: KUBE_NODE_NAME
+             valueFrom:
+               fieldRef:
+                 apiVersion: v1
+                 fieldPath: spec.nodeName
+           - name: KUBE_POD_IP
+             valueFrom:
+               fieldRef:
+                 apiVersion: v1
+                 fieldPath: status.podIP
+          volumeMounts:
+           - name: socket-dir
+             mountPath: /csi
+      volumes:
+        - name: socket-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/csi-pmem/
+            type: DirectoryOrCreate
+

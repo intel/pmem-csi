@@ -8,6 +8,7 @@ package pmemcsidriver
 
 import (
 	"fmt"
+
 	"github.com/golang/glog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -26,29 +27,24 @@ type CSIDriver struct {
 
 // Creates a NewCSIDriver object. Assumes vendor version is equal to driver version &
 // does not support optional driver plugin info manifest field. Refer to CSI spec for more details.
-func NewCSIDriver(name string, v string, nodeID string) *CSIDriver {
+func NewCSIDriver(name string, v string, nodeID string) (*CSIDriver, error) {
 	if name == "" {
-		glog.Errorf("Driver name missing")
-		return nil
+		return nil, fmt.Errorf("Driver name missing")
 	}
 
 	if nodeID == "" {
-		glog.Errorf("NodeID missing")
-		return nil
+		return nil, fmt.Errorf("NodeID missing")
 	}
 	// TODO version format and validation
 	if len(v) == 0 {
-		glog.Errorf("Version argument missing")
-		return nil
+		return nil, fmt.Errorf("Version argument missing")
 	}
 
-	driver := CSIDriver{
+	return &CSIDriver{
 		name:    name,
 		version: v,
 		nodeID:  nodeID,
-	}
-
-	return &driver
+	}, nil
 }
 
 func (d *CSIDriver) ValidateControllerServiceRequest(c csi.ControllerServiceCapability_RPC_Type) error {

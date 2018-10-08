@@ -7,10 +7,11 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
-	"golang.org/x/net/context"
 	"os"
 	"os/exec"
 	"strings"
+
+	"golang.org/x/net/context"
 
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
 	"google.golang.org/grpc/codes"
@@ -24,7 +25,18 @@ import (
 
 type nodeServer struct {
 	*DefaultNodeServer
-	ctx *ndctl.Context
+	ctx     *ndctl.Context
+	volInfo map[string]string
+}
+
+var _ csi.NodeServer = &nodeServer{}
+
+func NewNodeServer(driver *CSIDriver, ctx *ndctl.Context) csi.NodeServer {
+	return &nodeServer{
+		DefaultNodeServer: NewDefaultNodeServer(driver),
+		ctx:               ctx,
+		volInfo:           map[string]string{},
+	}
 }
 
 func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
@@ -39,9 +51,12 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	if len(req.GetTargetPath()) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Target path missing in request")
 	}
+	if len(req.GetStagingTargetPath()) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "Staging target path missing in request")
+	}
 
-	targetPath := req.GetTargetPath()
-	stagingtargetPath := req.GetStagingTargetPath()
+	targetPath := req.TargetPath
+	stagingtargetPath := req.StagingTargetPath
 	// TODO: check is bind-mount already made
 	// (happens when publish is asked repeatedly for already published namespace)
 	// Repeated bind-mount does not seem to cause OS level error though, likely just No-op
@@ -61,21 +76,15 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		return &csi.NodePublishVolumeResponse{}, nil
 	}
 
-	//fsType := req.GetVolumeCapability().GetMount().GetFsType()
-
-	// TODO: check and clean this, deviceId empty and not used here?
-	//deviceId := ""
-	//if req.GetPublishInfo() != nil {
-	//	deviceId = req.GetPublishInfo()[deviceID]
-	//}
+	fsType := req.GetVolumeCapability().GetMount().GetFsType()
 
 	readOnly := req.GetReadonly()
-	//volumeId := req.GetVolumeId()
-	//attrib := req.GetVolumeAttributes()
-	//mountFlags := req.GetVolumeCapability().GetMount().GetMountFlags()
+	volumeID := req.GetVolumeId()
+	attrib := req.GetVolumeAttributes()
+	mountFlags := req.GetVolumeCapability().GetMount().GetMountFlags()
 
-	//glog.Infof("NodePublishVolume: targetpath %v\nStagingtargetpath %v\nfstype %v\ndevice %v\nreadonly %v\nattributes %v\n mountflags %v\n",
-	//	targetPath, stagingtargetPath, fsType, deviceId, readOnly, volumeId, attrib, mountFlags)
+	glog.Infof("NodePublishVolume: targetpath %v\nStagingtargetpath %v\nfstype %v\nreadonly %v\nattributes %v\n mountflags %v\n",
+		targetPath, stagingtargetPath, fsType, readOnly, volumeID, attrib, mountFlags)
 
 	options := []string{"bind"}
 	if readOnly {
@@ -110,7 +119,9 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	}
 	pmemcommon.Infof(4, ctx, "volume %s/%s has been unmounted.", targetPath, volumeID)
 
-	RemoveDir(ctx, targetPath)
+	if err := removeDir(targetPath); err != nil {
+		pmemcommon.Infof(3, ctx, "failed to remove directory %v: %v", targetPath, err)
+	}
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
@@ -127,32 +138,32 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		return nil, status.Error(codes.InvalidArgument, "Target path missing in request")
 	}
 
-	//volumeId := req.GetVolumeId()
+	attrs := req.GetVolumeAttributes()
+
 	requestedFsType := req.GetVolumeCapability().GetMount().GetFsType()
 	// showing for debug:
 	glog.Infof("NodeStageVolume: VolumeID is %v", req.GetVolumeId())
+	glog.Infof("NodeStageVolume: VolumeName is %v", attrs["name"])
+	glog.Infof("NodeStageVolume: VolumeSize is %v", attrs["size"])
 	glog.Infof("NodeStageVolume: Staging target path is %v", stagingtargetPath)
 	glog.Infof("NodeStageVolume: Requested fsType is %v", requestedFsType)
 
 	var devicepath string
-	var err error
 	if lvmode() == true {
-		devicepath, err = lvPath(req.GetVolumeId())
-		if err == nil {
-			glog.Infof("NodeStageVolume: devicepath: %v", devicepath)
-		} else {
+		devicepath, err := lvPath(attrs["name"])
+		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, "No such volume")
 		}
+		glog.Infof("NodeStageVolume: devicepath: %v", devicepath)
 	} else {
-		namespace, err := ns.ctx.GetNamespaceByName(req.GetVolumeId())
+		namespace, err := ns.ctx.GetNamespaceByName(attrs["name"])
 		if err != nil {
-			pmemcommon.Infof(3, ctx, "NodeStageVolume: did not find volume %s", req.GetVolumeId())
+			pmemcommon.Infof(3, ctx, "NodeStageVolume: did not find volume %s", attrs["name"])
 			return nil, err
 		}
 		glog.Infof("NodeStageVolume: Existing namespace: blockdev is %v with size %v", namespace.BlockDeviceName(), namespace.Size())
 		devicepath = "/dev/" + namespace.BlockDeviceName()
 	}
-
 
 	// Check does devicepath already contain a filesystem?
 	existingFsType, err := determineFilesystemType(devicepath)
@@ -203,11 +214,11 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	glog.Infof("NodeStageVolume: mount %s %s", devicepath, stagingtargetPath)
 
 	/* THIS is how it could go with using "mount" package
-        options := []string{""}
-	mounter := mount.New("")
-	if err := mounter.Mount(devicepath, stagingtargetPath, "", options); err != nil {
-		return nil, err
-	}*/
+	        options := []string{""}
+		mounter := mount.New("")
+		if err := mounter.Mount(devicepath, stagingtargetPath, "", options); err != nil {
+			return nil, err
+		}*/
 	// ... but it seems not supporting -c "canonical" option, so do it with exec
 	// added -c makes canonical mount, resulting in mounted path matching what LV thinks is lvpath.
 	// Without -c mounted path will look like /dev/mapper/... and its more difficult to match it to lvpath when unmounting
@@ -216,6 +227,8 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "mount failed"+string(output))
 	}
+
+	ns.volInfo[req.VolumeId] = attrs["name"]
 	return &csi.NodeStageVolumeResponse{}, nil
 }
 
@@ -230,31 +243,29 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 		return nil, status.Error(codes.InvalidArgument, "Target path missing in request")
 	}
 
+	volName := ns.volInfo[req.VolumeId]
 	// showing for debug:
 	glog.Infof("NodeUnStageVolume: VolumeID is %v", req.GetVolumeId())
+	glog.Infof("NodeUnStageVolume: VolumeName is %v", volName)
 	glog.Infof("NodeUnStageVolume: Staging target path is %v", stagingtargetPath)
+	glog.Infof("NodeUnStageVolume: umount %s", stagingtargetPath)
 
 	// by spec, we have to return OK if asked volume is not mounted on asked path,
 	// so we look up the current device by volumeID and see is that device
 	// mounted on staging target path
-	var devicepath string
-	var err error
 	if lvmode() == true {
-		devicepath, err = lvPath(req.GetVolumeId())
-		//devicepath = "/dev/mapper/" + lvgroup + "-" + req.GetVolumeId()
-		if err == nil {
-                        glog.Infof("NodeUnstageVolume: devicepath: %v", devicepath)
-                } else {
-                        return nil, status.Error(codes.InvalidArgument, "No such volume")
-                }
+		devicepath, err := lvPath(volName)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, "No such volume")
+		}
+		glog.Infof("NodeUnstageVolume: devicepath: %v", devicepath)
 	} else {
-		namespace, err := ns.ctx.GetNamespaceByName(req.GetVolumeId())
+		namespace, err := ns.ctx.GetNamespaceByName(volName)
 		if err != nil {
 			pmemcommon.Infof(3, ctx, "NodeUnstageVolume: did not find volume %s", req.GetVolumeId())
 			return nil, err
 		}
 		glog.Infof("NodeUnstageVolume: Existing namespace: blockdev: %v with size %v", namespace.BlockDeviceName(), namespace.Size())
-		devicepath = "/dev/" + namespace.BlockDeviceName()
 	}
 
 	// Find out device name for mounted path
@@ -273,16 +284,17 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 		glog.Infof("NodeUnstageVolume: Umount failed: %v", err)
 		return nil, err
 	}
-	RemoveDir(ctx, stagingtargetPath)
+	if err := removeDir(stagingtargetPath); err != nil {
+		pmemcommon.Infof(3, ctx, "failed to remove directory %v: %v", stagingtargetPath, err)
+	}
 	return &csi.NodeUnstageVolumeResponse{}, nil
 }
 
 // common handler called from few places above
-func RemoveDir(ctx context.Context, Path string) error {
+func removeDir(Path string) error {
 	glog.Infof("RemoveDir: remove dir %s", Path)
 	err := os.Remove(Path)
 	if err != nil {
-		pmemcommon.Infof(3, ctx, "failed to remove directory %v: %v", Path, err)
 		return err
 	}
 	return nil
@@ -334,9 +346,10 @@ func determineFilesystemType(devicePath string) (string, error) {
 
 //var lvMode bool = false
 var lvMode bool = true
+
 //var lvModeSet bool = false
-func lvmode() (bool) {
-/*	if lvModeSet == false {
+func lvmode() bool {
+	/*	if lvModeSet == false {
 		lvModeSet = true
 		glog.Infof("LVmode not set, try to determine...")
 		_, err := exec.Command("vgdisplay", lvgroup).CombinedOutput()

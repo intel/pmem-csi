@@ -19,5 +19,3 @@ reviewers:
 - sttts
 - ncdc
 - tallclair
-labels:
-- sig/api-machinery
