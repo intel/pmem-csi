@@ -56,7 +56,7 @@ func (cs *DefaultControllerServer) ValidateVolumeCapabilities(ctx context.Contex
 }
 
 func (cs *DefaultControllerServer) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
-        return nil, status.Error(codes.Unimplemented, "")
+	return nil, status.Error(codes.Unimplemented, "")
 }
 
 func (cs *DefaultControllerServer) GetCapacity(ctx context.Context, req *csi.GetCapacityRequest) (*csi.GetCapacityResponse, error) {
@@ -72,13 +72,13 @@ func (cs *DefaultControllerServer) ControllerGetCapabilities(ctx context.Context
 }
 
 func (cs *DefaultControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateSnapshotRequest) (*csi.CreateSnapshotResponse, error) {
-        return nil, status.Error(codes.Unimplemented, "")
+	return nil, status.Error(codes.Unimplemented, "")
 }
 
 func (cs *DefaultControllerServer) DeleteSnapshot(ctx context.Context, req *csi.DeleteSnapshotRequest) (*csi.DeleteSnapshotResponse, error) {
-        return nil, status.Error(codes.Unimplemented, "")
+	return nil, status.Error(codes.Unimplemented, "")
 }
 
 func (cs *DefaultControllerServer) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsRequest) (*csi.ListSnapshotsResponse, error) {
-        return nil, status.Error(codes.Unimplemented, "")
+	return nil, status.Error(codes.Unimplemented, "")
 }

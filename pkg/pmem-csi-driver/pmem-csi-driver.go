@@ -223,8 +223,8 @@ func CreateNamespaces(ctx *ndctl.Context, namespacesize int, uselimit int) {
 	}
 	// TODO: add sanity checking of namespacesize (but using what limits?)
 	var nsSize uint64 = (uint64(namespacesize) * 1024 * 1024 * 1024)
-        for _, bus := range ctx.GetBuses() {
-                for _, r := range bus.ActiveRegions() {
+	for _, bus := range ctx.GetBuses() {
+		for _, r := range bus.ActiveRegions() {
 			glog.Infof("CreateNamespaces in %v: %v bytes total, %v bytes available",
 				r.DeviceName(), r.Size(), r.AvailableSize())
 			availSize := r.AvailableSize()
@@ -244,8 +244,8 @@ func CreateNamespaces(ctx *ndctl.Context, namespacesize int, uselimit int) {
 				glog.Infof("Remaining Available in %v is %v", r.DeviceName(), availSize)
 			}
 			glog.Infof("avail_size %v in %v not enough for adding more namespaces", availSize, r.DeviceName())
-                }
-        }
+		}
+	}
 }
 
 func VGName(bus *ndctl.Bus, region *ndctl.Region) string {

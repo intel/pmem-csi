@@ -15,5 +15,3 @@ func NewIdentityServer(pmemd *pmemDriver) *identityServer {
 		DefaultIdentityServer: NewDefaultIdentityServer(pmemd.driver),
 	}
 }
-
-
