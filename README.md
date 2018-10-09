@@ -36,7 +36,7 @@ was mostly based on the hostpath driver.
 - Go interface that uses #cgo and linkage to libndctl, replaces ndctl CLI layer
 - This code resides in branch:gondctl/devel
 - Uses full power of libndctl
-- This is considered path forward for development
+- Combined with LVM to solve fragmentation problem
 
 ### Semantics
 
@@ -50,7 +50,7 @@ and responds to API use on TCP or Unix socket.
 
 # Development system configuration
 
-So far, the development and verification has been carried out on qemu-emulated NVDIMMs.
+So far, the development and verification has mostly been carried out on qemu-emulated NVDIMMs, with brief testing on a system having real 2x256 GB of persistent memory
 
 Build has been verified on a system described below.
 
