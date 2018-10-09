@@ -40,4 +40,18 @@ clean:
 	go clean -r -x
 	-rm -rf _output
 
+# Check resp. fix formatting.
+.PHONY: test_fmt fmt
+test: test_fmt
+test_fmt:
+	@ files=$$(find pkg cmd -name '*.go'); \
+	if [ $$(gofmt -d $$files | wc -l) -ne 0 ]; then \
+		echo "formatting errors:"; \
+		gofmt -d $$files; \
+		false; \
+	fi
+fmt:
+	gofmt -l -w $$(find pkg cmd -name '*.go')
+
+
 .PHONY: all test clean pmem-csi-driver
