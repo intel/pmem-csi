@@ -329,7 +329,7 @@ func (cs *controllerServer) listVolumes() (map[string]pmemVolume, error) {
 	if lvmode() == true {
 		output, err := exec.Command("lvs", "--noheadings", "--nosuffix", "--options", "lv_name,lv_size", "--units", "B").CombinedOutput()
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "lvcreate failed"+string(output))
+			return nil, status.Error(codes.InvalidArgument, "lvs failed"+string(output))
 		}
 		lines := strings.Split(string(output), "\n")
 		for _, line := range lines {
@@ -436,6 +436,7 @@ func (cs *controllerServer) deleteVolume(name string) error {
 	return nil
 }
 
+// Return device path for based on LV name
 func lvPath(volumeID string) (string, error) {
 	output, err := exec.Command("lvs", "--noheadings", "--options", "lv_name,lv_path").CombinedOutput()
 	if err != nil {
@@ -443,7 +444,7 @@ func lvPath(volumeID string) (string, error) {
 	}
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
-		// we have a trimmed line like this here: [nspace4 ndbus0region0]
+		// we have a line like this here: [nspace1 /dev/ndbus0region1/nspace1]
 		glog.Infof("lvPath: Line from lvs: [%v]", line)
 		fields := strings.Fields(line)
 		if len(fields) == 2 {
