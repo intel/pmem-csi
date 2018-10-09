@@ -30,6 +30,7 @@ var (
 	/* node mode options */
 	controllerEndpoint = flag.String("controllerEndpoint", "", "internal node controller endpoint")
 	namespacesize      = flag.Int("namespacesize", 32, "NVDIMM namespace size in GB")
+	uselimit           = flag.Int("uselimit", 100, "Limit use of total PMEM amount, used percent")
 )
 
 func main() {
@@ -49,6 +50,7 @@ func main() {
 		RegistryEndpoint:   *registryEndpoint,
 		ControllerEndpoint: *controllerEndpoint,
 		NamespaceSize:      *namespacesize,
+		UseLimit:           *uselimit,
 	})
 	if err != nil {
 		fmt.Printf("Failed to Initialized driver: %s", err.Error())

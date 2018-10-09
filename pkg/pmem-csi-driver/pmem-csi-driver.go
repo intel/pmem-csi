@@ -57,6 +57,8 @@ type Config struct {
 	ControllerEndpoint string
 	//NamespaceSize size(in GB) of namespace block
 	NamespaceSize int
+	//UseLimit
+	UseLimit int
 }
 
 type pmemDriver struct {
@@ -192,7 +194,7 @@ func (pmemd *pmemDriver) Run() error {
 				return err
 			}
 		}
-		InitNVdimms(pmemd.ctx, pmemd.cfg.NamespaceSize)
+		InitNVdimms(pmemd.ctx, pmemd.cfg.NamespaceSize, pmemd.cfg.UseLimit)
 	}
 
 	defer s.Stop()
@@ -205,7 +207,7 @@ const (
 	// we get this as argument 'namespacesize'
 	//namespaceSize uint64 = (4*1024*1024*1024)
 	// TODO: try to get rid of hard-coded overhead
-	namespaceOverhead = (4 * 1024 * 1024)
+	namespaceOverhead = 4 * 1024 * 1024
 	// smaller namespace size (in GB) for devel mode in VM
 	namespacesizeVM = 2
 )
@@ -213,14 +215,23 @@ const (
 // Try to make all space in all regions consumed by namespaces
 // for all regions:
 // - Check available size, if bigger than one NS size, create one more, repeat this in loop
-func CreateNamespaces(ctx *ndctl.Context, namespacesize int) {
+func CreateNamespaces(ctx *ndctl.Context, namespacesize int, uselimit int) {
 
+	if uselimit < 0 || uselimit > 100 {
+		glog.Infof("Use limit should be 0..100 (seeing %v), resetting to 100", uselimit)
+		uselimit = 100
+	}
+	// TODO: add sanity checking of namespacesize (but using what limits?)
 	var nsSize uint64 = (uint64(namespacesize) * 1024 * 1024 * 1024)
-	for _, bus := range ctx.GetBuses() {
-		for _, r := range bus.ActiveRegions() {
-			glog.Infof("CreateNamespaces in %v with %v bytes available", r.DeviceName(), r.AvailableSize())
+        for _, bus := range ctx.GetBuses() {
+                for _, r := range bus.ActiveRegions() {
+			glog.Infof("CreateNamespaces in %v: %v bytes total, %v bytes available",
+				r.DeviceName(), r.Size(), r.AvailableSize())
 			availSize := r.AvailableSize()
-			for availSize > nsSize+namespaceOverhead {
+			// uselimit sets the percentage we can use
+			leaveUnused := (100 - uint64(uselimit)) * r.Size() / 100
+			glog.Infof("Leaving %v bytes unused", leaveUnused)
+			for availSize > nsSize+namespaceOverhead+leaveUnused {
 				glog.Info("Available is greater than one NS size, try to create a Namespace")
 				_, err := ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
 					Size: nsSize,
@@ -232,9 +243,9 @@ func CreateNamespaces(ctx *ndctl.Context, namespacesize int) {
 				availSize -= namespaceOverhead
 				glog.Infof("Remaining Available in %v is %v", r.DeviceName(), availSize)
 			}
-			glog.Infof("avail_size in %v not enough for adding more namespaces", r.DeviceName())
-		}
-	}
+			glog.Infof("avail_size %v in %v not enough for adding more namespaces", availSize, r.DeviceName())
+                }
+        }
 }
 
 func VGName(bus *ndctl.Bus, region *ndctl.Region) string {
@@ -320,7 +331,7 @@ func CheckVG(ctx *ndctl.Context) {
 	}
 }
 
-func InitNVdimms(ctx *ndctl.Context, namespacesize int) {
+func InitNVdimms(ctx *ndctl.Context, namespacesize int, uselimit int) {
 	// check is there physical NVDIMM(s) present. What happens if we run this without NVDIMM:
 	// verified on a VM without NVDIMMs:
 	// loop attempt in CreateNamespaces over buses-regions-namespaces makes zero loops,
@@ -344,18 +355,18 @@ func InitNVdimms(ctx *ndctl.Context, namespacesize int) {
 			strings.TrimSpace(string(output)), namespacesizeVM)
 		namespacesize = namespacesizeVM
 	}
-	CreateNamespaces(ctx, namespacesize)
+	CreateNamespaces(ctx, namespacesize, uselimit)
 	CheckVG(ctx)
 	/* for debug
-		nss := ctx.GetActiveNamespaces()
-	        glog.Info("elems in Namespaces:", len(nss))
-	        for _, ns := range nss {
-	                glog.Info("Namespace Name:", ns.Name())
-	                glog.Info("    Size:", ns.Size())
-	                glog.Info("    Device:", ns.DeviceName())
-	                glog.Info("    Mode:", ns.Mode())
-	                glog.Info("    BlockDevice:", ns.BlockDeviceName())
-		}*/
+	nss := ctx.GetActiveNamespaces()
+	glog.Info("elems in Namespaces:", len(nss))
+	for _, ns := range nss {
+		glog.Info("Namespace Name:", ns.Name())
+		glog.Info("    Size:", ns.Size())
+		glog.Info("    Device:", ns.DeviceName())
+		glog.Info("    Mode:", ns.Mode())
+		glog.Info("    BlockDevice:", ns.BlockDeviceName())
+	}*/
 }
 
 func (pmemd *pmemDriver) registerNodeController() error {
