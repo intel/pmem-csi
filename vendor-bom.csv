@@ -1,0 +1,13 @@
+Repo;Component;License
+github.com/container-storage-interface/spec;Container Storage Interface Community spec;Apache License 2.0
+github.com/golang/glog;glog;Apache License 2.0
+github.com/golang/protobuf;golang protobuf;BSD 3-clause "New" or "Revised" License
+github.com/google/uuid;Google UUID;BSD 3-clause "New" or "Revised" License
+golang.org/x/net;Golang Net;BSD 3-clause "New" or "Revised" License
+golang.org/x/sys;Golang sys;BSD 3-clause "New" or "Revised" License
+golang.org/x/text;golang text;BSD 3-clause "New" or "Revised" License
+google.golang.org/genproto;Google go-genproto;Apache License 2.0
+google.golang.org/grpc;grpc grpc-go;Apache License 2.0
+k8s.io/apimachinery;kubernetes apimachinery;Apache License 2.0
+k8s.io/kubernetes;kubernetes;Apache License 2.0
+k8s.io/utils;kubernetes utils;Apache License 2.0
