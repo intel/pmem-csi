@@ -149,8 +149,9 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	glog.Infof("NodeStageVolume: Requested fsType is %v", requestedFsType)
 
 	var devicepath string
+	var err error
 	if lvmode() == true {
-		devicepath, err := lvPath(attrs["name"])
+		devicepath, err = lvPath(attrs["name"])
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, "No such volume")
 		}
