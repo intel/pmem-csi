@@ -14,35 +14,6 @@ Either specify a different destination path when cloning:
 
 or rename the directory from `Pmem-CSI` to `pmem-csi` after cloning.
 
-## Based on
-
-The driver code is based on early OIM-CSI driver which in turn
-was mostly based on the hostpath driver.
-
-## Development stages and corresponding code branches
-
-### First proof-of-concept trial
-
-- was implemented in branch:devel, with down-interface as ndctl commands. ndctl command is performed, it's JSON-format output is unmarshalled into structured data.
-- The driver does not maintain state, i.e. state of objects is looked up using down-interface.
-- The "name" field is used as primary key and VolumeID.
-- The "name" field value for a new namespace and mount point path names originate from csc CLI commands.
-- ext4 or xfs is supported as file system type
-- This trial had limited functionality and was used to demonstrate simple life cycle, and to verify dev.path on emulated NVDIMMs
-- This method can remain as another method for cross-checking, but interface to the rest of driver should be unified then, which is not in short-term plans
-
-### ndctl CLI interface replaced by Go-language interface to libndctl, using cgo
-
-- Go interface that uses #cgo and linkage to libndctl, replaces ndctl CLI layer
-- This code resides in branch:gondctl/devel
-- Uses full power of libndctl
-- Combined with LVM to solve fragmentation problem
-
-### Semantics
-
-Some sane, data-preserving semantics rules need to be agreed on. For example, some scenarios:
-  - Server reboots and driver starts again. The namespaces with contents are expected to be preserved, but mounts are gone, and mount points may exist or may be gone as well. Driver should work so that requests by volume names that have existed before, do not destroy/recreate file systems but try to reach the same state that was active before reboot.
-
 ## State
 
 The code builds, runs as standalone, see `run_driver`
@@ -54,7 +25,7 @@ So far, the development and verification has mostly been carried out on qemu-emu
 
 Build has been verified on a system described below.
 
-Running the steps forming a simple volume lifecycle has been verified using csc on same system. See steps using 'csc' in `run_client_csc`.
+Running as stand-alone: There are example steps forming a simple volume lifecycle, using csc on same system. See steps using 'csc' in `run_client_csc`. The exact steps sequence does currently succeed due recent changes about k8s deployment.
 
 - Host: Dell Poweredge R620, distro: openSUSE Tumbleweed, kernel 4.18.5, qemu 2.12.1
 - Guest: VM: 16GB RAM, 8 vCPUs, Ubuntu 18.04.1 server, kernel 4.15.0
@@ -170,12 +141,10 @@ Further container-based use scenarios have not been explored yet.
 
 `make test`
 
-This does not succeed yet
-
 # Run
 
 1. start driver (as user:root) as in `run_driver`
-2. Run client-side commands (as regular user) as in `run_client_csc`
+2. Example client-side commands using csc (as regular user) as in `run_client_csc`
 
 The client-side endpoint can be specified either:
 
