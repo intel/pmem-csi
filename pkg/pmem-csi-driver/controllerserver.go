@@ -276,7 +276,6 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		return nil, status.Errorf(codes.Internal, "Failed to create volume: %s", err.Error())
 	}
 
-	glog.Infof("Volume attached!!!")
 	cs.publishVolumeInfo[req.VolumeId] = attrs["name"]
 
 	return &csi.ControllerPublishVolumeResponse{
@@ -393,10 +392,14 @@ func (cs *controllerServer) createVolume(name string, size uint64) error {
 					// lvcreate takes size in MBytes if no unit
 					sizeM := int(size / (1024 * 1024))
 					sz := strconv.Itoa(sizeM)
-					_, err := exec.Command("lvcreate", "-L", sz, "-n", name, vgName).CombinedOutput()
+					output, err := exec.Command("lvcreate", "-L", sz, "-n", name, vgName).CombinedOutput()
 					if err != nil {
-						return err
+						glog.Infof("CreateVolume: lvcreate failed: %v", string(output))
+					} else {
+						glog.Infof("CreateVolume: LVol %v with size=%v MB created", name, sz)
 					}
+					// return in all cases, otherwise loop will create LVs in other regions
+					return err
 				}
 			}
 		}
