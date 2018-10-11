@@ -53,6 +53,7 @@ type pmemVolume struct {
 	Size   uint64
 	Status VolumeStatus
 	NodeID string
+	Erase  bool
 }
 
 type controllerServer struct {
@@ -95,6 +96,7 @@ func (cs *controllerServer) GetVolumeByName(Name string) *pmemVolume {
 
 func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
 	var vol *pmemVolume
+	var eraseafter bool = true
 	if err := cs.Driver.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
 		pmemcommon.Infof(3, ctx, "invalid create volume req: %v", req)
 		return nil, err
@@ -106,6 +108,22 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 
 	if len(req.GetName()) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Name missing in request")
+	}
+	// Process plugin-specific parameters given as key=value pairs
+	params := req.GetParameters()
+	if params != nil {
+		glog.Infof("CreateVolume: parameters detected")
+		// We recognize eraseafter=false/true, defaulting to true
+		for key, val := range params {
+			glog.Infof("CreateVolume: seeing param: [%v] [%v]", key, val)
+			if key == "eraseafter" {
+				if val == "true" {
+					eraseafter = true
+				} else if val == "false" {
+					eraseafter = false
+				}
+			}
+		}
 	}
 
 	asked := uint64(req.GetCapacityRange().GetRequiredBytes())
@@ -125,8 +143,10 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 			Name:   req.GetName(),
 			Size:   asked,
 			Status: Created,
+			Erase:  eraseafter,
 		}
 		cs.pmemVolumes[volumeID] = *vol
+		glog.Infof("CreateVolume: Record new volume as [%v]", *vol)
 	}
 
 	return &csi.CreateVolumeResponse{
@@ -317,8 +337,15 @@ func (cs *controllerServer) ControllerUnpublishVolume(ctx context.Context, req *
 
 	/* Node */
 
+	// eraseafter was possibly given as plugin-specific option,
+	// it was stored in the pmemVolumes entry during Create
+	var erase bool = true
+	if vol, ok := cs.pmemVolumes[req.GetVolumeId()]; ok {
+		glog.Infof("ControllerUnpublish: use stored EraseAfter: %v", vol.Erase)
+		erase = vol.Erase
+	}
 	name := cs.publishVolumeInfo[req.GetVolumeId()]
-	if err := cs.deleteVolume(name); err != nil {
+	if err := cs.deleteVolume(name, erase); err != nil {
 		return nil, status.Errorf(codes.Internal, "Failed to delete volume: %s", err.Error())
 	}
 
@@ -425,15 +452,25 @@ func (cs *controllerServer) createVolume(name string, size uint64) error {
 	return nil
 }
 
-func (cs *controllerServer) deleteVolume(name string) error {
+func (cs *controllerServer) deleteVolume(name string, erase bool) error {
 
 	if lvmode() {
 		lvpath, err := lvPath(name)
 		if err != nil {
 			return err
 		}
+		glog.Infof("deleteVolume: Matching LVpath: %v erase:%v", lvpath, erase)
+		if erase {
+			// erase data on block device, if not disabled by driver option
+			// use one iteration instead of shred's default=3 for speed
+			glog.Infof("deleteVolume: Based on EraseAfter=true, wipe data using [shred %v]", lvpath)
+			output, err := exec.Command("shred", "--iterations=1", lvpath).CombinedOutput()
+			if err != nil {
+				glog.Infof("deleteVolume: shred failed: %v", string(output))
+				return err
+			}
+		}
 		var output []byte
-		glog.Infof("DeleteVolume: Matching LVpath: %v", lvpath)
 		output, err = exec.Command("lvremove", "-fy", lvpath).CombinedOutput()
 		glog.Infof("lvremove output: %s\n", string(output))
 		return err
