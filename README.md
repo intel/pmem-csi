@@ -124,13 +124,16 @@ vendor/ directory should stay up-to-date.
 
 `make`
 
-This produces driver binary `./_output/pmem-csi-driver`
+This produces the below binaries in _output directory:
+- `pmem-ns-init`: Helper utility for namespace inititialization
+- `pmem-vgm`: Helper utility for creating logical volume groups over pmem devices created.
+- `pmem-csi-driver`: The PMEM csi driver
 
 ## Docker-based build
 
-`make pmem-csi-driver-container`
+`make build-images`
 
-This succeeds and produces container image and driver can be
+This succeeds and produces docker images and driver can be
 started inside of that image:
 
 `docker run IMAGE --endpoint tcp://127.0.0.1:10000`

@@ -379,7 +379,7 @@ func (cs *controllerServer) createVolume(name string, size uint64) error {
 			glog.Infof("CreateVolume: Bus: %v", bus.DeviceName())
 			for _, r := range bus.ActiveRegions() {
 				glog.Infof("CreateVolume: Region: %v", r.DeviceName())
-				vgName := VGName(bus, r)
+				vgName := vgName(bus, r)
 				glog.Infof("CreateVolume: vgName: %v", vgName)
 				output, err := exec.Command("vgs", "--noheadings", "--nosuffix", "--options", "vg_free", "--units", "B", vgName).CombinedOutput()
 				if err != nil {
@@ -457,4 +457,8 @@ func lvPath(volumeID string) (string, error) {
 		}
 	}
 	return "", status.Error(codes.InvalidArgument, "no such volume")
+}
+
+func vgName(bus *ndctl.Bus, region *ndctl.Region) string {
+	return bus.DeviceName() + region.DeviceName()
 }
