@@ -386,13 +386,14 @@ func (cs *controllerServer) createVolume(name string, size uint64) error {
 					return err
 				}
 				vgAvailStr := strings.TrimSpace(string(output))
-				vgAvail, _ := strconv.Atoi(vgAvailStr)
+				vgAvail, _ := strconv.ParseUint(vgAvailStr, 10, 64)
 				glog.Infof("CreateVolume: vgAvail in %v: [%v]", vgName, vgAvail)
-				if uint64(vgAvail) >= size {
+				if vgAvail >= size {
 					// lvcreate takes size in MBytes if no unit
 					sizeM := int(size / (1024 * 1024))
 					sz := strconv.Itoa(sizeM)
 					output, err := exec.Command("lvcreate", "-L", sz, "-n", name, vgName).CombinedOutput()
+					glog.Infof("lvcreate output: %s\n", string(output))
 					if err != nil {
 						glog.Infof("CreateVolume: lvcreate failed: %v", string(output))
 					} else {
@@ -400,6 +401,8 @@ func (cs *controllerServer) createVolume(name string, size uint64) error {
 					}
 					// return in all cases, otherwise loop will create LVs in other regions
 					return err
+				} else {
+					glog.Infof("This volime size %v is not having enough space required(%v)", vgAvail, size)
 				}
 			}
 		}

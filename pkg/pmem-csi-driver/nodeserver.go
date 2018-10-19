@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -119,7 +120,8 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	}
 	pmemcommon.Infof(4, ctx, "volume %s/%s has been unmounted.", targetPath, volumeID)
 
-	if err := removeDir(targetPath); err != nil {
+	glog.Infof("NodeUnpublishVolume: removing mount target directory: %s", targetPath)
+	if err := os.Remove(targetPath); err != nil {
 		pmemcommon.Infof(3, ctx, "failed to remove directory %v: %v", targetPath, err)
 	}
 
@@ -285,24 +287,18 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 		glog.Infof("NodeUnstageVolume: Umount failed: %v", err)
 		return nil, err
 	}
-	if err := removeDir(stagingtargetPath); err != nil {
+	glog.Infof("NodeUnStageVolume: removing staging directory: %s", stagingtargetPath)
+	if err := os.Remove(stagingtargetPath); err != nil {
 		pmemcommon.Infof(3, ctx, "failed to remove directory %v: %v", stagingtargetPath, err)
 	}
 	return &csi.NodeUnstageVolumeResponse{}, nil
 }
 
-// common handler called from few places above
-func removeDir(Path string) error {
-	glog.Infof("RemoveDir: remove dir %s", Path)
-	err := os.Remove(Path)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 // This is based on function used in LV-CSI driver
 func determineFilesystemType(devicePath string) (string, error) {
+	if devicePath == "" {
+		return "", fmt.Errorf("null device path")
+	}
 	// Use `file -bsL` to determine whether any filesystem type is detected.
 	// If a filesystem is detected (ie., the output is not "data", we use
 	// `blkid` to determine what the filesystem is. We use `blkid` as `file`
@@ -318,22 +314,28 @@ func determineFilesystemType(devicePath string) (string, error) {
 		return "", nil
 	}
 	// Some filesystem was detected, use blkid to figure out what it is.
-	output, err = exec.Command("blkid", "-c", "/dev/null", "-o", "export", devicePath).CombinedOutput()
+	output, err = exec.Command("blkid", "-c", "/dev/null", "-o", "full", devicePath).CombinedOutput()
+	glog.Infof("blkid output: %s\n", string(output))
 	if err != nil {
 		return "", err
 	}
-	parseErr := status.Error(codes.InvalidArgument, "Can not parse blkid output")
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		fields := strings.Split(strings.TrimSpace(line), "=")
-		if len(fields) != 2 {
-			return "", parseErr
-		}
-		if fields[0] == "TYPE" {
-			return fields[1], nil
+	if len(output) == 0 {
+		return "", fmt.Errorf("no device information for %s", devicePath)
+	}
+
+	// exptected output format from blkid:
+	// devicepath: UUID="<uuid>" TYPE="<filesystem type>"
+	attrs := strings.Split(string(output), ":")
+	if len(attrs) != 2 {
+		return "", fmt.Errorf("Can not parse blkid output: %s", output)
+	}
+	for _, field := range strings.Fields(attrs[1]) {
+		attr := strings.Split(field, "=")
+		if len(attr) == 2 && attr[0] == "TYPE" {
+			return strings.Trim(attr[1], "\""), nil
 		}
 	}
-	return "", parseErr
+	return "", fmt.Errorf("no filesystem type detected for %s", devicePath)
 }
 
 // TODO: clean this up, likely can be deleted.
