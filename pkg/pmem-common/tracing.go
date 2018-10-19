@@ -8,16 +8,15 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcommon
 
 import (
-	"fmt"
+	// "fmt"
 	"io"
 
 	"github.com/golang/glog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-
-	"github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
-	jaegercfg "github.com/uber/jaeger-client-go/config"
+	// "github.com/opentracing/opentracing-go"
+	// otlog "github.com/opentracing/opentracing-go/log"
+	// jaegercfg "github.com/uber/jaeger-client-go/config"
 )
 
 // LogGRPCServer logs the server-side call information via glog.
@@ -54,14 +53,14 @@ func LogGRPCClient(ctx context.Context, method string, req, reply interface{}, c
 // to the call's span, if the log level is five or higher.
 // Warning: this may include sensitive information like the
 // secrets.
-func TraceGRPCPayload(sp opentracing.Span, method string, req, reply interface{}, err error) {
-	if glog.V(5) {
-		sp.SetTag("request", req)
-		if err == nil {
-			sp.SetTag("response", reply)
-		}
-	}
-}
+// func TraceGRPCPayload(sp opentracing.Span, method string, req, reply interface{}, err error) {
+// 	if glog.V(5) {
+// 		sp.SetTag("request", req)
+// 		if err == nil {
+// 			sp.SetTag("response", reply)
+// 		}
+// 	}
+// }
 
 // Infof logs with glog.V(level).Infof() and in addition, always adds
 // a log message to the current tracing span if the context has
@@ -69,25 +68,25 @@ func TraceGRPCPayload(sp opentracing.Span, method string, req, reply interface{}
 // the full information.
 func Infof(level glog.Level, ctx context.Context, format string, args ...interface{}) {
 	glog.V(level).Infof(format, args...)
-	sp := opentracing.SpanFromContext(ctx)
-	if sp != nil {
-		sp.LogFields(otlog.Lazy(func(fv otlog.Encoder) {
-			fv.EmitString("message", fmt.Sprintf(format, args...))
-		}))
-	}
+	// sp := opentracing.SpanFromContext(ctx)
+	// if sp != nil {
+	// 	sp.LogFields(otlog.Lazy(func(fv otlog.Encoder) {
+	// 		fv.EmitString("message", fmt.Sprintf(format, args...))
+	// 	}))
+	// }
 }
 
 // Errorf does the same as Infof for error messages, except that
 // it ignores the current log level.
 func Errorf(ctx context.Context, format string, args ...interface{}) {
 	glog.Errorf(format, args...)
-	sp := opentracing.SpanFromContext(ctx)
-	if sp != nil {
-		sp.LogFields(otlog.Lazy(func(fv otlog.Encoder) {
-			fv.EmitString("event", "error")
-			fv.EmitString("message", fmt.Sprintf(format, args...))
-		}))
-	}
+	// sp := opentracing.SpanFromContext(ctx)
+	// if sp != nil {
+	// 	sp.LogFields(otlog.Lazy(func(fv otlog.Encoder) {
+	// 		fv.EmitString("event", "error")
+	// 		fv.EmitString("message", fmt.Sprintf(format, args...))
+	// 	}))
+	// }
 }
 
 // InitTracer initializes the global OpenTracing tracer, using Jaeger
@@ -95,16 +94,16 @@ func Errorf(ctx context.Context, format string, args ...interface{}) {
 // the start of main(). The result is a function which should be
 // called at the end of main() to clean up.
 func InitTracer(component string) (closer io.Closer, err error) {
-	// Add support for the usual env variables, in particular
-	// JAEGER_AGENT_HOST, which is needed when running only one
-	// Jaeger agent per cluster.
-	cfg, err := jaegercfg.FromEnv()
-	if err != nil {
-		// parsing errors might happen here, such as when we get a string where we expect a number
-		return
-	}
+	// // Add support for the usual env variables, in particular
+	// // JAEGER_AGENT_HOST, which is needed when running only one
+	// // Jaeger agent per cluster.
+	// cfg, err := jaegercfg.FromEnv()
+	// if err != nil {
+	// 	// parsing errors might happen here, such as when we get a string where we expect a number
+	// 	return
+	// }
 
-	// Initialize tracer singleton.
-	closer, err = cfg.InitGlobalTracer(component)
+	// // Initialize tracer singleton.
+	// closer, err = cfg.InitGlobalTracer(component)
 	return
 }

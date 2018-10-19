@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
-	"github.com/opentracing/opentracing-go"
+	// "github.com/grpc-ecosystem/go-grpc-middleware"
+	// "github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
+	// "github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 
@@ -67,13 +67,14 @@ func StartNewServer(endpoint string, serviceRegister RegisterService) error {
 		return err
 	}
 
-	interceptor := grpc_middleware.ChainUnaryServer(
-		otgrpc.OpenTracingServerInterceptor(
-			opentracing.GlobalTracer(),
-			otgrpc.SpanDecorator(pmemcommon.TraceGRPCPayload),
-		),
-		pmemcommon.LogGRPCServer,
-	)
+	// interceptor := grpc_middleware.ChainUnaryServer(
+	// 	otgrpc.OpenTracingServerInterceptor(
+	// 		opentracing.GlobalTracer(),
+	// 		otgrpc.SpanDecorator(pmemcommon.TraceGRPCPayload),
+	// 	),
+	// 	pmemcommon.LogGRPCServer,
+	// )
+	interceptor := pmemcommon.LogGRPCServer
 	opts := []grpc.ServerOption{
 		grpc.UnaryInterceptor(interceptor),
 	}

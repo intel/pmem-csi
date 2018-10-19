@@ -1,0 +1,6 @@
+glog,https://github.com/golang/glog
+Go,https://github.com/golang/go
+golang-protobuf,https://github.com/golang/protobuf
+google uuid,https://github.com/google/uuid
+grpc-go,https://github.com/grpc/grpc-go
+kubernetes,https://github.com/kubernetes/kubernetes
