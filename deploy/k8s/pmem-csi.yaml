@@ -127,6 +127,19 @@ spec:
       nodeSelector:
          storage: nvdimm
       hostNetwork: true
+      initContainers:
+        - name: pmem-ns-init
+          imagePullPolicy: Always
+          image: avalluriGigabyte.fi.intel.com/pmem-ns-init:canary
+          args: [ "-v=5", "-namespacesize=1" ]
+          securityContext:
+            privileged: true
+        - name: pmem-vgm
+          imagePullPolicy: Always
+          image: avalluriGigabyte.fi.intel.com/pmem-vgm:canary
+          args: [ "-v=5" ]
+          securityContext:
+            privileged: true
       containers:
          ## driver-registrar:
          # 1) registers the CSI driver with kubelet

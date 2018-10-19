@@ -276,7 +276,6 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		return nil, status.Errorf(codes.Internal, "Failed to create volume: %s", err.Error())
 	}
 
-	glog.Infof("Volume attached!!!")
 	cs.publishVolumeInfo[req.VolumeId] = attrs["name"]
 
 	return &csi.ControllerPublishVolumeResponse{
@@ -380,7 +379,7 @@ func (cs *controllerServer) createVolume(name string, size uint64) error {
 			glog.Infof("CreateVolume: Bus: %v", bus.DeviceName())
 			for _, r := range bus.ActiveRegions() {
 				glog.Infof("CreateVolume: Region: %v", r.DeviceName())
-				vgName := VGName(bus, r)
+				vgName := vgName(bus, r)
 				glog.Infof("CreateVolume: vgName: %v", vgName)
 				output, err := exec.Command("vgs", "--noheadings", "--nosuffix", "--options", "vg_free", "--units", "B", vgName).CombinedOutput()
 				if err != nil {
@@ -393,10 +392,14 @@ func (cs *controllerServer) createVolume(name string, size uint64) error {
 					// lvcreate takes size in MBytes if no unit
 					sizeM := int(size / (1024 * 1024))
 					sz := strconv.Itoa(sizeM)
-					_, err := exec.Command("lvcreate", "-L", sz, "-n", name, vgName).CombinedOutput()
+					output, err := exec.Command("lvcreate", "-L", sz, "-n", name, vgName).CombinedOutput()
 					if err != nil {
-						return err
+						glog.Infof("CreateVolume: lvcreate failed: %v", string(output))
+					} else {
+						glog.Infof("CreateVolume: LVol %v with size=%v MB created", name, sz)
 					}
+					// return in all cases, otherwise loop will create LVs in other regions
+					return err
 				}
 			}
 		}
@@ -454,4 +457,8 @@ func lvPath(volumeID string) (string, error) {
 		}
 	}
 	return "", status.Error(codes.InvalidArgument, "no such volume")
+}
+
+func vgName(bus *ndctl.Bus, region *ndctl.Region) string {
+	return bus.DeviceName() + region.DeviceName()
 }

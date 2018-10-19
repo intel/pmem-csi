@@ -18,23 +18,29 @@ SHELL=bash
 
 REGISTRY_NAME=localhost:5000
 IMAGE_VERSION_pmem-csi-driver=canary
+IMAGE_VERSION_pmem-ns-init=canary
+IMAGE_VERSION_pmem-vgm=canary
 IMAGE_TAG=$(REGISTRY_NAME)/$*:$(IMAGE_VERSION_$*)
 IMAGE_BUILD_ARGS=
 BUILD_ARGS=--build-arg http_proxy=${http_proxy} --build-arg https_proxy=${https_proxy} --build-arg no_proxy=${no_proxy}
 
-all: pmem-csi-driver
+all: pmem-csi-driver pmem-ns-init pmem-vgm
+
+build-images: build-pmem-csi-driver-image build-pmem-ns-init-image build-pmem-vgm-image
+
+push-images: push-pmem-csi-driver-image push-pmem-ns-init-image push-pmem-vgm-image
 
 test:
 	go test $(IMPORT_PATH)/pkg/... -cover
 	go vet $(IMPORT_PATH)/pkg/...
 
-pmem-csi-driver:
+pmem-csi-driver pmem-vgm pmem-ns-init:
 	GOOS=linux go build -a -o _output/$@ ./cmd/$@
 
-%-image:
+build-%-image:
 	docker build ${BUILD_ARGS} ${IMAGE_BUILD_ARGS} -t $(IMAGE_TAG) -f ./cmd/$*/Dockerfile .
 
-push-%: %-container
+push-%-image: build-%-image
 	docker push $(IMAGE_TAG)
 
 clean:
@@ -54,8 +60,7 @@ test_fmt:
 fmt:
 	gofmt -l -w $$(find pkg cmd -name '*.go')
 
-
-.PHONY: all test clean pmem-csi-driver
+.PHONY: all test clean pmem-csi-driver pmem-ns-init pmem-vgm
 
 # This ensures that the vendor directory and vendor-bom.csv are in sync
 # at least as far as the listed components go.

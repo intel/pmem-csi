@@ -587,7 +587,7 @@ func (r *Region) DestroyNamespace(ns *Namespace, force bool) error {
 	}
 	rc := C.ndctl_region_destroy_namespace(ndr, ndns, C.bool(force))
 	if int(rc) != 0 {
-		return fmt.Errorf("%s", C.strerror(-rc))
+		return fmt.Errorf("%s", C.GoString(C.strerror(-rc)))
 	}
 
 	return nil
