@@ -22,7 +22,18 @@ IMAGE_VERSION_pmem-ns-init=canary
 IMAGE_VERSION_pmem-vgm=canary
 IMAGE_TAG=$(REGISTRY_NAME)/$*:$(IMAGE_VERSION_$*)
 IMAGE_BUILD_ARGS=
-BUILD_ARGS=--build-arg http_proxy=${http_proxy} --build-arg https_proxy=${https_proxy} --build-arg no_proxy=${no_proxy}
+# Pass proxy config via --build-arg only if these are set,
+# enabling proxy config other way, like ~/.docker/config.json
+BUILD_ARGS=
+ifneq ($(http_proxy),)
+	BUILD_ARGS:=${BUILD_ARGS} --build-arg http_proxy=${http_proxy}
+endif
+ifneq ($(https_proxy),)
+	BUILD_ARGS:=${BUILD_ARGS} --build-arg https_proxy=${https_proxy}
+endif
+ifneq ($(no_proxy),)
+	BUILD_ARGS:=${BUILD_ARGS} --build-arg no_proxy=${no_proxy}
+endif
 
 all: pmem-csi-driver pmem-ns-init pmem-vgm
 
