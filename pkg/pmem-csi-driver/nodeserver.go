@@ -120,7 +120,8 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	}
 	pmemcommon.Infof(4, ctx, "volume %s/%s has been unmounted.", targetPath, volumeID)
 
-	if err := removeDir(targetPath); err != nil {
+	glog.Infof("NodeUnpublishVolume: removing mount target directory: %s", targetPath)
+	if err := os.Remove(targetPath); err != nil {
 		pmemcommon.Infof(3, ctx, "failed to remove directory %v: %v", targetPath, err)
 	}
 
@@ -286,20 +287,11 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 		glog.Infof("NodeUnstageVolume: Umount failed: %v", err)
 		return nil, err
 	}
-	if err := removeDir(stagingtargetPath); err != nil {
+	glog.Infof("NodeUnStageVolume: removing staging directory: %s", stagingtargetPath)
+	if err := os.Remove(stagingtargetPath); err != nil {
 		pmemcommon.Infof(3, ctx, "failed to remove directory %v: %v", stagingtargetPath, err)
 	}
 	return &csi.NodeUnstageVolumeResponse{}, nil
-}
-
-// common handler called from few places above
-func removeDir(Path string) error {
-	glog.Infof("RemoveDir: remove dir %s", Path)
-	err := os.Remove(Path)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 // This is based on function used in LV-CSI driver
