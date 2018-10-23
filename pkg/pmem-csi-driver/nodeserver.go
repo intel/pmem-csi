@@ -80,12 +80,11 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	fsType := req.GetVolumeCapability().GetMount().GetFsType()
 
 	readOnly := req.GetReadonly()
-	volumeID := req.GetVolumeId()
 	attrib := req.GetVolumeAttributes()
 	mountFlags := req.GetVolumeCapability().GetMount().GetMountFlags()
 
 	glog.Infof("NodePublishVolume: targetpath %v\nStagingtargetpath %v\nfstype %v\nreadonly %v\nattributes %v\n mountflags %v\n",
-		targetPath, stagingtargetPath, fsType, readOnly, volumeID, attrib, mountFlags)
+		targetPath, stagingtargetPath, fsType, readOnly, attrib, mountFlags)
 
 	options := []string{"bind"}
 	if readOnly {
@@ -204,12 +203,12 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	}
 
 	// MkdirAll is equal to mkdir -p i.e. it creates parent dirs if needed, and is no-op if dir exists
-	glog.Infof("NodeStageVolume: mkdir -p %s", stagingtargetPath)
-	err = os.MkdirAll(stagingtargetPath, 0777)
-	if err != nil {
-		pmemcommon.Infof(3, ctx, "failed to create volume: %v", err)
-		return nil, err
-	}
+	//glog.Infof("NodeStageVolume: mkdir -p %s", stagingtargetPath)
+	//err = os.MkdirAll(stagingtargetPath, 0777)
+	//if err != nil {
+	//	pmemcommon.Infof(3, ctx, "failed to create volume: %v", err)
+	//	return nil, err
+	//}
 	// If file system is already mounted, can happen if out-of-sync "stage" is asked again without unstage
 	// then the mount here will fail. I guess it's ok to not check explicitly for existing mount,
 	// as end result after mount attempt will be same: no new mount and existing mount remains.
@@ -287,10 +286,10 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 		glog.Infof("NodeUnstageVolume: Umount failed: %v", err)
 		return nil, err
 	}
-	glog.Infof("NodeUnStageVolume: removing staging directory: %s", stagingtargetPath)
-	if err := os.Remove(stagingtargetPath); err != nil {
-		pmemcommon.Infof(3, ctx, "failed to remove directory %v: %v", stagingtargetPath, err)
-	}
+	//glog.Infof("NodeUnStageVolume: removing staging directory: %s", stagingtargetPath)
+	//if err := os.Remove(stagingtargetPath); err != nil {
+	//	pmemcommon.Infof(3, ctx, "failed to remove directory %v: %v", stagingtargetPath, err)
+	//}
 	return &csi.NodeUnstageVolumeResponse{}, nil
 }
 
