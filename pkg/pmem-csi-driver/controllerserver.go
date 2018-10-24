@@ -147,6 +147,12 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		}
 		cs.pmemVolumes[volumeID] = *vol
 		glog.Infof("CreateVolume: Record new volume as [%v]", *vol)
+		if cs.mode == Unified {
+			glog.Infof("CreateVolume: Special create volume in Unified mode")
+			if err := cs.createVolume(vol.Name, vol.Size); err != nil {
+				return nil, status.Errorf(codes.Internal, "CreateVolume: failed to create volume: %s", err.Error())
+			}
+		}
 	}
 
 	return &csi.CreateVolumeResponse{
@@ -181,6 +187,14 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 			pmemcommon.Infof(3, ctx, "Volume %s is attached to %s but not dittached", vol.Name, vol.NodeID)
 		}
 		delete(cs.pmemVolumes, vol.ID)
+		if cs.mode == Unified {
+			glog.Infof("DeleteVolume: Special Delete in Unified mode")
+			if vol, ok := cs.pmemVolumes[req.GetVolumeId()]; ok {
+				if err := cs.deleteVolume(vol.Name, vol.Erase); err != nil {
+					return nil, status.Errorf(codes.Internal, "Failed to delete volume: %s", err.Error())
+				}
+			}
+		}
 	}
 
 	pmemcommon.Infof(4, ctx, "DeleteVolume: volume deleted %s", req.GetVolumeId())
