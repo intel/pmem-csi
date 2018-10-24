@@ -69,3 +69,15 @@ func (rs *registryServer) UnregisterController(ctx context.Context, req *registr
 
 	return &registry.UnregisterControllerReply{}, nil
 }
+
+func (rs *registryServer) UpdateNodeCapacity(nodeID string, capacity uint64) error {
+	info, ok := rs.nodeClients[nodeID]
+	if !ok {
+		return fmt.Errorf("No entry with id '%s' not found in registry", nodeID)
+	}
+
+	info.Capacity = capacity
+	rs.nodeClients[nodeID] = info
+
+	return nil
+}

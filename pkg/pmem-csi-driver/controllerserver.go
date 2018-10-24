@@ -96,7 +96,7 @@ func (cs *controllerServer) GetVolumeByName(Name string) *pmemVolume {
 
 func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
 	var vol *pmemVolume
-	var eraseafter bool = true
+	eraseafter := true
 	if err := cs.Driver.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
 		pmemcommon.Infof(3, ctx, "invalid create volume req: %v", req)
 		return nil, err
@@ -136,6 +136,25 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 			return nil, status.Error(codes.AlreadyExists, fmt.Sprintf("Volume with the same name: %s but with different size already exist", vol.Name))
 		}
 	} else {
+		if cs.mode == Unified || cs.mode == Node {
+			glog.Infof("CreateVolume: Special create volume in Unified mode")
+			if err := cs.createVolume(req.Name, asked); err != nil {
+				return nil, status.Errorf(codes.Internal, "CreateVolume: failed to create volume: %s", err.Error())
+			}
+		} else /*if cs.mode == Unified */ {
+			foundNode := false
+			for _, nodeInfo := range cs.rs.nodeClients {
+				if nodeInfo.Capacity >= asked {
+					foundNode = true
+					break
+				}
+			}
+
+			if !foundNode {
+				return nil, status.Error(codes.Unavailable, fmt.Sprintf("No node found with %v capacaity", asked))
+			}
+		}
+
 		id, _ := uuid.NewUUID() //nolint: gosec
 		volumeID := id.String()
 		vol = &pmemVolume{
@@ -147,12 +166,6 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		}
 		cs.pmemVolumes[volumeID] = *vol
 		glog.Infof("CreateVolume: Record new volume as [%v]", *vol)
-		if cs.mode == Unified {
-			glog.Infof("CreateVolume: Special create volume in Unified mode")
-			if err := cs.createVolume(vol.Name, vol.Size); err != nil {
-				return nil, status.Errorf(codes.Internal, "CreateVolume: failed to create volume: %s", err.Error())
-			}
-		}
 	}
 
 	return &csi.CreateVolumeResponse{
@@ -299,6 +312,11 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		if err == nil {
 			if vol, ok := cs.pmemVolumes[req.VolumeId]; ok {
 				vol.Status = Attached
+				vol.NodeID = req.NodeId
+				// Update node capacity
+				// FIXME: Does this update should done via Registry API?
+				// like RegistryServer.UpdateCapacity(uint64 request)
+				cs.rs.UpdateNodeCapacity(node.NodeID, node.Capacity-vol.Size)
 			}
 		}
 		return resp, err
@@ -343,6 +361,10 @@ func (cs *controllerServer) ControllerUnpublishVolume(ctx context.Context, req *
 		if err == nil {
 			if vol, ok := cs.pmemVolumes[req.GetVolumeId()]; ok {
 				vol.Status = Unattached
+				// Update node capacity
+				// FIXME: Does this should be invoked from node controller?
+				// like RegistryServer.UpdateNodeCapacity(uint64 request)
+				cs.rs.UpdateNodeCapacity(node.NodeID, node.Capacity+vol.Size)
 			}
 		}
 
@@ -353,7 +375,7 @@ func (cs *controllerServer) ControllerUnpublishVolume(ctx context.Context, req *
 
 	// eraseafter was possibly given as plugin-specific option,
 	// it was stored in the pmemVolumes entry during Create
-	var erase bool = true
+	erase := true
 	if vol, ok := cs.pmemVolumes[req.GetVolumeId()]; ok {
 		glog.Infof("ControllerUnpublish: use stored EraseAfter: %v", vol.Erase)
 		erase = vol.Erase

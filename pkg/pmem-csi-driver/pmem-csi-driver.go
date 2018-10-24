@@ -10,6 +10,9 @@ package pmemcsidriver
 import (
 	"context"
 	"fmt"
+	"os/exec"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
@@ -200,7 +203,7 @@ func (pmemd *pmemDriver) registerNodeController() error {
 	var err error
 	var conn *grpc.ClientConn
 
-	for true {
+	for {
 		conn, err = pmemgrpc.Connect(pmemd.cfg.RegistryEndpoint, connectionTimeout)
 		if err == nil {
 			glog.Infof("Conneted to RegistryServer!!!")
@@ -211,9 +214,14 @@ func (pmemd *pmemDriver) registerNodeController() error {
 		time.Sleep(10 * time.Second)
 	}
 	client := registry.NewRegistryClient(conn)
+	capacity, err := pmemd.getNodeCapacity()
+	if err != nil {
+		glog.Warningf("Error while preparing node capacity: %s", err.Error())
+	}
 	req := registry.RegisterControllerRequest{
 		NodeId:   pmemd.driver.nodeID,
 		Endpoint: pmemd.cfg.ControllerEndpoint,
+		Capacity: capacity,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
@@ -223,4 +231,32 @@ func (pmemd *pmemDriver) registerNodeController() error {
 	}
 
 	return nil
+}
+
+func (pmemd *pmemDriver) getNodeCapacity() (uint64, error) {
+	var capacity uint64
+	vgsArgs := []string{"--noheadings", "--nosuffix", "--options", "vg_free", "--units", "B"}
+	pmemVolumeGroups := []string{}
+
+	for _, bus := range pmemd.ctx.GetBuses() {
+		for _, r := range bus.ActiveRegions() {
+			pmemVolumeGroups = append(pmemVolumeGroups, vgName(bus, r))
+		}
+	}
+
+	args := append(vgsArgs, pmemVolumeGroups...)
+	output, err := exec.Command("vgs", args...).CombinedOutput()
+	if err != nil {
+		return 0, err
+	}
+
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		vgAvail, _ := strconv.ParseUint(strings.TrimSpace(line), 10, 64)
+		capacity += vgAvail
+	}
+
+	glog.Infof("Available Node capacity: %v", capacity)
+
+	return capacity, nil
 }
