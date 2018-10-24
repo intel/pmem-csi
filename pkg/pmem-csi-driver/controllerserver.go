@@ -343,6 +343,10 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		return resp, err
 	}
 
+	if req.GetNodeId() != cs.Driver.nodeID {
+	        // if asked nodeID does not match ours, return NotFound error
+		return nil, status.Error(codes.NotFound, "Node not found")
+	}
 	var volumeName string
 	var volumeSize uint64
 	if cs.mode == Node {
