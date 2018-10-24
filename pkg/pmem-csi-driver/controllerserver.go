@@ -302,6 +302,11 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Volume capability must be provided")
 	}
 
+	vol := cs.GetVolumeByID(req.GetVolumeId())
+	if vol == nil {
+		return nil, status.Error(codes.NotFound, "Volume not created by this controller")
+	}
+
 	if cs.mode == Controller {
 		vol, ok := cs.pmemVolumes[req.VolumeId]
 		if !ok {
