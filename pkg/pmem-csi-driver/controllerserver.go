@@ -296,7 +296,7 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Node ID must be provided")
 	}
 
-	glog.Infof("Node: %s ControllerPublishVolume : volume_id: %s, node_id: %s ", cs.Driver.nodeID, req.VolumeId, req.NodeId)
+	glog.Infof("ControllerPublishVolume: cs.Node: %s req.volume_id: %s, req.node_id: %s ", cs.Driver.nodeID, req.VolumeId, req.NodeId)
 
 	if req.GetVolumeCapability() == nil {
 		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Volume capability must be provided")
@@ -464,7 +464,7 @@ func (cs *controllerServer) listVolumes() (map[string]pmemVolume, error) {
 }
 
 func (cs *controllerServer) createVolume(name string, size uint64) error {
-	glog.Infof("Creating volume/namespace '%s' with size '%v", name, size)
+	glog.Infof("createVolume name '%s' size '%v", name, size)
 
 	if lvmode() == true {
 		// pick a region, few possible strategies:
