@@ -68,6 +68,20 @@ type controllerServer struct {
 var _ csi.ControllerServer = &controllerServer{}
 
 func NewControllerServer(driver *CSIDriver, mode DriverMode, rs *registryServer, ctx *ndctl.Context) csi.ControllerServer {
+	serverCaps := []csi.ControllerServiceCapability_RPC_Type{}
+	switch mode {
+	case Controller:
+		serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME)
+		serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME)
+		serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_LIST_VOLUMES)
+	case Node:
+		serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME)
+	case Unified:
+		serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME)
+		serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_LIST_VOLUMES)
+	}
+	driver.AddControllerServiceCapabilities(serverCaps)
+
 	return &controllerServer{
 		DefaultControllerServer: NewDefaultControllerServer(driver),
 		mode:              mode,

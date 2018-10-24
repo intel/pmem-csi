@@ -114,11 +114,6 @@ func (pmemd *pmemDriver) Run() error {
 	if pmemd.cfg.Mode == Controller {
 		pmemd.rs = NewRegistryServer()
 		pmemd.cs = NewControllerServer(pmemd.driver, pmemd.cfg.Mode, pmemd.rs, pmemd.ctx)
-		pmemd.driver.AddControllerServiceCapabilities([]csi.ControllerServiceCapability_RPC_Type{
-			csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
-			csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
-			csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
-		})
 
 		if pmemd.cfg.Endpoint != pmemd.cfg.RegistryEndpoint {
 			if err := s.Start(pmemd.cfg.Endpoint, func(server *grpc.Server) {
@@ -144,13 +139,6 @@ func (pmemd *pmemDriver) Run() error {
 	} else {
 		pmemd.ns = NewNodeServer(pmemd.driver, pmemd.ctx)
 		pmemd.cs = NewControllerServer(pmemd.driver, pmemd.cfg.Mode, nil, pmemd.ctx)
-		pmemd.driver.AddControllerServiceCapabilities([]csi.ControllerServiceCapability_RPC_Type{
-			csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
-			csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
-		})
-		pmemd.driver.AddNodeServiceCapabilities([]csi.NodeServiceCapability_RPC_Type{
-			csi.NodeServiceCapability_RPC_STAGE_UNSTAGE_VOLUME,
-		})
 
 		if pmemd.cfg.Mode == Node {
 			if pmemd.cfg.Endpoint != pmemd.cfg.ControllerEndpoint {
@@ -179,9 +167,6 @@ func (pmemd *pmemDriver) Run() error {
 				return err
 			}
 		} else /* if pmemd.cfg.Mode == Unified */ {
-			pmemd.driver.AddControllerServiceCapabilities([]csi.ControllerServiceCapability_RPC_Type{
-				csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
-			})
 			if err := s.Start(pmemd.cfg.Endpoint, func(server *grpc.Server) {
 				csi.RegisterIdentityServer(server, pmemd.ids)
 				csi.RegisterControllerServer(server, pmemd.cs)
