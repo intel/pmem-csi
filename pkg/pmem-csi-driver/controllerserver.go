@@ -299,12 +299,11 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Volume capability must be provided")
 	}
 
-	attrs := req.GetVolumeAttributes()
-	if attrs == nil {
-		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Volume attribultes must be provided")
-	}
-
 	if cs.mode == Controller {
+		vol, ok := cs.pmemVolumes[req.VolumeId]
+		if !ok {
+			return nil, status.Error(codes.NotFound, fmt.Sprintf("No volume with id '%s' found", req.VolumeId))
+		}
 		node, err := cs.rs.GetNodeController(req.NodeId)
 		if err != nil {
 			return nil, status.Error(codes.NotFound, err.Error())
@@ -320,36 +319,51 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		csiClient := csi.NewControllerClient(conn)
 		glog.Infof("Iniitiating Publishing volume ....")
 
+		req.VolumeAttributes["name"] = vol.Name
+		req.VolumeAttributes["size"] = strconv.FormatUint(vol.Size, 10)
 		resp, err := csiClient.ControllerPublishVolume(ctx, req)
 		glog.Infof("Got response")
 
 		if err == nil {
-			if vol, ok := cs.pmemVolumes[req.VolumeId]; ok {
-				vol.Status = Attached
-				vol.NodeID = req.NodeId
-				// Update node capacity
-				// FIXME: Does this update should done via Registry API?
-				// like RegistryServer.UpdateCapacity(uint64 request)
-				cs.rs.UpdateNodeCapacity(node.NodeID, node.Capacity-vol.Size)
-			}
+			vol.Status = Attached
+			vol.NodeID = req.NodeId
+			// Update node capacity
+			// FIXME: Does this update should done via Registry API?
+			// like RegistryServer.UpdateCapacity(uint64 request)
+			cs.rs.UpdateNodeCapacity(node.NodeID, node.Capacity-vol.Size)
 		}
 		return resp, err
 	}
 
-	/* Node/Unified */
-	size, err := strconv.ParseUint(attrs["size"], 10, 64)
-	if err != nil {
-		return nil, err
+	var volumeName string
+	var volumeSize uint64
+	if cs.mode == Node {
+		attrs := req.GetVolumeAttributes()
+		if attrs == nil {
+			return nil, status.Error(codes.InvalidArgument, "Volume attribultes must be provided")
+		}
+		volumeName = attrs["name"]
+		volumeSize, _ = strconv.ParseUint(attrs["size"], 10, 64)
+	} else /* if cs.mode == Unified */ {
+		vol, ok := cs.pmemVolumes[req.VolumeId]
+		if !ok {
+			return nil, status.Error(codes.NotFound, fmt.Sprintf("No volume with id '%s' found", req.VolumeId))
+		}
+		volumeName = vol.Name
+		volumeSize = vol.Size
 	}
-
-	if err := cs.createVolume(attrs["name"], size); err != nil {
+	/* Node/Unified */
+	if err := cs.createVolume(volumeName, volumeSize); err != nil {
 		return nil, status.Errorf(codes.Internal, "Failed to create volume: %s", err.Error())
 	}
 
-	cs.publishVolumeInfo[req.VolumeId] = attrs["name"]
+	cs.publishVolumeInfo[req.VolumeId] = volumeName
 
 	return &csi.ControllerPublishVolumeResponse{
-		PublishInfo: attrs,
+		PublishInfo: map[string]string{
+			"name": volumeName,
+			"size": strconv.FormatUint(volumeSize, 10),
+		},
 	}, nil
 }
 
