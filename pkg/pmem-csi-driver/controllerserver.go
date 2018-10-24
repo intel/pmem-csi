@@ -471,6 +471,13 @@ func (cs *controllerServer) listVolumes() (map[string]pmemVolume, error) {
 func (cs *controllerServer) createVolume(name string, size uint64) error {
 	glog.Infof("createVolume name '%s' size '%v", name, size)
 
+        // TODO: Workaround/hack: if size is zero, create 4 Mbyte volume, as lvcreate does not allow zero size
+	// csi-sanity creates zero-sized volumes, not sure really how to handle, should we fail?
+	// (I dont find rules in CSI spec for this)
+	// at least LV-based volumes mgmt does not tolerate zero-sized volumes
+	if size == 0 {
+	        size = 4 * 1024 * 1024
+	}
 	if lvmode() == true {
 		// pick a region, few possible strategies:
 		// 1. pick first with enough available space: simplest, regions get filled in order;
