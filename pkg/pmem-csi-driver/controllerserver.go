@@ -427,20 +427,18 @@ func (cs *controllerServer) createVolume(name string, size uint64) error {
 
 func (cs *controllerServer) deleteVolume(name string) error {
 
-	if lvmode() == true {
+	if lvmode() {
 		lvpath, err := lvPath(name)
 		if err != nil {
 			return err
 		}
+		var output []byte
 		glog.Infof("DeleteVolume: Matching LVpath: %v", lvpath)
-		_, err = exec.Command("lvremove", "-f", lvpath).CombinedOutput()
-		if err != nil {
-			return err
-		}
+		output, err = exec.Command("lvremove", "-fy", lvpath).CombinedOutput()
+		glog.Infof("lvremove output: %s\n", string(output))
+		return err
 	} else {
-		if err := cs.ctx.DestroyNamespaceByName(name); err != nil {
-			return err
-		}
+		return cs.ctx.DestroyNamespaceByName(name)
 	}
 
 	return nil

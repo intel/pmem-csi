@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/intel/pmem-csi/pkg/pmem-common"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-driver"
 )
 
@@ -33,12 +32,6 @@ var (
 
 func main() {
 	flag.Parse()
-	closer, err := pmemcommon.InitTracer(*driverName)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize tracer: %s\n", err)
-		os.Exit(1)
-	}
-	defer closer.Close()
 
 	driver, err := pmemcsidriver.GetPMEMDriver(pmemcsidriver.Config{
 		DriverName:         *driverName,

@@ -62,53 +62,62 @@ spec:
   ports:
   - port: 10000
 ---
-apiVersion: v1
-kind: Pod
+apiVersion: apps/v1
+kind: ReplicaSet
 metadata:
   labels:
     app: pmem-csi-controller
   name: pmem-csi-controller
   namespace: default
 spec:
-  serviceAccount: csi-service-account
-  containers:
-    ## external-provisioner:
-    #    Watches PVClaim objects and triggers Create/DeleteVolume
-  - name: external-provisioner
-    imagePullPolicy: Always
-    image: quay.io/k8scsi/csi-provisioner:v0.3.0
-    args: [ "--v=5", "--provisioner=csi-pmem", "--csi-address=$(ADDRESS)" ]
-    env:
-    - name: ADDRESS
-      value: "0.0.0.0:10000"
-    ## external-attacher: sidecar
-    #    Watches VolumeAttachment objects and triggers
-    #    ControllerPublish/Unpublish
-  - name: external-attacher
-    imagePullPolicy: Always
-    image: quay.io/k8scsi/csi-attacher:v0.3.0
-    args: [ "--v=5", "--csi-address=$(ADDRESS)" ]
-    env:
-    - name: ADDRESS
-      value: "0.0.0.0:10000"
-  - name: pmem-driver
-    image: avalluriGigabyte.fi.intel.com/pmem-csi-driver:canary
-    imagePullPolicy: Always
-    args:  [ "-v=5",
-             "-drivername=csi-pmem",
-             "-mode=controller",
-             "-endpoint=$(CSI_ENDPOINT)",
-             "-nodeid=$(KUBE_NODE_NAME)" ]
-    env:
-    - name: CSI_ENDPOINT
-      value: "tcp://0.0.0.0:10000"
-    - name: KUBE_NODE_NAME
-      valueFrom:
-        fieldRef:
-          apiVersion: v1
-          fieldPath: spec.nodeName
-    securityContext:
-      privileged: true
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pmem-csi-controller
+  template:
+    metadata:
+      labels:
+        app: pmem-csi-controller
+    spec:
+      serviceAccount: csi-service-account
+      containers:
+        ## external-provisioner:
+        #    Watches PVClaim objects and triggers Create/DeleteVolume
+      - name: external-provisioner
+        imagePullPolicy: Always
+        image: quay.io/k8scsi/csi-provisioner:v0.3.0
+        args: [ "--v=5", "--provisioner=csi-pmem", "--csi-address=$(ADDRESS)" ]
+        env:
+        - name: ADDRESS
+          value: "0.0.0.0:10000"
+        ## external-attacher: sidecar
+        #    Watches VolumeAttachment objects and triggers
+        #    ControllerPublish/Unpublish
+      - name: external-attacher
+        imagePullPolicy: Always
+        image: quay.io/k8scsi/csi-attacher:v0.3.0
+        args: [ "--v=5", "--csi-address=$(ADDRESS)" ]
+        env:
+        - name: ADDRESS
+          value: "0.0.0.0:10000"
+      - name: pmem-driver
+        image: avalluriGigabyte.fi.intel.com/pmem-csi-driver:canary
+        imagePullPolicy: Always
+        args:  [ "-v=5",
+                 "-drivername=csi-pmem",
+                 "-mode=controller",
+                 "-endpoint=$(CSI_ENDPOINT)",
+                 "-nodeid=$(KUBE_NODE_NAME)" ]
+        env:
+        - name: CSI_ENDPOINT
+          value: "tcp://0.0.0.0:10000"
+        - name: KUBE_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        securityContext:
+          privileged: true
 ---
 kind: DaemonSet
 apiVersion: apps/v1beta2
@@ -125,73 +134,86 @@ spec:
     spec:
       serviceAccount: csi-service-account
       nodeSelector:
-         storage: nvdimm
+        storage: nvdimm
       hostNetwork: true
       initContainers:
-        - name: pmem-ns-init
-          imagePullPolicy: Always
-          image: avalluriGigabyte.fi.intel.com/pmem-ns-init:canary
-          args: [ "-v=5", "-namespacesize=1" ]
-          securityContext:
-            privileged: true
-        - name: pmem-vgm
-          imagePullPolicy: Always
-          image: avalluriGigabyte.fi.intel.com/pmem-vgm:canary
-          args: [ "-v=5" ]
-          securityContext:
-            privileged: true
+      - name: pmem-ns-init
+        imagePullPolicy: Always
+        image: avalluriGigabyte.fi.intel.com/pmem-ns-init:canary
+        args: [ "-v=5", "-namespacesize=9" ]
+        securityContext:
+          privileged: true
+      - name: pmem-vgm
+        imagePullPolicy: Always
+        image: avalluriGigabyte.fi.intel.com/pmem-vgm:canary
+        args: [ "-v=5" ]
+        securityContext:
+          privileged: true
       containers:
-         ## driver-registrar:
-         # 1) registers the CSI driver with kubelet
-         # 2) adds the driver's custom nodeId
-        - name: driver-registrar
-          imagePullPolicy: Always
-          image: quay.io/k8scsi/driver-registrar:v0.3.0
-          args: [ "--v=5" , "--csi-address=$(ADDRESS)" ]
-          env:
-           - name: ADDRESS
-             value: /csi/csi.sock
-           - name: KUBE_NODE_NAME
-             valueFrom:
-               fieldRef:
-                 apiVersion: v1
-                 fieldPath: spec.nodeName
-          volumeMounts:
-           - mountPath: /csi
-             name: socket-dir
-         ## pmem-driver:
-         #
-        - name: pmem-driver
-          imagePullPolicy: Always
-          image: avalluriGigabyte.fi.intel.com/pmem-csi-driver:canary
-          args: [ "-v=5",
+        ## driver-registrar:
+        # Registers the CSI driver with kubelet adds the driver's custom nodeId
+      - name: driver-registrar
+        imagePullPolicy: Always
+        image: quay.io/k8scsi/driver-registrar:v0.3.0
+        args: [ "--v=5" , "--csi-address=$(ADDRESS)" ]
+        env:
+        - name: ADDRESS
+          value: /csi/csi.sock
+        - name: KUBE_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        volumeMounts:
+        - mountPath: /csi
+          name: socket-dir
+        ## pmem-driver:
+        #
+      - name: pmem-driver
+        imagePullPolicy: Always
+        image: avalluriGigabyte.fi.intel.com/pmem-csi-driver:canary
+        args: [ "-v=5",
                   "-drivername=csi-pmem",
                   "-mode=node",
                   "-endpoint=$(CSI_ENDPOINT)",
                   "-nodeid=$(KUBE_NODE_NAME)",
                   "-controllerEndpoint=tcp://$(KUBE_POD_IP):10001",
                   "-registryEndpoint=$(PMEM_CONTROLLER_PORT_10000_TCP)" ]
-          securityContext:
-            privileged: true
-          env:
-           - name: CSI_ENDPOINT
-             value: unix:///csi/csi.sock
-           - name: KUBE_NODE_NAME
-             valueFrom:
-               fieldRef:
-                 apiVersion: v1
-                 fieldPath: spec.nodeName
-           - name: KUBE_POD_IP
-             valueFrom:
-               fieldRef:
-                 apiVersion: v1
-                 fieldPath: status.podIP
-          volumeMounts:
-           - name: socket-dir
-             mountPath: /csi
+        securityContext:
+          privileged: true
+        env:
+        - name: CSI_ENDPOINT
+          value: unix:///csi/csi.sock
+        - name: KUBE_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: KUBE_POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        volumeMounts:
+        - name: socket-dir
+          mountPath: /csi
+        - name: staging-target-dir
+          mountPath: /var/lib/kubelet/plugins/
+          mountPropagation: Bidirectional
+        - name: mountpoint-dir
+          mountPath: /var/lib/kubelet/pods
+          mountPropagation: Bidirectional
       volumes:
         - name: socket-dir
           hostPath:
             path: /var/lib/kubelet/plugins/csi-pmem/
+            type: DirectoryOrCreate
+        - name: staging-target-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/
+            type: DirectoryOrCreate
+        - name: mountpoint-dir
+          hostPath:
+            path: /var/lib/kubelet/pods
             type: DirectoryOrCreate
 
