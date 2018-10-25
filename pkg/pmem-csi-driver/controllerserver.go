@@ -141,8 +141,13 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 	}
 
 	asked := uint64(req.GetCapacityRange().GetRequiredBytes())
+	// Required==zero means unspecified by CSI spec, we create a small 4 Mbyte volume
+	// as lvcreate does not allow zero size (csi-sanity creates zero-sized volumes)
+	if asked == 0 {
+		asked = 4 * 1024 * 1024
+	}
 
-	glog.Infof("CreateVolume: Name: %v, Size: %v", req.Name, asked)
+	glog.Infof("CreateVolume: Name: %v, req.Required: %v req.Limit; %v", req.Name, asked, req.GetCapacityRange().GetLimitBytes())
 	if vol = cs.GetVolumeByName(req.Name); vol != nil {
 		// Check if the size of exisiting volume new can cover the new request
 		glog.Infof("CreateVolume: Vol %s exists, Size: %v", vol.Name, vol.Size)
@@ -344,7 +349,7 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 	}
 
 	if req.GetNodeId() != cs.Driver.nodeID {
-	        // if asked nodeID does not match ours, return NotFound error
+		// if asked nodeID does not match ours, return NotFound error
 		return nil, status.Error(codes.NotFound, "Node not found")
 	}
 	var volumeName string
@@ -473,15 +478,8 @@ func (cs *controllerServer) listVolumes() (map[string]pmemVolume, error) {
 }
 
 func (cs *controllerServer) createVolume(name string, size uint64) error {
-	glog.Infof("createVolume name '%s' size '%v", name, size)
+	glog.Infof("createVolume: name: %s size: %v", name, size)
 
-        // TODO: Workaround/hack: if size is zero, create 4 Mbyte volume, as lvcreate does not allow zero size
-	// csi-sanity creates zero-sized volumes, not sure really how to handle, should we fail?
-	// (I dont find rules in CSI spec for this)
-	// at least LV-based volumes mgmt does not tolerate zero-sized volumes
-	if size == 0 {
-	        size = 4 * 1024 * 1024
-	}
 	if lvmode() == true {
 		// pick a region, few possible strategies:
 		// 1. pick first with enough available space: simplest, regions get filled in order;
@@ -503,7 +501,11 @@ func (cs *controllerServer) createVolume(name string, size uint64) error {
 				vgAvail, _ := strconv.ParseUint(vgAvailStr, 10, 64)
 				glog.Infof("CreateVolume: vgAvail in %v: [%v]", vgName, vgAvail)
 				if vgAvail >= size {
-					// lvcreate takes size in MBytes if no unit
+					// lvcreate takes size in MBytes if no unit.
+					// We use MBytes here to avoid problems with byte-granularity, as lvcreate
+					// may refuse to create some arbitrary sizes.
+					// Division by 1M should not result in smaller-than-asked here
+					// as lvcreate will round up to next 4MB boundary.
 					sizeM := int(size / (1024 * 1024))
 					sz := strconv.Itoa(sizeM)
 					output, err := exec.Command("lvcreate", "-L", sz, "-n", name, vgName).CombinedOutput()
