@@ -10,6 +10,9 @@ package pmemcsidriver
 import (
 	"context"
 	"fmt"
+	"os/exec"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
@@ -111,11 +114,6 @@ func (pmemd *pmemDriver) Run() error {
 	if pmemd.cfg.Mode == Controller {
 		pmemd.rs = NewRegistryServer()
 		pmemd.cs = NewControllerServer(pmemd.driver, pmemd.cfg.Mode, pmemd.rs, pmemd.ctx)
-		pmemd.driver.AddControllerServiceCapabilities([]csi.ControllerServiceCapability_RPC_Type{
-			csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
-			csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
-			csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
-		})
 
 		if pmemd.cfg.Endpoint != pmemd.cfg.RegistryEndpoint {
 			if err := s.Start(pmemd.cfg.Endpoint, func(server *grpc.Server) {
@@ -141,13 +139,6 @@ func (pmemd *pmemDriver) Run() error {
 	} else {
 		pmemd.ns = NewNodeServer(pmemd.driver, pmemd.ctx)
 		pmemd.cs = NewControllerServer(pmemd.driver, pmemd.cfg.Mode, nil, pmemd.ctx)
-		pmemd.driver.AddControllerServiceCapabilities([]csi.ControllerServiceCapability_RPC_Type{
-			csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
-			csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
-		})
-		pmemd.driver.AddNodeServiceCapabilities([]csi.NodeServiceCapability_RPC_Type{
-			csi.NodeServiceCapability_RPC_STAGE_UNSTAGE_VOLUME,
-		})
 
 		if pmemd.cfg.Mode == Node {
 			if pmemd.cfg.Endpoint != pmemd.cfg.ControllerEndpoint {
@@ -176,9 +167,6 @@ func (pmemd *pmemDriver) Run() error {
 				return err
 			}
 		} else /* if pmemd.cfg.Mode == Unified */ {
-			pmemd.driver.AddControllerServiceCapabilities([]csi.ControllerServiceCapability_RPC_Type{
-				csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
-			})
 			if err := s.Start(pmemd.cfg.Endpoint, func(server *grpc.Server) {
 				csi.RegisterIdentityServer(server, pmemd.ids)
 				csi.RegisterControllerServer(server, pmemd.cs)
@@ -200,7 +188,7 @@ func (pmemd *pmemDriver) registerNodeController() error {
 	var err error
 	var conn *grpc.ClientConn
 
-	for true {
+	for {
 		conn, err = pmemgrpc.Connect(pmemd.cfg.RegistryEndpoint, connectionTimeout)
 		if err == nil {
 			glog.Infof("Conneted to RegistryServer!!!")
@@ -211,9 +199,14 @@ func (pmemd *pmemDriver) registerNodeController() error {
 		time.Sleep(10 * time.Second)
 	}
 	client := registry.NewRegistryClient(conn)
+	capacity, err := pmemd.getNodeCapacity()
+	if err != nil {
+		glog.Warningf("Error while preparing node capacity: %s", err.Error())
+	}
 	req := registry.RegisterControllerRequest{
 		NodeId:   pmemd.driver.nodeID,
 		Endpoint: pmemd.cfg.ControllerEndpoint,
+		Capacity: capacity,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
@@ -223,4 +216,32 @@ func (pmemd *pmemDriver) registerNodeController() error {
 	}
 
 	return nil
+}
+
+func (pmemd *pmemDriver) getNodeCapacity() (uint64, error) {
+	var capacity uint64
+	vgsArgs := []string{"--noheadings", "--nosuffix", "--options", "vg_free", "--units", "B"}
+	pmemVolumeGroups := []string{}
+
+	for _, bus := range pmemd.ctx.GetBuses() {
+		for _, r := range bus.ActiveRegions() {
+			pmemVolumeGroups = append(pmemVolumeGroups, vgName(bus, r))
+		}
+	}
+
+	args := append(vgsArgs, pmemVolumeGroups...)
+	output, err := exec.Command("vgs", args...).CombinedOutput()
+	if err != nil {
+		return 0, err
+	}
+
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		vgAvail, _ := strconv.ParseUint(strings.TrimSpace(line), 10, 64)
+		capacity += vgAvail
+	}
+
+	glog.Infof("Available Node capacity: %v", capacity)
+
+	return capacity, nil
 }

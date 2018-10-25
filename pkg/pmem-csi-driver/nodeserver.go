@@ -33,6 +33,9 @@ type nodeServer struct {
 var _ csi.NodeServer = &nodeServer{}
 
 func NewNodeServer(driver *CSIDriver, ctx *ndctl.Context) csi.NodeServer {
+	driver.AddNodeServiceCapabilities([]csi.NodeServiceCapability_RPC_Type{
+		csi.NodeServiceCapability_RPC_STAGE_UNSTAGE_VOLUME,
+	})
 	return &nodeServer{
 		DefaultNodeServer: NewDefaultNodeServer(driver),
 		ctx:               ctx,
