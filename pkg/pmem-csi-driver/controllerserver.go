@@ -296,10 +296,15 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Node ID must be provided")
 	}
 
-	glog.Infof("Node: %s ControllerPublishVolume : volume_id: %s, node_id: %s ", cs.Driver.nodeID, req.VolumeId, req.NodeId)
+	glog.Infof("ControllerPublishVolume: cs.Node: %s req.volume_id: %s, req.node_id: %s ", cs.Driver.nodeID, req.VolumeId, req.NodeId)
 
 	if req.GetVolumeCapability() == nil {
 		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Volume capability must be provided")
+	}
+
+	vol := cs.GetVolumeByID(req.GetVolumeId())
+	if vol == nil {
+		return nil, status.Error(codes.NotFound, "Volume not created by this controller")
 	}
 
 	if cs.mode == Controller {
@@ -338,6 +343,10 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		return resp, err
 	}
 
+	if req.GetNodeId() != cs.Driver.nodeID {
+	        // if asked nodeID does not match ours, return NotFound error
+		return nil, status.Error(codes.NotFound, "Node not found")
+	}
 	var volumeName string
 	var volumeSize uint64
 	if cs.mode == Node {
@@ -464,8 +473,15 @@ func (cs *controllerServer) listVolumes() (map[string]pmemVolume, error) {
 }
 
 func (cs *controllerServer) createVolume(name string, size uint64) error {
-	glog.Infof("Creating volume/namespace '%s' with size '%v", name, size)
+	glog.Infof("createVolume name '%s' size '%v", name, size)
 
+        // TODO: Workaround/hack: if size is zero, create 4 Mbyte volume, as lvcreate does not allow zero size
+	// csi-sanity creates zero-sized volumes, not sure really how to handle, should we fail?
+	// (I dont find rules in CSI spec for this)
+	// at least LV-based volumes mgmt does not tolerate zero-sized volumes
+	if size == 0 {
+	        size = 4 * 1024 * 1024
+	}
 	if lvmode() == true {
 		// pick a region, few possible strategies:
 		// 1. pick first with enough available space: simplest, regions get filled in order;
