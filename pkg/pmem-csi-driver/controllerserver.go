@@ -178,6 +178,9 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 			Status: Created,
 			Erase:  eraseafter,
 		}
+		if cs.mode == Unified || cs.mode == Node {
+			vol.Status = Attached
+		}
 		cs.pmemVolumes[volumeID] = *vol
 		glog.Infof("CreateVolume: Record new volume as [%v]", *vol)
 	}
@@ -213,8 +216,7 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 		if vol.Status != Unattached {
 			pmemcommon.Infof(3, ctx, "Volume %s is attached to %s but not dittached", vol.Name, vol.NodeID)
 		}
-		delete(cs.pmemVolumes, vol.ID)
-		if cs.mode == Unified {
+		if cs.mode == Unified || cs.mode == Node {
 			glog.Infof("DeleteVolume: Special Delete in Unified mode")
 			if vol, ok := cs.pmemVolumes[req.GetVolumeId()]; ok {
 				if err := cs.deleteVolume(vol.Name, vol.Erase); err != nil {
@@ -222,6 +224,7 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 				}
 			}
 		}
+		delete(cs.pmemVolumes, vol.ID)
 	}
 
 	pmemcommon.Infof(4, ctx, "DeleteVolume: volume deleted %s", req.GetVolumeId())
