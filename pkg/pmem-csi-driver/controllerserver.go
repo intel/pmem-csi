@@ -155,9 +155,11 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 			return nil, status.Error(codes.AlreadyExists, fmt.Sprintf("Volume with the same name: %s but with different size already exist", vol.Name))
 		}
 	} else {
+		id, _ := uuid.NewUUID() //nolint: gosec
+		volumeID := id.String()
 		if cs.mode == Unified || cs.mode == Node {
 			glog.Infof("CreateVolume: Special create volume in Unified mode")
-			if err := cs.createVolume(req.Name, asked); err != nil {
+			if err := cs.createVolume(volumeID, asked); err != nil {
 				return nil, status.Errorf(codes.Internal, "CreateVolume: failed to create volume: %s", err.Error())
 			}
 		} else /*if cs.mode == Unified */ {
@@ -174,8 +176,6 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 			}
 		}
 
-		id, _ := uuid.NewUUID() //nolint: gosec
-		volumeID := id.String()
 		vol = &pmemVolume{
 			ID:     volumeID,
 			Name:   req.GetName(),
@@ -224,7 +224,7 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 		if cs.mode == Unified || cs.mode == Node {
 			glog.Infof("DeleteVolume: Special Delete in Unified mode")
 			if vol, ok := cs.pmemVolumes[req.GetVolumeId()]; ok {
-				if err := cs.deleteVolume(vol.Name, vol.Erase); err != nil {
+				if err := cs.deleteVolume(req.GetVolumeId(), vol.Erase); err != nil {
 					return nil, status.Errorf(codes.Internal, "Failed to delete volume: %s", err.Error())
 				}
 			}
@@ -370,7 +370,7 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		volumeSize = vol.Size
 	}
 	/* Node/Unified */
-	if err := cs.createVolume(volumeName, volumeSize); err != nil {
+	if err := cs.createVolume(req.VolumeId, volumeSize); err != nil {
 		return nil, status.Errorf(codes.Internal, "Failed to create volume: %s", err.Error())
 	}
 
@@ -425,8 +425,7 @@ func (cs *controllerServer) ControllerUnpublishVolume(ctx context.Context, req *
 		glog.Infof("ControllerUnpublish: use stored EraseAfter: %v", vol.Erase)
 		erase = vol.Erase
 	}
-	name := cs.publishVolumeInfo[req.GetVolumeId()]
-	if err := cs.deleteVolume(name, erase); err != nil {
+	if err := cs.deleteVolume(req.GetVolumeId(), erase); err != nil {
 		return nil, status.Errorf(codes.Internal, "Failed to delete volume: %s", err.Error())
 	}
 
@@ -537,10 +536,10 @@ func (cs *controllerServer) createVolume(name string, size uint64) error {
 	return nil
 }
 
-func (cs *controllerServer) deleteVolume(name string, erase bool) error {
+func (cs *controllerServer) deleteVolume(volumeID string, erase bool) error {
 
 	if lvmode() {
-		lvpath, err := lvPath(name)
+		lvpath, err := lvPath(volumeID)
 		if err != nil {
 			return err
 		}
@@ -560,6 +559,9 @@ func (cs *controllerServer) deleteVolume(name string, erase bool) error {
 		glog.Infof("lvremove output: %s\n", string(output))
 		return err
 	} else {
+		// TODO: name lookup added as arg was changed to be VolumeID,
+		// but whole direct-nvdimm mode will need re-engineering
+		name := cs.publishVolumeInfo[volumeID]
 		return cs.ctx.DestroyNamespaceByName(name)
 	}
 

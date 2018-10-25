@@ -155,7 +155,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	var devicepath string
 	var err error
 	if lvmode() == true {
-		devicepath, err = lvPath(attrs["name"])
+		devicepath, err = lvPath(req.VolumeId)
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, "No such volume")
 		}
@@ -259,7 +259,7 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	// so we look up the current device by volumeID and see is that device
 	// mounted on staging target path
 	if lvmode() == true {
-		devicepath, err := lvPath(volName)
+		devicepath, err := lvPath(req.VolumeId)
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, "No such volume")
 		}
