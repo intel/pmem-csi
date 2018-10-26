@@ -9,7 +9,6 @@ package pmemcsidriver
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"golang.org/x/net/context"
@@ -22,6 +21,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/intel/pmem-csi/pkg/pmem-common"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
+	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 )
 
 type nodeServer struct {
@@ -132,7 +132,6 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 
 func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
 
-	var output []byte
 	// Check arguments
 	if len(req.GetVolumeId()) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Volume ID missing in request")
@@ -180,18 +179,21 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	} else {
 		// no existing file system, make fs
 		// Empty FsType means "unspecified" and we pick default, currently hard-codes to ext4
+		cmd := ""
+		args := []string{}
 		if requestedFsType == "ext4" || requestedFsType == "" {
-			glog.Infof("NodeStageVolume: mkfs.ext4 -F %s", device.Path)
-			output, err = exec.Command("mkfs.ext4", "-F", device.Path).CombinedOutput()
+			cmd = "mkfs.ext4"
+			args = []string{"-F", device.Path}
 		} else if requestedFsType == "xfs" {
-			glog.Infof("NodeStageVolume: mkfs.xfs -f %s", device.Path)
-			output, err = exec.Command("mkfs.xfs", "-f", device.Path).CombinedOutput()
+			cmd = "mkfs.xfs"
+			args = []string{"-f", device.Path}
 		} else {
 			glog.Infof("NodeStageVolume: Unsupported fstype: [%v]", requestedFsType)
 			return nil, status.Error(codes.InvalidArgument, "xfs, ext4 are supported as file system types")
 		}
+		output, err := pmemexec.RunCommand(cmd, args...)
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "mkfs failed"+string(output))
+			return nil, status.Error(codes.InvalidArgument, "mkfs failed: "+output)
 		}
 	}
 
@@ -218,9 +220,8 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	// added -c makes canonical mount, resulting in mounted path matching what LV thinks is lvpath.
 	// Without -c mounted path will look like /dev/mapper/... and its more difficult to match it to lvpath when unmounting
 	// TODO: perhaps this thing can be revisited-cleaned somehow
-	output, err = exec.Command("mount", "-c", device.Path, stagingtargetPath).CombinedOutput()
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "mount failed"+string(output))
+	if _, err := pmemexec.RunCommand("mount", "-c", device.Path, stagingtargetPath); err != nil {
+		return nil, status.Error(codes.InvalidArgument, "mount filesystem failed"+err.Error())
 	}
 
 	ns.volInfo[req.VolumeId] = attrs["name"]
@@ -285,17 +286,16 @@ func determineFilesystemType(devicePath string) (string, error) {
 	// has inconvenient output.
 	// We do *not* use `lsblk` as that requires udev to be up-to-date which
 	// is often not the case when a device is erased using `dd`.
-	output, err := exec.Command("file", "-bsL", devicePath).CombinedOutput()
+	output, err := pmemexec.RunCommand("file", "-bsL", devicePath)
 	if err != nil {
 		return "", err
 	}
-	if strings.TrimSpace(string(output)) == "data" {
+	if strings.TrimSpace(output) == "data" {
 		// No filesystem detected.
 		return "", nil
 	}
 	// Some filesystem was detected, use blkid to figure out what it is.
-	output, err = exec.Command("blkid", "-c", "/dev/null", "-o", "full", devicePath).CombinedOutput()
-	glog.Infof("blkid output: %s\n", string(output))
+	output, err = pmemexec.RunCommand("blkid", "-c", "/dev/null", "-o", "full", devicePath)
 	if err != nil {
 		return "", err
 	}

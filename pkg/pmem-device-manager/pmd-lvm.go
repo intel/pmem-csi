@@ -2,12 +2,12 @@ package pmdmanager
 
 import (
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 
 	"github.com/golang/glog"
 	"github.com/intel/pmem-csi/pkg/ndctl"
+	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 )
 
 type pmemLvm struct {
@@ -85,10 +85,8 @@ func (lvm *pmemLvm) CreateDevice(name string, size uint64) error {
 	for _, vg := range vgs {
 		if vg.free >= size {
 			// lvcreate takes size in MBytes if no unit
-			output, err := exec.Command("lvcreate", "-L", strSz, "-n", name, vg.name).CombinedOutput()
-			glog.Infof("lvcreate output: %s\n", string(output))
-			if err != nil {
-				glog.Infof("lvcreate failed: %v, trying for next free region", string(output))
+			if _, err := pmemexec.RunCommand("lvcreate", "-L", strSz, "-n", name, vg.name); err != nil {
+				glog.Infof("lvcreate failed with error: %v, trying for next free region", err)
 			} else {
 				return nil
 			}
@@ -106,9 +104,9 @@ func (lvm *pmemLvm) DeleteDevice(name string, flush bool) error {
 	if flush {
 		flushDevice(device)
 	}
-	var output []byte
-	output, err = exec.Command("lvremove", "-fy", device.Path).CombinedOutput()
-	glog.Infof("lvremove output: %s\n", string(output))
+
+	_, err = pmemexec.RunCommand("lvremove", "-fy", device.Path)
+
 	return err
 }
 
@@ -135,11 +133,11 @@ func (lvm *pmemLvm) GetDevice(id string) (PmemDeviceInfo, error) {
 
 func (lvm *pmemLvm) ListDevices() ([]PmemDeviceInfo, error) {
 	args := append(lvsArgs, lvm.volumeGroups...)
-	output, err := exec.Command("lvs", args...).CombinedOutput()
+	output, err := pmemexec.RunCommand("lvs", args...)
 	if err != nil {
-		return nil, fmt.Errorf("list volumes failed : %s(lvs output: %s)", err.Error(), string(output))
+		return nil, fmt.Errorf("list volumes failed : %s(lvs output: %s)", err.Error())
 	}
-	return parseLVSOuput(string(output))
+	return parseLVSOuput(output)
 }
 
 func vgName(bus *ndctl.Bus, region *ndctl.Region) string {
@@ -149,9 +147,9 @@ func vgName(bus *ndctl.Bus, region *ndctl.Region) string {
 func flushDevice(dev PmemDeviceInfo) error {
 	// erase data on block device, if not disabled by driver option
 	// use one iteration instead of shred's default=3 for speed
-	glog.Infof("Wiping data using [shred %v]", dev.Path)
-	if output, err := exec.Command("shred", "--iterations=1", dev.Path).CombinedOutput(); err != nil {
-		return fmt.Errorf("device flush failure: %v(shred output:%v)", err.Error(), string(output))
+	glog.Infof("Wiping data on: %s", dev.Path)
+	if _, err := pmemexec.RunCommand("shred", "--iterations=1", dev.Path); err != nil {
+		return fmt.Errorf("device flush failure: %v", err.Error())
 	}
 	return nil
 }
@@ -180,13 +178,11 @@ func parseLVSOuput(output string) ([]PmemDeviceInfo, error) {
 func getVolumeGroups(groups []string) ([]vgInfo, error) {
 	vgs := []vgInfo{}
 	args := append(vgsArgs, groups...)
-	glog.Infof("Running: vgs %v", args)
-	output, err := exec.Command("vgs", args...).CombinedOutput()
-	glog.Infof("Output: %s", string(output))
+	output, err := pmemexec.RunCommand("vgs", args...)
 	if err != nil {
-		return vgs, fmt.Errorf("vgs failure: %s(output %s)", err.Error(), string(output))
+		return vgs, fmt.Errorf("vgs failure: %s", err.Error())
 	}
-	for _, line := range strings.SplitN(string(output), "\n", len(groups)) {
+	for _, line := range strings.SplitN(output, "\n", len(groups)) {
 		fields := strings.Fields(strings.TrimSpace(line))
 		if len(fields) != 3 {
 			return vgs, fmt.Errorf("Failed to parse vgs output line: %s", line)

@@ -4,11 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/golang/glog"
 	"github.com/intel/pmem-csi/pkg/ndctl"
+	"github.com/intel/pmem-csi/pkg/pmem-exec"
 )
 
 const (
@@ -59,13 +59,13 @@ func initNVdimms(ctx *ndctl.Context, namespacesize, uselimit int) {
 	// if cmd returns nonzero, its either "cmd exists and we run on baremetal (retval 1)" or "cmd does not exist: retval 127"
 	// in both cases we settle to baremetal mode, no harm done
 	glog.Infof("Configured namespacesize; %v GB", namespacesize)
-	output, err := exec.Command("systemd-detect-virt", "-v").CombinedOutput() //nolint: gosec
+	output, err := pmemexec.RunCommand("systemd-detect-virt", "-v")
 	if err != nil {
-		glog.Infof("VM detection: [%v] [%v], seem to run on bare metal, use default %v GB namespace size",
-			strings.TrimSpace(string(output)), err, namespacesize)
+		glog.Infof("VM detection: [%v], seem to run on bare metal, use default %v GB namespace size",
+			err, namespacesize)
 	} else {
 		glog.Infof("VM detection: [%v], this looks like VM, use smaller %v GB namespace size",
-			strings.TrimSpace(string(output)), namespacesizeVM)
+			strings.TrimSpace(output), namespacesizeVM)
 		namespacesize = namespacesizeVM
 	}
 	createNamespaces(ctx, namespacesize, uselimit)

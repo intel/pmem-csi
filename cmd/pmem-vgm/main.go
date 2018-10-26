@@ -2,10 +2,10 @@ package main
 
 import (
 	"flag"
-	"os/exec"
 
 	"github.com/golang/glog"
 	"github.com/intel/pmem-csi/pkg/ndctl"
+	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 )
 
 func init() {
@@ -59,17 +59,16 @@ func createVolumesForRegion(r *ndctl.Region, vgName string) error {
 		devName := "/dev/" + ns.BlockDeviceName()
 		/* check if this pv is already part of a group, if yes ignore this pv
 		   if not add to arg list */
-		output, err := exec.Command("pvdisplay", devName).CombinedOutput()
+		_, err := pmemexec.RunCommand("pvdisplay", devName)
 		if err != nil {
 			cmdArgs = append(cmdArgs, devName)
 		}
-		glog.Infof("pvdisplay output: %s", string(output[:]))
 	}
 	if len(cmdArgs) == 2 {
 		glog.Infof("no new namespace found to add to this group: %s", vgName)
 		return nil
 	}
-	if _, err := exec.Command("vgdisplay", vgName).CombinedOutput(); err != nil {
+	if _, err := pmemexec.RunCommand("vgdisplay", vgName); err != nil {
 		glog.Infof("No Vgroup with name %v, mark for creation", vgName)
 		cmd = "vgcreate"
 	} else {
@@ -77,14 +76,7 @@ func createVolumesForRegion(r *ndctl.Region, vgName string) error {
 		cmd = "vgextend"
 	}
 
-	glog.Infof("Running: %s %v", cmd, append([]string{cmd}, cmdArgs...))
-
-	output, err := exec.Command(cmd, cmdArgs...).CombinedOutput() //nolint gosec
-	if err != nil {
-		glog.Warningf(cmd, " failed with output: ", string(output[:]))
-	} else {
-		glog.Infof("%s output: %s", cmd, string(output[:]))
-	}
+	_, err := pmemexec.RunCommand(cmd, cmdArgs...) //nolint gosec
 
 	return err
 }
