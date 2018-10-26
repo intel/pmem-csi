@@ -20,25 +20,25 @@ import (
 	"k8s.io/kubernetes/pkg/util/mount"
 
 	"github.com/golang/glog"
-	"github.com/intel/pmem-csi/pkg/ndctl"
 	"github.com/intel/pmem-csi/pkg/pmem-common"
+	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 )
 
 type nodeServer struct {
 	*DefaultNodeServer
-	ctx     *ndctl.Context
+	dm      pmdmanager.PmemDeviceManager
 	volInfo map[string]string
 }
 
 var _ csi.NodeServer = &nodeServer{}
 
-func NewNodeServer(driver *CSIDriver, ctx *ndctl.Context) csi.NodeServer {
+func NewNodeServer(driver *CSIDriver, dm pmdmanager.PmemDeviceManager) csi.NodeServer {
 	driver.AddNodeServiceCapabilities([]csi.NodeServiceCapability_RPC_Type{
 		csi.NodeServiceCapability_RPC_STAGE_UNSTAGE_VOLUME,
 	})
 	return &nodeServer{
 		DefaultNodeServer: NewDefaultNodeServer(driver),
-		ctx:               ctx,
+		dm:                dm,
 		volInfo:           map[string]string{},
 	}
 }
@@ -152,26 +152,14 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	glog.Infof("NodeStageVolume: Staging target path is %v", stagingtargetPath)
 	glog.Infof("NodeStageVolume: Requested fsType is %v", requestedFsType)
 
-	var devicepath string
-	var err error
-	if lvmode() == true {
-		devicepath, err = lvPath(req.VolumeId)
-		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "No such volume")
-		}
-		glog.Infof("NodeStageVolume: devicepath: %v", devicepath)
-	} else {
-		namespace, err := ns.ctx.GetNamespaceByName(attrs["name"])
-		if err != nil {
-			pmemcommon.Infof(3, ctx, "NodeStageVolume: did not find volume %s", attrs["name"])
-			return nil, err
-		}
-		glog.Infof("NodeStageVolume: Existing namespace: blockdev is %v with size %v", namespace.BlockDeviceName(), namespace.Size())
-		devicepath = "/dev/" + namespace.BlockDeviceName()
+	device, err := ns.dm.GetDevice(req.VolumeId)
+	if err != nil {
+		pmemcommon.Infof(3, ctx, "NodeStageVolume: did not find volume %s", attrs["name"])
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	// Check does devicepath already contain a filesystem?
-	existingFsType, err := determineFilesystemType(devicepath)
+	existingFsType, err := determineFilesystemType(device.Path)
 	if err != nil {
 		glog.Infof("NodeStageVolume: determine failed: %v", err)
 		return nil, err
@@ -183,21 +171,21 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		glog.Infof("NodeStageVolume: Found existing %v filesystem", existingFsType)
 		// Is existing filesystem type same as requested?
 		if existingFsType == requestedFsType {
-			glog.Infof("Skip mkfs as %v file system already exists on %v", existingFsType, devicepath)
+			glog.Infof("Skip mkfs as %v file system already exists on %v", existingFsType, device.Path)
 		} else {
 			pmemcommon.Infof(3, ctx, "NodeStageVolume: File system with different type %v exist on %v",
-				existingFsType, devicepath)
+				existingFsType, device.Path)
 			return nil, status.Error(codes.InvalidArgument, "File system with different type exists")
 		}
 	} else {
 		// no existing file system, make fs
 		// Empty FsType means "unspecified" and we pick default, currently hard-codes to ext4
 		if requestedFsType == "ext4" || requestedFsType == "" {
-			glog.Infof("NodeStageVolume: mkfs.ext4 -F %s", devicepath)
-			output, err = exec.Command("mkfs.ext4", "-F", devicepath).CombinedOutput()
+			glog.Infof("NodeStageVolume: mkfs.ext4 -F %s", device.Path)
+			output, err = exec.Command("mkfs.ext4", "-F", device.Path).CombinedOutput()
 		} else if requestedFsType == "xfs" {
-			glog.Infof("NodeStageVolume: mkfs.xfs -f %s", devicepath)
-			output, err = exec.Command("mkfs.xfs", "-f", devicepath).CombinedOutput()
+			glog.Infof("NodeStageVolume: mkfs.xfs -f %s", device.Path)
+			output, err = exec.Command("mkfs.xfs", "-f", device.Path).CombinedOutput()
 		} else {
 			glog.Infof("NodeStageVolume: Unsupported fstype: [%v]", requestedFsType)
 			return nil, status.Error(codes.InvalidArgument, "xfs, ext4 are supported as file system types")
@@ -218,7 +206,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	// then the mount here will fail. I guess it's ok to not check explicitly for existing mount,
 	// as end result after mount attempt will be same: no new mount and existing mount remains.
 	// TODO: cleaner is to explicitly check (although CSI spec may tell that out-of-order call is illegal (check it))
-	glog.Infof("NodeStageVolume: mount %s %s", devicepath, stagingtargetPath)
+	glog.Infof("NodeStageVolume: mount %s %s", device.Path, stagingtargetPath)
 
 	/* THIS is how it could go with using "mount" package
 	        options := []string{""}
@@ -230,7 +218,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	// added -c makes canonical mount, resulting in mounted path matching what LV thinks is lvpath.
 	// Without -c mounted path will look like /dev/mapper/... and its more difficult to match it to lvpath when unmounting
 	// TODO: perhaps this thing can be revisited-cleaned somehow
-	output, err = exec.Command("mount", "-c", devicepath, stagingtargetPath).CombinedOutput()
+	output, err = exec.Command("mount", "-c", device.Path, stagingtargetPath).CombinedOutput()
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "mount failed"+string(output))
 	}
@@ -260,19 +248,10 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	// by spec, we have to return OK if asked volume is not mounted on asked path,
 	// so we look up the current device by volumeID and see is that device
 	// mounted on staging target path
-	if lvmode() == true {
-		devicepath, err := lvPath(req.VolumeId)
-		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "No such volume")
-		}
-		glog.Infof("NodeUnstageVolume: devicepath: %v", devicepath)
-	} else {
-		namespace, err := ns.ctx.GetNamespaceByName(volName)
-		if err != nil {
-			pmemcommon.Infof(3, ctx, "NodeUnstageVolume: did not find volume %s", req.GetVolumeId())
-			return nil, err
-		}
-		glog.Infof("NodeUnstageVolume: Existing namespace: blockdev: %v with size %v", namespace.BlockDeviceName(), namespace.Size())
+	_, err := ns.dm.GetDevice(req.VolumeId)
+	if err != nil {
+		pmemcommon.Infof(3, ctx, "NodeUnstageVolume: did not find volume %s", req.GetVolumeId())
+		return nil, err
 	}
 
 	// Find out device name for mounted path
@@ -291,10 +270,7 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 		glog.Infof("NodeUnstageVolume: Umount failed: %v", err)
 		return nil, err
 	}
-	//glog.Infof("NodeUnStageVolume: removing staging directory: %s", stagingtargetPath)
-	//if err := os.Remove(stagingtargetPath); err != nil {
-	//	pmemcommon.Infof(3, ctx, "failed to remove directory %v: %v", stagingtargetPath, err)
-	//}
+
 	return &csi.NodeUnstageVolumeResponse{}, nil
 }
 
@@ -340,33 +316,4 @@ func determineFilesystemType(devicePath string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no filesystem type detected for %s", devicePath)
-}
-
-// TODO: clean this up, likely can be deleted.
-// This is method to determine "LV mode" dynamically in a setup where
-// we want run-time detection.
-// It was implemented when we faked LVs on top of regular block device in VM-devel mode.
-// Right now lvMode=true is had-coded here and all lvmode checks in code will return true
-// The code in else-parts of these blocks would serve ndctl-managed namespaces directly,
-// but this seems not viable way forward, and is incomplete and nto in good shape.
-// For now, keeping the code in else-parts for historic reference.
-
-//var lvMode bool = false
-var lvMode bool = true
-
-//var lvModeSet bool = false
-func lvmode() bool {
-	/*	if lvModeSet == false {
-		lvModeSet = true
-		glog.Infof("LVmode not set, try to determine...")
-		_, err := exec.Command("vgdisplay", lvgroup).CombinedOutput()
-		if err != nil {
-			lvMode = false
-			glog.Infof("No LV group: %v found, LV mode false", lvgroup)
-		} else {
-			lvMode = true
-			glog.Infof("LV group: %v is found, LV mode is true", lvgroup)
-		}
-	}*/
-	return lvMode
 }
