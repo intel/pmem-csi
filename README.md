@@ -41,8 +41,9 @@ So far, the early development and verification has mostly been carried out on qe
 
 Build has been verified on a system described below.
 
+- Host: Dell Poweredge R620, distro: openSUSE Leap 15.0, kernel 4.12.14, qemu 2.11.2
 - Host: Dell Poweredge R620, distro: openSUSE Tumbleweed, kernel 4.18.8, qemu 2.12.1, 3.0.0
-- Guest: VM: 16GB RAM, 8 vCPUs, Ubuntu 18.04.1 server, kernel 4.15.0
+- Guest: VM: 32GB RAM, 8 vCPUs, Ubuntu 18.04.1 server, kernel 4.15.0
 - VM config originally created by libvirt/GUI (also doable using virt-install CLI), with configuration changes made directly in VM-config xml file to emulate pair of NVDIMMs backed by host file.
 
 ### NOTE about hugepages:
@@ -52,22 +53,22 @@ Emulated nvdimm appears not fully working if the VM is configured to use Hugepag
 ### maxMemory
 
 ```
-  <maxMemory slots='16' unit='KiB'>33554432</maxMemory>
+  <maxMemory slots='16' unit='KiB'>67108864</maxMemory>
 ```
 
-### NUMA config, 2 nodes with 8GB mem in both
+### NUMA config, 2 nodes with 16 GB mem in both
 
 ```
   <cpu ...>
     <...>
     <numa>
-      <cell id='0' cpus='0-3' memory='8388608' unit='KiB'/>
-      <cell id='1' cpus='4-7' memory='8388608' unit='KiB'/>
+      <cell id='0' cpus='0-3' memory='16777216' unit='KiB'/>
+      <cell id='1' cpus='4-7' memory='16777216' unit='KiB'/>
     </numa>
   </cpu>
 ```
 
-### Emulated 2x 1G NVDIMM with labels support
+### Emulated 2x 8G NVDIMM with labels support
 
 ```
     <memory model='nvdimm' access='shared'>
@@ -75,7 +76,7 @@ Emulated nvdimm appears not fully working if the VM is configured to use Hugepag
         <path>/var/lib/libvirt/images/nvdimm0</path>
       </source>
       <target>
-        <size unit='KiB'>1048576</size>
+        <size unit='KiB'>8388608</size>
         <node>0</node>
         <label>
           <size unit='KiB'>2048</size>
@@ -88,7 +89,7 @@ Emulated nvdimm appears not fully working if the VM is configured to use Hugepag
         <path>/var/lib/libvirt/images/nvdimm1</path>
       </source>
       <target>
-        <size unit='KiB'>1048576</size>
+        <size unit='KiB'>8388608</size>
         <node>1</node>
         <label>
           <size unit='KiB'>2048</size>
@@ -98,11 +99,11 @@ Emulated nvdimm appears not fully working if the VM is configured to use Hugepag
     </memory>
 ```
 
-### 2x 1 GB NVDIMM backing file creation example on Host
+### 2x 8 GB NVDIMM backing file creation example on Host
 
 ```
-dd if=/dev/zero of=/var/lib/libvirt/images/nvdimm0 bs=4K count=262144
-dd if=/dev/zero of=/var/lib/libvirt/images/nvdimm1 bs=4K count=262144
+dd if=/dev/zero of=/var/lib/libvirt/images/nvdimm0 bs=4K count=2097152
+dd if=/dev/zero of=/var/lib/libvirt/images/nvdimm1 bs=4K count=2097152
 ```
 
 ### Labels initialization is needed once per emulated NVDIMM
@@ -123,10 +124,11 @@ ndctl init-labels nmem1
 ndctl enable-region region1
 ```
 
-## Software on the guest:
+## Software on the guest to support development and local-mode run:
 - Go: version 1.10.1
 - ndctl: version 62, built on same host via autogen,configure,make,install steps as per instruction in README.md
-- csc: built from github.com/rexray/gocsi 0.5.0
+- csc: v0.5.0 from github.com/rexray/gocsi
+- csi-sanity: v0.2.0-1-95-g3bc4135 from github.com/kubernetes-csi/csi-test
 - Docker-ce: version 18.06.1
 
 * Hardware required
@@ -190,21 +192,31 @@ This pushes docker container images to the docker images registry.
 ### Run plugin
 
 #### Run driver as standalone
+
+This is useful in development/trial mode.
+
 Use `run_driver` as user:root.
 This runs two preparation parts, and starts driver binary which listens and
-responds to API use on TCP or Unix socket.
+responds to API use on a TCP socket. You can modify this to use Unix socket if needed.
 
-Try volume lifecycle on a standalone system:
+The driver can be verified in the single-host context. Such running mode is called "Unified"
+in the driver. Both Controller and Node service run combined in local host, without Kubernetes context.
 
-There are example steps forming a simple volume lifecycle in `run_client_csc`. 
-The client-side endpoint can be specified either:
+The endpoint for driver access can be specified either:
 
 - with each csc command as `--endpoint tcp://127.0.0.1:10000` 
-- export endpoint as env.variable, see `run_client_csc`
+- export endpoint as env.variable, see `util/lifecycle-unified.sh`
+
+There are example steps verifying a volume lifecycle in `util/lifecycle-unified.sh`.
+
+There is example run of API test using csi-sanity in `util/sanity-unified.sh`.
 
 #### Run as kubernetes deployment
 
-Use manifest file:  `kubectl create -f deploy/k8/pmem-csi.yaml`
+In a Kubernetes context, relevant driver parts are started on cluster nodes.
+
+Use manifest file to start: `kubectl create -f deploy/k8/pmem-csi.yaml`
+Use manifest file to delete: `kubectl delete -f deploy/k8/pmem-csi.yaml`
 
 ##### Notes:
 * The images registry address in the manifest is not final and may need tuning.
@@ -221,7 +233,7 @@ Use manifest file:  `kubectl create -f deploy/k8/pmem-csi.yaml`
 # Test
 
 1. Use the `make test` command.
-Note: testing code is not completed yet.
+Note: testing code is not completed yet. Currently it runs some passes using `gofmt, go vet`.
 
 ## Use plugin in your application
 <!-- FILL TEMPLATE:
