@@ -191,13 +191,15 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		}
 	} else {
 		// no existing file system, make fs
-		if requestedFsType == "ext4" {
+		// Empty FsType means "unspecified" and we pick default, currently hard-codes to ext4
+		if requestedFsType == "ext4" || requestedFsType == "" {
 			glog.Infof("NodeStageVolume: mkfs.ext4 -F %s", devicepath)
 			output, err = exec.Command("mkfs.ext4", "-F", devicepath).CombinedOutput()
 		} else if requestedFsType == "xfs" {
 			glog.Infof("NodeStageVolume: mkfs.xfs -f %s", devicepath)
 			output, err = exec.Command("mkfs.xfs", "-f", devicepath).CombinedOutput()
 		} else {
+			glog.Infof("NodeStageVolume: Unsupported fstype: [%v]", requestedFsType)
 			return nil, status.Error(codes.InvalidArgument, "xfs, ext4 are supported as file system types")
 		}
 		if err != nil {
