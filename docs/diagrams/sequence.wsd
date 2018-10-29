@@ -1,0 +1,85 @@
+@startuml "pmem-csi-sequence-diagram"
+
+title \nDynamic volume provisioning with pmem-csi driver\n
+
+skinparam BoxPadding 40
+
+actor Admin as admin #red
+actor User as user
+entity Kubernetes as k8s
+box "Master node"
+entity kubelet as masterkubelet
+participant "external-provisioner" as provisioner
+participant "external-attacher" as attacher
+participant "pmem-csi-driver" as masterdriver
+endbox
+
+box "Computee node XYZ"
+entity kubelet as nodekubelet
+participant "pmem-csi-driver" as nodedriver
+endbox
+
+== Driver setup ==
+admin->k8s:Label nvdimm nodes: <b>storage=nvdimm</b>
+k8s->admin
+
+admin->k8s:deploy driver\nkubectl create -f pmem-csi.yaml
+k8s->admin
+k8s->masterkubelet:start driver pod
+masterkubelet-->provisioner:start container
+masterkubelet-->attacher:start container
+masterkubelet-->masterdriver:start container
+note right of masterdriver
+    listen on tcp port 10000
+end note
+k8s-->nodekubelet:start driver pod
+nodekubelet-->nodedriver:start container
+note left of nodedriver
+    * prepare logical volume groups
+    * listen on port 10001
+    * listen on unix socket:
+      /var/lib/kubelet/plugins/csi-pmem/csi.sock
+end note
+nodedriver->masterdriver:RegistryServer.RegisterNodeController(\n{nodeId:"node-xyz", endpoint:"http://ip:10001"})
+
+== Volume provisioning ==
+admin->k8s:create PVC object\nkubectl create -f pmem-pvc.yaml
+k8s->admin
+k8s-->provisioner:<<Event>>\nPersistentVolumeClaim created
+activate provisioner
+provisioner->masterdriver:CSI.ControllerCreateVolume()
+masterdriver->masterdriver:create volume
+masterdriver->provisioner:success
+provisioner->k8s:Create PV object
+deactivate provisioner
+
+== Volume usage ==
+user->k8s:Create application pod
+k8s->user
+
+k8s-->attacher:<<Event>>\nVolumeAttachment object create
+activate attacher
+attacher-->masterdriver:CSI.ControllerPublishVolume()
+activate masterdriver
+masterdriver-->nodedriver:CSI.ControllerPublishVolume()
+nodedriver->nodedriver:create pmem device
+nodedriver->masterdriver:success
+masterdriver->attacher:success
+attacher->k8s:volume attached
+deactivate masterdriver
+deactivate attacher
+
+k8s-->nodekubelet:make available volume to pod
+nodekubelet->nodedriver:CSI.NodeStageVolume()
+activate nodedriver
+nodedriver->nodedriver:mount pmem device
+nodedriver->nodekubelet:success
+deactivate nodedriver
+
+nodekubelet->nodedriver:CSI.NodePublishVolume()
+activate nodedriver
+nodedriver->nodedriver:bind mount pmem device
+nodedriver->nodekubelet:success
+deactivate nodedriver
+
+@enduml
