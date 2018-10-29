@@ -22,9 +22,6 @@ func main() {
 	prepareVolumeGroups(ctx)
 }
 
-// TODO: could combine loops in above and below function, as loops traverse
-// same buses, regions, namespaces. But readability,clarity will suffer, so I prefer not to combine right now
-
 // for all regions:
 // - Check that VG exists for this region. Create if does not exist
 // - For all namespaces in region:

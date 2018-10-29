@@ -33,28 +33,6 @@ func (cs *DefaultControllerServer) ControllerUnpublishVolume(ctx context.Context
 	return nil, status.Error(codes.Unimplemented, "")
 }
 
-func (cs *DefaultControllerServer) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
-	for _, c := range req.GetVolumeCapabilities() {
-		found := false
-		for _, c1 := range cs.Driver.vc {
-			if c1.GetMode() == c.GetAccessMode().GetMode() {
-				found = true
-			}
-		}
-		if !found {
-			return &csi.ValidateVolumeCapabilitiesResponse{
-				Supported: false,
-				Message:   "Driver doesnot support mode:" + c.GetAccessMode().GetMode().String(),
-			}, status.Error(codes.InvalidArgument, "Driver doesnot support mode:"+c.GetAccessMode().GetMode().String())
-		}
-		// TODO: Ignoring mount & block types for now.
-	}
-
-	return &csi.ValidateVolumeCapabilitiesResponse{
-		Supported: true,
-	}, nil
-}
-
 func (cs *DefaultControllerServer) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }

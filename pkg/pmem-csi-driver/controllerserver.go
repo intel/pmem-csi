@@ -23,13 +23,6 @@ import (
 	"github.com/intel/pmem-csi/pkg/pmem-grpc"
 )
 
-const (
-	deviceID = "deviceID"
-	// LV mode in emulated case: if LV Group named nvdimm exists, we use Lvolumes instead of libndctl
-	// to achieve stable emulated env. LV storage is set up outside of this driver
-	//lvgroup  = "ndbus0region0"
-)
-
 //VolumeStatus type representation for volume status
 type VolumeStatus int
 
