@@ -526,8 +526,8 @@ func (r *Region) AvailableSize() uint64 {
 	return uint64(C.ndctl_region_get_available_size(ndr))
 }
 
-//MaxAvailabeExtent returns max available extent size in the region
-func (r *Region) MaxAvailabeExtent() uint64 {
+//MaxAvailableExtent returns max available extent size in the region
+func (r *Region) MaxAvailableExtent() uint64 {
 	ndr := (*C.struct_ndctl_region)(r)
 	return uint64(C.ndctl_region_get_max_available_extent(ndr))
 }
@@ -600,7 +600,7 @@ func (r *Region) MarshalJSON() ([]byte, error) {
 		"dev":                  r.DeviceName(),
 		"size":                 r.Size(),
 		"available_size":       r.AvailableSize(),
-		"max_available_extent": r.MaxAvailabeExtent(),
+		"max_available_extent": r.MaxAvailableExtent(),
 		"namespaces":           r.ActiveNamespaces(),
 		"mappings":             r.Mappings(),
 	})
@@ -989,7 +989,7 @@ func (ctx *Context) GetAllNamespaces() []*Namespace {
 func (ctx *Context) IsSpaceAvailable(size uint64) bool {
 	for _, bus := range ctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
-			if r.MaxAvailabeExtent() >= size && NamespaceType(r.Type()) == Pmem {
+			if r.MaxAvailableExtent() >= size && NamespaceType(r.Type()) == Pmem {
 				return true
 			}
 		}

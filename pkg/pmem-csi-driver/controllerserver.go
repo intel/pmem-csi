@@ -7,11 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
-	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strconv"
-	"strings"
 
 	"github.com/golang/glog"
 	"github.com/google/uuid"
@@ -21,8 +18,8 @@ import (
 
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
 
-	"github.com/intel/pmem-csi/pkg/ndctl"
 	"github.com/intel/pmem-csi/pkg/pmem-common"
+	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	"github.com/intel/pmem-csi/pkg/pmem-grpc"
 )
 
@@ -60,14 +57,14 @@ type controllerServer struct {
 	*DefaultControllerServer
 	mode              DriverMode
 	rs                *registryServer
-	ctx               *ndctl.Context
+	dm                pmdmanager.PmemDeviceManager
 	pmemVolumes       map[string]pmemVolume //Controller: map of reqID:VolumeInfo
 	publishVolumeInfo map[string]string     //Node: map of reqID:VolumeName
 }
 
 var _ csi.ControllerServer = &controllerServer{}
 
-func NewControllerServer(driver *CSIDriver, mode DriverMode, rs *registryServer, ctx *ndctl.Context) csi.ControllerServer {
+func NewControllerServer(driver *CSIDriver, mode DriverMode, rs *registryServer, dm pmdmanager.PmemDeviceManager) csi.ControllerServer {
 	serverCaps := []csi.ControllerServiceCapability_RPC_Type{}
 	switch mode {
 	case Controller:
@@ -86,7 +83,7 @@ func NewControllerServer(driver *CSIDriver, mode DriverMode, rs *registryServer,
 		DefaultControllerServer: NewDefaultControllerServer(driver),
 		mode:              mode,
 		rs:                rs,
-		ctx:               ctx,
+		dm:                dm,
 		pmemVolumes:       map[string]pmemVolume{},
 		publishVolumeInfo: map[string]string{},
 	}
@@ -159,7 +156,7 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		volumeID := id.String()
 		if cs.mode == Unified || cs.mode == Node {
 			glog.Infof("CreateVolume: Special create volume in Unified mode")
-			if err := cs.createVolume(volumeID, asked); err != nil {
+			if err := cs.dm.CreateDevice(volumeID, asked); err != nil {
 				return nil, status.Errorf(codes.Internal, "CreateVolume: failed to create volume: %s", err.Error())
 			}
 		} else /*if cs.mode == Unified */ {
@@ -224,7 +221,7 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 		if cs.mode == Unified || cs.mode == Node {
 			glog.Infof("DeleteVolume: Special Delete in Unified mode")
 			if vol, ok := cs.pmemVolumes[req.GetVolumeId()]; ok {
-				if err := cs.deleteVolume(req.GetVolumeId(), vol.Erase); err != nil {
+				if err := cs.dm.DeleteDevice(req.VolumeId, vol.Erase); err != nil {
 					return nil, status.Errorf(codes.Internal, "Failed to delete volume: %s", err.Error())
 				}
 			}
@@ -307,11 +304,6 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Volume capability must be provided")
 	}
 
-	vol := cs.GetVolumeByID(req.GetVolumeId())
-	if vol == nil {
-		return nil, status.Error(codes.NotFound, "Volume not created by this controller")
-	}
-
 	if cs.mode == Controller {
 		vol, ok := cs.pmemVolumes[req.VolumeId]
 		if !ok {
@@ -370,7 +362,7 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		volumeSize = vol.Size
 	}
 	/* Node/Unified */
-	if err := cs.createVolume(req.VolumeId, volumeSize); err != nil {
+	if err := cs.dm.CreateDevice(req.VolumeId, volumeSize); err != nil {
 		return nil, status.Errorf(codes.Internal, "Failed to create volume: %s", err.Error())
 	}
 
@@ -425,169 +417,11 @@ func (cs *controllerServer) ControllerUnpublishVolume(ctx context.Context, req *
 		glog.Infof("ControllerUnpublish: use stored EraseAfter: %v", vol.Erase)
 		erase = vol.Erase
 	}
-	if err := cs.deleteVolume(req.GetVolumeId(), erase); err != nil {
+	if err := cs.dm.DeleteDevice(req.GetVolumeId(), erase); err != nil {
 		return nil, status.Errorf(codes.Internal, "Failed to delete volume: %s", err.Error())
 	}
 
 	delete(cs.publishVolumeInfo, req.GetVolumeId())
 
 	return &csi.ControllerUnpublishVolumeResponse{}, nil
-}
-
-func (cs *controllerServer) listVolumes() (map[string]pmemVolume, error) {
-	volumes := map[string]pmemVolume{}
-	if lvmode() == true {
-		output, err := exec.Command("lvs", "--noheadings", "--nosuffix", "--options", "lv_name,lv_size", "--units", "B").CombinedOutput()
-		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "lvs failed"+string(output))
-		}
-		lines := strings.Split(string(output), "\n")
-		for _, line := range lines {
-			fields := strings.Split(strings.TrimSpace(line), " ")
-			if len(fields) == 2 {
-				size, _ := strconv.ParseUint(fields[1], 10, 64) //nolint: gosec
-				vol := pmemVolume{
-					ID:     fields[0],
-					Size:   size,
-					Status: Attached,
-					NodeID: cs.Driver.nodeID,
-				}
-				volumes[vol.ID] = vol
-			}
-		}
-	} else {
-		nss := cs.ctx.GetActiveNamespaces()
-
-		for _, ns := range nss {
-			data, _ := json.MarshalIndent(ns, "", " ")
-			glog.Info("Namespace:", string(data[:]))
-			//glog.Infof("namespace BlockDevName: %v, Size: %v", ns.BlockDeviceName(), ns.Size())
-			vol := pmemVolume{
-				ID:     ns.Name(),
-				Name:   ns.Name(),
-				Size:   ns.Size(),
-				Status: Attached,
-				NodeID: cs.Driver.nodeID,
-			}
-			volumes[vol.ID] = vol
-		}
-	}
-
-	return volumes, nil
-}
-
-func (cs *controllerServer) createVolume(name string, size uint64) error {
-	glog.Infof("createVolume: name: %s size: %v", name, size)
-
-	if lvmode() == true {
-		// pick a region, few possible strategies:
-		// 1. pick first with enough available space: simplest, regions get filled in order;
-		// 2. pick first with largest available space: regions get used round-robin, i.e. load-balanced, but does not leave large unused;
-		// 3. pick first with smallest available which satisfies the request: ordered initially, but later leaves bigger free available;
-		// Let's implement strategy 1 for now, simplest to code as no need to compare sizes in all regions
-		// NOTE: We walk buses and regions in ndctl context, but avail.size we check in LV context
-		for _, bus := range cs.ctx.GetBuses() {
-			glog.Infof("CreateVolume: Bus: %v", bus.DeviceName())
-			for _, r := range bus.ActiveRegions() {
-				glog.Infof("CreateVolume: Region: %v", r.DeviceName())
-				vgName := vgName(bus, r)
-				glog.Infof("CreateVolume: vgName: %v", vgName)
-				output, err := exec.Command("vgs", "--noheadings", "--nosuffix", "--options", "vg_free", "--units", "B", vgName).CombinedOutput()
-				if err != nil {
-					return err
-				}
-				vgAvailStr := strings.TrimSpace(string(output))
-				vgAvail, _ := strconv.ParseUint(vgAvailStr, 10, 64)
-				glog.Infof("CreateVolume: vgAvail in %v: [%v]", vgName, vgAvail)
-				if vgAvail >= size {
-					// lvcreate takes size in MBytes if no unit.
-					// We use MBytes here to avoid problems with byte-granularity, as lvcreate
-					// may refuse to create some arbitrary sizes.
-					// Division by 1M should not result in smaller-than-asked here
-					// as lvcreate will round up to next 4MB boundary.
-					sizeM := int(size / (1024 * 1024))
-					sz := strconv.Itoa(sizeM)
-					output, err := exec.Command("lvcreate", "-L", sz, "-n", name, vgName).CombinedOutput()
-					glog.Infof("lvcreate output: %s\n", string(output))
-					if err != nil {
-						glog.Infof("CreateVolume: lvcreate failed: %v", string(output))
-					} else {
-						glog.Infof("CreateVolume: LVol %v with size=%v MB created", name, sz)
-					}
-					// return in all cases, otherwise loop will create LVs in other regions
-					return err
-				} else {
-					glog.Infof("This volime size %v is not having enough space required(%v)", vgAvail, size)
-				}
-			}
-		}
-	} else {
-		ns, err := cs.ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
-			Name: name,
-			Size: size,
-		})
-		if err != nil {
-			return err
-		}
-		data, _ := ns.MarshalJSON() //nolint: gosec
-		glog.Infof("Namespace crated: %v", data)
-	}
-
-	return nil
-}
-
-func (cs *controllerServer) deleteVolume(volumeID string, erase bool) error {
-
-	if lvmode() {
-		lvpath, err := lvPath(volumeID)
-		if err != nil {
-			return err
-		}
-		glog.Infof("deleteVolume: Matching LVpath: %v erase:%v", lvpath, erase)
-		if erase {
-			// erase data on block device, if not disabled by driver option
-			// use one iteration instead of shred's default=3 for speed
-			glog.Infof("deleteVolume: Based on EraseAfter=true, wipe data using [shred %v]", lvpath)
-			output, err := exec.Command("shred", "--iterations=1", lvpath).CombinedOutput()
-			if err != nil {
-				glog.Infof("deleteVolume: shred failed: %v", string(output))
-				return err
-			}
-		}
-		var output []byte
-		output, err = exec.Command("lvremove", "-fy", lvpath).CombinedOutput()
-		glog.Infof("lvremove output: %s\n", string(output))
-		return err
-	} else {
-		// TODO: name lookup added as arg was changed to be VolumeID,
-		// but whole direct-nvdimm mode will need re-engineering
-		name := cs.publishVolumeInfo[volumeID]
-		return cs.ctx.DestroyNamespaceByName(name)
-	}
-
-	return nil
-}
-
-// Return device path for based on LV name
-func lvPath(volumeID string) (string, error) {
-	output, err := exec.Command("lvs", "--noheadings", "--options", "lv_name,lv_path").CombinedOutput()
-	if err != nil {
-		return "", status.Error(codes.InvalidArgument, "lvs failed"+string(output))
-	}
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		// we have a line like this here: [nspace1 /dev/ndbus0region1/nspace1]
-		glog.Infof("lvPath: Line from lvs: [%v]", line)
-		fields := strings.Fields(line)
-		if len(fields) == 2 {
-			if volumeID == fields[0] {
-				return fields[1], nil
-			}
-		}
-	}
-	return "", status.Error(codes.InvalidArgument, "no such volume")
-}
-
-func vgName(bus *ndctl.Bus, region *ndctl.Region) string {
-	return bus.DeviceName() + region.DeviceName()
 }

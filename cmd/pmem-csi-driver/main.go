@@ -28,6 +28,7 @@ var (
 	registryEndpoint = flag.String("registryEndpoint", "", "endpoint to connect/listen resgistery server")
 	/* node mode options */
 	controllerEndpoint = flag.String("controllerEndpoint", "", "internal node controller endpoint")
+	deviceManager      = flag.String("deviceManager", "lvm", "device manager to use to manage pmem devices. supported types: 'lvm' or 'ndctl'")
 )
 
 func main() {
@@ -40,6 +41,7 @@ func main() {
 		Mode:               pmemcsidriver.DriverMode(*mode),
 		RegistryEndpoint:   *registryEndpoint,
 		ControllerEndpoint: *controllerEndpoint,
+		DeviceManager:      *deviceManager,
 	})
 	if err != nil {
 		fmt.Printf("Failed to Initialized driver: %s", err.Error())
