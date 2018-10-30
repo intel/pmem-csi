@@ -12,8 +12,6 @@ import (
 )
 
 const (
-	// we get this as argument 'namespacesize'
-	//namespaceSize uint64 = (4*1024*1024*1024)
 	// TODO: try to get rid of hard-coded overhead
 	namespaceOverhead = 4 * 1024 * 1024
 	// smaller namespace size (in GB) for devel mode in VM

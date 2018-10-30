@@ -135,7 +135,7 @@ func (lvm *pmemLvm) ListDevices() ([]PmemDeviceInfo, error) {
 	args := append(lvsArgs, lvm.volumeGroups...)
 	output, err := pmemexec.RunCommand("lvs", args...)
 	if err != nil {
-		return nil, fmt.Errorf("list volumes failed : %s(lvs output: %s)", err.Error())
+		return nil, fmt.Errorf("list volumes failed : %s(lvs output: %s)", err.Error(), output)
 	}
 	return parseLVSOuput(output)
 }

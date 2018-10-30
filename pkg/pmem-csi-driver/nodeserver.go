@@ -197,13 +197,6 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		}
 	}
 
-	// MkdirAll is equal to mkdir -p i.e. it creates parent dirs if needed, and is no-op if dir exists
-	//glog.Infof("NodeStageVolume: mkdir -p %s", stagingtargetPath)
-	//err = os.MkdirAll(stagingtargetPath, 0777)
-	//if err != nil {
-	//	pmemcommon.Infof(3, ctx, "failed to create volume: %v", err)
-	//	return nil, err
-	//}
 	// If file system is already mounted, can happen if out-of-sync "stage" is asked again without unstage
 	// then the mount here will fail. I guess it's ok to not check explicitly for existing mount,
 	// as end result after mount attempt will be same: no new mount and existing mount remains.
