@@ -9,11 +9,12 @@ STAGEPATH=/tmp/stage5
 TARGETPATH=/tmp/target5
 SIZE=33554432
 FSTYPE=xfs
-out=`$GOPATH/bin/csc controller create-volume --req-bytes $SIZE --cap SINGLE_NODE_WRITER,mount,$FSTYPE --params eraseafter=false $NAME`
+NSMODE=fsdax
+out=`$GOPATH/bin/csc controller create-volume --req-bytes $SIZE --cap SINGLE_NODE_WRITER,mount,$FSTYPE --params eraseafter=false --params nsmode=$NSMODE $NAME`
 VOLID=`echo $out |awk '{print $1}' |tr -d \"`
 #echo [$VOLID]
 mkdir -p $STAGEPATH
-$GOPATH/bin/csc node stage $VOLID --cap SINGLE_NODE_WRITER,mount,$FSTYPE --staging-target-path $STAGEPATH --attrib name=$NAME
+$GOPATH/bin/csc node stage $VOLID --cap SINGLE_NODE_WRITER,mount,$FSTYPE --staging-target-path $STAGEPATH --attrib name=$NAME --attrib nsmode=$NSMODE
 $GOPATH/bin/csc node publish $VOLID --cap SINGLE_NODE_WRITER,mount,$FSTYPE --staging-target-path $STAGEPATH --target-path $TARGETPATH
 $GOPATH/bin/csc node unpublish $VOLID --target-path $TARGETPATH
 $GOPATH/bin/csc node unstage $VOLID --staging-target-path $STAGEPATH

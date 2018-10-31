@@ -148,6 +148,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	glog.Infof("NodeStageVolume: VolumeID is %v", req.GetVolumeId())
 	glog.Infof("NodeStageVolume: VolumeName is %v", attrs["name"])
 	glog.Infof("NodeStageVolume: VolumeSize is %v", attrs["size"])
+	glog.Infof("NodeStageVolume: Namespacemode is %v", attrs["nsmode"])
 	glog.Infof("NodeStageVolume: Staging target path is %v", stagingtargetPath)
 	glog.Infof("NodeStageVolume: Requested fsType is %v", requestedFsType)
 
@@ -211,9 +212,18 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		}*/
 	// ... but it seems not supporting -c "canonical" option, so do it with exec
 	// added -c makes canonical mount, resulting in mounted path matching what LV thinks is lvpath.
+	args := []string{"-c"}
 	// Without -c mounted path will look like /dev/mapper/... and its more difficult to match it to lvpath when unmounting
-	// TODO: perhaps this thing can be revisited-cleaned somehow
-	if _, err := pmemexec.RunCommand("mount", "-c", device.Path, stagingtargetPath); err != nil {
+	// TODO: perhaps what's explained above can be revisited-cleaned somehow
+
+	// Add dax option if namespacemode == fsdax
+	if attrs["nsmode"] == "fsdax" {
+		glog.Infof("NodeStageVolume: namespacemode FSDAX, add dax mount option")
+		args = append(args, "-o", "dax")
+	}
+	args = append(args, device.Path, stagingtargetPath)
+	glog.Infof("NodeStageVolume: mount args: [%v]", args)
+	if _, err := pmemexec.RunCommand("mount", args...); err != nil {
 		return nil, status.Error(codes.InvalidArgument, "mount filesystem failed"+err.Error())
 	}
 

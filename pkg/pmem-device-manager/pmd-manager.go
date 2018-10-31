@@ -15,8 +15,8 @@ type PmemDeviceManager interface {
 	//GetCapacity returns the available maximum capacity that can be assigned to a Device/Volume
 	GetCapacity() (uint64, error)
 
-	//CreateDevice creates a new block device with give name and size
-	CreateDevice(name string, size uint64) error
+	//CreateDevice creates a new block device with give name, size and namespace mode
+	CreateDevice(name string, size uint64, nsmode string) error
 
 	//GetDevice returns the block device information for given name
 	GetDevice(name string) (PmemDeviceInfo, error)

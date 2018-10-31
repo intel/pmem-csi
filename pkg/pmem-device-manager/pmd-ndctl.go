@@ -37,10 +37,11 @@ func (pmem *pmemNdctl) GetCapacity() (uint64, error) {
 	return capacity, nil
 }
 
-func (pmem *pmemNdctl) CreateDevice(name string, size uint64) error {
+func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) error {
 	ns, err := pmem.ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
 		Name: name,
 		Size: size,
+		Mode: ndctl.NamespaceMode(nsmode),
 	})
 	if err != nil {
 		return err
