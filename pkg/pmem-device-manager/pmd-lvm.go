@@ -148,7 +148,7 @@ func flushDevice(dev PmemDeviceInfo) error {
 	// erase data on block device, if not disabled by driver option
 	// use one iteration instead of shred's default=3 for speed
 	glog.Infof("Wiping data on: %s", dev.Path)
-	if _, err := pmemexec.RunCommand("shred", "--iterations=1", dev.Path); err != nil {
+	if _, err := pmemexec.RunCommand("shred", "-n", "1", dev.Path); err != nil {
 		return fmt.Errorf("device flush failure: %v", err.Error())
 	}
 	return nil
