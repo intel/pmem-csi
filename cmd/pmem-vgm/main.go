@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"strings"
 
 	"github.com/golang/glog"
 	"github.com/intel/pmem-csi/pkg/ndctl"
@@ -56,8 +57,8 @@ func createVolumesForRegion(r *ndctl.Region, vgName string) error {
 		devName := "/dev/" + ns.BlockDeviceName()
 		/* check if this pv is already part of a group, if yes ignore this pv
 		   if not add to arg list */
-		_, err := pmemexec.RunCommand("pvdisplay", devName)
-		if err != nil {
+		output, err := pmemexec.RunCommand("pvs", "--noheadings", "-o", "vg_name", devName)
+		if err != nil || len(strings.TrimSpace(output)) == 0 {
 			cmdArgs = append(cmdArgs, devName)
 		}
 	}
