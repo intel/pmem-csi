@@ -82,13 +82,13 @@ func createNamespaces(ctx *ndctl.Context, namespacesize int, uselimit int) {
 				glog.Infof("%v namespaces of size %v possible in region %s",
 					nPossibleNS, nsSize, r.DeviceName())
 				for i := 0; i < nPossibleNS; i++ {
-					glog.Infof("Createing namespace%d", i)
+					glog.Infof("Creating namespace%d", i)
 					_, err := r.CreateNamespace(ndctl.CreateNamespaceOpts{
 						Size: nsSize,
 					})
 					if err != nil {
 						glog.Warning("Failed to create namespace:", err.Error())
-						/* ??? something went worng, leave this region ??? */
+						/* ??? something went wrong, leave this region ??? */
 						break
 					}
 				}
