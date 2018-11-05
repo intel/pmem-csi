@@ -22,10 +22,10 @@ package ndctl
 //
 //#define try(prefix, action, ...) \
 //do { \
-//	int _rc = prefix##_##action(__VA_ARGS__); \
-//	if (_rc) { \
-//		warn(#prefix"_"#action ": failed with error : %s\n", strerror(-_rc)); \
-//		return rc; \
+//	rc = prefix##_##action(__VA_ARGS__); \
+//	if (rc) { \
+//		warn(#prefix"_"#action ": failed with error : %s\n", strerror(-rc)); \
+//		goto end; \
 //	} else { \
 //		debug(#prefix "_" #action " : success\n"); \
 //	} \
@@ -68,6 +68,39 @@ package ndctl
 //     default_options.align = SZ_2M;
 //}
 //
+//static int _set_btt_sector_size(struct ndctl_btt *btt, unsigned long size) {
+//	int rc = -EINVAL;
+//	int num;
+//	if (!btt) {
+//		return rc;
+//	}
+//
+//	num = ndctl_btt_get_num_sector_sizes(btt) - 1;
+//	for (; num >= 0; num--) {
+//		if (ndctl_btt_get_supported_sector_size(btt, num) == size) {
+//			try(ndctl_btt, set_sector_size, btt, size);
+//		}
+//	}
+//end:
+//	return rc;
+//}
+//
+//static int _set_namespace_sector_size(struct ndctl_namespace *ndns, unsigned long size) {
+//	int num = 0;
+//	int rc = -EINVAL;
+//	if (!ndns) {
+//		return rc;
+//	}
+//	num = ndctl_namespace_get_num_sector_sizes(ndns);
+//	for (; num >= 0; num--) {
+// 		if (ndctl_namespace_get_supported_sector_size(ndns, num) == size) {
+//			try(ndctl_namespace, set_sector_size, ndns, size);
+//		}
+//	}
+//end:
+//	return rc;
+//}
+//
 //int ndctl_region_create_namespace(struct ndctl_region *region,
 //         struct ndctl_namespace_create_opts *opts,
 //         struct ndctl_namespace **ndns_out) {
@@ -101,12 +134,6 @@ package ndctl
 //  	return -EAGAIN;
 //  }
 //
-//  ndns = ndctl_region_get_namespace_seed(region);
-//  if (!ndns || ndctl_namespace_is_active(ndns)) {
-//		warn("No available namespace found in region %s\n", region_name);
-//		return -EAGAIN;
-//	}
-//
 //	if (opts->map_location) {
 //		pfn_loc = !strcmp("mem", opts->map_location) ? NDCTL_PFN_LOC_RAM : NDCTL_PFN_LOC_PMEM;
 //		if (opts->mode != NDCTL_NS_MODE_MEMORY
@@ -117,92 +144,47 @@ package ndctl
 //		}
 //	} else if (opts->mode == NDCTL_NS_MODE_MEMORY
 //          || opts->mode == NDCTL_NS_MODE_DAX) {
-//		debug("Using NDCTL_PFN_LOC_PMEM pfn location");
+//		debug("Using NDCTL_PFN_LOC_PMEM pfn location\n");
 //		pfn_loc = NDCTL_PFN_LOC_PMEM;
 //	}
 //
 //	if (opts->align) {
-//		if (opts->mode == NDCTL_NS_MODE_MEMORY && opts->align != SZ_2M) {
-//			struct ndctl_pfn *pfn = ndctl_region_get_pfn_seed(region);
-//			if (!pfn || !ndctl_pfn_has_align(pfn)) {
-//				warn("%s not support 'align' for fsdax mode\n", region_name);
-//				return -EINVAL;
-//			}
-//		} else if (opts->mode == NDCTL_NS_MODE_DAX) {
-//			struct ndctl_dax *dax = ndctl_region_get_dax_seed(region);
-//			if (!dax || !ndctl_dax_has_align(dax)) {
-//				debug("%s not support 'align' for devdax mode\n", region_name);
-//				return -EINVAL;
-//			}
-//		} else if (opts->mode == NDCTL_NS_MODE_SAFE
-//             || opts->mode == NDCTL_NS_MODE_RAW) {
-//			warn("%s mode does not support setting an alignment,"
-//                   " hence ignoring alignment\n",
-// 					opts->mode == NDCTL_NS_MODE_SAFE ? "sector" : "raw");
-//		}
-//
-//		resource = ndctl_region_get_resource(region);
-//		if (resource < ULLONG_MAX && (resource & (SZ_2M - 1))) {
-//			debug("%s: falling back to a 4K alignment\n", region_name);
-//			opts->align = SZ_4K;
-//		}
-//		switch (opts->align) {
-//			case SZ_4K:
-//			case SZ_2M:
-//			case SZ_1G:
-//				break;
-//			default:
-//				warn("unsupported align");
-//				return -ENXIO;
-//		}
-//		if (opts->mode == NDCTL_NS_MODE_MEMORY
-// 		 || opts->mode == NDCTL_NS_MODE_DAX)
-//			size_align = opts->align;
-//	}
-//
-//	btt = ndctl_region_get_btt_seed(region);
-//	if (opts->sector_size) {
-//		int num;
-//		if (opts->mode == NDCTL_NS_MODE_SAFE) {
-//			if (!btt) {
-//				warn("%s: does not support 'sector' mode\n", region_name);
-//				return -EINVAL;
-//			}
-//			num = ndctl_btt_get_num_sector_sizes(btt) - 1;
-//			for (; num >= 0; num--) {
-// 				if (ndctl_btt_get_supported_sector_size(btt, num) == opts->sector_size)
-// 					break;
-//			}
-// 			if (num < 0) {
-// 				warn("%s: does not support btt sector_size %lu\n",
-// 						region_name, opts->sector_size);
-// 				return -EINVAL;
-// 			}
+//		size_align = opts->align;
+//		if (opts->mode == NDCTL_NS_MODE_SAFE
+//			|| opts->mode == NDCTL_NS_MODE_RAW) {
+//			warn("%s mode does not support setting an alignment, hence ignoring alignment\n",
+//				 opts->mode == NDCTL_NS_MODE_SAFE ? "sector" : "raw");
 //		} else {
-//			num = ndctl_namespace_get_num_sector_sizes(ndns);
-//			for (; num >= 0; num--)
-// 				if (ndctl_namespace_get_supported_sector_size(ndns, num)
-// 						== opts->sector_size)
-// 					break;
-// 			if (num < 0) {
-// 				warn("%s: does not support namespace sector_size %lu\n",
-// 						region_name, opts->sector_size);
-// 				return -EINVAL;
-// 			}
+//			resource = ndctl_region_get_resource(region);
+//			if (resource < ULLONG_MAX && (resource & (SZ_2M - 1))) {
+//				debug("%s: falling back to a 4K alignment\n", region_name);
+//				size_align = SZ_4K;
+//			} else if (size_align != SZ_4K && size_align != SZ_2M && size_align != SZ_1G) {
+//				warn("unsupported alignment: %lld", size_align);
+//				return -ENXIO;
+//			}
 //		}
 //	} else {
-//		opts->sector_size = (btt && opts->mode == NDCTL_NS_MODE_SAFE)
-//                         ? ndctl_btt_get_sector_size(btt)
-//                         : ndctl_namespace_get_sector_size(ndns);
+//		/* default to 2MB alignment */
+//		size_align = SZ_2M;
 //	}
 //
 //	/* setup_namespace */
+//
+//	ndns = ndctl_region_get_namespace_seed(region);
+//	if (!ndns || ndctl_namespace_is_active(ndns)) {
+//		warn("No available namespace found in region %s\n", region_name);
+//		return -EAGAIN;
+//	}
+//
 //	if (ndctl_namespace_get_type(ndns) != ND_DEVICE_NAMESPACE_IO) {
 //		uuid_generate(uid);
 //		try(ndctl_namespace, set_alt_name, ndns, opts->name);
 //		try(ndctl_namespace, set_uuid, ndns, uid);
 //		try(ndctl_namespace, set_size, ndns, opts->size);
 //	}
+//
+//	_set_namespace_sector_size(ndns, opts->sector_size);
 //
 //	ndctl_namespace_set_enforce_mode(ndns, opts->mode);
 //
@@ -211,35 +193,72 @@ package ndctl
 //	 && ndctl_namespace_get_mode(ndns) != NDCTL_NS_MODE_MEMORY
 //   && pfn_loc == NDCTL_PFN_LOC_PMEM) {
 //		struct ndctl_pfn *pfn = ndctl_region_get_pfn_seed(region);
-//
+//		if (!pfn) {
+//			warn("%s: no pfn seed", region_name);
+//			rc = -EINVAL;
+//			goto end;
+//		}
 //		try(ndctl_pfn, set_uuid, pfn, uid);
 //		try(ndctl_pfn, set_location, pfn, pfn_loc);
-//		if (ndctl_pfn_has_align(pfn))
-//			try(ndctl_pfn, set_align, pfn, opts->align);
+//		if (ndctl_pfn_has_align(pfn)) {
+//			try(ndctl_pfn, set_align, pfn, size_align);
+//		} else if(size_align){
+//			warn("Ignoring alignment(%lld) as '%s' region not support "
+//				 "alignment for devdax mode\n", size_align, region_name);
+//		}
 //		try(ndctl_pfn, set_namespace, pfn, ndns);
 //		rc = ndctl_pfn_enable(pfn);
+//		/* reset pfn seed in failure case */
+//		if (rc) ndctl_pfn_set_namespace(pfn, NULL);
+//
 //	} else if (opts->mode == NDCTL_NS_MODE_DAX) {
 //		struct ndctl_dax *dax = ndctl_region_get_dax_seed(region);
+//		if (!dax) {
+//			warn("%s: no dax seed", region_name);
+//			rc = -EINVAL;
+//			goto end;
+//		}
 //
 //		try(ndctl_dax, set_uuid, dax, uid);
 //		try(ndctl_dax, set_location, dax, pfn_loc);
-//		try(ndctl_dax, set_align, dax, opts->align);
+//		if (ndctl_dax_has_align(dax)) {
+//			try(ndctl_dax, set_align, dax, size_align);
+//		} else if(size_align) {
+//			warn("Ignoring alignment(%lld) as '%s' region not support "
+//				 "alignment for fsvdax mode\n", size_align, region_name);
+//		}
 //		try(ndctl_dax, set_namespace, dax, ndns);
 //		rc = ndctl_dax_enable(dax);
+//		/* reset dax seed in failure case */
+//		if (rc) ndctl_dax_set_namespace(dax, NULL);
 //	} else if (opts->mode == NDCTL_NS_MODE_SAFE) {
 //		struct ndctl_btt *btt = ndctl_region_get_btt_seed(region);
-//
-//		unsigned long sector_size = 0;
-//		sector_size = opts->sector_size == UINT_MAX ? 4096 : opts->sector_size;
+//		unsigned long sector_size = opts->sector_size == UINT_MAX ? 4096 : opts->sector_size;
+//		if (!btt) {
+//			warn("%s: does not support 'sector' mode\n", region_name);
+//			rc = -EINVAL;
+//			goto end;
+//		}
+//		if (_set_btt_sector_size(btt, sector_size) == 0) {
+//			warn("failed to set btt sector size(%ld)", sector_size);
+//			rc = -EINVAL;
+//			goto end;
+//		}
 //		try(ndctl_btt, set_uuid, btt, uid);
-//		try(ndctl_btt, set_sector_size, btt, sector_size);
 //		try(ndctl_btt, set_namespace, btt, ndns);
 //		rc = ndctl_btt_enable(btt);
+//		/* reset btt seed in failure case */
+//		if (rc) ndctl_btt_set_namespace(btt, NULL);
 //	} else {
 //		rc = ndctl_namespace_enable(ndns);
 //	}
 //
-//	if (!rc && ndns_out) {
+//end:
+//	if (rc) {
+//		/* reset namespace seed in failure case */
+//		ndctl_namespace_set_enforce_mode(ndns, NDCTL_NS_MODE_RAW);
+//		ndctl_namespace_delete(ndns);
+//	} else if(ndns_out) {
 //		*ndns_out = ndns;
 //	}
 //
@@ -576,6 +595,20 @@ func (r *Region) Mappings() []*Mapping {
 	}
 
 	return mappings
+}
+
+func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
+	var ndns *C.struct_ndctl_namespace
+
+	copts := opts.toCOptions()
+	ndr := (*C.struct_ndctl_region)(r)
+	rc := C.ndctl_region_create_namespace(ndr, copts, &ndns)
+	if rc != 0 {
+		return nil, fmt.Errorf("failed to create namespace: %s(%d)",
+			C.GoString(C.strerror(-rc)), -rc)
+	}
+
+	return (*Namespace)(ndns), nil
 }
 
 //DestroyNamespace destroys the given namespace ns in the region
