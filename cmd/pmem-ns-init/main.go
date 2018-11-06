@@ -91,23 +91,24 @@ func createNamespaces(ctx *ndctl.Context, namespacesize int, uselimit int) {
 	nsSize := (uint64(namespacesize) * 1024 * 1024 * 1024)
 	for _, bus := range ctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
-			glog.Infof("CreateNamespaces in %v: %v bytes total, %v bytes available",
-				r.DeviceName(), r.Size(), r.AvailableSize())
 			// uselimit sets the percentage we can use
 			leaveUnused := uint64(100-uselimit) * r.Size() / 100
-			glog.Infof("Leaving %v bytes unused", leaveUnused)
-			nPossibleNS := int((r.AvailableSize() - leaveUnused) / (nsSize + namespaceOverhead))
-			glog.Infof("%v namespaces of size %v possible in region %s",
-				nPossibleNS, r.AvailableSize()-leaveUnused, r.DeviceName())
-			for i := 0; i < nPossibleNS; i++ {
-				glog.Infof("Createing namespace%d", i)
-				_, err := ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
-					Size: nsSize,
-				})
-				if err != nil {
-					glog.Warning("Failed to create namespace:", err.Error())
-					/* ??? something went worng, leave this region ??? */
-					break
+			glog.Infof("CreateNamespaces in %v:\ntotal       : %16d\navail       : %16d\nleave unused: %16d",
+				r.DeviceName(), r.Size(), r.AvailableSize(), leaveUnused)
+			if r.AvailableSize() > leaveUnused {
+				nPossibleNS := int((r.AvailableSize() - leaveUnused) / (nsSize + namespaceOverhead))
+				glog.Infof("%v namespaces of size %v possible in region %s",
+					nPossibleNS, nsSize, r.DeviceName())
+				for i := 0; i < nPossibleNS; i++ {
+					glog.Infof("Createing namespace%d", i)
+					_, err := ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
+						Size: nsSize,
+					})
+					if err != nil {
+						glog.Warning("Failed to create namespace:", err.Error())
+						/* ??? something went worng, leave this region ??? */
+						break
+					}
 				}
 			}
 		}
