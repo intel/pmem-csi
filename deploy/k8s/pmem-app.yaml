@@ -1,0 +1,18 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: my-csi-app
+spec:
+  containers:
+    - name: my-frontend
+      image: busybox
+      command: [ "sleep", "100000" ]
+      volumeMounts:
+      - mountPath: "/data"
+        name: my-csi-volume
+  nodeSelector:
+    storage: nvdimm
+  volumes:
+  - name: my-csi-volume
+    persistentVolumeClaim:
+      claimName: csi-pmem-pvc
