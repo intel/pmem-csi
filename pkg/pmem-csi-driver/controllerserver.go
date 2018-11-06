@@ -315,7 +315,7 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 
 		glog.Infof("Getting New Controller Client ....")
 		csiClient := csi.NewControllerClient(conn)
-		glog.Infof("Iniitiating Publishing volume ....")
+		glog.Infof("Initiating Publishing volume ....")
 
 		req.VolumeAttributes["name"] = vol.Name
 		req.VolumeAttributes["size"] = strconv.FormatUint(vol.Size, 10)
