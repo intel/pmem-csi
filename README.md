@@ -179,8 +179,7 @@ The driver deployment in kubernetes cluster has been verified on:
 
 | Branch            | Kubernetes branch/version      |
 |-------------------|--------------------------------|
-| master            | Kubernetes 1.11 branch v1.11.3 |
-| master            | Kubernetes 1.12 branch v1.12.1 |
+| devel             | Kubernetes 1.11 branch v1.11.3 |
 
 ## Setup
 
