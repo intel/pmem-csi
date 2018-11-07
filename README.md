@@ -76,102 +76,15 @@ The below diagram illustrates how does dynamic volume provisioning with PMEM csi
 
 ### Software required
 
-So far, the early development and verification has mostly been carried out on qemu-emulated NVDIMMs, with brief testing on a system having real 2x256 GB of persistent memory
+Building and Unified-mode run has been verified using these components:
 
-Build has been verified on a system described below.
-
-* Host: Dell Poweredge R620, distro: openSUSE Leap 15.0, kernel 4.12.14, qemu 2.11.2
-* Host: Dell Poweredge R620, distro: openSUSE Tumbleweed, kernel 4.18.8, qemu 2.12.1, 3.0.0
-* Guest: VM: 32GB RAM, 8 vCPUs, Ubuntu 18.04.1 server, kernel 4.15.0
-* VM config originally created by libvirt/GUI (also doable using virt-install CLI), with configuration changes made directly in VM-config xml file to emulate pair of NVDIMMs backed by host file.
-
-> **NOTE about hugepages:** 
-> Emulated nvdimm appears not fully working if the VM is configured to use Hugepages. With Hugepages configured, no data survives guest reboots, nothing is ever written into backing store file in host. Configured backing store file is not even part of command line options to qemu. Instead of that, there is some dev/hugepages/libvirt/... path which in reality remains empty in host.
-
-### maxMemory
-
-```xml
-  <maxMemory slots='16' unit='KiB'>67108864</maxMemory>
-```
-
-### NUMA config, 2 nodes with 16 GB mem in both
-
-```xml
-  <cpu ...>
-    <...>
-    <numa>
-      <cell id='0' cpus='0-3' memory='16777216' unit='KiB'/>
-      <cell id='1' cpus='4-7' memory='16777216' unit='KiB'/>
-    </numa>
-  </cpu>
-```
-
-### Emulated 2x 8G NVDIMM with labels support
-
-```xml
-    <memory model='nvdimm' access='shared'>
-      <source>
-        <path>/var/lib/libvirt/images/nvdimm0</path>
-      </source>
-      <target>
-        <size unit='KiB'>8388608</size>
-        <node>0</node>
-        <label>
-          <size unit='KiB'>2048</size>
-        </label>
-      </target>
-      <address type='dimm' slot='0'/>
-    </memory>
-    <memory model='nvdimm' access='shared'>
-      <source>
-        <path>/var/lib/libvirt/images/nvdimm1</path>
-      </source>
-      <target>
-        <size unit='KiB'>8388608</size>
-        <node>1</node>
-        <label>
-          <size unit='KiB'>2048</size>
-        </label>
-      </target>
-      <address type='dimm' slot='1'/>
-    </memory>
-```
-
-### 2x 8 GB NVDIMM backing file creation example on Host
-
-```sh
-dd if=/dev/zero of=/var/lib/libvirt/images/nvdimm0 bs=4K count=2097152
-dd if=/dev/zero of=/var/lib/libvirt/images/nvdimm1 bs=4K count=2097152
-```
-
-### Labels initialization is needed once per emulated NVDIMM
-
-The first OS startup in currently used dev.system with emulated NVDIMM triggers creation of one device-size pmem region and ndctl would show zero remaining available space. To make emulated NVDIMMs usable by ndctl, we use labels initialization steps which have to be run once after first bootup with new device(s).
-These steps need to be repeated if device backing file(s) start from scratch.
-
-For example, these commands for set of 2 NVDIMMs:
-(can be re-written as loop for more devices)
-
-```sh
-ndctl disable-region region0
-ndctl init-labels nmem0
-ndctl enable-region region0
-
-ndctl disable-region region1
-ndctl init-labels nmem1
-ndctl enable-region region1
-```
-
-## Software on the guest to support development and local-mode run:
 - Go: version 1.10.1
-- ndctl: version 62, built on same host via autogen,configure,make,install steps as per instruction in README.md
-- csc: v0.5.0 from github.com/rexray/gocsi
-- csi-sanity: v0.2.0-1-95-g3bc4135 from github.com/kubernetes-csi/csi-test
+- [ndctl](https://github.com/pmem/ndctl) version 62, built on dev.host via autogen,configure,make,install as per instruction in README.md
 - Docker-ce: version 18.06.1
 
-## Hardware required
+### Hardware required
 
-Non-volatile DIMM device(s) are required for operation. Some development and testing can however be done using Qemu-emulated NVDIMMs.
+Non-volatile DIMM device(s) are required for operation. Some development and testing can however be done using Qemu-emulated NVDIMMs, see [README-qemu-notes](README-qemu-notes.txt).
 
 ## Supported Kubernetes versions
 
@@ -182,6 +95,14 @@ The driver deployment in kubernetes cluster has been verified on:
 | devel             | Kubernetes 1.11 branch v1.11.3 |
 
 ## Setup
+
+### Development system
+
+So far, the early development and verification has mostly been carried out on qemu-emulated NVDIMMs, with brief testing on a system having real 2x256 GB of persistent memory
+
+* Host: Dell Poweredge R620, distro: openSUSE Leap 15.0, kernel 4.12.14, qemu 2.11.2
+* Guest VM: 32GB RAM, 8 vCPUs, Ubuntu 18.04.1 server, kernel 4.15.0, 4.18.0, 4.19.1
+* See [README-qemu-notes](README-qemu-notes.txt) for more details about VM config
 
 ### Get source code
 
@@ -217,11 +138,11 @@ This produces docker container images.
 
 This pushes docker container images to the docker images registry.
 
-See the [Makefile](Makefile) for additional make targets and possible make variables.
+See [Makefile](Makefile) for additional make targets and possible make variables.
 
 ### Verify socket
 
-1. You can verify that drivers listens on specified endpoint (Unix or TCP socket)
+1. You can verify that driver listens on specified endpoint (Unix or TCP socket)
 
 `netstat -l`
 
@@ -231,23 +152,11 @@ See the [Makefile](Makefile) for additional make targets and possible make varia
 
 #### Run driver as standalone
 
-This is useful in development/trial mode.
+This is useful in development mode.
 
 Use `run_driver` as user:root.
 This runs two preparation parts, and starts driver binary which listens and
 responds to API use on a TCP socket. You can modify this to use Unix socket if needed.
-
-The driver can be verified in the single-host context. Such running mode is called "Unified"
-in the driver. Both Controller and Node service run combined in local host, without Kubernetes context.
-
-The endpoint for driver access can be specified either:
-
-* with each csc command as `--endpoint tcp://127.0.0.1:10000`
-* export endpoint as env.variable, see `util/lifecycle-unified.sh`
-
-There are example steps verifying a volume lifecycle in `util/lifecycle-unified.sh`.
-
-There is example run of API test using csi-sanity in `util/sanity-unified.sh`.
 
 #### Run as kubernetes deployment
 
@@ -300,39 +209,54 @@ There is example run of API test using csi-sanity in `util/sanity-unified.sh`.
 
 ## Test plugin
 
-# Test
+### Tests runnable via make
 
-1. Use the `make test` command.
+Use the `make test` command.
 
 Note: testing code is not completed yet. Currently it runs some passes using `gofmt, go vet`.
 
-## Use plugin in your application
+### Verification in Unified mode
+
+The driver can be verified in the single-host context. Such running mode is called "Unified"
+in the driver. Both Controller and Node service run combined in local host, without Kubernetes context.
+
+The endpoint for driver access can be specified either:
+
+* with each csc command as `--endpoint tcp://127.0.0.1:10000`
+* export endpoint as env.variable, see `util/lifecycle-unified.sh`
+
+#### Scripts in util/ directory
+
+* [lifecycle-unified](util/lifecycle-unified.sh) example steps verifying a volume lifecycle
+* [sanity-unified](util/sanity-unified.sh) API test using csi-sanity
+* [get-capabilities-unified](util/get-capabilities-unified.sh) Query Controller and Node capabilities
+
+These utilities are needed as used by scripts residing in `util/` directory:
+
+- [csc](http://github.com/rexray/gocsi) v0.5.0
+- [csi-sanity](http://github.com/kubernetes-csi/csi-test) v0.2.0-1-95-g3bc4135
 
 <!-- FILL TEMPLATE:
+## Use plugin in your application
+
 [comment]: # (See the NVIDIA GPU example -> TensorFlow Jupyter Notebook)
 1. Use the `blah` command.
--->
 
 ### How to extend the plugin
 
-<!-- FILL TEMPLATE:
 You can modify the plugin to support more xxx by changing the `variable` from Y to Z.
--->
 
 ## Maintenance
 
-<!-- FILL TEMPLATE:
 * Known limitations
 * What is supported and what isn't supported
     * Disclaimer that nothing is supported with any kind of SLA
 * Example configuration for target use case
 * How to upgrade
 * Upgrade cadence
--->
 
 ## Troubleshooting
 
-<!-- FILL TEMPLATE:
 * If you see this error, then enter this command `blah`.
 -->
 
