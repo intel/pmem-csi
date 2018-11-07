@@ -33,7 +33,6 @@ func init() {
 func main() {
 	flag.Parse()
 	ctx, err := ndctl.NewContext()
-	fmt.Printf("I am here")
 	if err != nil {
 		fmt.Printf("Failed to initialize pmem context: %s", err.Error())
 		os.Exit(1)
@@ -101,7 +100,7 @@ func createNamespaces(ctx *ndctl.Context, namespacesize int, uselimit int) {
 					nPossibleNS, nsSize, r.DeviceName())
 				for i := 0; i < nPossibleNS; i++ {
 					glog.Infof("Createing namespace%d", i)
-					_, err := ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
+					_, err := r.CreateNamespace(ndctl.CreateNamespaceOpts{
 						Size: nsSize,
 					})
 					if err != nil {
