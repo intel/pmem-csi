@@ -220,6 +220,14 @@ The endpoint for driver access can be specified either:
 * with each csc command as `--endpoint tcp://127.0.0.1:10000`
 * export endpoint as env.variable, see `util/lifecycle-unified.sh`
 
+These run-time dependencies are used by the plugin in Unified mode:
+
+- lvm2
+- shred
+- mount
+- file
+- blkid
+
 #### Scripts in util/ directory
 
 * [lifecycle-unified](util/lifecycle-unified.sh) example steps verifying a volume lifecycle
