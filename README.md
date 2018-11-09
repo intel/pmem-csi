@@ -78,38 +78,38 @@ The following diagram illustrates how the PMEM-CSI driver performs dynamic volum
 
 ### Software required
 
-Early development and verification was performed on qemu-emulated NVDIMMs, with brief testing on a system having actual persistent memory of 2x256 GB.
-
-The build was verified on the system described below:
-
-* Host: Dell Poweredge R620, distro: openSUSE Leap 15.0, kernel 4.12.14, qemu 2.11.2
-* Host: Dell Poweredge R620, distro: openSUSE Tumbleweed, kernel 4.18.8, qemu 2.12.1, 3.0.0
-* Guest: VM: 32GB RAM, 8 vCPUs, Ubuntu 18.04.1 server, kernel 4.15.0
-* VM config originally created by libvirt/GUI (also doable using virt-install CLI), with configuration changes made directly in VM-config xml file to emulate pair of NVDIMMs backed by host file.
-
-## Software on the guest
-
-Use the following software to support development and running in local mode:
+Building has been verified using these components:
 
 - Go: version 1.10.1
-- ndctl: version 62, built on same host via autogen, configure, make, install steps as per instructions in README.md
-- csc: v0.5.0 from github.com/rexray/gocsi
-- csi-sanity: v0.2.0-1-95-g3bc4135 from github.com/kubernetes-csi/csi-test
-- Docker-ce: version 18.06.1
+- [ndctl](https://github.com/pmem/ndctl) version 62, built on dev.host via autogen,configure,make,install as per instruction in README.md
 
-## Hardware required
+Building of Docker images has additionally requires:
 
-Non-volatile DIMM device(s) are required for operation, however, some development and testing can be done using qemu-emulated NVDIMMs.
+- Docker-ce: verified using version 18.06.1
+
+### Hardware required
+
+Non-volatile DIMM device(s) are required for operation. Some development and testing can however be done using Qemu-emulated NVDIMMs, see [README-qemu-notes](README-qemu-notes.txt).
 
 ## Supported Kubernetes versions
 
-The driver deployment in Kubernetes cluster has been verified on:
+The driver deployment in kubernetes cluster has been verified on:
 
 | Branch            | Kubernetes branch/version      |
 |-------------------|--------------------------------|
 | devel             | Kubernetes 1.11 branch v1.11.3 |
 
 ## Setup
+
+### Development system using Virtual Machine
+
+Early development and verification was performed on qemu-emulated NVDIMMs.
+
+The build was verified on the system described below:
+
+* Host: Dell Poweredge R620, distro: openSUSE Leap 15.0, kernel 4.12.14, qemu 2.11.2
+* Guest VM: 32GB RAM, 8 vCPUs, Ubuntu 18.04.1 server, kernel 4.15.0, 4.18.0, 4.19.1
+* See [README-qemu-notes](README-qemu-notes.txt) for more details about VM config
 
 ### Get source code
 
@@ -154,18 +154,6 @@ This is useful in development/trial mode.
 
 Use `run_driver` as user:root.
 This runs two preparation parts, and starts the driver binary, which listens and responds to API use on a TCP socket. You can modify this to use a Unix socket, if needed.
-
-The driver can be verified in the single-host context. This running mode is
-called "Unified" in the driver. Both Controller and Node service run combined in the local host, without Kubernetes context.
-
-The endpoint for driver access can be specified either:
-
-* with each csc command as `--endpoint tcp://127.0.0.1:10000`
-* export endpoint as env.variable, see `util/lifecycle-unified.sh`
-
-`util/lifecycle-unified.sh` has example steps verifying a volume lifecycle.
-
-`util/sanity-unified.sh` has an example run of API test using csi-sanity.
 
 #### Run as Kubernetes deployment
 
@@ -216,9 +204,32 @@ The endpoint for driver access can be specified either:
 
 ## Test plugin
 
+### Tests runnable using make
+
 1. Use the `make test` command.
 
 Note: Testing code is not completed yet. Currently it runs some passes using `gofmt, go vet`.
+
+### Verification in Unified mode
+
+The driver can be verified in the single-host context. Such running mode is called "Unified"
+in the driver. Both Controller and Node service run combined in local host, without Kubernetes context.
+
+The endpoint for driver access can be specified either:
+
+* with each csc command as `--endpoint tcp://127.0.0.1:10000`
+* export endpoint as env.variable, see `util/lifecycle-unified.sh`
+
+#### Scripts in util/ directory
+
+* [lifecycle-unified](util/lifecycle-unified.sh) example steps verifying a volume lifecycle
+* [sanity-unified](util/sanity-unified.sh) API test using csi-sanity
+* [get-capabilities-unified](util/get-capabilities-unified.sh) Query Controller and Node capabilities
+
+These utilities are needed as used by scripts residing in `util/` directory:
+
+- [csc](http://github.com/rexray/gocsi) v0.5.0
+- [csi-sanity](http://github.com/kubernetes-csi/csi-test) v0.2.0-1-95-g3bc4135
 
 <!-- FILL TEMPLATE:
 
