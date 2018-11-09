@@ -4,11 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/golang/glog"
 	"github.com/intel/pmem-csi/pkg/ndctl"
-	"github.com/intel/pmem-csi/pkg/pmem-exec"
 )
 
 const (
@@ -49,22 +47,7 @@ func initNVdimms(ctx *ndctl.Context, namespacesize, uselimit int) {
 	// but ops will fail as there is no regions and PVs, so it's safe.
 	// TODO: Should we detect device(s) explicitly here?
 
-	// check are we running in VM. Useful for dev-mode with emulated NVDIMM case, set namespacesize smaller
-	// TODO: this depends on systemd-detect-virt, to be clarified is this present always.
-	// At least present in CentOS-7, openSUSE-15, Fedora-28, Ubuntu-18.04, Clear
-	// if cmd returns 0, we are in VM (and text shows which type)
-	// if cmd returns nonzero, its either "cmd exists and we run on baremetal (retval 1)" or "cmd does not exist: retval 127"
-	// in both cases we settle to baremetal mode, no harm done
 	glog.Infof("Configured namespacesize; %v GB", namespacesize)
-	output, err := pmemexec.RunCommand("systemd-detect-virt", "-v")
-	if err != nil {
-		glog.Infof("VM detection: [%v], seem to run on bare metal, use default %v GB namespace size",
-			err, namespacesize)
-	} else {
-		glog.Infof("VM detection: [%v], this looks like VM, use smaller %v GB namespace size",
-			strings.TrimSpace(output), namespacesizeVM)
-		namespacesize = namespacesizeVM
-	}
 	createNamespaces(ctx, namespacesize, uselimit)
 	/* for debug
 	nss := ctx.GetActiveNamespaces()
