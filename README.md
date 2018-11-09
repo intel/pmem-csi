@@ -6,9 +6,7 @@
 
 This [Kubernetes plugin](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/resource-management/device-plugin.md) is a Persistent Memory Container Storage Interface (PMEM-CSI) driver for provisioning of node-local non-volatile memory to Kubernetes as block devices. The driver can currently utilize non-volatile memory devices which can be controlled via [libndctl utility library](https://github.com/pmem/ndctl).
 
-The PMEM-CSI driver follows the [CSI specification](https://github.com
-/container-storage-interface/spec) by listening for API requests and
-provisioning volumes accordingly.
+The PMEM-CSI driver follows the [CSI specification](https://github.com/container-storage-interface/spec) by listening for API requests and provisioning volumes accordingly.
 
 
 ## Design
@@ -28,7 +26,7 @@ After two initialization stages, the third binary _pmem-csi-driver_ starts servi
 
 ### Driver modes
 
-The PMEM-CSI driver supports running in different modes, which can be controlled by passing one of the below options to the driver's `_-mode_` command line option. In each mode it starts a different set of open source Remote Procedure Call (gRPC) [servers](#driver-components) on given driver endpoint(s).
+The PMEM-CSI driver supports running in different modes, which can be controlled by passing one of the below options to the driver's '_-mode_' command line option. In each mode it starts a different set of open source Remote Procedure Call (gRPC) [servers](#driver-components) on given driver endpoint(s).
 
 * **_Controller_**  mode is intended to be used in a multi-node cluster and should run as single instance in cluster level. When the driver is running in _Controller_ mode, it forwards the pmem volume create/delete requests to the registered node controller servers running on the worker node. In this mode, the driver starts the following gRPC servers:
 
