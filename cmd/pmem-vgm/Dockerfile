@@ -11,8 +11,8 @@ RUN ./configure CFLAGS='-g -O2' --prefix=/usr --sysconfdir=/etc --libdir=/usr/li
 RUN make install
 
 # build pmem-vgm
-ADD . /go/src/github.com/intel/pmem-csi
-WORKDIR /go/src/github.com/intel/pmem-csi
+ADD . /go/src/github.com/intel/csi-pmem
+WORKDIR /go/src/github.com/intel/csi-pmem
 RUN make pmem-vgm
 RUN mv ./_output/pmem-vgm /go/bin/
 

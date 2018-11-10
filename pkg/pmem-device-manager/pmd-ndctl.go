@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/golang/glog"
-	"github.com/intel/pmem-csi/pkg/ndctl"
+	"github.com/intel/csi-pmem/pkg/ndctl"
 )
 
 type pmemNdctl struct {

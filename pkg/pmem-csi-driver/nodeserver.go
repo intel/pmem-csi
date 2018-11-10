@@ -19,9 +19,9 @@ import (
 	"k8s.io/kubernetes/pkg/util/mount"
 
 	"github.com/golang/glog"
-	"github.com/intel/pmem-csi/pkg/pmem-common"
-	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
-	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
+	"github.com/intel/csi-pmem/pkg/pmem-common"
+	pmdmanager "github.com/intel/csi-pmem/pkg/pmem-device-manager"
+	pmemexec "github.com/intel/csi-pmem/pkg/pmem-exec"
 )
 
 type nodeServer struct {

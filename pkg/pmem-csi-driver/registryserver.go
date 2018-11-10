@@ -3,7 +3,7 @@ package pmemcsidriver
 import (
 	"fmt"
 
-	"github.com/intel/pmem-csi/pkg/pmem-registry"
+	"github.com/intel/csi-pmem/pkg/pmem-registry"
 	"golang.org/x/net/context"
 )
 

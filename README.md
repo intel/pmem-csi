@@ -196,15 +196,15 @@ The driver deployment in Kubernetes cluster has been verified on:
 
 ### Get source code
 
-Use the command: `git clone https://github.com/otcshare/Pmem-CSI pmem-csi`
+Use the command: `git clone https://github.com/otcshare/Pmem-CSI csi-pmem`
 
 > **NOTE:** The repository name is mixed-case but the paths are
 > lowercase-only. If you want to build the code using Go, then
-> the driver code must reside on the path `github.com/intel/pmem-csi/`
+> the driver code must reside on the path `github.com/intel/csi-pmem/`
 >
 > You must specify a different destination path when cloning:
-> `git clone .../Pmem-CSI pmem-csi`
-> or rename the directory from `Pmem-CSI` to `pmem-csi` after cloning.
+> `git clone .../Pmem-CSI csi-pmem`
+> or rename the directory from `Pmem-CSI` to `csi-pmem` after cloning.
 
 ### Build plugin
 

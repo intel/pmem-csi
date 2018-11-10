@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/golang/glog"
-	"github.com/intel/pmem-csi/pkg/ndctl"
+	"github.com/intel/csi-pmem/pkg/ndctl"
 )
 
 const (
@@ -19,7 +19,7 @@ const (
 var (
 	/* generic options */
 	//TODO: reading name configuration not yet supported
-	//configFile    = flag.String("configfile", "/etc/pmem-csi/config", "PMEM CSI driver namespace configuration file")
+	//configFile    = flag.String("configfile", "/etc/csi-pmem/config", "PMEM CSI driver namespace configuration file")
 	namespacesize = flag.Int("namespacesize", 32, "NVDIMM namespace size in GB")
 	uselimit      = flag.Int("uselimit", 100, "Limit use of total PMEM amount, used percent")
 )
