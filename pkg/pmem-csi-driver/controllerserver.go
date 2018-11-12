@@ -18,9 +18,9 @@ import (
 
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
 
-	"github.com/intel/pmem-csi/pkg/pmem-common"
-	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
-	"github.com/intel/pmem-csi/pkg/pmem-grpc"
+	"github.com/intel/csi-pmem/pkg/pmem-common"
+	pmdmanager "github.com/intel/csi-pmem/pkg/pmem-device-manager"
+	"github.com/intel/csi-pmem/pkg/pmem-grpc"
 )
 
 //VolumeStatus type representation for volume status

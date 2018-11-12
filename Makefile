@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-IMPORT_PATH=github.com/intel/pmem-csi
+IMPORT_PATH=github.com/intel/csi-pmem
 SHELL=bash
 
 REGISTRY_NAME=localhost:5000
@@ -114,7 +114,7 @@ RUNTIME_DEPS =
 RUNTIME_DEPS += go list -f '{{ join .Deps "\n" }}' ./cmd/pmem-csi-driver |
 
 # This focuses on packages that are not in Golang core.
-RUNTIME_DEPS += grep '^github.com/intel/pmem-csi/vendor/' |
+RUNTIME_DEPS += grep '^github.com/intel/csi-pmem/vendor/' |
 
 # Filter out some packages that aren't really code.
 RUNTIME_DEPS += grep -v -e 'github.com/container-storage-interface/spec' |
@@ -122,7 +122,7 @@ RUNTIME_DEPS += grep -v -e 'google.golang.org/genproto/googleapis/rpc/status' |
 
 # Reduce the package import paths to project names + download URL.
 # - strip prefix
-RUNTIME_DEPS += sed -e 's;github.com/intel/pmem-csi/vendor/;;' |
+RUNTIME_DEPS += sed -e 's;github.com/intel/csi-pmem/vendor/;;' |
 # - use path inside github.com as project name
 RUNTIME_DEPS += sed -e 's;^github.com/\([^/]*\)/\([^/]*\).*;github.com/\1/\2;' |
 # - everything from gRPC is one project

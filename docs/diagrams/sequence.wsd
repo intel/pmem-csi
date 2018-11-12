@@ -1,6 +1,6 @@
 @startuml "pmem-csi-sequence-diagram"
 
-title \nDynamic volume provisioning with pmem-csi driver\n
+title \nDynamic volume provisioning with csi-pmem driver\n
 
 skinparam BoxPadding 40
 

@@ -10,11 +10,11 @@ RUN ./autogen.sh
 RUN ./configure CFLAGS='-g -O2' --prefix=/usr --sysconfdir=/etc --libdir=/usr/lib --disable-docs with_systemd_unit_dir=no
 RUN make install
 
-# build pmem-csi-driver
-ADD . /go/src/github.com/intel/pmem-csi
-WORKDIR /go/src/github.com/intel/pmem-csi
-RUN make pmem-csi-driver
-RUN mv ./_output/pmem-csi-driver /go/bin/
+# build csi-pmem-driver
+ADD . /go/src/github.com/intel/csi-pmem
+WORKDIR /go/src/github.com/intel/csi-pmem
+RUN make csi-pmem-driver
+RUN mv ./_output/csi-pmem-driver /go/bin/
 
 # build clean container
 FROM golang:alpine
@@ -25,6 +25,6 @@ RUN apk add --update kmod eudev util-linux libuuid e2fsprogs lvm2 file
 COPY --from=build /usr/lib/libndctl* /usr/lib/
 COPY --from=build /usr/lib/libdaxctl* /usr/lib/
 RUN mkdir -p /go/bin
-COPY --from=build /go/bin/pmem-csi-driver /go/bin/
+COPY --from=build /go/bin/csi-pmem-driver /go/bin/
 
-ENTRYPOINT ["/go/bin/pmem-csi-driver"]
+ENTRYPOINT ["/go/bin/csi-pmem-driver"]
