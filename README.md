@@ -4,6 +4,10 @@
 
 ## About
 
+---
+*Note: This is Alpha code and not production ready.*
+---
+
 This [Kubernetes plugin](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/resource-management/device-plugin.md) is a Persistent Memory Container Storage Interface (PMEM-CSI) driver for provisioning of node-local non-volatile memory to Kubernetes as block devices. The driver can currently utilize non-volatile memory devices which can be controlled via [libndctl utility library](https://github.com/pmem/ndctl).
 
 The PMEM-CSI driver follows the [CSI specification](https://github.com/container-storage-interface/spec) by listening for API requests and provisioning volumes accordingly.
