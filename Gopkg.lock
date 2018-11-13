@@ -10,6 +10,14 @@
   version = "v0.3.0"
 
 [[projects]]
+  digest = "1:6e73003ecd35f4487a5e88270d3ca0a81bc80dc88053ac7e4dcfec5fba30d918"
+  name = "github.com/gogo/protobuf"
+  packages = ["proto"]
+  pruneopts = ""
+  revision = "636bf0302bc95575d69441b25a2603156ffdddf1"
+  version = "v1.1.1"
+
+[[projects]]
   branch = "master"
   digest = "1:107b233e45174dbab5b1324201d092ea9448e58243ab9f039e4c0f332e121e3a"
   name = "github.com/golang/glog"
@@ -164,8 +172,8 @@
   analyzer-version = 1
   input-imports = [
     "github.com/container-storage-interface/spec/lib/go/csi/v0",
+    "github.com/gogo/protobuf/proto",
     "github.com/golang/glog",
-    "github.com/golang/protobuf/proto",
     "github.com/google/uuid",
     "golang.org/x/net/context",
     "google.golang.org/grpc",
