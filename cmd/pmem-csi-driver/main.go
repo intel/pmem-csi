@@ -25,7 +25,10 @@ var (
 	nodeID           = flag.String("nodeid", "nodeid", "node id")
 	endpoint         = flag.String("endpoint", "unix:///tmp/csi-pmem.sock", "PMEM CSI endpoint")
 	mode             = flag.String("mode", "unified", "driver run mode : controller, node or unified")
-	registryEndpoint = flag.String("registryEndpoint", "", "endpoint to connect/listen resgistery server")
+	registryEndpoint = flag.String("registryEndpoint", "", "endpoint to connect/listen registry server")
+	registryCertFile = flag.String("registryCertFile", "", "certificate file to use for registry server")
+	/* controller mode options */
+	registryKeyFile = flag.String("registryKeyFile", "", "key file to use for registry server")
 	/* node mode options */
 	controllerEndpoint = flag.String("controllerEndpoint", "", "internal node controller endpoint")
 	deviceManager      = flag.String("deviceManager", "lvm", "device manager to use to manage pmem devices. supported types: 'lvm' or 'ndctl'")
@@ -40,6 +43,8 @@ func main() {
 		Endpoint:           *endpoint,
 		Mode:               pmemcsidriver.DriverMode(*mode),
 		RegistryEndpoint:   *registryEndpoint,
+		RegistryCertFile:   *registryCertFile,
+		RegistryKeyFile:    *registryKeyFile,
 		ControllerEndpoint: *controllerEndpoint,
 		DeviceManager:      *deviceManager,
 	})

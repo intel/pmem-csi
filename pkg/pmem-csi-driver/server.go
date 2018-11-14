@@ -17,7 +17,7 @@ import (
 // Defines Non blocking GRPC server interfaces
 type NonBlockingGRPCServer interface {
 	// Start services at the endpoint
-	Start(endpoint string, register pmemgrpc.RegisterService) error
+	Start(endpoint, certFile, keyFile string, register pmemgrpc.RegisterService) error
 	// Waits for the service to stop
 	Wait()
 	// Stops the service gracefully
@@ -36,12 +36,15 @@ type nonBlockingGRPCServer struct {
 	servers []*grpc.Server
 }
 
-func (s *nonBlockingGRPCServer) Start(endpoint string, register pmemgrpc.RegisterService) error {
+func (s *nonBlockingGRPCServer) Start(endpoint, certFile, keyFile string, register pmemgrpc.RegisterService) error {
 	if endpoint == "" {
 		return fmt.Errorf("endpoint cannot be empty")
 	}
 	s.wg.Add(1)
-	return pmemgrpc.StartNewServer(endpoint, register)
+	server, err := pmemgrpc.StartNewServer(endpoint, certFile, keyFile, register)
+	s.servers = append(s.servers, server)
+
+	return err
 }
 
 func (s *nonBlockingGRPCServer) Wait() {

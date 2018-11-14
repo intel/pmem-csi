@@ -307,7 +307,7 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 			return nil, status.Error(codes.NotFound, err.Error())
 		}
 
-		conn, err := pmemgrpc.Connect(node.Endpoint, connectionTimeout)
+		conn, err := pmemgrpc.Connect(node.Endpoint, "", connectionTimeout)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
@@ -381,7 +381,7 @@ func (cs *controllerServer) ControllerUnpublishVolume(ctx context.Context, req *
 		if err != nil {
 			return nil, status.Error(codes.NotFound, err.Error())
 		}
-		conn, errr := pmemgrpc.Connect(node.Endpoint, connectionTimeout)
+		conn, errr := pmemgrpc.Connect(node.Endpoint, "", connectionTimeout)
 		if errr != nil {
 			return nil, status.Error(codes.Internal, errr.Error())
 		}

@@ -44,7 +44,7 @@ func (rs *registryServer) RegisterController(ctx context.Context, req *registry.
 		return nil, fmt.Errorf("Missing endpoint address")
 	}
 
-	fmt.Printf("Registring node: %s, endpont: %s", req.NodeId, req.Endpoint)
+	fmt.Printf("Registering node: %s, endpont: %s", req.NodeId, req.Endpoint)
 
 	rs.nodeClients[req.NodeId] = NodeInfo{
 		NodeID:   req.NodeId,
