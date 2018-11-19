@@ -44,7 +44,7 @@ The PMEM-CSI driver supports running in different modes, which can be controlled
     * [NodeControllerServer](#node-controller-server)
     * [NodeServer](#node-server)
 
-* **_Unified_** mode is intended to run the driver in a single-node cluster, mostly for testing the driver in a non-clustered environment.
+* **_Unified_** mode is intended to run the driver in a single host, mostly for testing the driver in a non-clustered environment.
 
 ### Driver Components
 
@@ -93,11 +93,11 @@ Building of Docker images has additionally requires:
 
 ### Hardware required
 
-Non-volatile DIMM device(s) are required for operation. Some development and testing can however be done using Qemu-emulated NVDIMMs, see [README-qemu-notes](README-qemu-notes.txt).
+Non-volatile DIMM device(s) are required for operation. Some development and testing can however be done using QEMU-emulated NVDIMMs, see [README-qemu-notes](README-qemu-notes.md).
 
 ## Supported Kubernetes versions
 
-The driver deployment in kubernetes cluster has been verified on:
+The driver deployment in Kubernetes cluster has been verified on:
 
 | Branch            | Kubernetes branch/version      |
 |-------------------|--------------------------------|
@@ -107,21 +107,20 @@ The driver deployment in kubernetes cluster has been verified on:
 
 ### Development system using Virtual Machine
 
-Early development and verification was performed on qemu-emulated NVDIMMs.
+Early development and verification was performed on QEMU-emulated NVDIMMs.
 
 The build was verified on the system described below:
 
 * Host: Dell Poweredge R620, distro: openSUSE Leap 15.0, kernel 4.12.14, qemu 2.11.2
 * Guest VM: 32GB RAM, 8 vCPUs, Ubuntu 18.04.1 server, kernel 4.15.0, 4.18.0, 4.19.1
-* See [README-qemu-notes](README-qemu-notes.txt) for more details about VM config
+* See [README-qemu-notes](README-qemu-notes.md) for more details about VM config
 
 ### Get source code
 
 Use the command: `git clone https://github.com/otcshare/Pmem-CSI csi-pmem`
 
 > **NOTE:** The repository name is mixed-case but the paths are
-> lowercase-only. If you want to build the code using Go, then
-> the driver code must reside on the path `github.com/intel/csi-pmem/`
+> lowercase-only. To build the plugin, the driver code must reside on the path github.com/intel/csi-pmem/
 >
 > You must specify a different destination path when cloning:
 > `git clone .../Pmem-CSI csi-pmem`
@@ -208,13 +207,13 @@ This runs two preparation parts, and starts the driver binary, which listens and
 
 ## Test plugin
 
-### Tests runnable using make
+### Run tests using make
 
 1. Use the `make test` command.
 
 Note: Testing code is not completed yet. Currently it runs some passes using `gofmt, go vet`.
 
-### Verification in Unified mode
+### Verify driver in unified mode
 
 The driver can be verified in the single-host context. Such running mode is called "Unified"
 in the driver. Both Controller and Node service run combined in local host, without Kubernetes context.
