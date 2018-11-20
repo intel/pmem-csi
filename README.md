@@ -95,6 +95,10 @@ Building of Docker images has additionally requires:
 
 Non-volatile DIMM device(s) are required for operation. Some development and testing can however be done using QEMU-emulated NVDIMMs, see [README-qemu-notes](README-qemu-notes.md).
 
+### NVDIMM device initialization
+
+The driver does not create NVDIMM Regions, but expects Regions to exist when the driver starts. The utility [ipmctl](https://github.com/intel/ipmctl) can be used to create Regions.
+
 ## Supported Kubernetes versions
 
 The driver deployment in Kubernetes cluster has been verified on:
