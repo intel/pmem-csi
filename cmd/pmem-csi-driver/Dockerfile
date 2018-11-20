@@ -13,8 +13,8 @@ RUN make install
 # build csi-pmem-driver
 ADD . /go/src/github.com/intel/csi-pmem
 WORKDIR /go/src/github.com/intel/csi-pmem
-RUN make csi-pmem-driver
-RUN mv ./_output/csi-pmem-driver /go/bin/
+RUN make pmem-csi-driver
+RUN mv ./_output/pmem-csi-driver /go/bin/
 
 # build clean container
 FROM golang:alpine
@@ -25,6 +25,6 @@ RUN apk add --update kmod eudev util-linux libuuid e2fsprogs lvm2 file
 COPY --from=build /usr/lib/libndctl* /usr/lib/
 COPY --from=build /usr/lib/libdaxctl* /usr/lib/
 RUN mkdir -p /go/bin
-COPY --from=build /go/bin/csi-pmem-driver /go/bin/
+COPY --from=build /go/bin/pmem-csi-driver /go/bin/
 
-ENTRYPOINT ["/go/bin/csi-pmem-driver"]
+ENTRYPOINT ["/go/bin/pmem-csi-driver"]
