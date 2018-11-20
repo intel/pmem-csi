@@ -73,6 +73,10 @@ fmt:
 
 .PHONY: all test clean pmem-csi-driver pmem-ns-init pmem-vgm
 
+# Add support for creating and booting a cluster under QEMU.
+include test/clear-kvm.make
+include test/start-stop.make
+
 # This ensures that the vendor directory and vendor-bom.csv are in sync
 # at least as far as the listed components go.
 .PHONY: test_vendor_bom

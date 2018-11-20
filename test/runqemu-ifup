@@ -1,0 +1,66 @@
+#!/bin/bash -e
+#
+# Copyright (c) 2006-2011 Linux Foundation
+# Copyright (c) 2018 Intel Corporation
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License version 2 as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+# QEMU network interface configuration script for VMs. This utility needs to
+# be run as normal user and depends on sudo.
+#
+# Inspired by https://www.linux-kvm.org/page/Networking#Private_Virtual_Bridge
+# (bridge setup) and https://git.yoctoproject.org/cgit.cgi/poky/plain/scripts/runqemu-ifup
+# (NAT and user-mode QEMU).
+
+usage() {
+	echo "$(basename $0) <number of nodes>"
+}
+
+if [ $# -ne 1 ]; then
+	usage
+	exit 1
+fi
+
+. $(dirname $0)/test-config.sh
+
+
+BR=${TEST_PREFIX}br0
+
+# Set up bridge.
+sudo ip link add $BR type bridge
+sudo ip link set $BR up # otherwise VMs can't ping each other, missing in linux-kvm.org page
+sleep 0.5s
+
+# Connect host.
+sudo ip addr add ${TEST_IP_ADDR}.1/32 broadcast ${TEST_IP_ADDR}.255 dev $BR
+sudo ip route add ${TEST_IP_ADDR}.0/24 dev $BR
+
+# Enable NAT on host.
+sudo iptables -A POSTROUTING -t nat -j MASQUERADE -s ${TEST_IP_ADDR}.1/32
+sudo sh -c "echo 1 > /proc/sys/net/ipv4/ip_forward"
+sudo iptables -P FORWARD ACCEPT
+
+for i in $(seq 0 $(($1 - 1))); do
+    TAP=${TEST_PREFIX}tap$i
+    sudo ip tuntap add $TAP mode tap user `whoami`
+    sudo ip link set $TAP up
+    sleep 0.5s
+    sudo ip link set $TAP master $BR
+
+    dest=$(( $i * 2 + 2 ))
+
+    # Enable NAT for VM.
+    sudo iptables -A POSTROUTING -t nat -j MASQUERADE -s ${TEST_IP_ADDR}.$dest/32
+    sudo sh -c "echo 1 > /proc/sys/net/ipv4/conf/$TAP/proxy_arp"
+done
