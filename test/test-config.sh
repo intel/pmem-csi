@@ -20,3 +20,15 @@ TEST_CONFIGURE_POST_MASTER=
 
 # Called after Kubernetes has been configured and started on all nodes.
 TEST_CONFIGURE_POST_ALL=
+
+# PMEM NVDIMM configuration.
+#
+# When changing PMEM size after booting the VMs already, _work/*.pmem.raw must
+# get deleted to re-initialize the PMEM.
+#
+# See https://github.com/qemu/qemu/blob/bd54b11062c4baa7d2e4efadcf71b8cfd55311fd/docs/nvdimm.txt
+# for details about QEMU simulated PMEM.
+TEST_MEM_SLOTS=2
+TEST_NORMAL_MEM_SIZE=2048 # 2GB
+TEST_PMEM_MEM_SIZE=32768 # 32GB
+TEST_PMEM_SHARE=on
