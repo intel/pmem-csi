@@ -4,11 +4,13 @@
 
 ## About
 
+---
+*Note: This is Alpha code and not production ready.*
+---
+
 This [Kubernetes plugin](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/resource-management/device-plugin.md) is a Persistent Memory Container Storage Interface (PMEM-CSI) driver for provisioning of node-local non-volatile memory to Kubernetes as block devices. The driver can currently utilize non-volatile memory devices which can be controlled via [libndctl utility library](https://github.com/pmem/ndctl).
 
-The PMEM-CSI driver follows the [CSI specification](https://github.com
-/container-storage-interface/spec) by listening for API requests and
-provisioning volumes accordingly.
+The PMEM-CSI driver follows the [CSI specification](https://github.com/container-storage-interface/spec) by listening for API requests and provisioning volumes accordingly.
 
 
 ## Design
@@ -28,7 +30,7 @@ After two initialization stages, the third binary _pmem-csi-driver_ starts servi
 
 ### Driver modes
 
-The PMEM-CSI driver supports running in different modes, which can be controlled by passing one of the below options to the driver's `_-mode_` command line option. In each mode it starts a different set of open source Remote Procedure Call (gRPC) [servers](#driver-components) on given driver endpoint(s).
+The PMEM-CSI driver supports running in different modes, which can be controlled by passing one of the below options to the driver's '_-mode_' command line option. In each mode it starts a different set of open source Remote Procedure Call (gRPC) [servers](#driver-components) on given driver endpoint(s).
 
 * **_Controller_**  mode is intended to be used in a multi-node cluster and should run as single instance in cluster level. When the driver is running in _Controller_ mode, it forwards the pmem volume create/delete requests to the registered node controller servers running on the worker node. In this mode, the driver starts the following gRPC servers:
 
@@ -42,7 +44,7 @@ The PMEM-CSI driver supports running in different modes, which can be controlled
     * [NodeControllerServer](#node-controller-server)
     * [NodeServer](#node-server)
 
-* **_Unified_** mode is intended to run the driver in a single-node cluster, mostly for testing the driver in a non-clustered environment.
+* **_Unified_** mode is intended to run the driver in a single host, mostly for testing the driver in a non-clustered environment.
 
 ### Driver Components
 
@@ -80,109 +82,22 @@ The following diagram illustrates how the PMEM-CSI driver performs dynamic volum
 
 ### Software required
 
-Early development and verification was performed on qemu-emulated NVDIMMs, with brief testing on a system having actual persistent memory of 2x256 GB.
-
-The build was verified on the system described below:
-
-* Host: Dell Poweredge R620, distro: openSUSE Leap 15.0, kernel 4.12.14, qemu 2.11.2
-* Host: Dell Poweredge R620, distro: openSUSE Tumbleweed, kernel 4.18.8, qemu 2.12.1, 3.0.0
-* Guest: VM: 32GB RAM, 8 vCPUs, Ubuntu 18.04.1 server, kernel 4.15.0
-* VM config originally created by libvirt/GUI (also doable using virt-install CLI), with configuration changes made directly in VM-config xml file to emulate pair of NVDIMMs backed by host file.
-
-> **NOTE about hugepages:**
-> Emulated NVDIMM appears not fully working if the VM is configured to use Hugepages. With Hugepages configured, no data survives guest reboots and nothing is ever written into backing store file in host. Configured backing store file is not even part of command line options to qemu. Instead of that, there is some dev/hugepages/libvirt/... path which in reality remains empty in host.
-
-### maxMemory
-
-```xml
-  <maxMemory slots='16' unit='KiB'>67108864</maxMemory>
-```
-
-### NUMA config, 2 nodes with 16 GB mem in both
-
-```xml
-  <cpu ...>
-    <...>
-    <numa>
-      <cell id='0' cpus='0-3' memory='16777216' unit='KiB'/>
-      <cell id='1' cpus='4-7' memory='16777216' unit='KiB'/>
-    </numa>
-  </cpu>
-```
-
-### Emulated 2x 8G NVDIMM with labels support
-
-```xml
-    <memory model='nvdimm' access='shared'>
-      <source>
-        <path>/var/lib/libvirt/images/nvdimm0</path>
-      </source>
-      <target>
-        <size unit='KiB'>8388608</size>
-        <node>0</node>
-        <label>
-          <size unit='KiB'>2048</size>
-        </label>
-      </target>
-      <address type='dimm' slot='0'/>
-    </memory>
-    <memory model='nvdimm' access='shared'>
-      <source>
-        <path>/var/lib/libvirt/images/nvdimm1</path>
-      </source>
-      <target>
-        <size unit='KiB'>8388608</size>
-        <node>1</node>
-        <label>
-          <size unit='KiB'>2048</size>
-        </label>
-      </target>
-      <address type='dimm' slot='1'/>
-    </memory>
-```
-
-### 2x 8 GB NVDIMM backing file creation example on Host
-
-```sh
-dd if=/dev/zero of=/var/lib/libvirt/images/nvdimm0 bs=4K count=2097152
-dd if=/dev/zero of=/var/lib/libvirt/images/nvdimm1 bs=4K count=2097152
-```
-
-### Labels initialization is needed once per emulated NVDIMM
-
-In the dev.system with emulated NVDIMM, the first OS startup triggers the
-creation of one device-size pmem region and `ndctl` shows zero remaining
-available space. To make emulated NVDIMMs usable by `ndctl`, we use labels
-initialization, which must be once after the first bootup with new device(s).
-You must repeat these steps if the device backing file(s) starts from scratch.
-
-For example, use these commands for a set of 2 NVDIMMs:
-
-```sh
-ndctl disable-region region0
-ndctl init-labels nmem0
-ndctl enable-region region0
-
-ndctl disable-region region1
-ndctl init-labels nmem1
-ndctl enable-region region1
-```
-
-The commands can be re-written as a loop for more devices.
-
-## Software on the guest
-
-Use the following software to support development and running in local mode:
+Building has been verified using these components:
 
 - Go: version 1.10.1
-- ndctl: version 62, built on same host via autogen, configure, make, install steps as per instructions in README.md
-- csc: v0.5.0 from github.com/rexray/gocsi
-- csi-sanity: v0.2.0-1-95-g3bc4135 from github.com/kubernetes-csi/csi-test
-- Docker-ce: version 18.06.1
+- [ndctl](https://github.com/pmem/ndctl) version 62, built on dev.host via autogen,configure,make,install as per instruction in README.md
 
-## Hardware required
+Building of Docker images has additionally requires:
 
-Non-volatile DIMM device(s) are required for operation, however, some development and testing can be done using qemu-emulated NVDIMMs.
+- Docker-ce: verified using version 18.06.1
+
+### Hardware required
+
+Non-volatile DIMM device(s) are required for operation. Some development and testing can however be done using QEMU-emulated NVDIMMs, see [README-qemu-notes](README-qemu-notes.md).
+
+### NVDIMM device initialization
+
+The driver does not create NVDIMM Regions, but expects Regions to exist when the driver starts. The utility [ipmctl](https://github.com/intel/ipmctl) can be used to create Regions.
 
 ## Supported Kubernetes versions
 
@@ -194,13 +109,22 @@ The driver deployment in Kubernetes cluster has been verified on:
 
 ## Setup
 
+### Development system using Virtual Machine
+
+Early development and verification was performed on QEMU-emulated NVDIMMs.
+
+The build was verified on the system described below:
+
+* Host: Dell Poweredge R620, distro: openSUSE Leap 15.0, kernel 4.12.14, qemu 2.11.2
+* Guest VM: 32GB RAM, 8 vCPUs, Ubuntu 18.04.1 server, kernel 4.15.0, 4.18.0, 4.19.1
+* See [README-qemu-notes](README-qemu-notes.md) for more details about VM config
+
 ### Get source code
 
 Use the command: `git clone https://github.com/otcshare/Pmem-CSI csi-pmem`
 
 > **NOTE:** The repository name is mixed-case but the paths are
-> lowercase-only. If you want to build the code using Go, then
-> the driver code must reside on the path `github.com/intel/csi-pmem/`
+> lowercase-only. To build the plugin, the driver code must reside on the path github.com/intel/csi-pmem/
 >
 > You must specify a different destination path when cloning:
 > `git clone .../Pmem-CSI csi-pmem`
@@ -237,18 +161,6 @@ This is useful in development/trial mode.
 
 Use `run_driver` as user:root.
 This runs two preparation parts, and starts the driver binary, which listens and responds to API use on a TCP socket. You can modify this to use a Unix socket, if needed.
-
-The driver can be verified in the single-host context. This running mode is
-called "Unified" in the driver. Both Controller and Node service run combined in the local host, without Kubernetes context.
-
-The endpoint for driver access can be specified either:
-
-* with each csc command as `--endpoint tcp://127.0.0.1:10000`
-* export endpoint as env.variable, see `util/lifecycle-unified.sh`
-
-`util/lifecycle-unified.sh` has example steps verifying a volume lifecycle.
-
-`util/sanity-unified.sh` has an example run of API test using csi-sanity.
 
 #### Run as Kubernetes deployment
 
@@ -299,9 +211,40 @@ The endpoint for driver access can be specified either:
 
 ## Test plugin
 
+### Run tests using make
+
 1. Use the `make test` command.
 
 Note: Testing code is not completed yet. Currently it runs some passes using `gofmt, go vet`.
+
+### Verify driver in unified mode
+
+The driver can be verified in the single-host context. Such running mode is called "Unified"
+in the driver. Both Controller and Node service run combined in local host, without Kubernetes context.
+
+The endpoint for driver access can be specified either:
+
+* with each csc command as `--endpoint tcp://127.0.0.1:10000`
+* export endpoint as env.variable, see `util/lifecycle-unified.sh`
+
+These run-time dependencies are used by the plugin in Unified mode:
+
+- lvm2
+- shred
+- mount
+- file
+- blkid
+
+#### Scripts in util/ directory
+
+* [lifecycle-unified](util/lifecycle-unified.sh) example steps verifying a volume lifecycle
+* [sanity-unified](util/sanity-unified.sh) API test using csi-sanity
+* [get-capabilities-unified](util/get-capabilities-unified.sh) Query Controller and Node capabilities
+
+These utilities are needed as used by scripts residing in `util/` directory:
+
+- [csc](http://github.com/rexray/gocsi) v0.5.0
+- [csi-sanity](http://github.com/kubernetes-csi/csi-test) v0.2.0-1-95-g3bc4135
 
 <!-- FILL TEMPLATE:
 
