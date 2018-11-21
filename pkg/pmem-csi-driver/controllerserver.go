@@ -44,6 +44,7 @@ type pmemVolume struct {
 	Status VolumeStatus
 	NodeID string
 	Erase  bool
+	NsMode string
 }
 
 type controllerServer struct {
@@ -101,6 +102,7 @@ func (cs *controllerServer) GetVolumeByName(Name string) *pmemVolume {
 func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
 	var vol *pmemVolume
 	eraseafter := true
+	nsmode := "fsdax"
 	if err := cs.Driver.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
 		pmemcommon.Infof(3, ctx, "invalid create volume req: %v", req)
 		return nil, err
@@ -126,6 +128,12 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 				} else if val == "false" {
 					eraseafter = false
 				}
+			} else if key == "nsmode" {
+				if val == "fsdax" {
+					nsmode = "fsdax"
+				} else if val == "sector" {
+					nsmode = "sector"
+				}
 			}
 		}
 	}
@@ -149,7 +157,7 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		volumeID := id.String()
 		if cs.mode == Unified || cs.mode == Node {
 			glog.Infof("CreateVolume: Special create volume in Unified mode")
-			if err := cs.dm.CreateDevice(volumeID, asked); err != nil {
+			if err := cs.dm.CreateDevice(volumeID, asked, nsmode); err != nil {
 				return nil, status.Errorf(codes.Internal, "CreateVolume: failed to create volume: %s", err.Error())
 			}
 		} else /*if cs.mode == Unified */ {
@@ -172,6 +180,7 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 			Size:   asked,
 			Status: Created,
 			Erase:  eraseafter,
+			NsMode: nsmode,
 		}
 		if cs.mode == Unified || cs.mode == Node {
 			vol.Status = Attached
@@ -185,8 +194,9 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 			Id:            vol.ID,
 			CapacityBytes: int64(vol.Size),
 			Attributes: map[string]string{
-				"name": req.GetName(),
-				"size": strconv.FormatUint(asked, 10),
+				"name":   req.GetName(),
+				"size":   strconv.FormatUint(asked, 10),
+				"nsmode": nsmode,
 			},
 		},
 	}, nil
@@ -319,6 +329,7 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 
 		req.VolumeAttributes["name"] = vol.Name
 		req.VolumeAttributes["size"] = strconv.FormatUint(vol.Size, 10)
+		req.VolumeAttributes["nsmode"] = vol.NsMode
 		resp, err := csiClient.ControllerPublishVolume(ctx, req)
 		glog.Infof("Got response")
 
@@ -339,6 +350,7 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 	}
 	var volumeName string
 	var volumeSize uint64
+	var nsmode string
 	if cs.mode == Node {
 		attrs := req.GetVolumeAttributes()
 		if attrs == nil {
@@ -346,6 +358,7 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		}
 		volumeName = attrs["name"]
 		volumeSize, _ = strconv.ParseUint(attrs["size"], 10, 64)
+		nsmode = attrs["nsname"]
 	} else /* if cs.mode == Unified */ {
 		vol, ok := cs.pmemVolumes[req.VolumeId]
 		if !ok {
@@ -353,9 +366,11 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		}
 		volumeName = vol.Name
 		volumeSize = vol.Size
+		nsmode = vol.NsMode
 	}
+	glog.Infof("ControllerPublishVolume: volumeName:%v volumeSize:%v nsmode:%v", volumeName, volumeSize, nsmode)
 	/* Node/Unified */
-	if err := cs.dm.CreateDevice(req.VolumeId, volumeSize); err != nil {
+	if err := cs.dm.CreateDevice(req.VolumeId, volumeSize, nsmode); err != nil {
 		return nil, status.Errorf(codes.Internal, "Failed to create volume: %s", err.Error())
 	}
 

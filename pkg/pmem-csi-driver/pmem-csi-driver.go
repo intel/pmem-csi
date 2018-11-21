@@ -195,6 +195,9 @@ func (pmemd *pmemDriver) registerNodeController(dm pmdmanager.PmemDeviceManager)
 		time.Sleep(10 * time.Second)
 	}
 	client := registry.NewRegistryClient(conn)
+	// TODO: this creates open question in LVM-mode, where 2 kind of namespace pools are pre-allocated
+	// What should we report as capacity?
+	// Currently the function we call here, uses fsdax mode pool only, as this is likely used more
 	capacity, err := dm.GetCapacity()
 	if err != nil {
 		glog.Warningf("Error while preparing node capacity: %s", err.Error())

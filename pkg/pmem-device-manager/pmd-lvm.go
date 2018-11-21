@@ -16,7 +16,7 @@ type pmemLvm struct {
 
 var _ PmemDeviceManager = &pmemLvm{}
 var lvsArgs = []string{"--noheadings", "-o", "lv_name,lv_path,lv_size", "--units", "B"}
-var vgsArgs = []string{"--noheadings", "--nosuffix", "-o", "vg_name,vg_size,vg_free", "--units", "B"}
+var vgsArgs = []string{"--noheadings", "--nosuffix", "-o", "vg_name,vg_size,vg_free,vg_tags", "--units", "B"}
 
 // NewPmemDeviceManagerLVM Instantiates a new LVM based pmem device manager
 // The pre-requisite for this manager is that all the pmem regions which should be managed by
@@ -31,7 +31,16 @@ func NewPmemDeviceManagerLVM() (PmemDeviceManager, error) {
 		glog.Infof("NewPmemDeviceManagerLVM: Bus: %v", bus.DeviceName())
 		for _, r := range bus.ActiveRegions() {
 			glog.Infof("NewPmemDeviceManagerLVM: Region: %v", r.DeviceName())
-			volumeGroups = append(volumeGroups, vgName(bus, r))
+			nsmodes := []string{"fsdax", "sector"}
+			for _, nsmod := range nsmodes {
+				vgname := vgName(bus, r, nsmod)
+				if _, err := pmemexec.RunCommand("vgs", vgname); err != nil {
+					glog.Infof("NewPmemDeviceManagerLVM: VG %v non-existent, skip", vgname)
+				} else {
+					volumeGroups = append(volumeGroups, vgname)
+					glog.Infof("NewPmemDeviceManagerLVM: NsMode: %v", nsmod)
+				}
+			}
 		}
 	}
 	ctx.Free()
@@ -45,10 +54,12 @@ type vgInfo struct {
 	name string
 	size uint64
 	free uint64
+	tag  string
 }
 
 func (lvm *pmemLvm) GetCapacity() (uint64, error) {
-	vgs, err := getVolumeGroups(lvm.volumeGroups)
+	// TODO: this is hard-coded to fsdax. should add another loop over nsmode=sector ?
+	vgs, err := getVolumeGroups(lvm.volumeGroups, "fsdax")
 	if err != nil {
 		return 0, err
 	}
@@ -63,14 +74,18 @@ func (lvm *pmemLvm) GetCapacity() (uint64, error) {
 	return capacity, nil
 }
 
-func (lvm *pmemLvm) CreateDevice(name string, size uint64) error {
+// nsmode is "fsdax" or "sector"
+func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error {
+	if nsmode != "fsdax" && nsmode != "sector" {
+		return fmt.Errorf("Unknown nsmode(%v)", nsmode)
+	}
 	// pick a region, few possible strategies:
 	// 1. pick first with enough available space: simplest, regions get filled in order;
 	// 2. pick first with largest available space: regions get used round-robin, i.e. load-balanced, but does not leave large unused;
 	// 3. pick first with smallest available which satisfies the request: ordered initially, but later leaves bigger free available;
 	// Let's implement strategy 1 for now, simplest to code as no need to compare sizes in all regions
 	// NOTE: We walk buses and regions in ndctl context, but avail.size we check in LV context
-	vgs, err := getVolumeGroups(lvm.volumeGroups)
+	vgs, err := getVolumeGroups(lvm.volumeGroups, nsmode)
 	if err != nil {
 		return err
 	}
@@ -140,8 +155,8 @@ func (lvm *pmemLvm) ListDevices() ([]PmemDeviceInfo, error) {
 	return parseLVSOuput(output)
 }
 
-func vgName(bus *ndctl.Bus, region *ndctl.Region) string {
-	return bus.DeviceName() + region.DeviceName()
+func vgName(bus *ndctl.Bus, region *ndctl.Region, nsmode string) string {
+	return bus.DeviceName() + region.DeviceName() + nsmode
 }
 
 func flushDevice(dev PmemDeviceInfo) error {
@@ -175,7 +190,7 @@ func parseLVSOuput(output string) ([]PmemDeviceInfo, error) {
 	return devices, nil
 }
 
-func getVolumeGroups(groups []string) ([]vgInfo, error) {
+func getVolumeGroups(groups []string, wantedTag string) ([]vgInfo, error) {
 	vgs := []vgInfo{}
 	args := append(vgsArgs, groups...)
 	output, err := pmemexec.RunCommand("vgs", args...)
@@ -184,14 +199,18 @@ func getVolumeGroups(groups []string) ([]vgInfo, error) {
 	}
 	for _, line := range strings.SplitN(output, "\n", len(groups)) {
 		fields := strings.Fields(strings.TrimSpace(line))
-		if len(fields) != 3 {
+		if len(fields) != 4 {
 			return vgs, fmt.Errorf("Failed to parse vgs output line: %s", line)
 		}
-		vg := vgInfo{}
-		vg.name = fields[0]
-		vg.size, _ = strconv.ParseUint(fields[1], 10, 64)
-		vg.free, _ = strconv.ParseUint(fields[2], 10, 64)
-		vgs = append(vgs, vg)
+		tag := fields[3]
+		if tag == wantedTag {
+			vg := vgInfo{}
+			vg.name = fields[0]
+			vg.size, _ = strconv.ParseUint(fields[1], 10, 64)
+			vg.free, _ = strconv.ParseUint(fields[2], 10, 64)
+			vg.tag = tag
+			vgs = append(vgs, vg)
+		}
 	}
 
 	return vgs, nil
