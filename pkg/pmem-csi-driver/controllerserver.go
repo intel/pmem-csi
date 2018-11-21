@@ -358,7 +358,7 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		}
 		volumeName = attrs["name"]
 		volumeSize, _ = strconv.ParseUint(attrs["size"], 10, 64)
-		nsmode = attrs["nsname"]
+		nsmode = attrs["nsmode"]
 	} else /* if cs.mode == Unified */ {
 		vol, ok := cs.pmemVolumes[req.VolumeId]
 		if !ok {
