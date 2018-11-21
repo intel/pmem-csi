@@ -50,7 +50,7 @@ func initNVdimms(ctx *ndctl.Context, namespacesize int, useforfsdax int, usefors
 	// TODO: Should we detect device(s) explicitly here?
 
 	glog.Infof("Configured namespacesize; %v GB", namespacesize)
-	createNamespaces(ctx, namespacesize, uselimit)
+	createNamespaces(ctx, namespacesize, useforfsdax, useforsector)
 	/* for debug
 	nss := ctx.GetActiveNamespaces()
 	glog.Info("elems in Namespaces:", len(nss))
