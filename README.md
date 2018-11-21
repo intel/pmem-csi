@@ -142,7 +142,7 @@ Use the command: `git clone https://github.com/otcshare/Pmem-CSI csi-pmem`
 
 2.  Use `make build-images` to produce Docker container images.
 
-3.  Use `make push-images` to push Docker container images to the Docker images registry.
+3.  Use `make push-images` to push Docker container images to the Docker images registry. The docker registry can be configured using _REGISTRY_NAME_ make variable, which defaults to "localhost:5000"
 
 See the [Makefile](Makefile) for additional make targets and possible make variables.
 
@@ -172,6 +172,9 @@ This runs two preparation parts, and starts the driver binary, which listens and
 ```
 
 - **Deploy the driver to Kubernetes**
+
+Example Kubernetes deployment is provided in [pmem-csi.yaml](deploy/k8s/pmem-csi.yaml) file.
+The docker registry in this file is hard-coded to "localhost:5000/" which should be altered to appropriate docker registry that was used while building the images.
 
 ```sh
     $ kubectl create -f deploy/k8s/pmem-csi.yaml

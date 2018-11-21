@@ -17,9 +17,9 @@ IMPORT_PATH=github.com/intel/csi-pmem
 SHELL=bash
 
 REGISTRY_NAME=localhost:5000
-IMAGE_VERSION_pmem-csi-driver=canary
-IMAGE_VERSION_pmem-ns-init=canary
-IMAGE_VERSION_pmem-vgm=canary
+IMAGE_VERSION_pmem-csi-driver=alpine
+IMAGE_VERSION_pmem-ns-init=alpine
+IMAGE_VERSION_pmem-vgm=alpine
 IMAGE_TAG=$(REGISTRY_NAME)/$*:$(IMAGE_VERSION_$*)
 IMAGE_BUILD_ARGS=
 # Pass proxy config via --build-arg only if these are set,
