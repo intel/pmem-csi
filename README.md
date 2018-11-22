@@ -68,6 +68,11 @@ This gRPC server is started by the PMEM-CSI driver running in _Node_ mode and im
 
 This gRPC server is started by the driver running in _Node_ mode and implements the [Node service](https://github.com/container-storage-interface/spec/blob/master/spec.md#node-service-rpc) interface defined in the CSI specification. It serves the NodeStageVolume(), NodeUnstageVolume(), NodePublishVolume(), and NodeUnpublishVolume() requests coming from the Container Orchestrator (CO).
 
+### Communication channels
+
+The following diagram illustrates the communication channels between driver components:
+![communication diagram](/docs/images/communication/pmem-csi-communication-diagram.png)
+
 ### Dynamic provisioning
 
 The following diagram illustrates how the PMEM-CSI driver performs dynamic volume provisioning in Kubernetes:
