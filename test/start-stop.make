@@ -27,7 +27,9 @@ start: _work/clear-kvm.img _work/kube-clear-kvm _work/start-clear-kvm _work/ssh-
 	for i in $$(seq 1 $$(($(NUM_NODES) - 1))); do \
 		_work/ssh-clear-kvm kubectl label --overwrite node host-$$i storage=nvdimm; \
 	done
+	@ echo
 	@ echo "The test cluster is ready. Log in with _work/ssh-clear-kvm, run kubectl once logged in."
+	@ echo "Alternatively, KUBECONFIG=$$(pwd)/_work/clear-kvm-kube.config can also be used directly."
 
 stop:
 	for i in $$(seq 0 $$(($(NUM_NODES) - 1))); do \
