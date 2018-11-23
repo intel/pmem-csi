@@ -41,6 +41,10 @@
   version = "1.14.0"
 
 [[constraint]]
+  name = "github.com/kubernetes-csi/csi-test"
+  version = "0.3.0-4"
+
+[[constraint]]
   name = "k8s.io/kubernetes"
   branch = "storage-volume-testsuites-avoid-tests"
   source = "github.com/pohly/kubernetes"

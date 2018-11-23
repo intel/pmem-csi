@@ -1,0 +1,110 @@
+# Deploys the csi-pmem driver onto exactly one node, running in unified mode.
+# That CSI drivers gets exposed with a NodePort service and the fixed port
+# 30123 for use with csi-test sanity testing.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: csi-service-account
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: csi-cluster-role
+rules:
+- apiGroups: [ "" ]
+  resources: [ "persistentvolumes" ]
+  verbs: [ "create", "delete", "get", "list", "watch", "update" ]
+- apiGroups: [ "" ]
+  resources: [ "secrets" ]
+  verbs: [ "get", "list" ]
+- apiGroups: [ "" ]
+  resources: [ "persistentvolumeclaims" ]
+  verbs: [ "get", "list", "watch", "update" ]
+- apiGroups: [ "" ]
+  resources: [ "nodes" ]
+  verbs: [ "get", "list", "watch", "update" ]
+- apiGroups: [ "storage.k8s.io" ]
+  resources: [ "volumeattachments" ]
+  verbs: [ "get", "list", "watch", "update" ]
+- apiGroups: [ "storage.k8s.io" ]
+  resources: [ "storageclasses" ]
+  verbs: [ "get", "list", "watch" ]
+- apiGroups: [ "" ]
+  resources: [ "events" ]
+  verbs: [ "list", "watch", "create", "update", "patch" ]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: csi-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: csi-cluster-role
+subjects:
+- kind: ServiceAccount
+  name: csi-service-account
+  namespace: default
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pmem-controller
+spec:
+  type: NodePort
+  selector:
+    app: pmem-csi-controller
+  ports:
+  - port: 10000
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pmem-csi-controller
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pmem-csi-controller
+  serviceName: pmem-csi-controller
+  template:
+    metadata:
+      labels:
+        app: pmem-csi-controller
+    spec:
+      serviceAccount: csi-service-account
+      initContainers:
+      - name: pmem-ns-init
+        imagePullPolicy: Always
+        image: 192.168.8.1:5000/pmem-ns-init:canary
+        args: [ "-v=5", "-namespacesize=9" ]
+        securityContext:
+          privileged: true
+      - name: pmem-vgm
+        imagePullPolicy: Always
+        image: 192.168.8.1:5000/pmem-vgm:canary
+        args: [ "-v=5" ]
+        securityContext:
+          privileged: true
+      containers:
+      - name: pmem-driver
+        image: 192.168.8.1:5000/pmem-csi-driver:canary
+        imagePullPolicy: Always
+        args:  [ "-v=5",
+                 "-drivername=csi-pmem",
+                 "-mode=unified",
+                 "-endpoint=$(CSI_ENDPOINT)",
+                 "-nodeid=$(KUBE_NODE_NAME)" ]
+        env:
+        - name: CSI_ENDPOINT
+          value: "tcp://0.0.0.0:10000"
+        - name: KUBE_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        securityContext:
+          privileged: true

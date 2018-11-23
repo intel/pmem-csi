@@ -428,6 +428,17 @@
   version = "v1.0.1"
 
 [[projects]]
+  digest = "1:f2d2fa10f6cd1ad64274c85f6105947b2966e026aafb997c3f6b7a91a4700664"
+  name = "github.com/kubernetes-csi/csi-test"
+  packages = [
+    "pkg/sanity",
+    "utils",
+  ]
+  pruneopts = "UT"
+  revision = "4107c1c6c44089a96b2f8836242b91cf23947fdf"
+  version = "v0.3.0-4"
+
+[[projects]]
   branch = "master"
   digest = "1:84a5a2b67486d5d67060ac393aa255d05d24ed5ee41daecd5635ec22657b6492"
   name = "github.com/mailru/easyjson"
@@ -1579,6 +1590,7 @@
     "github.com/container-storage-interface/spec/lib/go/csi/v0",
     "github.com/golang/protobuf/proto",
     "github.com/google/uuid",
+    "github.com/kubernetes-csi/csi-test/pkg/sanity",
     "github.com/onsi/ginkgo",
     "github.com/onsi/gomega",
     "golang.org/x/net/context",

@@ -41,6 +41,7 @@ github.com/imdario/mergo;mergo;BSD 3-clause "New" or "Revised" License
 github.com/inconshreveable/mousetrap;inconshreveable mousetrap;Apache License 2.0
 github.com/json-iterator/go;json-iterator go;MIT License
 github.com/konsorten/go-windows-terminal-sequences;go-windows-terminal-sequences;MIT License
+github.com/kubernetes-csi/csi-test;Kubernetes-CSI csi-test;Apache License 2.0
 github.com/mailru/easyjson;Mail.Ru easyjson for golag;MIT License
 github.com/matttproud/golang_protobuf_extensions;Matt Proud golang-protobuf-extentions;Apache License 2.0
 github.com/mitchellh/mapstructure;mapstructure;MIT License
