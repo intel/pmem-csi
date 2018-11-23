@@ -28,6 +28,21 @@ The second stage of initialization arranges physical volumes provided by namespa
 
 After two initialization stages, the third binary _pmem-csi-driver_ starts serving CSI API requests.
 
+### Namespace modes
+
+The PMEM-CSI driver can pre-create Namespaces in two modes, forming corresponding LVM Volume groups, to serve volumes based on `fsdax` or `sector` (alias `safe`) mode Namespaces. The amount of space to be used is determined using two options `-useforfsdax` and `-useforsector` given to _pmem-ns-init_. These options specify an integer presenting limit as percentage, which is applied separately in each Region. The default values are `useforfsdax=100` and `useforsector=0`. A CSI request for volume can specify the Namespace mode using plugin-specific argument `nsmode` having value either "fsdax" or "sector", the default being "fsdax". A volume provisioned in `fsdax` mode will get `dax` option added to mount options.
+
+*NOTE* Currently, the kernel (tested with current latest 4.19.3) overrides ext4-type filesystem `dax` mount option like this:
+```
+[  232.584035] EXT4-fs (dm-0): DAX enabled. Warning: EXPERIMENTAL, use at your own risk
+[  232.584038] EXT4-fs (dm-0): DAX unsupported by block device. Turning off DAX.
+[  232.585125] EXT4-fs (dm-0): mounted filesystem with ordered data mode. Opts: dax
+```
+
+This happens when Volume is provisioned on top of LVM. The override does not happen if a NVDIMM phys.volume is directly formatted and mounted.
+
+The similar override does not happen when volume is formatted as XFS file system.
+
 ### Driver modes
 
 The PMEM-CSI driver supports running in different modes, which can be controlled by passing one of the below options to the driver's '_-mode_' command line option. In each mode it starts a different set of open source Remote Procedure Call (gRPC) [servers](#driver-components) on given driver endpoint(s).
