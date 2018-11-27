@@ -84,13 +84,13 @@ func createNamespaces(ctx *ndctl.Context, namespacesize int, useforfsdax int, us
 	nsSize := (uint64(namespacesize) * 1024 * 1024 * 1024)
 	for _, bus := range ctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
-			createNS(ctx, r, nsSize, useforfsdax, "fsdax")
-			createNS(ctx, r, nsSize, useforsector, "sector")
+			createNS(r, nsSize, useforfsdax, "fsdax")
+			createNS(r, nsSize, useforsector, "sector")
 		}
 	}
 }
 
-func createNS(ctx *ndctl.Context, r *ndctl.Region, nsSize uint64, uselimit int, nsmode ndctl.NamespaceMode) {
+func createNS(r *ndctl.Region, nsSize uint64, uselimit int, nsmode ndctl.NamespaceMode) {
 	// uselimit is the percentage we can use
 	canUse := uint64(uselimit) * r.Size() / 100
 	glog.Infof("Create %s-namespaces in %v, allowed %d %%:\ntotal       : %16d\navail       : %16d\ncan use     : %16d",
@@ -115,7 +115,7 @@ func createNS(ctx *ndctl.Context, r *ndctl.Region, nsSize uint64, uselimit int, 
 			nPossibleNS, nsmode, nsSize, r.DeviceName())
 		for i := 0; i < nPossibleNS; i++ {
 			glog.Infof("Creating namespace %d", i)
-			_, err := ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
+			_, err := r.CreateNamespace(ndctl.CreateNamespaceOpts{
 				Mode: nsmode,
 				Size: nsSize,
 				// TODO: setting mapping location to "mem" avoids use (and problems in qemu env) of pfn
