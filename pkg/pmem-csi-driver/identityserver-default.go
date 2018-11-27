@@ -8,10 +8,10 @@ package pmemcsidriver
 
 import (
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
-	"github.com/golang/glog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"k8s.io/klog/glog"
 )
 
 type DefaultIdentityServer struct {

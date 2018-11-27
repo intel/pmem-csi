@@ -10,8 +10,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/golang/glog"
 	"github.com/google/uuid"
+	"k8s.io/klog/glog"
 )
 
 type RegionType string

@@ -1,4 +1,3 @@
-glog,https://github.com/golang/glog
 Go,https://github.com/golang/go
 golang-protobuf,https://github.com/golang/protobuf
 google uuid,https://github.com/google/uuid

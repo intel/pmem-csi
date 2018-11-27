@@ -4,7 +4,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/golang/glog"
+	"k8s.io/klog/glog"
 )
 
 // RunCommand wrapper around exec.Command()

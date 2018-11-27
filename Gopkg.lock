@@ -10,14 +10,6 @@
   version = "v0.3.0"
 
 [[projects]]
-  branch = "master"
-  digest = "1:1ba1d79f2810270045c328ae5d674321db34e3aae468eb4233883b473c5c0467"
-  name = "github.com/golang/glog"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "23def4e6c14b4da8ac2ed8007337bc5eb5007998"
-
-[[projects]]
   digest = "1:8f0705fa33e8957018611cc81c65cb373b626c092d39931bb86882489fc4c3f4"
   name = "github.com/golang/protobuf"
   packages = [
@@ -131,15 +123,27 @@
   version = "v1.14.0"
 
 [[projects]]
+  branch = "master"
   digest = "1:f5fb6c4c9e14909a66efe7d3e49403234cd52523eb3997c5753a880635e8be2d"
   name = "k8s.io/apimachinery"
   packages = ["pkg/util/sets"]
   pruneopts = "UT"
-  revision = "def12e63c512da17043b4f0293f52d1006603d9f"
-  version = "kubernetes-1.11.3"
+  revision = "4a9a8137c0a17bc4594f544987b3f0d48b2e3d3a"
 
 [[projects]]
-  digest = "1:8f25a47e55a83bfdbb0301fb3908b9a2b0071a067f2eaef6b58d91f14543a793"
+  digest = "1:93153ae93df78ae288f0b601122f2a784df3187c9b3fae45c5960a36b52aa771"
+  name = "k8s.io/klog"
+  packages = [
+    ".",
+    "glog",
+  ]
+  pruneopts = "UT"
+  revision = "a5bc97fbc634d635061f3146511332c7e313a55a"
+  version = "v0.1.0"
+
+[[projects]]
+  branch = "storage-volume-testsuites-avoid-tests"
+  digest = "1:c2f527c8a5afd93da7bce9767c746053a45e7a4d6feb43a256ce085a172019a3"
   name = "k8s.io/kubernetes"
   packages = [
     "pkg/util/file",
@@ -148,8 +152,8 @@
     "pkg/util/nsenter",
   ]
   pruneopts = "UT"
-  revision = "a4529464e4629c21224b3d52edfe0ea91b072862"
-  version = "v1.11.3"
+  revision = "007ebd8e62b39cd982c13bfb798fd21d15ad99ab"
+  source = "github.com/pohly/kubernetes"
 
 [[projects]]
   branch = "master"
@@ -164,7 +168,6 @@
   analyzer-version = 1
   input-imports = [
     "github.com/container-storage-interface/spec/lib/go/csi/v0",
-    "github.com/golang/glog",
     "github.com/golang/protobuf/proto",
     "github.com/google/uuid",
     "golang.org/x/net/context",
@@ -172,6 +175,8 @@
     "google.golang.org/grpc/codes",
     "google.golang.org/grpc/connectivity",
     "google.golang.org/grpc/status",
+    "k8s.io/klog",
+    "k8s.io/klog/glog",
     "k8s.io/kubernetes/pkg/util/mount",
   ]
   solver-name = "gps-cdcl"

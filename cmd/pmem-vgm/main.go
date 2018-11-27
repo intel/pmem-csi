@@ -4,20 +4,20 @@ import (
 	"flag"
 	"strings"
 
-	"github.com/golang/glog"
+	"k8s.io/klog"
+	"k8s.io/klog/glog"
+
 	"github.com/intel/csi-pmem/pkg/ndctl"
 	pmemexec "github.com/intel/csi-pmem/pkg/pmem-exec"
 )
 
-func init() {
-	flag.Set("logtostderr", "true")
-}
-
 func main() {
+	klog.InitFlags(nil)
+	flag.Set("logtostderr", "true")
 	flag.Parse()
 	ctx, err := ndctl.NewContext()
 	if err != nil {
-		glog.Fatalf("Failed to initialize pmem context: %s", err.Error())
+		klog.Fatalf("Failed to initialize pmem context: %s", err.Error())
 	}
 
 	prepareVolumeGroups(ctx)

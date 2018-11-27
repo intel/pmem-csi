@@ -29,26 +29,6 @@
   version = "0.3.0"
 
 [[constraint]]
-  branch = "master"
-  name = "github.com/golang/glog"
-
-# [[constraint]]
-#   name = "github.com/grpc-ecosystem/go-grpc-middleware"
-#   version = "1.0.0"
-
-# [[constraint]]
-#   branch = "master"
-#   name = "github.com/grpc-ecosystem/grpc-opentracing"
-
-# [[constraint]]
-#   name = "github.com/opentracing/opentracing-go"
-#   version = "1.0.2"
-
-# [[constraint]]
-#   name = "github.com/uber/jaeger-client-go"
-#   version = "2.14.0"
-
-[[constraint]]
   name = "github.com/google/uuid"
   version = "1.0.0"
 
@@ -62,4 +42,33 @@
 
 [[constraint]]
   name = "k8s.io/kubernetes"
-  version = "1.11.3"
+  branch = "storage-volume-testsuites-avoid-tests"
+  source = "github.com/pohly/kubernetes"
+
+[[override]]
+  name = "k8s.io/apimachinery"
+  branch = "master"
+[[override]]
+  name = "k8s.io/api"
+  branch = "master"
+[[override]]
+  name = "k8s.io/apiserver"
+  branch = "master"
+[[override]]
+  name = "k8s.io/kube-aggregator"
+  branch = "master"
+[[override]]
+  name = "k8s.io/client-go"
+  branch = "master"
+
+[[override]]
+  # kubernetes/pkg/util/parsers/parsers.go needs the new reference.ParseNormalizedNamed
+  # API call, which isn't yet in any stable release.
+  name = "github.com/docker/distribution"
+  branch = "master"
+
+# This prevents dep from pulling an empty repo for gopkg.in/fsnotify.v1,
+# something that it does not recover from.
+[[override]]
+  name = "gopkg.in/fsnotify.v1"
+  source = "github.com/fsnotify/fsnotify"
