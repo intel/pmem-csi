@@ -1,6 +1,14 @@
 # This file is meant to be sourced into various scripts in this directory and provides
 # some common settings.
 
+# The container runtime that is meant to be used inside Clear Linux.
+# Possible values are "docker" and "crio".
+#
+# Docker is the default for two reasons:
+# - survives killing the VMs while cri-o doesn't (https://github.com/kubernetes-sigs/cri-o/issues/1742#issuecomment-442384980)
+# - Docker mounts /sys read/write while cri-o read-only. csi-pmem needs it in writable state.
+TEST_CRI=docker
+
 # Prefix for network devices etc.
 TEST_PREFIX=csipmem
 
@@ -32,3 +40,10 @@ TEST_MEM_SLOTS=2
 TEST_NORMAL_MEM_SIZE=2048 # 2GB
 TEST_PMEM_MEM_SIZE=32768 # 32GB
 TEST_PMEM_SHARE=on
+
+# allow overriding the configuration in additional file(s)
+if [ -d test/test-config.d ]; then
+    for i in $(ls test/test-config.d/*.sh | sort); do
+        . $i
+    done
+fi

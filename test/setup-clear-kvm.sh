@@ -19,6 +19,34 @@ set -x
 NO_PROXY="$NO_PROXY,${TEST_IP_ADDR}.0/24"
 PROXY_ENV="env 'HTTP_PROXY=$HTTP_PROXY' 'HTTPS_PROXY=$HTTPS_PROXY' 'NO_PROXY=$NO_PROXY'"
 
+bundles="cloud-native-basic ${TEST_CLEAR_LINUX_BUNDLES}"
+
+# containers-basic is needed because of the CNI plugins (https://github.com/clearlinux/distribution/issues/256#issuecomment-440998525)
+# and for Docker.
+bundles="$bundles containers-basic"
+
+kubeadm_args=
+kubeadm_args_init=
+case $TEST_CRI in
+    docker)
+        cri_daemon=docker
+        # [ERROR SystemVerification]: unsupported docker version: 18.06.1
+        kubeadm_args="$kubeadm_args --ignore-preflight-errors=SystemVerification"
+        ;;
+    crio)
+        cri_daemon=cri-o
+        # Needed for CRI-O (https://clearlinux.org/documentation/clear-linux/tutorials/kubernetes).
+        kubeadm_args="$kubeadm_args --cri-socket=/run/crio/crio.sock"
+        ;;
+    *)
+        echo "ERROR: unsupported TEST_CRI=$TEST_CRI"
+        exit 1
+        ;;
+esac
+
+# Needed for flannel (https://clearlinux.org/documentation/clear-linux/tutorials/kubernetes).
+kubeadm_args_init="$kubeadm_args_init --pod-network-cidr 10.244.0.0/16"
+
 # Kills a process and all its children.
 kill_process_tree () {
     name=$1
@@ -115,10 +143,14 @@ setup_clear_img () (
     for addr in $(grep '^ *nameserver ' /etc/resolv.conf  | sed -e 's/nameserver//' -e "s/127.0.0.1/${TEST_IP_ADDR}.1/"); do echo "echo 'DNS=$addr' >>/etc/systemd/network/20-wired.network" >&${COPROC[1]}; done
     echo "systemctl restart systemd-networkd" >&${COPROC[1]}
 
+    # Disable auto-update. An update of Kubernetes would require
+    # manual intervention, and we don't want the updating to interfere
+    # with testing.
+    _work/ssh-clear-kvm.$imagenum swupd autoupdate --disable
+
     # Install Kubernetes and additional bundles.
-    # containers-basic is needed because of the CNI plugins (https://github.com/clearlinux/distribution/issues/256#issuecomment-440998525)
     ( echo "Configuring Kubernetes..." ) 2>/dev/null
-    _work/ssh-clear-kvm.$imagenum "$PROXY_ENV swupd bundle-add cloud-native-basic containers-basic ${TEST_CLEAR_LINUX_BUNDLES}"
+    _work/ssh-clear-kvm.$imagenum "$PROXY_ENV swupd bundle-add $bundles"
     _work/ssh-clear-kvm.$imagenum swupd clean
 
     # Enable IP Forwarding.
@@ -139,6 +171,9 @@ setup_clear_img () (
     _work/ssh-clear-kvm.$imagenum systemctl mask $(_work/ssh-clear-kvm.$imagenum cat /proc/swaps | sed -n -e 's;^/dev/\([0-9a-z]*\).*;dev-\1.swap;p')
     _work/ssh-clear-kvm.$imagenum swapoff -a
 
+    # We put config changes in place for both runtimes, even though only one of them will
+    # be used by Kubernetes, just in case that someone wants to use them manually.
+
     # Proxy settings for CRI-O.
     _work/ssh-clear-kvm.$imagenum mkdir /etc/systemd/system/crio.service.d
     _work/ssh-clear-kvm.$imagenum "cat >/etc/systemd/system/crio.service.d/proxy.conf" <<EOF
@@ -154,6 +189,37 @@ EOF
 registries = [ '${TEST_IP_ADDR}.1:5000' ]
 EOF
 
+    # The same for Docker.
+    _work/ssh-clear-kvm.$imagenum mkdir -p /etc/docker
+    _work/ssh-clear-kvm.$imagenum "cat >/etc/docker/daemon.json" <<EOF
+{ "insecure-registries": ["${TEST_IP_ADDR}.1:5000"] }
+EOF
+
+    # Proxy settings for Docker.
+    _work/ssh-clear-kvm.$imagenum mkdir -p /etc/systemd/system/docker.service.d/
+    _work/ssh-clear-kvm.$imagenum "cat >/etc/systemd/system/docker.service.d/proxy.conf" <<EOF
+[Service]
+Environment="HTTP_PROXY=$HTTP_PROXY" "HTTPS_PROXY=$HTTPS_PROXY" "NO_PROXY=$NO_PROXY"
+EOF
+
+    case $TEST_CRI in
+        docker)
+             # Choose Docker by disabling the use of CRI-O in KUBELET_EXTRA_ARGS.
+            _work/ssh-clear-kvm.$imagenum 'mkdir -p /etc/systemd/system/kubelet.service.d/'
+            _work/ssh-clear-kvm.$imagenum "cat >/etc/systemd/system/kubelet.service.d/extra.conf" <<EOF
+[Service]
+Environment="KUBELET_EXTRA_ARGS="
+EOF
+            ;;
+        crio)
+            # Nothing to do, it is the default in Clear Linux.
+            ;;
+        *)
+            echo "ERROR: unsupported TEST_CRI=$TEST_CRI"
+            exit 1
+            ;;
+    esac
+
     # flannel + CRI-O + Kata Containers needs a crio.conf change (https://clearlinux.org/documentation/clear-linux/tutorials/kubernetes):
     #    If you are using CRI-O and flannel and you want to use Kata Containers, edit the /etc/crio/crio.conf file to add:
     #    [crio.runtime]
@@ -163,7 +229,7 @@ EOF
     # at this time.
 
     # Reconfiguration done, start daemons.
-    _work/ssh-clear-kvm.$imagenum 'systemctl daemon-reload && systemctl restart cri-o kubelet && systemctl enable cri-o kubelet'
+    _work/ssh-clear-kvm.$imagenum "systemctl daemon-reload && systemctl restart $cri_daemon kubelet && systemctl enable $cri_daemon kubelet"
 
     # Run additional code specified by config.
     ${TEST_CLEAR_LINUX_POST_INSTALL:-true} $imagenum
@@ -223,13 +289,7 @@ done 2>/dev/null
 # TODO: it is possible to set up each node in parallel, see
 # https://kubernetes.io/docs/reference/setup-tools/kubeadm/kubeadm-init/#automating-kubeadm
 
-# We use Docker (not default),
-# but have to suppress a version check:
-# [ERROR SystemVerification]: unsupported docker version: 18.06.1
-#
-# --pod-network-cidr 10.244.0.0/16 is needed for flannel (https://clearlinux.org/documentation/clear-linux/tutorials/kubernetes)
-# --cri-socket=/run/crio/crio.sock is for CRI-O (https://clearlinux.org/documentation/clear-linux/tutorials/kubernetes)
-_work/ssh-clear-kvm.0 $PROXY_ENV kubeadm init --pod-network-cidr 10.244.0.0/16 --cri-socket=/run/crio/crio.sock | tee _work/clear-kvm-kubeadm.0.log
+_work/ssh-clear-kvm.0 $PROXY_ENV kubeadm init $kubeadm_args $kubeadm_args_init | tee _work/clear-kvm-kubeadm.0.log
 _work/ssh-clear-kvm.0 mkdir -p .kube
 _work/ssh-clear-kvm.0 cp -i /etc/kubernetes/admin.conf .kube/config
 
@@ -261,7 +321,7 @@ ${TEST_CONFIGURE_POST_MASTER}
 
 # Let the other machines join the cluster.
 for i in $(seq 1 $LAST_NODE); do
-    _work/ssh-clear-kvm.$i $(grep "kubeadm join.*token" _work/clear-kvm-kubeadm.0.log) --ignore-preflight-errors=SystemVerification --cri-socket=/run/crio/crio.sock
+    _work/ssh-clear-kvm.$i $(grep "kubeadm join.*token" _work/clear-kvm-kubeadm.0.log) $kubeadm_args
 done
 
 # From https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/#pod-network
