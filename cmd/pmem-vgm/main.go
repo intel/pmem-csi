@@ -58,8 +58,9 @@ func createVolumesForRegion(r *ndctl.Region, vgName string, nsmode ndctl.Namespa
 		return nil
 	}
 	for _, ns := range nsArray {
-		// consider only namespaces in asked namespacemode
-		if ns.Mode() == ndctl.NamespaceMode(nsmode) {
+		// consider only namespaces in asked namespacemode,
+		// and having name given by this driver, to exclude foreign ones
+		if ns.Mode() == ndctl.NamespaceMode(nsmode) && ns.Name() == "csi-pmem" {
 			devName := "/dev/" + ns.BlockDeviceName()
 			glog.Infof("createVolumesForRegion: %s has nsmode %s", ns.BlockDeviceName(), nsmode)
 			/* check if this pv is already part of a group, if yes ignore this pv

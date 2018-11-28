@@ -98,7 +98,7 @@ func createNS(r *ndctl.Region, nsSize uint64, uselimit int, nsmode ndctl.Namespa
 	// Find sum of sizes of existing active namespaces with currently handled mode
 	var used uint64 = 0
 	for _, ns := range r.ActiveNamespaces() {
-		glog.Infof("createNS: Existing namespace: Size %16d Mode: %v Device:%v", ns.Size(), ns.Mode(), ns.DeviceName())
+		glog.Infof("createNS: Exists: Size %16d Mode:%v Device:%v Name:%v", ns.Size(), ns.Mode(), ns.DeviceName(), ns.Name())
 		if ns.Mode() == nsmode {
 			used += ns.Size() + namespaceOverhead
 		}
@@ -116,6 +116,7 @@ func createNS(r *ndctl.Region, nsSize uint64, uselimit int, nsmode ndctl.Namespa
 		for i := 0; i < nPossibleNS; i++ {
 			glog.Infof("Creating namespace %d", i)
 			_, err := r.CreateNamespace(ndctl.CreateNamespaceOpts{
+				Name: "csi-pmem",
 				Mode: nsmode,
 				Size: nsSize,
 				// TODO: setting mapping location to "mem" avoids use (and problems in qemu env) of pfn
