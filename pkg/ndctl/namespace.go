@@ -32,7 +32,7 @@ const (
 	DaxMode     NamespaceMode = "dax"   //DevDax
 	FsdaxMode   NamespaceMode = "fsdax" //Memory
 	RawMode     NamespaceMode = "raw"
-	SafeMode    NamespaceMode = "safe"
+	SectorMode  NamespaceMode = "sector"
 	UnknownMode NamespaceMode = "unknown"
 )
 
@@ -56,7 +56,7 @@ func (mode NamespaceMode) toCMode() C.enum_ndctl_namespace_mode {
 		return C.NDCTL_NS_MODE_FSDAX
 	case RawMode:
 		return C.NDCTL_NS_MODE_RAW
-	case SafeMode:
+	case SectorMode:
 		return C.NDCTL_NS_MODE_SAFE
 	}
 	return C.NDCTL_NS_MODE_UNKNOWN
@@ -135,7 +135,7 @@ func (ns *Namespace) Size() uint64 {
 		if DaxMode := C.ndctl_namespace_get_dax(ndns); DaxMode != nil {
 			size = C.ndctl_dax_get_size(DaxMode)
 		}
-	case SafeMode:
+	case SectorMode:
 		if btt := C.ndctl_namespace_get_btt(ndns); btt != nil {
 			size = C.ndctl_btt_get_size(btt)
 		}
@@ -164,7 +164,7 @@ func (ns *Namespace) Mode() NamespaceMode {
 	}
 
 	if mode == C.NDCTL_NS_MODE_SAFE {
-		return SafeMode
+		return SectorMode
 	}
 
 	return UnknownMode

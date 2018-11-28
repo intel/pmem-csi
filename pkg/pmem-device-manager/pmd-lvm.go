@@ -31,7 +31,7 @@ func NewPmemDeviceManagerLVM() (PmemDeviceManager, error) {
 		glog.Infof("NewPmemDeviceManagerLVM: Bus: %v", bus.DeviceName())
 		for _, r := range bus.ActiveRegions() {
 			glog.Infof("NewPmemDeviceManagerLVM: Region: %v", r.DeviceName())
-			nsmodes := []string{"fsdax", "sector"}
+			nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
 			for _, nsmod := range nsmodes {
 				vgname := vgName(bus, r, nsmod)
 				if _, err := pmemexec.RunCommand("vgs", vgname); err != nil {
@@ -74,9 +74,9 @@ func (lvm *pmemLvm) GetCapacity() (uint64, error) {
 	return capacity, nil
 }
 
-// nsmode is "fsdax" or "sector"
+// nsmode is expected to be either "fsdax" or "sector"
 func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error {
-	if nsmode != "fsdax" && nsmode != "sector" {
+	if nsmode != string(ndctl.FsdaxMode) && nsmode != string(ndctl.SectorMode) {
 		return fmt.Errorf("Unknown nsmode(%v)", nsmode)
 	}
 	// pick a region, few possible strategies:
@@ -155,8 +155,8 @@ func (lvm *pmemLvm) ListDevices() ([]PmemDeviceInfo, error) {
 	return parseLVSOuput(output)
 }
 
-func vgName(bus *ndctl.Bus, region *ndctl.Region, nsmode string) string {
-	return bus.DeviceName() + region.DeviceName() + nsmode
+func vgName(bus *ndctl.Bus, region *ndctl.Region, nsmode ndctl.NamespaceMode) string {
+	return bus.DeviceName() + region.DeviceName() + string(nsmode)
 }
 
 func flushDevice(dev PmemDeviceInfo) error {

@@ -33,7 +33,7 @@ func prepareVolumeGroups(ctx *ndctl.Context) {
 		glog.Infof("CheckVG: Bus: %v", bus.DeviceName())
 		for _, r := range bus.ActiveRegions() {
 			glog.Infof("Region: %v", r.DeviceName())
-			nsmodes := []string{"fsdax", "sector"}
+			nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
 			for _, nsmod := range nsmodes {
 				glog.Infof("NsMode: %v", nsmod)
 				vgName := vgName(bus, r, nsmod)
@@ -45,11 +45,11 @@ func prepareVolumeGroups(ctx *ndctl.Context) {
 	}
 }
 
-func vgName(bus *ndctl.Bus, region *ndctl.Region, nsmode string) string {
-	return bus.DeviceName() + region.DeviceName() + nsmode
+func vgName(bus *ndctl.Bus, region *ndctl.Region, nsmode ndctl.NamespaceMode) string {
+	return bus.DeviceName() + region.DeviceName() + string(nsmode)
 }
 
-func createVolumesForRegion(r *ndctl.Region, vgName string, nsmode string) error {
+func createVolumesForRegion(r *ndctl.Region, vgName string, nsmode ndctl.NamespaceMode) error {
 	cmd := ""
 	cmdArgs := []string{"--force", vgName}
 	nsArray := r.ActiveNamespaces()
@@ -87,6 +87,6 @@ func createVolumesForRegion(r *ndctl.Region, vgName string, nsmode string) error
 		return err
 	}
 	// Tag add works without error if repeated, so it is safe to run without checking for existing
-	_, err = pmemexec.RunCommand("vgchange", "--addtag", nsmode, vgName)
+	_, err = pmemexec.RunCommand("vgchange", "--addtag", string(nsmode), vgName)
 	return err
 }

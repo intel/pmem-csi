@@ -84,8 +84,8 @@ func createNamespaces(ctx *ndctl.Context, namespacesize int, useforfsdax int, us
 	nsSize := (uint64(namespacesize) * 1024 * 1024 * 1024)
 	for _, bus := range ctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
-			createNS(r, nsSize, useforfsdax, "fsdax")
-			createNS(r, nsSize, useforsector, "sector")
+			createNS(r, nsSize, useforfsdax, ndctl.FsdaxMode)
+			createNS(r, nsSize, useforsector, ndctl.SectorMode)
 		}
 	}
 }

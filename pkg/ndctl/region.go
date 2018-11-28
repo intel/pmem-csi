@@ -127,7 +127,7 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 		if opts.Type == PmemNamespace {
 			opts.Mode = FsdaxMode // == MemoryMode
 		} else {
-			opts.Mode = SafeMode
+			opts.Mode = SectorMode
 		}
 	}
 	if opts.Location == "" {
@@ -135,7 +135,7 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 	}
 
 	if opts.SectorSize == 0 {
-		if opts.Type == BlockNamespace || opts.Mode == SafeMode {
+		if opts.Type == BlockNamespace || opts.Mode == SectorMode {
 			// default sector size for blk-type or safe-mode
 			opts.SectorSize = kib4
 		}
@@ -168,7 +168,7 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 	}
 
 	if opts.Align != 0 {
-		if opts.Mode == SafeMode || opts.Mode == RawMode {
+		if opts.Mode == SectorMode || opts.Mode == RawMode {
 			glog.Infof("%s mode does not support setting an alignment, hence ignoring alignment", opts.Mode)
 		} else {
 			resource := uint64(C.ndctl_region_get_resource(ndr))
@@ -230,7 +230,7 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 		case DaxMode:
 			glog.Infof("setting dax")
 			err = ns.setDaxSeed(opts.Location, uint64(opts.Align))
-		case SafeMode:
+		case SectorMode:
 			glog.Infof("setting btt")
 			err = ns.setBttSeed(opts.SectorSize)
 		}
