@@ -209,7 +209,7 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 		if err == nil {
 			err = ns.SetSize(opts.Size)
 		}
-		if err == nil && opts.Name == "" {
+		if err == nil && opts.Name != "" {
 			err = ns.SetAltName(opts.Name)
 		}
 	}
