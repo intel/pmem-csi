@@ -129,10 +129,8 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 					eraseafter = false
 				}
 			} else if key == "nsmode" {
-				if val == "fsdax" {
-					nsmode = "fsdax"
-				} else if val == "sector" {
-					nsmode = "sector"
+				if val == "fsdax" || val == "sector" {
+					nsmode = val
 				}
 			}
 		}
