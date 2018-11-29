@@ -172,8 +172,8 @@ This runs two preparation parts, and starts the driver binary, which listens and
 - **Label the cluster nodes that have NVDIMM support**
 
 ```sh
-    $ kubectl label node pmem-csi-4 storage=nvdimm
-    $ kubectl label node pmem-csi-5 storage=nvdimm
+    $ kubectl label node pmem-csi-4 storage=pmem
+    $ kubectl label node pmem-csi-5 storage=pmem
 ```
 
 - **Deploy the driver to Kubernetes**
@@ -210,8 +210,8 @@ This runs two preparation parts, and starts the driver binary, which listens and
 **Notes:**
 
 * The images registry address in the manifest is not final and may need tuning.
-* A label **storage: nvdimm** needs to be added to the cluster node that provides NVDIMM device(s).
-* The application should add **storage: nvdimm** to its <i>nodeSelector</i> list.
+* A label **storage: pmem** needs to be added to the cluster node that provides NVDIMM device(s).
+* The application should add **storage: pmem** to its <i>nodeSelector</i> list.
 
 
 ## Test plugin

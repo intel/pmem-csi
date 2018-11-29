@@ -134,7 +134,7 @@ spec:
     spec:
       serviceAccount: csi-service-account
       nodeSelector:
-        storage: nvdimm
+        storage: pmem
       hostNetwork: true
       initContainers:
       - name: pmem-ns-init

@@ -21,7 +21,7 @@ var (
 	/* generic options */
 	//TODO: reading name configuration not yet supported
 	//configFile    = flag.String("configfile", "/etc/csi-pmem/config", "PMEM CSI driver namespace configuration file")
-	namespacesize = flag.Int("namespacesize", 32, "NVDIMM namespace size in GB")
+	namespacesize = flag.Int("namespacesize", 32, "Namespace size in GB")
 	useforfsdax   = flag.Int("useforfsdax", 100, "Percentage of total to use in Fsdax mode")
 	useforsector  = flag.Int("useforsector", 0, "Percentage of total to use in Sector mode")
 )
