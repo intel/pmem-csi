@@ -11,7 +11,7 @@ spec:
       - mountPath: "/data"
         name: my-csi-volume
   nodeSelector:
-    storage: nvdimm
+    storage: pmem
   volumes:
   - name: my-csi-volume
     persistentVolumeClaim:
