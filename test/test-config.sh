@@ -16,6 +16,12 @@ TEST_PREFIX=csipmem
 # as NAT gateway. Even numbers are for the guests (.2, .4, ...).
 TEST_IP_ADDR=192.168.8
 
+# IP addresses of DNS servers to use inside the VMs, separated by spaces.
+# The default is to use the ones specified in /etc/resolv.conf, but those
+# might not be reachable from inside the VMs (like for example, 127.0.0.53
+# from systemd-network).
+TEST_DNS_SERVERS=
+
 # Additional Clear Linux bundles.
 TEST_CLEAR_LINUX_BUNDLES=""
 
