@@ -228,8 +228,9 @@ EOF
     # We don't use Kata Containers, so that particular change is not made to /etc/crio/crio.conf
     # at this time.
 
-    # Reconfiguration done, start daemons.
-    _work/ssh-clear-kvm.$imagenum "systemctl daemon-reload && systemctl restart $cri_daemon kubelet && systemctl enable $cri_daemon kubelet"
+    # Reconfiguration done, start daemons. Starting kubelet must wait until kubeadm has created
+    # the necessary config files.
+    _work/ssh-clear-kvm.$imagenum "systemctl daemon-reload && systemctl restart $cri_daemon && systemctl enable $cri_daemon kubelet"
 
     # Run additional code specified by config.
     ${TEST_CLEAR_LINUX_POST_INSTALL:-true} $imagenum
