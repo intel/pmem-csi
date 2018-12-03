@@ -202,6 +202,14 @@ EOF
 Environment="HTTP_PROXY=$HTTP_PROXY" "HTTPS_PROXY=$HTTPS_PROXY" "NO_PROXY=$NO_PROXY"
 EOF
 
+    # Disable the use of Kata containers as default runtime in Docker.
+    # The Kubernetes control plan (apiserver, etc.) fails to run otherwise
+    # ("Host networking requested, not supported by runtime").
+    _work/ssh-clear-kvm.$imagenum "cat >/etc/systemd/system/docker.service.d/51-runtime.conf" <<EOF
+[Service]
+Environment="DOCKER_DEFAULT_RUNTIME=--default-runtime runc"
+EOF
+
     case $TEST_CRI in
         docker)
              # Choose Docker by disabling the use of CRI-O in KUBELET_EXTRA_ARGS.
