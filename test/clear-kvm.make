@@ -51,7 +51,6 @@ CLEAR_IMG_VERSION = $(shell curl https://download.clearlinux.org/latest)
 DOWNLOAD_CLEAR_IMG = true
 DOWNLOAD_CLEAR_IMG += && mkdir -p _work
 DOWNLOAD_CLEAR_IMG += && cd _work
-DOWNLOAD_CLEAR_IMG += && dd if=/dev/random bs=1 count=8 2>/dev/null | od -A n -t x8 | sed -e 's/ //g' >passwd
 DOWNLOAD_CLEAR_IMG += && version=$(CLEAR_IMG_VERSION)
 DOWNLOAD_CLEAR_IMG += && [ "$$version" ]
 DOWNLOAD_CLEAR_IMG += && curl -O https://download.clearlinux.org/releases/$$version/clear/clear-$$version-kvm.img.xz
@@ -72,7 +71,7 @@ NUM_NODES = 4
 # kubernetes-0/1/2/.... The first image is for the Kubernetes master node,
 # but configured so that also normal apps can run on it, i.e. no additional
 # worker nodes are needed.
-_work/clear-kvm.img: test/setup-clear-kvm.sh _work/clear-kvm-original.img _work/kube-clear-kvm _work/OVMF.fd _work/start-clear-kvm _work/id
+_work/clear-kvm.img: test/setup-clear-kvm.sh _work/clear-kvm-original.img _work/kube-clear-kvm _work/OVMF.fd _work/start-clear-kvm _work/id _work/passwd
 	$(PROXY_ENV) test/setup-clear-kvm.sh $(NUM_NODES)
 	ln -sf clear-kvm.0.img $@
 
@@ -81,6 +80,32 @@ _work/start-clear-kvm: test/start_qemu.sh
 	cp $< $@
 	sed -i -e "s;\(OVMF.fd\);$$(pwd)/_work/\1;g" $@
 	chmod a+x $@
+
+# Generate a random password. Converting a random binary to hex still
+# had many repetitive or adjacent characters, which was flagged as
+# insecure by the pwquality-tools password check in Clear Linux. Now
+# we generate a wider range of printable characters (one at a time,
+# to avoid depleting the entropy pool) and in addition apply the same
+# quality check if pwscore is installed.
+_work/passwd:
+	while true; do \
+		rm -f $@; \
+		len=0; \
+		while [ $$len -lt 32 ]; do \
+			c=$$(dd if=/dev/urandom bs=1 count=1 2>/dev/null| tr -dc _A-Z-a-z-0-9); \
+			if [ "$$c" ]; then \
+				echo -n "$$c" >>$@; \
+				len=$$(($$len + 1)); \
+			fi; \
+		done; \
+		if command -v pwscore >/dev/null; then \
+			if pwscore <$@ >/dev/null; then \
+				break; \
+			fi; \
+		else \
+			break; \
+		fi; \
+	done
 
 _work/kube-clear-kvm: test/start_kubernetes.sh
 	mkdir -p _work
