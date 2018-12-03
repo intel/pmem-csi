@@ -214,7 +214,7 @@ EOF
         docker)
              # Choose Docker by disabling the use of CRI-O in KUBELET_EXTRA_ARGS.
             _work/ssh-clear-kvm.$imagenum 'mkdir -p /etc/systemd/system/kubelet.service.d/'
-            _work/ssh-clear-kvm.$imagenum "cat >/etc/systemd/system/kubelet.service.d/extra.conf" <<EOF
+            _work/ssh-clear-kvm.$imagenum "cat >/etc/systemd/system/kubelet.service.d/10-kubeadm.conf" <<EOF
 [Service]
 Environment="KUBELET_EXTRA_ARGS="
 EOF
