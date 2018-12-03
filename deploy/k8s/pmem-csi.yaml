@@ -1,11 +1,3 @@
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: csi-pmem-sc
-provisioner: csi-pmem
-reclaimPolicy: Delete
-volumeBindingMode: Immediate
----
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -63,10 +55,8 @@ spec:
   - port: 10000
 ---
 apiVersion: apps/v1
-kind: ReplicaSet
+kind: StatefulSet
 metadata:
-  labels:
-    app: pmem-csi-controller
   name: pmem-csi-controller
   namespace: default
 spec:
@@ -74,6 +64,7 @@ spec:
   selector:
     matchLabels:
       app: pmem-csi-controller
+  serviceName: pmem-controller
   template:
     metadata:
       labels:
@@ -101,7 +92,7 @@ spec:
         - name: ADDRESS
           value: "0.0.0.0:10000"
       - name: pmem-driver
-        image: avalluriGigabyte.fi.intel.com/pmem-csi-driver:canary
+        image: 192.168.8.1:5000/pmem-csi-driver:canary
         imagePullPolicy: Always
         args:  [ "-v=5",
                  "-drivername=csi-pmem",
@@ -139,13 +130,13 @@ spec:
       initContainers:
       - name: pmem-ns-init
         imagePullPolicy: Always
-        image: avalluriGigabyte.fi.intel.com/pmem-ns-init:canary
+        image: 192.168.8.1:5000/pmem-ns-init:canary
         args: [ "-v=5", "-namespacesize=9" ]
         securityContext:
           privileged: true
       - name: pmem-vgm
         imagePullPolicy: Always
-        image: avalluriGigabyte.fi.intel.com/pmem-vgm:canary
+        image: 192.168.8.1:5000/pmem-vgm:canary
         args: [ "-v=5" ]
         securityContext:
           privileged: true
@@ -171,7 +162,7 @@ spec:
         #
       - name: pmem-driver
         imagePullPolicy: Always
-        image: avalluriGigabyte.fi.intel.com/pmem-csi-driver:canary
+        image: 192.168.8.1:5000/pmem-csi-driver:canary
         args: [ "-v=5",
                   "-drivername=csi-pmem",
                   "-mode=node",

@@ -12,12 +12,10 @@ import (
 	"fmt"
 	"os"
 
+	"k8s.io/klog"
+
 	"github.com/intel/csi-pmem/pkg/pmem-csi-driver"
 )
-
-func init() {
-	flag.Set("logtostderr", "true")
-}
 
 var (
 	/* generic options */
@@ -32,6 +30,8 @@ var (
 )
 
 func main() {
+	klog.InitFlags(nil)
+	flag.Set("logtostderr", "true")
 	flag.Parse()
 
 	driver, err := pmemcsidriver.GetPMEMDriver(pmemcsidriver.Config{

@@ -11,9 +11,9 @@ import (
 	// "fmt"
 	"io"
 
-	"github.com/golang/glog"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"k8s.io/klog/glog"
 	// "github.com/opentracing/opentracing-go"
 	// otlog "github.com/opentracing/opentracing-go/log"
 	// jaegercfg "github.com/uber/jaeger-client-go/config"

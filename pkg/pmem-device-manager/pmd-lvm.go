@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/golang/glog"
 	"github.com/intel/csi-pmem/pkg/ndctl"
 	pmemexec "github.com/intel/csi-pmem/pkg/pmem-exec"
+	"k8s.io/klog/glog"
 )
 
 type pmemLvm struct {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/glog"
+	"k8s.io/klog/glog"
 	// "github.com/grpc-ecosystem/go-grpc-middleware"
 	// "github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	// "github.com/opentracing/opentracing-go"

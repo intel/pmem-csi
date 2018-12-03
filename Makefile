@@ -73,6 +73,10 @@ fmt:
 
 .PHONY: all test clean pmem-csi-driver pmem-ns-init pmem-vgm
 
+# Add support for creating and booting a cluster under QEMU.
+include test/clear-kvm.make
+include test/start-stop.make
+
 # This ensures that the vendor directory and vendor-bom.csv are in sync
 # at least as far as the listed components go.
 .PHONY: test_vendor_bom
@@ -142,3 +146,10 @@ RUNTIME_DEPS += sed \
 
 # Ignore duplicates.
 RUNTIME_DEPS += sort -u
+
+# E2E testing relies on a running QEMU test cluster. It therefore starts it,
+# but because it might have been running already and might have to be kept
+# running to debug test failures, it doesn't stop it
+.PHONY: test_e2e
+test_e2e: start
+	KUBECONFIG=`pwd`/_work/clear-kvm-kube.config REPO_ROOT=`pwd` go test -timeout 0 ./test/e2e

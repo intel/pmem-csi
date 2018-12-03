@@ -1,0 +1,43 @@
+#!/bin/bash
+#
+# QEMU network configuration script to bring down OIM tap devices.
+#
+# Copyright (c) 2006-2011 Linux Foundation
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License version 2 as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+usage() {
+	echo "$(basename $0)"
+}
+
+if [ $# -ne 0 ]; then
+	usage
+	exit 1
+fi
+
+. $(dirname $0)/test-config.sh
+
+BR=${TEST_PREFIX}br0
+
+for TAP in $(ip tuntap show | sed -e 's/:.*//' | grep ^${TEST_PREFIX}tap); do
+    sudo ip link del $TAP
+
+    i=$(echo $TAP | sed "s/${TEST_PREFIX}tap//")
+    n=$(( $i * 2 + 1 ))
+    dest=$(( $i * 2 + 2 ))
+    sudo iptables -D POSTROUTING -t nat -j MASQUERADE -s ${TEST_IP_ADDR}.$dest/32
+done
+
+sudo iptables -D POSTROUTING -t nat -j MASQUERADE -s ${TEST_IP_ADDR}.1/32
+sudo ip link del $BR

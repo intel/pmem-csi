@@ -18,10 +18,10 @@ import (
 	"google.golang.org/grpc/status"
 	"k8s.io/kubernetes/pkg/util/mount"
 
-	"github.com/golang/glog"
 	"github.com/intel/csi-pmem/pkg/pmem-common"
 	pmdmanager "github.com/intel/csi-pmem/pkg/pmem-device-manager"
 	pmemexec "github.com/intel/csi-pmem/pkg/pmem-exec"
+	"k8s.io/klog/glog"
 )
 
 type nodeServer struct {

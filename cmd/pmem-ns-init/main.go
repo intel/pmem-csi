@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/golang/glog"
+	"k8s.io/klog"
+	"k8s.io/klog/glog"
+
 	"github.com/intel/csi-pmem/pkg/ndctl"
 )
 
@@ -26,11 +28,9 @@ var (
 	useforsector  = flag.Int("useforsector", 0, "Percentage of total to use in Sector mode")
 )
 
-func init() {
-	flag.Set("logtostderr", "true")
-}
-
 func main() {
+	klog.InitFlags(nil)
+	flag.Set("logtostderr", "true")
 	flag.Parse()
 	ctx, err := ndctl.NewContext()
 	if err != nil {

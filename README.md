@@ -147,16 +147,10 @@ Use the command: `git clone https://github.com/otcshare/Pmem-CSI csi-pmem`
 
 2.  Use `make build-images` to produce Docker container images.
 
-3.  Use `make push-images` to push Docker container images to the Docker images registry.
+3.  Use `make push-images` to push Docker container images to a Docker images registry. The
+    default is to push to a local [Docker registry](https://docs.docker.com/registry/deploying/).
 
 See the [Makefile](Makefile) for additional make targets and possible make variables.
-
-### Verify socket
-
-Verify that the driver listens on the specified endpoint (Unix or TCP socket) with the command:
-`netstat -l`
-
-This command assumes that netstat is present in the system.
 
 ### Run plugin
 
@@ -169,17 +163,36 @@ This runs two preparation parts, and starts the driver binary, which listens and
 
 #### Run as Kubernetes deployment
 
+This section assumes that a Kubernetes cluster is already available
+with at least one node that has NVDIMM device(s). For development or
+testing it is also possible to use a cluster that runs on QEMU virtual
+machines, see the ["End-to-end testing"](#end-to-end-testing) section below.
+
 - **Label the cluster nodes that have NVDIMM support**
 
 ```sh
     $ kubectl label node pmem-csi-4 storage=pmem
-    $ kubectl label node pmem-csi-5 storage=pmem
 ```
+
+The label **storage: pmem** needs to be added to the cluster node that provides NVDIMM device(s).
+
+Clusters with multiple nodes with NVDIMM are not fully supported at the moment. Support for this will
+be added when making the CSI driver topology-aware.
 
 - **Deploy the driver to Kubernetes**
 
 ```sh
-    $ kubectl create -f deploy/k8s/pmem-csi.yaml
+    $ sed -e 's/192.168.8.1:5000/<your registry>/` deploy/k8s/pmem-csi.yaml | kubectl create -f -
+```
+
+This yaml file uses the registry address for the QEMU test cluster
+setup (see below). When deploying on a real cluster, some registry
+that can be accessed by that cluster has to be used.
+
+- **Define a storage class using the driver**
+
+```sh
+    $ kubectl create -f deploy/k8s/pmem-storageclass.yaml
 ```
 
 - **Provision a csi-pmem volume**
@@ -194,6 +207,9 @@ This runs two preparation parts, and starts the driver binary, which listens and
     $ kubectl create -f deploy/k8s/pmem-app.yaml
 ```
 
+The application uses **storage: pmem** in its <i>nodeSelector</i>
+list to ensure that it runs on the right node.
+
 - **Once the application pod is in 'Running' status, provision it with a pmem volume**
 
 ```sh
@@ -207,16 +223,54 @@ This runs two preparation parts, and starts the driver binary, which listens and
                            8191416     36852   7718752   0% /data
 ```
 
-**Notes:**
+<!-- FILL TEMPLATE:
 
-* The images registry address in the manifest is not final and may need tuning.
-* A label **storage: pmem** needs to be added to the cluster node that provides NVDIMM device(s).
-* The application should add **storage: pmem** to its <i>nodeSelector</i> list.
+### How to extend the plugin
+
+You can modify the plugin to support more xxx by changing the `variable` from Y to Z.
 
 
-## Test plugin
+## Maintenance
 
-### Run tests using make
+* Known limitations
+* What is supported and what isn't supported
+    * Disclaimer that nothing is supported with any kind of SLA
+* Example configuration for target use case
+* How to upgrade
+* Upgrade cadence
+
+
+## Troubleshooting
+
+* If you see this error, then enter this command `blah`.
+-->
+
+
+## Communication and contribution
+
+Report a bug by [filing a new issue](https://github.com/otcshare/Pmem-CSI/issues).
+
+Contribute by [opening a pull request](https://github.com/otcshare/Pmem-CSI/pulls).
+
+Learn [about pull requests](https://help.github.com/articles/using-pull-requests/).
+
+<!-- FILL TEMPLATE:
+Contact the development team (*TBD: slack or email?*)
+
+
+## References
+
+Pointers to other useful documentation.
+
+* Upstream documentation of [device plugins](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/).
+* Video tutorial
+    * Simple youtube style. Demo installation following steps in readme.
+      Useful to show relevant paths. Helps with troubleshooting.
+-->
+
+## Automated testing
+
+### Unit testing and code quality
 
 1. Use the `make test` command.
 
@@ -251,52 +305,134 @@ These utilities are needed as used by scripts residing in `util/` directory:
 - [csc](http://github.com/rexray/gocsi) v0.5.0
 - [csi-sanity](http://github.com/kubernetes-csi/csi-test) v0.2.0-1-95-g3bc4135
 
-<!-- FILL TEMPLATE:
+### End-to-end testing (E2E)
 
-## Use plugin in your application
+#### QEMU + Kubernetes
 
-[comment]: # (See the NVIDIA GPU example -> TensorFlow Jupyter Notebook)
-1. Use the `blah` command.
+E2E testing relies on a cluster running inside multiple QEMU virtual
+machines. This is known to work on a Linux development host system.
+The `qemu-system-x86_64` binary must be installed, either from
+[upstream QEMU](https://www.qemu.org/) or the Linux distribution.
 
+For networking, the `ip` tool from the `iproute2` package must be
+installed. The following command must be run once after booting the
+host machine and before starting the virtual machine:
 
-### How to extend the plugin
+    test/runqemu-ifup 4
 
-You can modify the plugin to support more xxx by changing the `variable` from Y to Z.
+This configures four tap devices for use by the current user. At the
+moment, the test setup is hard-coded to use:
 
+- `pmemtap0/1/2/3`
+- `pmembr0`
+- 192.168.7.1 for the build host side of the bridge interfaces
+- 192.168.7.2/4/6/8 for the virtual machines
+- the same DNS server for the virtual machines as on the development
+  host
 
-## Maintenance
+To undo the configuration changes made by `test/runqemu-ifup` when
+the tap device is no longer needed, run:
 
-* Known limitations
-* What is supported and what isn't supported
-    * Disclaimer that nothing is supported with any kind of SLA
-* Example configuration for target use case
-* How to upgrade
-* Upgrade cadence
+    test/runqemu-ifdown
 
+KVM must be enabled and the user must be allowed to use it. Usually this
+is done by adding the user to the `kvm` group. The
+["Install QEMU-KVM"](https://clearlinux.org/documentation/clear-linux/get-started/virtual-machine-install/kvm)
+section in the Clear Linux documentation contains further information
+about enabling KVM and installing QEMU.
 
-## Troubleshooting
+To ensure that QEMU and KVM are working, run this:
 
-* If you see this error, then enter this command `blah`.
--->
+    make _work/clear-kvm-original.img _work/start-clear-kvm _work/OVMF.fd
+    cp _work/clear-kvm-original.img _work/clear-kvm-test.img
+    _work/start-clear-kvm _work/clear-kvm-test.img
 
-## Communication and contribution
+The result should be login prompt like this:
 
-Report a bug by [filing a new issue](https://github.com/otcshare/Pmem-CSI/issues).
+    [    0.049839] kvm: no hardware support
+    
+    clr-c3f99095d2934d76a8e26d2f6d51cb91 login: 
 
-Contribute by [opening a pull request](https://github.com/otcshare/Pmem-CSI/pulls).
+The message about missing KVM hardware support comes from inside the
+virtual machine and indicates that nested KVM is not enabled. This can
+be ignored because it is not needed.
 
-Learn [about pull requests](https://help.github.com/articles/using-pull-requests/).
+Now the running QEMU can be killed and the test image removed again:
 
-<!-- FILL TEMPLATE:
-Contact the development team (*TBD: slack or email?*)
+    killall qemu-system-x86_64 # in a separate shell
+    rm _work/clear-kvm-test.img
+    reset # Clear Linux changes terminal colors, undo that.
 
+The `clear-kvm` images are prepared automatically by the Makefile. By
+default, four different images are prepared, each pre-configured with
+its own hostname and with network settings for the corresponding `tap`
+device. `clear-kvm.img` is a symlink to the `clear-kvm.0.img` where
+the Kubernetes master node will run.
 
-## References
+The images will contain the latest
+[Clear Linux OS](https://clearlinux.org/) and have the Kubernetes
+version supported by Clear Linux installed.
 
-Pointers to other useful documentation.
+#### Starting and stopping a test cluster
 
-* Upstream documentation of [device plugins](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/).
-* Video tutorial
-    * Simple youtube style. Demo installation following steps in readme.
-      Useful to show relevant paths. Helps with troubleshooting.
--->
+`make start` will bring up a Kubernetes test cluster inside four QEMU
+virtual machines.  It can be called multiple times in a row and will
+attempt to bring up missing pieces each time it is invoked.
+
+Once it completes, everything is ready for interactive use via
+`kubectl` inside the virtual machine. Alternatively one can also
+set `KUBECONFIG` as shown at the end of the `make start` output
+and use a local `kubectl` binary.
+
+The first node is the Kubernetes master without NVDIMM, the other
+three are worker nodes with one 32GB NVDIMM each. The worker nodes
+have already been labeled with `storage=nvdimm`, but the csi-pmem
+driver still needs to be installed manually as shown in
+["Run as Kubernetes deployment"](#run-as-kubernetes-deployment). If
+the Docker registry runs on the local development host, then the `sed`
+command which replaces the Docker registry is not needed.
+
+Once done, `make stop` will clean up the cluster and shut everything down.
+
+#### Running E2E tests
+
+`make test_e2e` will run
+[csi-test sanity](https://github.com/kubernetes-csi/csi-test/tree/master/pkg/sanity)
+tests and some
+[Kubernetes storage tests](https://github.com/kubernetes/kubernetes/tree/master/test/e2e/storage/testsuites)
+against the csi-pmem driver.
+
+The driver will get deployed automatically and thus must not be
+installed yet on the cluster.
+
+When [ginkgo](https://onsi.github.io/ginkgo/) is installed, then it
+can be used to run individual tests and to control additional aspects
+of the test run. For example, to run just the E2E provisioning test
+(create PVC, write data in one pod, read it in another) in verbose mode:
+
+``` sh
+$ KUBECONFIG=$(pwd)/_work/clear-kvm-kube.config REPO_ROOT=$(pwd) ginkgo -v -focus=csi-pmem.*should.provision.storage.with.defaults ./test/e2e/
+Nov 26 11:21:28.805: INFO: The --provider flag is not set.  Treating as a conformance test.  Some tests may not be run.
+Running Suite: PMEM E2E suite
+=============================
+Random Seed: 1543227683 - Will randomize all specs
+Will run 1 of 61 specs
+
+Nov 26 11:21:28.812: INFO: checking config
+Nov 26 11:21:28.812: INFO: >>> kubeConfig: /nvme/gopath/src/github.com/intel/csi-pmem/_work/clear-kvm-kube.config
+Nov 26 11:21:28.817: INFO: Waiting up to 30m0s for all (but 0) nodes to be schedulable
+...
+Ran 1 of 61 Specs in 58.465 seconds
+SUCCESS! -- 1 Passed | 0 Failed | 0 Pending | 60 Skipped
+PASS
+
+Ginkgo ran 1 suite in 1m3.850672246s
+Test Suite Passed
+```
+
+It is also possible to run just the sanity tests until one of them fails:
+
+``` sh
+$ REPO_ROOT=`pwd` ginkgo '-focus=sanity' -failFast ./test/e2e/
+...
+```
