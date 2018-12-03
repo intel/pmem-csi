@@ -16,7 +16,7 @@ set -x
 # Source additional configuration and commands.
 . $(dirname $0)/test-config.sh
 
-NO_PROXY="$NO_PROXY,${TEST_IP_ADDR}.0/24"
+NO_PROXY="$NO_PROXY,${TEST_IP_ADDR}.0/24,10.96.0.0/12,10.244.0.0/16"
 PROXY_ENV="env 'HTTP_PROXY=$HTTP_PROXY' 'HTTPS_PROXY=$HTTPS_PROXY' 'NO_PROXY=$NO_PROXY'"
 
 bundles="cloud-native-basic ${TEST_CLEAR_LINUX_BUNDLES}"
