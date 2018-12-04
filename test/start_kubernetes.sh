@@ -5,7 +5,7 @@
 SSH 'systemctl start crio kubelet'
 
 cnt=0
-while [ $cnt -lt 60 ]; do
+while [ $cnt -lt 300 ]; do
     if SSH kubectl get nodes >/dev/null 2>/dev/null; then
         exit 0
     fi
