@@ -43,6 +43,10 @@ This happens when Volume is provisioned on top of LVM. The override does not hap
 
 The similar override does not happen when volume is formatted as XFS file system.
 
+### Using limited amount of total space
+
+The PMEM-CSI driver can leave space on devices for others, and recognize "own" namespaces. Leaving space for others can be achieved by specifying lower-than-100 values to `-useforfsdax` and/or `-useforsector` options, The distinction "own" vs. "foreign" is implemented by setting _Name_ field in Namespace to static string "csi-pmem" during Namespace creation. Only those Physical Volumes which are based on Namespaces having name "csi-pmem" are considered when adding Physical Volumes to Volume Groups.
+
 ### Driver modes
 
 The PMEM-CSI driver supports running in different modes, which can be controlled by passing one of the below options to the driver's '_-mode_' command line option. In each mode it starts a different set of open source Remote Procedure Call (gRPC) [servers](#driver-components) on given driver endpoint(s).
