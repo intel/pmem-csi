@@ -2,13 +2,23 @@
 
 # Intel PMEM-CSI plugin for Kubernetes
 
+## Table of Contents
+
+- [About](#about)
+- [Design](#design)
+- [Prerequisites](#prerequisites)
+- [Supported Kubernetes versions](#supported-kubernetes-versions)
+- [Setup](#setup)
+- [Automated testing](#automated-testing)
+- [Communication and contribution](#communication-and-contribution)
+
 ## About
 
 ---
 *Note: This is Alpha code and not production ready.*
 ---
 
-This [Kubernetes plugin](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/resource-management/device-plugin.md) is a Persistent Memory Container Storage Interface (PMEM-CSI) driver for provisioning of node-local non-volatile memory to Kubernetes as block devices. The driver can currently utilize non-volatile memory devices which can be controlled via [libndctl utility library](https://github.com/pmem/ndctl).
+This [Kubernetes plugin](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/resource-management/device-plugin.md) is a Persistent Memory Container Storage Interface (PMEM-CSI) driver for provisioning of node-local non-volatile memory to Kubernetes as block devices. The driver can currently utilize non-volatile memory devices that can be controlled via the [libndctl utility library](https://github.com/pmem/ndctl). In this readme, we use *persistent memory* to refer to a non-volatile dual in-line memory module (NVDIMM).
 
 The PMEM-CSI driver follows the [CSI specification](https://github.com/container-storage-interface/spec) by listening for API requests and provisioning volumes accordingly.
 
@@ -17,47 +27,47 @@ The PMEM-CSI driver follows the [CSI specification](https://github.com/container
 
 ### Architecture and Operation
 
-The PMEM-CSI driver uses LVM for Logical Volumes Management to avoid the risk of fragmentation that would become an issue if NVDIMM Namespaces were served directly. The logical volumes of LVM are served to satisfy API requests. This also ensures the region-affinity of served volumes, because physical volumes on each region belong to a region-specific LVM volume group.
+The PMEM-CSI driver uses LVM for Logical Volumes Management to avoid the risk of fragmentation that would become an issue if Namespaces were served directly. The logical volumes of LVM are served to satisfy API requests. This also ensures the region-affinity of served volumes, because physical volumes on each region belong to a region-specific LVM volume group.
 
 Currently the driver consists of three separate binaries that form two
 initialization stages and a third API-serving stage.
 
-During startup, the driver scans non-volatile memory for regions and namespaces, and tries to create more namespaces using all or part (selectable via option) of remaining available NVDIMM space. The namespace size can be specified as a driver parameter and defaults to 32 GB. This first stage is performed by a separate entity _pmem-ns-init_.
+During startup, the driver scans persistent memory for regions and namespaces, and tries to create more namespaces using all or part (selectable via option) of the remaining available space. The namespace size can be specified as a driver parameter and defaults to 32 GB. This first stage is performed by a separate entity _pmem-ns-init_.
 
-The second stage of initialization arranges physical volumes provided by namespaces, into LVM volume groups. This is performed by a separate binary _pmem-vgm_.
+The second stage of initialization arranges physical volumes provided by namespaces into LVM volume groups. This is performed by a separate binary _pmem-vgm_.
 
 After two initialization stages, the third binary _pmem-csi-driver_ starts serving CSI API requests.
 
 ### Namespace modes
 
-The PMEM-CSI driver can pre-create Namespaces in two modes, forming corresponding LVM Volume groups, to serve volumes based on `fsdax` or `sector` (alias `safe`) mode Namespaces. The amount of space to be used is determined using two options `-useforfsdax` and `-useforsector` given to _pmem-ns-init_. These options specify an integer presenting limit as percentage, which is applied separately in each Region. The default values are `useforfsdax=100` and `useforsector=0`. A CSI request for volume can specify the Namespace mode using plugin-specific argument `nsmode` having value either "fsdax" or "sector", the default being "fsdax". A volume provisioned in `fsdax` mode will get `dax` option added to mount options.
+The PMEM-CSI driver can pre-create Namespaces in two modes, forming corresponding LVM Volume groups, to serve volumes based on `fsdax` or `sector` (alias `safe`) mode Namespaces. The amount of space to be used is determined using two options `-useforfsdax` and `-useforsector` given to _pmem-ns-init_. These options specify an integer presenting limit as percentage, which is applied separately in each Region. The default values are `useforfsdax=100` and `useforsector=0`. A CSI request for volume can specify the Namespace mode using the plugin-specific argument `nsmode` which has a value of either "fsdax" (default) or "sector". A volume provisioned in `fsdax` mode will have the `dax` option added to mount options.
 
-*NOTE* Currently, the kernel (tested with current latest 4.19.3) overrides ext4-type filesystem `dax` mount option like this:
+**Note:** Currently, the kernel (tested with current latest 4.19.3) overrides the ext4-type filesystem `dax` mount option like this:
 ```
 [  232.584035] EXT4-fs (dm-0): DAX enabled. Warning: EXPERIMENTAL, use at your own risk
 [  232.584038] EXT4-fs (dm-0): DAX unsupported by block device. Turning off DAX.
 [  232.585125] EXT4-fs (dm-0): mounted filesystem with ordered data mode. Opts: dax
 ```
 
-This happens when Volume is provisioned on top of LVM. The override does not happen if a NVDIMM phys.volume is directly formatted and mounted.
+This happens when Volume is provisioned on top of LVM. The override does not happen if a persistent memory phys.volume is directly formatted and mounted.
 
-The similar override does not happen when volume is formatted as XFS file system.
+The similar override does not happen when volume is formatted as an XFS file system.
 
 ### Using limited amount of total space
 
-The PMEM-CSI driver can leave space on devices for others, and recognize "own" namespaces. Leaving space for others can be achieved by specifying lower-than-100 values to `-useforfsdax` and/or `-useforsector` options, The distinction "own" vs. "foreign" is implemented by setting _Name_ field in Namespace to static string "csi-pmem" during Namespace creation. Only those Physical Volumes which are based on Namespaces having name "csi-pmem" are considered when adding Physical Volumes to Volume Groups.
+The PMEM-CSI driver can leave space on devices for others, and recognize "own" namespaces. Leaving space for others can be achieved by specifying lower-than-100 values to `-useforfsdax` and/or `-useforsector` options. The distinction "own" vs. "foreign" is implemented by setting the _Name_ field in Namespace to a static string "csi-pmem" during Namespace creation. When adding Physical Volumes to Volume Groups, only Physical Volumes that are based on Namespaces with the name "csi-pmem" are considered.
 
 ### Driver modes
 
-The PMEM-CSI driver supports running in different modes, which can be controlled by passing one of the below options to the driver's '_-mode_' command line option. In each mode it starts a different set of open source Remote Procedure Call (gRPC) [servers](#driver-components) on given driver endpoint(s).
+The PMEM-CSI driver supports running in different modes, which can be controlled by passing one of the below options to the driver's '_-mode_' command line option. In each mode, it starts a different set of open source Remote Procedure Call (gRPC) [servers](#driver-components) on given driver endpoint(s).
 
-* **_Controller_**  mode is intended to be used in a multi-node cluster and should run as single instance in cluster level. When the driver is running in _Controller_ mode, it forwards the pmem volume create/delete requests to the registered node controller servers running on the worker node. In this mode, the driver starts the following gRPC servers:
+* **_Controller_**  mode is intended to be used in a multi-node cluster and should run as a single instance in cluster level. When the driver is running in _Controller_ mode, it forwards the pmem volume create/delete requests to the registered node controller servers running on the worker node. In this mode, the driver starts the following gRPC servers:
 
     * [IdentityServer](#identity-server)
     * [NodeRegistryServer](#node-registry-server)
     * [MasterControllerServer](#master-controller-server)
 
-* **_Node_** mode is intended to be used in a multi-node cluster by worker nodes that have NVDIMMs devices installed. When the driver starts in this mode, it registers with the _Controller_ driver running on given _-registryEndpoint_. In this mode, the driver starts the following servers:
+* **_Node_** mode is intended to be used in a multi-node cluster by worker nodes that have persistent memory devices installed. When the driver starts in this mode, it registers with the _Controller_ driver running on a given _-registryEndpoint_. In this mode, the driver starts the following servers:
 
     * [IdentityServer](#identity-server)
     * [NodeControllerServer](#node-controller-server)
@@ -69,19 +79,19 @@ The PMEM-CSI driver supports running in different modes, which can be controlled
 
 #### Identity Server
 
-This gRPC server serves on a given endpoint in all driver modes and implements the CSI [Identity interface](https://github.com/container-storage-interface/spec/blob/master/spec.md#identity-service-rpc).
+This gRPC server operates on a given endpoint in all driver modes and implements the CSI [Identity interface](https://github.com/container-storage-interface/spec/blob/master/spec.md#identity-service-rpc).
 
 #### Node Registry Server
 
-When the PMEM-CSI driver runs in _Controller_ mode, it starts a gRPC server on given endpoint(_-registryEndpoint_) and serves [RegistryServer](pkg/pmem-registry/pmem-registry.proto) interface. The driver(s) running in _Node_ mode can register themselves with node specific information such as node id, [NodeControllerServer](#node-controller-server) endpoint, and available NVDIMM capacity with them.
+When the PMEM-CSI driver runs in _Controller_ mode, it starts a gRPC server on a given endpoint(_-registryEndpoint_) and serves the [RegistryServer](pkg/pmem-registry/pmem-registry.proto) interface. The driver(s) running in _Node_ mode can register themselves with node specific information such as node id, [NodeControllerServer](#node-controller-server) endpoint, and their available persistent memory capacity.
 
 #### Master Controller Server
 
-This gRPC server is started by the PMEM-CSI driver running in _Controller_ mode and serves [Controller](https://github.com/container-storage-interface/spec/blob/master/spec.md#controller-service-rpc) interface defined by CSI specification. The server responds to CreateVolume(), DeleteVolume(), ControllerPublishVolume(), ControllerUnpublishVolume(), and ListVolumes() calls coming from [external-provisioner]() and [external-attacher]() sidecars. It forwards the publish and unpublish volume requests to the appropriate [Node controller server](#node-controller-server) running on a worker node that was registered with the driver.
+This gRPC server is started by the PMEM-CSI driver running in _Controller_ mode and serves the [Controller](https://github.com/container-storage-interface/spec/blob/master/spec.md#controller-service-rpc) interface defined by the CSI specification. The server responds to CreateVolume(), DeleteVolume(), ControllerPublishVolume(), ControllerUnpublishVolume(), and ListVolumes() calls coming from [external-provisioner]() and [external-attacher]() sidecars. It forwards the publish and unpublish volume requests to the appropriate [Node controller server](#node-controller-server) running on a worker node that was registered with the driver.
 
 #### Node Controller Server
 
-This gRPC server is started by the PMEM-CSI driver running in _Node_ mode and implements [ControllerPublishVolume](https://github.com/container-storage-interface/spec/blob/master/spec.md#controllerpublishvolume)  and [ControllerUnpublishVolume](https://github.com/container-storage-interface/spec/blob/master/spec.md#controllerunpublishvolume) methods of the [Controller service](https://github.com/container-storage-interface/spec/blob/master/spec.md#controller-service-rpc) interface defined by CSI specification. It serves the ControllerPublishVolume() and ControllerUnpublish() requests coming from the [Master controller server](#master-controller-server) and create/delete PMEM devices.
+This gRPC server is started by the PMEM-CSI driver running in _Node_ mode and implements the [ControllerPublishVolume](https://github.com/container-storage-interface/spec/blob/master/spec.md#controllerpublishvolume)  and [ControllerUnpublishVolume](https://github.com/container-storage-interface/spec/blob/master/spec.md#controllerunpublishvolume) methods of the [Controller service](https://github.com/container-storage-interface/spec/blob/master/spec.md#controller-service-rpc) interface defined by the CSI specification. It serves the ControllerPublishVolume() and ControllerUnpublish() requests coming from the [Master controller server](#master-controller-server) and creates/deletes persistent memory devices.
 
 #### Node Server
 
@@ -109,19 +119,19 @@ The following diagram illustrates how the PMEM-CSI driver performs dynamic volum
 Building has been verified using these components:
 
 - Go: version 1.10.1
-- [ndctl](https://github.com/pmem/ndctl) version 62, built on dev.host via autogen,configure,make,install as per instruction in README.md
+- [ndctl](https://github.com/pmem/ndctl) version 62, built on dev.host via autogen, configure, make, and install as per instruction in README.md
 
-Building of Docker images has additionally requires:
+Building of Docker images has an additional requirement:
 
 - Docker-ce: verified using version 18.06.1
 
 ### Hardware required
 
-Non-volatile DIMM device(s) are required for operation. Some development and testing can however be done using QEMU-emulated NVDIMMs, see [README-qemu-notes](README-qemu-notes.md).
+Persistent memory device(s) are required for operation. However, some development and testing can be done using QEMU-emulated persistent memory devices, see [README-qemu-notes](README-qemu-notes.md).
 
-### NVDIMM device initialization
+### Persistent memory device initialization
 
-The driver does not create NVDIMM Regions, but expects Regions to exist when the driver starts. The utility [ipmctl](https://github.com/intel/ipmctl) can be used to create Regions.
+The driver does not create persistent memory Regions, but expects Regions to exist when the driver starts. The utility [ipmctl](https://github.com/intel/ipmctl) can be used to create Regions.
 
 ## Supported Kubernetes versions
 
@@ -135,7 +145,7 @@ The driver deployment in Kubernetes cluster has been verified on:
 
 ### Development system using Virtual Machine
 
-Early development and verification was performed on QEMU-emulated NVDIMMs.
+Early development and verification was performed on QEMU-emulated persistent memory devices.
 
 The build was verified on the system described below:
 
@@ -147,7 +157,7 @@ The build was verified on the system described below:
 
 Use the command: `git clone https://github.com/otcshare/Pmem-CSI csi-pmem`
 
-> **NOTE:** The repository name is mixed-case but the paths are
+> **Note:** The repository name is mixed-case but the paths are
 > lowercase-only. To build the plugin, the driver code must reside on the path github.com/intel/csi-pmem/
 >
 > You must specify a different destination path when cloning:
@@ -162,7 +172,7 @@ Use the command: `git clone https://github.com/otcshare/Pmem-CSI csi-pmem`
 
     * `pmem-ns-init`: Helper utility for namespace initialization.
     * `pmem-vgm`: Helper utility for creating logical volume groups over PMEM devices created.
-    * `pmem-csi-driver`: The PMEM-CSI driver.
+    * `pmem-csi-driver`: PMEM-CSI driver.
 
 2.  Use `make build-images` to produce Docker container images.
 
@@ -183,20 +193,21 @@ This runs two preparation parts, and starts the driver binary, which listens and
 #### Run as Kubernetes deployment
 
 This section assumes that a Kubernetes cluster is already available
-with at least one node that has NVDIMM device(s). For development or
-testing it is also possible to use a cluster that runs on QEMU virtual
+with at least one node that has persistent memory device(s). For development or
+testing, it is also possible to use a cluster that runs on QEMU virtual
 machines, see the ["End-to-end testing"](#end-to-end-testing) section below.
 
-- **Label the cluster nodes that have NVDIMM support**
+- **Label the cluster nodes that have persistent memory support**
 
 ```sh
     $ kubectl label node pmem-csi-4 storage=pmem
 ```
 
-The label **storage: pmem** needs to be added to the cluster node that provides NVDIMM device(s).
+The label **storage: pmem** needs to be added to the cluster node that provides persistent memory device(s).
 
-Clusters with multiple nodes with NVDIMM are not fully supported at the moment. Support for this will
-be added when making the CSI driver topology-aware.
+Clusters with multiple nodes with persistent memory are not fully supported at
+the moment. Support for this will be added when making the CSI driver topology-
+aware.
 
 - **Deploy the driver to Kubernetes**
 
@@ -265,39 +276,17 @@ You can modify the plugin to support more xxx by changing the `variable` from Y 
 -->
 
 
-## Communication and contribution
-
-Report a bug by [filing a new issue](https://github.com/otcshare/Pmem-CSI/issues).
-
-Contribute by [opening a pull request](https://github.com/otcshare/Pmem-CSI/pulls).
-
-Learn [about pull requests](https://help.github.com/articles/using-pull-requests/).
-
-<!-- FILL TEMPLATE:
-Contact the development team (*TBD: slack or email?*)
-
-
-## References
-
-Pointers to other useful documentation.
-
-* Upstream documentation of [device plugins](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/).
-* Video tutorial
-    * Simple youtube style. Demo installation following steps in readme.
-      Useful to show relevant paths. Helps with troubleshooting.
--->
-
 ## Automated testing
 
 ### Unit testing and code quality
 
-1. Use the `make test` command.
+Use the `make test` command.
 
-Note: Testing code is not completed yet. Currently it runs some passes using `gofmt, go vet`.
+**Note:** Testing code is not completed yet. Currently it runs some passes using `gofmt, go vet`.
 
 ### Verify driver in unified mode
 
-The driver can be verified in the single-host context. Such running mode is called "Unified"
+The driver can be verified in the single-host context. This running mode is called "Unified"
 in the driver. Both Controller and Node service run combined in local host, without Kubernetes context.
 
 The endpoint for driver access can be specified either:
@@ -319,7 +308,7 @@ These run-time dependencies are used by the plugin in Unified mode:
 * [sanity-unified](util/sanity-unified.sh) API test using csi-sanity
 * [get-capabilities-unified](util/get-capabilities-unified.sh) Query Controller and Node capabilities
 
-These utilities are needed as used by scripts residing in `util/` directory:
+These utilities are required by scripts residing in `util/` directory:
 
 - [csc](http://github.com/rexray/gocsi) v0.5.0
 - [csi-sanity](http://github.com/kubernetes-csi/csi-test) v0.2.0-1-95-g3bc4135
@@ -366,14 +355,14 @@ To ensure that QEMU and KVM are working, run this:
     cp _work/clear-kvm-original.img _work/clear-kvm-test.img
     _work/start-clear-kvm _work/clear-kvm-test.img
 
-The result should be login prompt like this:
+The result should be a login prompt like this:
 
     [    0.049839] kvm: no hardware support
     
     clr-c3f99095d2934d76a8e26d2f6d51cb91 login: 
 
 The message about missing KVM hardware support comes from inside the
-virtual machine and indicates that nested KVM is not enabled. This can
+virtual machine and indicates that nested KVM is not enabled. This message can
 be ignored because it is not needed.
 
 Now the running QEMU can be killed and the test image removed again:
@@ -383,7 +372,7 @@ Now the running QEMU can be killed and the test image removed again:
     reset # Clear Linux changes terminal colors, undo that.
 
 The `clear-kvm` images are prepared automatically by the Makefile. By
-default, four different images are prepared, each pre-configured with
+default, four different images are prepared. Each image is pre-configured with
 its own hostname and with network settings for the corresponding `tap`
 device. `clear-kvm.img` is a symlink to the `clear-kvm.0.img` where
 the Kubernetes master node will run.
@@ -395,21 +384,19 @@ version supported by Clear Linux installed.
 #### Starting and stopping a test cluster
 
 `make start` will bring up a Kubernetes test cluster inside four QEMU
-virtual machines.  It can be called multiple times in a row and will
+virtual machines. It can be called multiple times in a row and will
 attempt to bring up missing pieces each time it is invoked.
 
 Once it completes, everything is ready for interactive use via
-`kubectl` inside the virtual machine. Alternatively one can also
+`kubectl` inside the virtual machine. Alternatively, you can also
 set `KUBECONFIG` as shown at the end of the `make start` output
 and use a local `kubectl` binary.
 
-The first node is the Kubernetes master without NVDIMM, the other
-three are worker nodes with one 32GB NVDIMM each. The worker nodes
-have already been labeled with `storage=nvdimm`, but the csi-pmem
-driver still needs to be installed manually as shown in
-["Run as Kubernetes deployment"](#run-as-kubernetes-deployment). If
-the Docker registry runs on the local development host, then the `sed`
-command which replaces the Docker registry is not needed.
+The first node is the Kubernetes master without persistent memory. The other
+three nodes are worker nodes with one 32GB NVDIMM each. The worker nodes have
+already been labeled with `storage=pmem`, but the csi-pmem driver still needs to be installed manually as shown in ["Run as Kubernetes deployment"](#run-as-
+kubernetes-deployment). If the Docker registry runs on the local development
+host, then the `sed` command which replaces the Docker registry is not needed.
 
 Once done, `make stop` will clean up the cluster and shut everything down.
 
@@ -455,3 +442,25 @@ It is also possible to run just the sanity tests until one of them fails:
 $ REPO_ROOT=`pwd` ginkgo '-focus=sanity' -failFast ./test/e2e/
 ...
 ```
+
+## Communication and contribution
+
+Report a bug by [filing a new issue](https://github.com/otcshare/Pmem-CSI/issues).
+
+Contribute by [opening a pull request](https://github.com/otcshare/Pmem-CSI/pulls).
+
+Learn [about pull requests](https://help.github.com/articles/using-pull-requests/).
+
+<!-- FILL TEMPLATE:
+Contact the development team (*TBD: slack or email?*)
+
+
+## References
+
+Pointers to other useful documentation.
+
+* Upstream documentation of [device plugins](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/).
+* Video tutorial
+    * Simple youtube style. Demo installation following steps in readme.
+      Useful to show relevant paths. Helps with troubleshooting.
+-->
