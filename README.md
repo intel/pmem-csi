@@ -329,7 +329,7 @@ host machine and before starting the virtual machine:
     test/runqemu-ifup 4
 
 This configures four tap devices for use by the current user. At the
-moment, the test setup is hard-coded to use:
+moment, the test setup uses:
 
 - `pmemtap0/1/2/3`
 - `pmembr0`
@@ -337,6 +337,11 @@ moment, the test setup is hard-coded to use:
 - 192.168.7.2/4/6/8 for the virtual machines
 - the same DNS server for the virtual machines as on the development
   host
+
+It is possible to configure this by creating one or more files ending
+in `.sh` (for shell) in the directory `test/test-config.d` and setting
+shell variables in those files. For all supported options, see
+[test-config.sh](test/test-config.sh).
 
 To undo the configuration changes made by `test/runqemu-ifup` when
 the tap device is no longer needed, run:

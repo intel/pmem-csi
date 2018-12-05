@@ -19,6 +19,11 @@ set -x
 NO_PROXY="$NO_PROXY,${TEST_IP_ADDR}.0/24,10.96.0.0/12,10.244.0.0/16"
 PROXY_ENV="env 'HTTP_PROXY=$HTTP_PROXY' 'HTTPS_PROXY=$HTTPS_PROXY' 'NO_PROXY=$NO_PROXY'"
 
+# 127.0.0.x is included here with the hope that the resolver accepts packets
+# also via other interfaces. If it doesn't, then TEST_DNS_SERVERS must be set
+# explicitly.
+dns_servers=${TEST_DNS_SERVERS:-$(grep '^ *nameserver ' /etc/resolv.conf  | sed -e 's/nameserver//' -e "s/127.0.0.[0-9]*/${TEST_IP_ADDR}.1/")}
+
 bundles="cloud-native-basic ${TEST_CLEAR_LINUX_BUNDLES}"
 
 # containers-basic is needed because of the CNI plugins (https://github.com/clearlinux/distribution/issues/256#issuecomment-440998525)
@@ -52,7 +57,7 @@ kill_process_tree () {
     name=$1
     pid=$2
 
-    pids=$(ps -o pid --ppid $pid | tail +2)
+    pids=$(ps -o pid --ppid $pid --no-headers)
     if [ "$pids" ]; then
         kill $pids
     fi
@@ -140,7 +145,7 @@ setup_clear_img () (
     # in start_qemu.sh. DNS configuration is taken from /etc/resolv.conf.
     echo "mkdir -p /etc/systemd/network" >&${COPROC[1]}
     for i in "[Match]" "MACAddress=DE:AD:BE:EF:01:0$i" "[Network]" "Address=$ipaddr/24" "Gateway=${TEST_IP_ADDR}.1"; do echo "echo '$i' >>/etc/systemd/network/20-wired.network" >&${COPROC[1]}; done
-    for addr in $(grep '^ *nameserver ' /etc/resolv.conf  | sed -e 's/nameserver//' -e "s/127.0.0.1/${TEST_IP_ADDR}.1/"); do echo "echo 'DNS=$addr' >>/etc/systemd/network/20-wired.network" >&${COPROC[1]}; done
+    for addr in $dns_servers; do echo "echo 'DNS=$addr' >>/etc/systemd/network/20-wired.network" >&${COPROC[1]}; done
     echo "systemctl restart systemd-networkd" >&${COPROC[1]}
 
     # Disable auto-update. An update of Kubernetes would require
@@ -264,6 +269,7 @@ kill_machines () {
             machines[$i]=
         fi
     done
+    rm -f _work/clear-kvm.*.running _work/clear-kvm.*.terminated
 }
 trap kill_machines EXIT SIGINT SIGTERM
 rm -f _work/clear-kvm.*.running _work/clear-kvm.*.terminated _work/clear-kvm.[0-9].img*
