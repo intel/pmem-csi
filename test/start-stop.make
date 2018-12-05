@@ -12,7 +12,7 @@ start: _work/clear-kvm.img _work/kube-clear-kvm _work/start-clear-kvm _work/ssh-
 				truncate -s $${TEST_PMEM_MEM_SIZE}M $$pmemfile; \
 				memargs="$$memargs,slots=$${TEST_MEM_SLOTS},maxmem=$$(($${TEST_NORMAL_MEM_SIZE} + $${TEST_PMEM_MEM_SIZE}))M"; \
 				memargs="$$memargs -object memory-backend-file,id=mem1,share=$${TEST_PMEM_SHARE},mem-path=$$pmemfile,size=$${TEST_PMEM_MEM_SIZE}M"; \
-				memargs="$$memargs -device nvdimm,id=nvdimm1,memdev=mem1"; \
+				memargs="$$memargs -device nvdimm,id=nvdimm1,memdev=mem1,label-size=$${TEST_PMEM_LABEL_SIZE}"; \
 				memargs="$$memargs -machine pc,nvdimm"; \
 			fi; \
 			_work/start-clear-kvm _work/clear-kvm.$$i.img $$memargs -monitor none -serial file:_work/clear-kvm.$$i.log $$opts & \
@@ -25,6 +25,12 @@ start: _work/clear-kvm.img _work/kube-clear-kvm _work/start-clear-kvm _work/ssh-
 	_work/kube-clear-kvm
 	_work/ssh-clear-kvm kubectl label node host-0 storage-
 	for i in $$(seq 1 $$(($(NUM_NODES) - 1))); do \
+		if ! [ -e _work/clear-kvm.$$i.labelsdone ]; then \
+			_work/ssh-clear-kvm.$$i "/usr/bin/ndctl disable-region region0"; \
+			_work/ssh-clear-kvm.$$i "/usr/bin/ndctl init-labels nmem0"; \
+			_work/ssh-clear-kvm.$$i "/usr/bin/ndctl enable-region region0"; \
+			touch _work/clear-kvm.$$i.labelsdone; \
+		fi; \
 		_work/ssh-clear-kvm kubectl label --overwrite node host-$$i storage=pmem; \
 	done
 	@ echo
