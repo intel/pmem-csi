@@ -212,7 +212,7 @@ aware.
 - **Deploy the driver to Kubernetes**
 
 ```sh
-    $ sed -e 's/192.168.8.1:5000/<your registry>/` deploy/k8s/pmem-csi.yaml | kubectl create -f -
+    $ sed -e 's/192.168.8.1:5000/<your registry>/' deploy/k8s/pmem-csi.yaml | kubectl create -f -
 ```
 
 This yaml file uses the registry address for the QEMU test cluster
