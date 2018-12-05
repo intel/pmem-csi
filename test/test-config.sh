@@ -23,7 +23,7 @@ TEST_IP_ADDR=192.168.8
 TEST_DNS_SERVERS=
 
 # Additional Clear Linux bundles.
-TEST_CLEAR_LINUX_BUNDLES=""
+TEST_CLEAR_LINUX_BUNDLES="storage-utils"
 
 # Post-install command for each virtual machine. Called with the
 # current image number (0 to n-1) as parameter.
@@ -46,6 +46,7 @@ TEST_MEM_SLOTS=2
 TEST_NORMAL_MEM_SIZE=2048 # 2GB
 TEST_PMEM_MEM_SIZE=32768 # 32GB
 TEST_PMEM_SHARE=on
+TEST_PMEM_LABEL_SIZE=2097152
 
 # allow overriding the configuration in additional file(s)
 if [ -d test/test-config.d ]; then
