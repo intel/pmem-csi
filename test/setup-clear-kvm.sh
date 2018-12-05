@@ -269,6 +269,7 @@ kill_machines () {
             machines[$i]=
         fi
     done
+    rm -f _work/clear-kvm.*.running _work/clear-kvm.*.terminated
 }
 trap kill_machines EXIT SIGINT SIGTERM
 rm -f _work/clear-kvm.*.running _work/clear-kvm.*.terminated _work/clear-kvm.[0-9].img*
