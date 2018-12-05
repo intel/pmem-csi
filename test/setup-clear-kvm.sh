@@ -57,7 +57,7 @@ kill_process_tree () {
     name=$1
     pid=$2
 
-    pids=$(ps -o pid --ppid $pid | tail +2)
+    pids=$(ps -o pid --ppid $pid --no-headers)
     if [ "$pids" ]; then
         kill $pids
     fi
