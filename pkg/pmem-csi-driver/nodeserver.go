@@ -18,9 +18,9 @@ import (
 	"google.golang.org/grpc/status"
 	"k8s.io/kubernetes/pkg/util/mount"
 
-	"github.com/intel/csi-pmem/pkg/pmem-common"
-	pmdmanager "github.com/intel/csi-pmem/pkg/pmem-device-manager"
-	pmemexec "github.com/intel/csi-pmem/pkg/pmem-exec"
+	"github.com/intel/pmem-csi/pkg/pmem-common"
+	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
+	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 	"k8s.io/klog/glog"
 )
 

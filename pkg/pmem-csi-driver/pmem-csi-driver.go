@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
-	pmdmanager "github.com/intel/csi-pmem/pkg/pmem-device-manager"
-	pmemgrpc "github.com/intel/csi-pmem/pkg/pmem-grpc"
-	registry "github.com/intel/csi-pmem/pkg/pmem-registry"
+	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
+	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
+	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
 	"google.golang.org/grpc"
 	"k8s.io/klog/glog"
 )

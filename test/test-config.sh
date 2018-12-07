@@ -6,11 +6,11 @@
 #
 # Docker is the default for two reasons:
 # - survives killing the VMs while cri-o doesn't (https://github.com/kubernetes-sigs/cri-o/issues/1742#issuecomment-442384980)
-# - Docker mounts /sys read/write while cri-o read-only. csi-pmem needs it in writable state.
+# - Docker mounts /sys read/write while cri-o read-only. pmem-csi needs it in writable state.
 TEST_CRI=docker
 
 # Prefix for network devices etc.
-TEST_PREFIX=csipmem
+TEST_PREFIX=pmemcsi
 
 # IPv4 base address. .1 is used for the host, which also acts
 # as NAT gateway. Even numbers are for the guests (.2, .4, ...).

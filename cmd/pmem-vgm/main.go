@@ -7,8 +7,8 @@ import (
 	"k8s.io/klog"
 	"k8s.io/klog/glog"
 
-	"github.com/intel/csi-pmem/pkg/ndctl"
-	pmemexec "github.com/intel/csi-pmem/pkg/pmem-exec"
+	"github.com/intel/pmem-csi/pkg/ndctl"
+	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 )
 
 func main() {
@@ -60,7 +60,7 @@ func createVolumesForRegion(r *ndctl.Region, vgName string, nsmode ndctl.Namespa
 	for _, ns := range nsArray {
 		// consider only namespaces in asked namespacemode,
 		// and having name given by this driver, to exclude foreign ones
-		if ns.Mode() == ndctl.NamespaceMode(nsmode) && ns.Name() == "csi-pmem" {
+		if ns.Mode() == ndctl.NamespaceMode(nsmode) && ns.Name() == "pmem-csi" {
 			devName := "/dev/" + ns.BlockDeviceName()
 			glog.Infof("createVolumesForRegion: %s has nsmode %s", ns.BlockDeviceName(), nsmode)
 			/* check if this pv is already part of a group, if yes ignore this pv

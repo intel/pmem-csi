@@ -1,7 +1,7 @@
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  name: csi-pmem-sc
-provisioner: csi-pmem
+  name: pmem-csi-sc
+provisioner: pmem-csi
 reclaimPolicy: Delete
 volumeBindingMode: Immediate

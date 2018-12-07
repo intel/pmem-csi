@@ -14,14 +14,14 @@ import (
 
 	"k8s.io/klog"
 
-	"github.com/intel/csi-pmem/pkg/pmem-csi-driver"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-driver"
 )
 
 var (
 	/* generic options */
-	driverName       = flag.String("drivername", "csi-pmem", "name of the driver")
+	driverName       = flag.String("drivername", "pmem-csi", "name of the driver")
 	nodeID           = flag.String("nodeid", "nodeid", "node id")
-	endpoint         = flag.String("endpoint", "unix:///tmp/csi-pmem.sock", "PMEM CSI endpoint")
+	endpoint         = flag.String("endpoint", "unix:///tmp/pmem-csi.sock", "PMEM CSI endpoint")
 	mode             = flag.String("mode", "unified", "driver run mode : controller, node or unified")
 	registryEndpoint = flag.String("registryEndpoint", "", "endpoint to connect/listen resgistery server")
 	/* node mode options */

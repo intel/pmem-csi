@@ -11,8 +11,8 @@ RUN ./configure CFLAGS='-g -O2' --prefix=/usr --sysconfdir=/etc --libdir=/usr/li
 RUN make install
 
 # build pmem-ns-init
-ADD . /go/src/github.com/intel/csi-pmem
-WORKDIR /go/src/github.com/intel/csi-pmem
+ADD . /go/src/github.com/intel/pmem-csi
+WORKDIR /go/src/github.com/intel/pmem-csi
 RUN make pmem-ns-init
 RUN mv ./_output/pmem-ns-init /go/bin/
 
