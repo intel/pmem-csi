@@ -10,9 +10,9 @@ RUN ./autogen.sh
 RUN ./configure CFLAGS='-g -O2' --prefix=/usr --sysconfdir=/etc --libdir=/usr/lib --disable-docs with_systemd_unit_dir=no
 RUN make install
 
-# build csi-pmem-driver
-ADD . /go/src/github.com/intel/csi-pmem
-WORKDIR /go/src/github.com/intel/csi-pmem
+# build pmem-csi-driver
+ADD . /go/src/github.com/intel/pmem-csi
+WORKDIR /go/src/github.com/intel/pmem-csi
 RUN make pmem-csi-driver
 RUN mv ./_output/pmem-csi-driver /go/bin/
 

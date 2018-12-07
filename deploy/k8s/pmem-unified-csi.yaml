@@ -1,4 +1,4 @@
-# Deploys the csi-pmem driver onto exactly one node, running in unified mode.
+# Deploys the pmem-csi driver onto exactly one node, running in unified mode.
 # That CSI drivers gets exposed with a NodePort service and the fixed port
 # 30123 for use with csi-test sanity testing.
 
@@ -94,7 +94,7 @@ spec:
         image: 192.168.8.1:5000/pmem-csi-driver:canary
         imagePullPolicy: Always
         args:  [ "-v=5",
-                 "-drivername=csi-pmem",
+                 "-drivername=pmem-csi",
                  "-mode=unified",
                  "-endpoint=$(CSI_ENDPOINT)",
                  "-nodeid=$(KUBE_NODE_NAME)" ]

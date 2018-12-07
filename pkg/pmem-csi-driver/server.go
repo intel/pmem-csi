@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/intel/csi-pmem/pkg/pmem-grpc"
+	"github.com/intel/pmem-csi/pkg/pmem-grpc"
 	"google.golang.org/grpc"
 )
 

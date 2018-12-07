@@ -4,12 +4,12 @@ Copyright 2018 Intel Corporation.
 SPDX-License-Identifier: Apache-2.0
 */
 
-// Package sanity is a Ginkgo test suite that installs csi-pmem on the
+// Package sanity is a Ginkgo test suite that installs pmem-csi on the
 // test cluster and then runs the csi-test sanity tests against it.
 //
 // Like test/e2e, it must be run with REPO_ROOT=<full path> to ensure
 // that it can find the _work directory. Parallel test runs are not
-// supported because the csi-pmem driver needs exclusive control
+// supported because the pmem-csi driver needs exclusive control
 // over PMEM.
 package sanity
 
@@ -47,13 +47,13 @@ var (
 
 func TestSanity(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "csi-pmem sanity test suite")
+	RunSpecs(t, "pmem-csi sanity test suite")
 }
 
 var _ = SynchronizedBeforeSuite(func() []byte {
 	// Run only on Ginkgo node 1
 
-	By("deploying csi-pmem driver")
+	By("deploying pmem-csi driver")
 	var err error
 	// This uses a temp directory on the target and
 	// locally, with Unix domain sockets inside

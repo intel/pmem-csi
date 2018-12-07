@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 
-	"github.com/intel/csi-pmem/pkg/pmem-common"
+	"github.com/intel/pmem-csi/pkg/pmem-common"
 )
 
 func Connect(endpoint string, timeout time.Duration) (*grpc.ClientConn, error) {

@@ -55,7 +55,7 @@ The similar override does not happen when volume is formatted as an XFS file sys
 
 ### Using limited amount of total space
 
-The PMEM-CSI driver can leave space on devices for others, and recognize "own" namespaces. Leaving space for others can be achieved by specifying lower-than-100 values to `-useforfsdax` and/or `-useforsector` options. The distinction "own" vs. "foreign" is implemented by setting the _Name_ field in Namespace to a static string "csi-pmem" during Namespace creation. When adding Physical Volumes to Volume Groups, only Physical Volumes that are based on Namespaces with the name "csi-pmem" are considered.
+The PMEM-CSI driver can leave space on devices for others, and recognize "own" namespaces. Leaving space for others can be achieved by specifying lower-than-100 values to `-useforfsdax` and/or `-useforsector` options. The distinction "own" vs. "foreign" is implemented by setting the _Name_ field in Namespace to a static string "pmem-csi" during Namespace creation. When adding Physical Volumes to Volume Groups, only Physical Volumes that are based on Namespaces with the name "pmem-csi" are considered.
 
 ### Driver modes
 
@@ -155,14 +155,7 @@ The build was verified on the system described below:
 
 ### Get source code
 
-Use the command: `git clone https://github.com/otcshare/Pmem-CSI csi-pmem`
-
-> **Note:** The repository name is mixed-case but the paths are
-> lowercase-only. To build the plugin, the driver code must reside on the path github.com/intel/csi-pmem/
->
-> You must specify a different destination path when cloning:
-> `git clone .../Pmem-CSI csi-pmem`
-> or rename the directory from `Pmem-CSI` to `csi-pmem` after cloning.
+Use the command: `git clone https://github.com/intel/pmem-csi`
 
 ### Build plugin
 
@@ -225,7 +218,7 @@ that can be accessed by that cluster has to be used.
     $ kubectl create -f deploy/k8s/pmem-storageclass.yaml
 ```
 
-- **Provision a csi-pmem volume**
+- **Provision a pmem-csi volume**
 
 ```sh
     $ kubectl create -f deploy/k8s/pmem-pvc.yaml
@@ -399,7 +392,7 @@ and use a local `kubectl` binary.
 
 The first node is the Kubernetes master without persistent memory. The other
 three nodes are worker nodes with one 32GB NVDIMM each. The worker nodes have
-already been labeled with `storage=pmem`, but the csi-pmem driver still needs to be installed manually as shown in ["Run as Kubernetes deployment"](#run-as-
+already been labeled with `storage=pmem`, but the pmem-csi driver still needs to be installed manually as shown in ["Run as Kubernetes deployment"](#run-as-
 kubernetes-deployment). If the Docker registry runs on the local development
 host, then the `sed` command which replaces the Docker registry is not needed.
 
@@ -411,7 +404,7 @@ Once done, `make stop` will clean up the cluster and shut everything down.
 [csi-test sanity](https://github.com/kubernetes-csi/csi-test/tree/master/pkg/sanity)
 tests and some
 [Kubernetes storage tests](https://github.com/kubernetes/kubernetes/tree/master/test/e2e/storage/testsuites)
-against the csi-pmem driver.
+against the pmem-csi driver.
 
 The driver will get deployed automatically and thus must not be
 installed yet on the cluster.
@@ -422,7 +415,7 @@ of the test run. For example, to run just the E2E provisioning test
 (create PVC, write data in one pod, read it in another) in verbose mode:
 
 ``` sh
-$ KUBECONFIG=$(pwd)/_work/clear-kvm-kube.config REPO_ROOT=$(pwd) ginkgo -v -focus=csi-pmem.*should.provision.storage.with.defaults ./test/e2e/
+$ KUBECONFIG=$(pwd)/_work/clear-kvm-kube.config REPO_ROOT=$(pwd) ginkgo -v -focus=pmem-csi.*should.provision.storage.with.defaults ./test/e2e/
 Nov 26 11:21:28.805: INFO: The --provider flag is not set.  Treating as a conformance test.  Some tests may not be run.
 Running Suite: PMEM E2E suite
 =============================
@@ -430,7 +423,7 @@ Random Seed: 1543227683 - Will randomize all specs
 Will run 1 of 61 specs
 
 Nov 26 11:21:28.812: INFO: checking config
-Nov 26 11:21:28.812: INFO: >>> kubeConfig: /nvme/gopath/src/github.com/intel/csi-pmem/_work/clear-kvm-kube.config
+Nov 26 11:21:28.812: INFO: >>> kubeConfig: /nvme/gopath/src/github.com/intel/pmem-csi/_work/clear-kvm-kube.config
 Nov 26 11:21:28.817: INFO: Waiting up to 30m0s for all (but 0) nodes to be schedulable
 ...
 Ran 1 of 61 Specs in 58.465 seconds
@@ -450,9 +443,9 @@ $ REPO_ROOT=`pwd` ginkgo '-focus=sanity' -failFast ./test/e2e/
 
 ## Communication and contribution
 
-Report a bug by [filing a new issue](https://github.com/otcshare/Pmem-CSI/issues).
+Report a bug by [filing a new issue](https://github.com/intel/pmem-csi/issues).
 
-Contribute by [opening a pull request](https://github.com/otcshare/Pmem-CSI/pulls).
+Contribute by [opening a pull request](https://github.com/intel/pmem-csi/pulls).
 
 Learn [about pull requests](https://help.github.com/articles/using-pull-requests/).
 

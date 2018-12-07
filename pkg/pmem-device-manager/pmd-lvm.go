@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/intel/csi-pmem/pkg/ndctl"
-	pmemexec "github.com/intel/csi-pmem/pkg/pmem-exec"
+	"github.com/intel/pmem-csi/pkg/ndctl"
+	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 	"k8s.io/klog/glog"
 )
 

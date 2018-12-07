@@ -28,7 +28,7 @@ import (
 	. "github.com/onsi/ginkgo"
 
 	// test sources
-	_ "github.com/intel/csi-pmem/test/e2e/storage"
+	_ "github.com/intel/pmem-csi/test/e2e/storage"
 )
 
 func init() {

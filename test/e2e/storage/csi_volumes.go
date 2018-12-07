@@ -81,11 +81,11 @@ var _ = Describe("PMEM Volumes", func() {
 
 	// List of testDrivers to be executed in below loop
 	var csiTestDrivers = []func() testsuites.TestDriver{
-		// csi-pmem
+		// pmem-csi
 		func() testsuites.TestDriver {
 			return &manifestDriver{
 				driverInfo: testsuites.DriverInfo{
-					Name:        "csi-pmem",
+					Name:        "pmem-csi",
 					MaxFileSize: testpatterns.FileSizeMedium,
 					SupportedFsType: sets.NewString(
 						"", // Default fsType
@@ -98,7 +98,7 @@ var _ = Describe("PMEM Volumes", func() {
 						Framework: f,
 						Prefix:    "pmem",
 						// Ensure that we land on the same node as the node controller below.
-						// TODO: automatically handle scheduling in csi-pmem and remove
+						// TODO: automatically handle scheduling in pmem-csi and remove
 						// this.
 						ClientNodeName: "host-1",
 					},

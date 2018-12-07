@@ -3,7 +3,7 @@ package pmdmanager
 import (
 	"fmt"
 
-	"github.com/intel/csi-pmem/pkg/ndctl"
+	"github.com/intel/pmem-csi/pkg/ndctl"
 	"k8s.io/klog/glog"
 )
 

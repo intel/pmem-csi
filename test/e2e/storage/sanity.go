@@ -33,7 +33,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-// Run the csi-test sanity tests against a csi-pmem driver deployed in
+// Run the csi-test sanity tests against a pmem-csi driver deployed in
 // unified mode.
 var _ = Describe("sanity", func() {
 	f := framework.NewDefaultFramework("pmem")
@@ -59,7 +59,7 @@ var _ = Describe("sanity", func() {
 		podlogs.CopyAllLogs(ctx, cs, ns.Name, to)
 		podlogs.WatchPods(ctx, cs, ns.Name, GinkgoWriter)
 
-		By("deploying csi-pmem")
+		By("deploying pmem-csi")
 		// The "unified" mode is needed only because of https://github.com/kubernetes-csi/csi-test/issues/142.
 		// TODO (?): address that issue, then remove "unified" mode to make the driver simpler
 		// and sanity testing more realistic.
@@ -101,7 +101,7 @@ var _ = Describe("sanity", func() {
 			}
 			port = service.Spec.Ports[0].NodePort
 			return port != 0
-		}, "3m").Should(BeTrue(), "csi-pmem service running")
+		}, "3m").Should(BeTrue(), "pmem-csi service running")
 		config.Address = fmt.Sprintf("192.168.8.2:%d", port)
 	})
 
