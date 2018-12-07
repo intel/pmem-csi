@@ -15,8 +15,6 @@ const (
 	// TODO: try to get rid of hard-coded overhead
 	// overhead likely comes from alignment (default 2M) and mapping_mode="dev"
 	namespaceOverhead = 4 * 1024 * 1024
-	// smaller namespace size (in GB) for devel mode in VM
-	namespacesizeVM = 2
 )
 
 var (
@@ -42,13 +40,6 @@ func main() {
 }
 
 func initNVdimms(ctx *ndctl.Context, namespacesize int, useforfsdax int, useforsector int) {
-	// check is there physical NVDIMM(s) present. What happens if we run this without NVDIMM:
-	// verified on a VM without NVDIMMs:
-	// loop attempt in CreateNamespaces over buses-regions-namespaces makes zero loops,
-	// and CheckVG() creates zero PVs, then driver starts running,
-	// but ops will fail as there is no regions and PVs, so it's safe.
-	// TODO: Should we detect device(s) explicitly here?
-
 	glog.Infof("Configured namespacesize; %v GB", namespacesize)
 	createNamespaces(ctx, namespacesize, useforfsdax, useforsector)
 	/* for debug
@@ -96,7 +87,7 @@ func createNS(r *ndctl.Region, nsSize uint64, uselimit int, nsmode ndctl.Namespa
 	glog.Infof("Create %s-namespaces in %v, allowed %d %%:\ntotal       : %16d\navail       : %16d\ncan use     : %16d",
 		nsmode, r.DeviceName(), uselimit, r.Size(), r.AvailableSize(), canUse)
 	// Find sum of sizes of existing active namespaces with currently handled mode
-	var used uint64 = 0
+	var used uint64
 	for _, ns := range r.ActiveNamespaces() {
 		glog.Infof("createNS: Exists: Size %16d Mode:%v Device:%v Name:%v", ns.Size(), ns.Mode(), ns.DeviceName(), ns.Name())
 		if ns.Mode() == nsmode {
