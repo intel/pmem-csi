@@ -64,7 +64,7 @@ var _ = Describe("sanity", func() {
 		// TODO (?): address that issue, then remove "unified" mode to make the driver simpler
 		// and sanity testing more realistic.
 		cl, err := f.CreateFromManifests(nil, /* patch function */
-			"deploy/k8s/pmem-unified-csi.yaml",
+			"deploy/kubernetes/pmem-unified-csi.yaml",
 		)
 		Expect(err).NotTo(HaveOccurred())
 		cleanup = cl

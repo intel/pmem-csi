@@ -104,12 +104,9 @@ var _ = Describe("PMEM Volumes", func() {
 					},
 				},
 				manifests: []string{
-					// TODO: Rename the dir to deploy/kubernetes.
-					// deploy/kubernetes is how this is called elsewhere (e.g.
-					// https://github.com/kubernetes-csi/external-provisioner/tree/master/deploy/kubernetes).
-					"deploy/k8s/pmem-csi.yaml",
+					"deploy/kubernetes/pmem-csi.yaml",
 				},
-				scManifest: "deploy/k8s/pmem-storageclass.yaml",
+				scManifest: "deploy/kubernetes/pmem-storageclass.yaml",
 				// Renaming of the driver *not* enabled. It doesn't support
 				// that because there is only one instance of the registry
 				// and on each node the driver assumes that it has exclusive
