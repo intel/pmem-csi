@@ -207,6 +207,11 @@ aware.
 ```sh
     $ sed -e 's/192.168.8.1:5000/<your registry>/' deploy/kubernetes/pmem-csi.yaml | kubectl create -f -
 ```
+- **Use this variant to deploy on Kubernetes 1.12**
+
+```sh
+    $ sed -e 's/192.168.8.1:5000/<your registry>/' deploy/kubernetes-1.12/pmem-csi.yaml | kubectl create -f -
+```
 
 This yaml file uses the registry address for the QEMU test cluster
 setup (see below). When deploying on a real cluster, some registry
