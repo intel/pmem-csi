@@ -161,7 +161,7 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		} else /*if cs.mode == Unified */ {
 			foundNode := false
 			for _, nodeInfo := range cs.rs.nodeClients {
-				if nodeInfo.Capacity >= asked {
+				if nodeInfo.Capacity[nsmode] >= asked {
 					foundNode = true
 					break
 				}
@@ -337,7 +337,7 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 			// Update node capacity
 			// FIXME: Does this update should done via Registry API?
 			// like RegistryServer.UpdateCapacity(uint64 request)
-			cs.rs.UpdateNodeCapacity(node.NodeID, node.Capacity-vol.Size)
+			cs.rs.UpdateNodeCapacity(node.NodeID, vol.NsMode, node.Capacity[vol.NsMode]-vol.Size)
 		}
 		return resp, err
 	}
@@ -407,7 +407,7 @@ func (cs *controllerServer) ControllerUnpublishVolume(ctx context.Context, req *
 				// Update node capacity
 				// FIXME: Does this should be invoked from node controller?
 				// like RegistryServer.UpdateNodeCapacity(uint64 request)
-				cs.rs.UpdateNodeCapacity(node.NodeID, node.Capacity+vol.Size)
+				cs.rs.UpdateNodeCapacity(node.NodeID, vol.NsMode, node.Capacity[vol.NsMode]+vol.Size)
 			}
 		}
 

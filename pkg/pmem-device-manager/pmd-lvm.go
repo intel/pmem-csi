@@ -57,17 +57,19 @@ type vgInfo struct {
 	tag  string
 }
 
-func (lvm *pmemLvm) GetCapacity() (uint64, error) {
-	// TODO: this is hard-coded to fsdax. should add another loop over nsmode=sector ?
-	vgs, err := getVolumeGroups(lvm.volumeGroups, "fsdax")
-	if err != nil {
-		return 0, err
-	}
+func (lvm *pmemLvm) GetCapacity() (map[string]uint64, error) {
+	capacity := map[string]uint64{}
+	nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
+	for _, nsmod := range nsmodes {
+		vgs, err := getVolumeGroups(lvm.volumeGroups, string(nsmod))
+		if err != nil {
+			return nil, err
+		}
 
-	var capacity uint64
-	for _, vg := range vgs {
-		if vg.free > capacity {
-			capacity = vg.free
+		for _, vg := range vgs {
+			if vg.free > capacity[string(nsmod)] {
+				capacity[string(nsmod)] = vg.free
+			}
 		}
 	}
 
