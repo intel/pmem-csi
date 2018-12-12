@@ -41,23 +41,6 @@ func main() {
 
 func initNVdimms(ctx *ndctl.Context, namespacesize int, useforfsdax int, useforsector int) {
 	glog.Infof("Configured namespacesize; %v GB", namespacesize)
-	createNamespaces(ctx, namespacesize, useforfsdax, useforsector)
-	/* for debug
-	nss := ctx.GetActiveNamespaces()
-	glog.Info("elems in Namespaces:", len(nss))
-	for _, ns := range nss {
-		glog.Info("Namespace Name:", ns.Name())
-		glog.Info("    Size:", ns.Size())
-		glog.Info("    Device:", ns.DeviceName())
-		glog.Info("    Mode:", ns.Mode())
-		glog.Info("    BlockDevice:", ns.BlockDeviceName())
-	}*/
-}
-
-// Try to create more namespaces
-// for all regions:
-// - Check available size, if bigger than one NS size, create one more, repeat this in loop
-func createNamespaces(ctx *ndctl.Context, namespacesize int, useforfsdax int, useforsector int) {
 	// TODO: rethink is it good idea to reset to sane values or is it cleaner to fail
 	if useforfsdax < 0 || useforfsdax > 100 {
 		glog.Infof("useforfsdax limit should be 0..100 (seeing %v), resetting to default=100", useforfsdax)
@@ -79,6 +62,16 @@ func createNamespaces(ctx *ndctl.Context, namespacesize int, useforfsdax int, us
 			createNS(r, nsSize, useforsector, ndctl.SectorMode)
 		}
 	}
+	/* for debug
+	nss := ctx.GetActiveNamespaces()
+	glog.Info("elems in Namespaces:", len(nss))
+	for _, ns := range nss {
+		glog.Info("Namespace Name:", ns.Name())
+		glog.Info("    Size:", ns.Size())
+		glog.Info("    Device:", ns.DeviceName())
+		glog.Info("    Mode:", ns.Mode())
+		glog.Info("    BlockDevice:", ns.BlockDeviceName())
+	}*/
 }
 
 func createNS(r *ndctl.Region, nsSize uint64, uselimit int, nsmode ndctl.NamespaceMode) {
