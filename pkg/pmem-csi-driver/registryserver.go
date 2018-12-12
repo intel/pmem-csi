@@ -5,6 +5,7 @@ import (
 
 	"github.com/intel/pmem-csi/pkg/pmem-registry"
 	"golang.org/x/net/context"
+	"k8s.io/klog/glog"
 )
 
 type registryServer struct {
@@ -26,7 +27,7 @@ func NewRegistryServer() *registryServer {
 	}
 }
 
-//GetNodeController returns the node controlelr info for given nodeID, error if not found
+//GetNodeController returns the node controller info for given nodeID, error if not found
 func (rs *registryServer) GetNodeController(nodeID string) (NodeInfo, error) {
 	if node, ok := rs.nodeClients[nodeID]; ok {
 		return node, nil
@@ -43,8 +44,7 @@ func (rs *registryServer) RegisterController(ctx context.Context, req *registry.
 	if req.GetEndpoint() == "" {
 		return nil, fmt.Errorf("Missing endpoint address")
 	}
-
-	fmt.Printf("Registring node: %s, endpont: %s", req.NodeId, req.Endpoint)
+	glog.Infof("Registering node: %s, endpoint: %s", req.NodeId, req.Endpoint)
 
 	rs.nodeClients[req.NodeId] = NodeInfo{
 		NodeID:   req.NodeId,
@@ -61,10 +61,10 @@ func (rs *registryServer) UnregisterController(ctx context.Context, req *registr
 	}
 
 	if _, ok := rs.nodeClients[req.NodeId]; !ok {
-		return nil, fmt.Errorf("No entry with id '%s' not found in registry", req.NodeId)
+		return nil, fmt.Errorf("No entry with id '%s' found in registry", req.NodeId)
 	}
 
-	fmt.Printf("Unegistring node: %s", req.NodeId)
+	glog.Infof("Unregistering node: %s", req.NodeId)
 	delete(rs.nodeClients, req.NodeId)
 
 	return &registry.UnregisterControllerReply{}, nil
@@ -73,7 +73,7 @@ func (rs *registryServer) UnregisterController(ctx context.Context, req *registr
 func (rs *registryServer) UpdateNodeCapacity(nodeID string, capacity uint64) error {
 	info, ok := rs.nodeClients[nodeID]
 	if !ok {
-		return fmt.Errorf("No entry with id '%s' not found in registry", nodeID)
+		return fmt.Errorf("No entry with id '%s' found in registry", nodeID)
 	}
 
 	info.Capacity = capacity
