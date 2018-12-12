@@ -366,13 +366,20 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		volumeSize = vol.Size
 		nsmode = vol.NsMode
 	}
-	glog.Infof("ControllerPublishVolume: volumeName:%v volumeSize:%v nsmode:%v", volumeName, volumeSize, nsmode)
-	/* Node/Unified */
-	if err := cs.dm.CreateDevice(req.VolumeId, volumeSize, nsmode); err != nil {
-		return nil, status.Errorf(codes.Internal, "Failed to create volume: %s", err.Error())
-	}
+	// Check have we already published this volume.
+	// We may get called with same VolumeId repeatedly in short time
+	vol, published := cs.publishVolumeInfo[req.VolumeId]
+	if published {
+		glog.Infof("ControllerPublishVolume: Name:%v Id:%v already published, skip creation", vol, req.VolumeId)
+	} else {
+		glog.Infof("ControllerPublishVolume: volumeName:%v volumeSize:%v nsmode:%v", volumeName, volumeSize, nsmode)
+		/* Node/Unified */
+		if err := cs.dm.CreateDevice(req.VolumeId, volumeSize, nsmode); err != nil {
+			return nil, status.Errorf(codes.Internal, "Failed to create volume: %s", err.Error())
+		}
 
-	cs.publishVolumeInfo[req.VolumeId] = volumeName
+		cs.publishVolumeInfo[req.VolumeId] = volumeName
+	}
 
 	return &csi.ControllerPublishVolumeResponse{
 		PublishInfo: map[string]string{
