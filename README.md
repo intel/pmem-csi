@@ -205,7 +205,12 @@ aware.
 - **Deploy the driver to Kubernetes**
 
 ```sh
-    $ sed -e 's/192.168.8.1:5000/<your registry>/' deploy/k8s/pmem-csi.yaml | kubectl create -f -
+    $ sed -e 's/192.168.8.1:5000/<your registry>/' deploy/kubernetes/pmem-csi.yaml | kubectl create -f -
+```
+- **Use this variant to deploy on Kubernetes 1.12**
+
+```sh
+    $ sed -e 's/192.168.8.1:5000/<your registry>/' deploy/kubernetes-1.12/pmem-csi.yaml | kubectl create -f -
 ```
 
 This yaml file uses the registry address for the QEMU test cluster
@@ -215,19 +220,19 @@ that can be accessed by that cluster has to be used.
 - **Define a storage class using the driver**
 
 ```sh
-    $ kubectl create -f deploy/k8s/pmem-storageclass.yaml
+    $ kubectl create -f deploy/kubernetes/pmem-storageclass.yaml
 ```
 
 - **Provision a pmem-csi volume**
 
 ```sh
-    $ kubectl create -f deploy/k8s/pmem-pvc.yaml
+    $ kubectl create -f deploy/kubernetes/pmem-pvc.yaml
 ```
 
 - **Start an application requesting provisioned volume**
 
 ```sh
-    $ kubectl create -f deploy/k8s/pmem-app.yaml
+    $ kubectl create -f deploy/kubernetes/pmem-app.yaml
 ```
 
 The application uses **storage: pmem** in its <i>nodeSelector</i>
