@@ -16,7 +16,7 @@ message RegisterControllerRequest {
     // connect to the controller
     string endpoint = 2;
     // Available capacity of the node.
-    uint64 capacity = 3;
+    map<string, uint64> capacity = 3;
 }
 
 message RegisterControllerReply {
@@ -42,5 +42,5 @@ message GetCapacityRequest {
 }
 
 message GetCapacityReply {
-    uint64 capacity = 1;
+    map<string, uint64> capacity = 1;
 }

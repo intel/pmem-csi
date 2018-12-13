@@ -24,7 +24,9 @@ func NewPmemDeviceManagerNdctl() (PmemDeviceManager, error) {
 	}, nil
 }
 
-func (pmem *pmemNdctl) GetCapacity() (uint64, error) {
+func (pmem *pmemNdctl) GetCapacity() (map[string]uint64, error) {
+	Capacity := map[string]uint64{}
+	nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
 	var capacity uint64
 	for _, bus := range pmem.ctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
@@ -34,7 +36,13 @@ func (pmem *pmemNdctl) GetCapacity() (uint64, error) {
 			}
 		}
 	}
-	return capacity, nil
+	// we set same capacity for all namespace modes
+	// TODO: we should maintain all modes capacity when adding or subtracting
+	// from upper layer, not done right now!!
+	for _, nsmod := range nsmodes {
+		Capacity[string(nsmod)] = capacity
+	}
+	return Capacity, nil
 }
 
 func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) error {
