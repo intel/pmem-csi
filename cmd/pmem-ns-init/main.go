@@ -11,12 +11,6 @@ import (
 	"github.com/intel/pmem-csi/pkg/ndctl"
 )
 
-const (
-	// TODO: try to get rid of hard-coded overhead
-	// overhead likely comes from alignment (default 2M) and mapping_mode="dev"
-	namespaceOverhead = 4 * 1024 * 1024
-)
-
 var (
 	/* generic options */
 	//TODO: reading name configuration not yet supported
@@ -55,7 +49,7 @@ func initNVdimms(ctx *ndctl.Context, namespacesize int, useforfsdax int, usefors
 		useforfsdax = 100
 		useforsector = 0
 	}
-	nsSize := (uint64(namespacesize) * 1024 * 1024 * 1024)
+	nsSize := uint64(namespacesize) * 1024 * 1024 * 1024
 	for _, bus := range ctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
 			createNS(r, nsSize, useforfsdax, ndctl.FsdaxMode)
@@ -79,42 +73,44 @@ func createNS(r *ndctl.Region, nsSize uint64, uselimit int, nsmode ndctl.Namespa
 	canUse := uint64(uselimit) * r.Size() / 100
 	glog.Infof("Create %s-namespaces in %v, allowed %d %%:\ntotal       : %16d\navail       : %16d\ncan use     : %16d",
 		nsmode, r.DeviceName(), uselimit, r.Size(), r.AvailableSize(), canUse)
-	// Find sum of sizes of existing active namespaces with currently handled mode
-	var used uint64
+	// Subtract sizes of existing active namespaces with currently handled mode and owned by pmem-csi
 	for _, ns := range r.ActiveNamespaces() {
 		glog.Infof("createNS: Exists: Size %16d Mode:%v Device:%v Name:%v", ns.Size(), ns.Mode(), ns.DeviceName(), ns.Name())
-		if ns.Mode() == nsmode {
-			used += ns.Size() + namespaceOverhead
+		if ns.Mode() == nsmode && ns.Name() == "pmem-csi" {
+			canUse -= ns.Size()
 		}
 	}
-	glog.Infof("total used: %v", used)
-	if used < canUse {
-		actuallyAvailable := canUse - used
-		// because of NS sizes overhead, r.Available() is less then actuallyAvailable on an empty media
-		if r.AvailableSize() < actuallyAvailable {
-			actuallyAvailable = r.AvailableSize()
+	glog.Infof("%v bytes calculated available after scan for existing %s-mode namespaces", canUse, nsmode)
+	// cast to signed, otherwise can never be negative and risks forever-looping,
+	// broken only by break stmt below which happens after a failed creation attempt
+	for int64(canUse) > 0 {
+		if nsSize > canUse {
+			// this creates one last smaller namespace in leftover space
+			nsSize = canUse
+			glog.Infof("Less than configured namespacesize remaining, change desired size to %v", nsSize)
 		}
-		nPossibleNS := int(actuallyAvailable / (nsSize + namespaceOverhead))
-		glog.Infof("%d %s-namespaces of size %v possible in region %s",
-			nPossibleNS, nsmode, nsSize, r.DeviceName())
-		for i := 0; i < nPossibleNS; i++ {
-			glog.Infof("Creating namespace %d", i)
-			_, err := r.CreateNamespace(ndctl.CreateNamespaceOpts{
-				Name: "pmem-csi",
-				Mode: nsmode,
-				Size: nsSize,
-				// TODO: setting mapping location to "mem" avoids use (and problems in qemu env) of pfn
-				// but it also will force namespace to "raw" mode for some (still unknown) reason
-				//Location: "mem",
-				// An error was about not-given SectorSize, but when I give SectorSize specified:
-				//SectorSize: 2048,
-				// same forcing to raw happens without error reported
-			})
-			if err != nil {
-				glog.Warning("Failed to create namespace:", err.Error())
-				/* ??? something went wrong, leave this region ??? */
-				break
-			}
+		glog.Infof("Calculated canUse:%v, available by Region info:%v", canUse, r.AvailableSize())
+		// Because of overhead by alignement and extra space for page mapping, calculated available may show more than actual
+		if r.AvailableSize() < nsSize {
+			glog.Infof("Available in Region:%v is less than desired nsSize, limit nsSize to that", r.AvailableSize())
+			nsSize = r.AvailableSize()
 		}
+		// Should not happen easily, fragmented space could lead to r.MaxAvailableExtent() being less than r.AvailableSize()
+		if r.MaxAvailableExtent() < nsSize {
+			glog.Infof("MaxAvailableExtent in Region:%v is less than desired nsSize, limit nsSize to that", r.MaxAvailableExtent())
+			nsSize = r.MaxAvailableExtent()
+		}
+		glog.Infof("Create next %v-bytes %s-namespace", nsSize, nsmode)
+		_, err := r.CreateNamespace(ndctl.CreateNamespaceOpts{
+			Name: "pmem-csi",
+			Mode: nsmode,
+			Size: nsSize,
+		})
+		if err != nil {
+			glog.Warning("Failed to create namespace:", err.Error())
+			/* ??? something went wrong, leave this region ??? */
+			break
+		}
+		canUse -= nsSize
 	}
 }
