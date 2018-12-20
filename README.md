@@ -102,6 +102,17 @@ This gRPC server is started by the driver running in _Node_ mode and implements 
 The following diagram illustrates the communication channels between driver components:
 ![communication diagram](/docs/images/communication/pmem-csi-communication-diagram.png)
 
+### Security
+
+All pmem-csi specific communication [shown in above section](#communication-channels) between Master Controller([RegistryServer](#node-registry-server), [MasterControllerServer](#master-controller-server)) and NodeControllers([NodeControllerServer](#node-controller-server)) is protected by mutual TLS. Both client and server must identify themselves and the certificate they present must be trusted. The common name in each certificate is used to identify the different components. The following common names have a special meaning:
+
+- `pmem-registry` is used by the [RegistryServer](#node-registry-server).
+- `pmem-node-controller` is used by [NodeControllerServers](#node-controller-server)
+
+The [`test/setup-ca-kubernetes.sh`](test/setup-ca-kubernetes.sh) script shows how to generate certificates signed by Kubernetes cluster root Certificate Authority. And the provided [deployment files](deploy/kubernetes/pmem-csi.yaml) shows how to use the generated certificates to setup the driver. The test cluster is setup using certificates created by that script. The [`test/setup-ca.sh`](test/setup-ca.sh) script also shows how to generate self signed certificates. These are just examples, administrators of a cluster must ensure that they choose key lengths and algorithms of sufficient strength for their purposes and manage certificate distribution.
+
+A production deployment can improve upon that by using some other key delivery mechanism, like for example [Vault](https://www.vaultproject.io/).
+
 ### Dynamic provisioning
 
 The following diagram illustrates how the PMEM-CSI driver performs dynamic volume provisioning in Kubernetes:
