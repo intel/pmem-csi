@@ -2,7 +2,8 @@
 # - creates pmem NVDIMM files if necessary
 # - starts QEMU virtual machines with pmem NVDIMMs as described in https://github.com/qemu/qemu/blob/bd54b11062c4baa7d2e4efadcf71b8cfd55311fd/docs/nvdimm.txt
 # - starts a Kubernetes cluster
-start: _work/clear-kvm.img _work/kube-clear-kvm _work/start-clear-kvm _work/ssh-clear-kvm
+# - generate pmem secrets if necessary
+start: _work/clear-kvm.img _work/kube-clear-kvm _work/start-clear-kvm _work/ssh-clear-kvm test/setup-ca-kubernetes.sh _work/.setupcfssl-stamp
 	. test/test-config.sh && \
 	for i in $$(seq 0 $$(($(NUM_NODES) - 1))); do \
 		if ! [ -e _work/clear-kvm.$$i.pid ] || ! kill -0 $$(cat _work/clear-kvm.$$i.pid) 2>/dev/null; then \
@@ -33,6 +34,10 @@ start: _work/clear-kvm.img _work/kube-clear-kvm _work/start-clear-kvm _work/ssh-
 		fi; \
 		_work/ssh-clear-kvm kubectl label --overwrite node host-$$i storage=pmem; \
 	done
+	if ! [ -e _work/clear-kvm.secretsdone ] || [ $$(_work/ssh-clear-kvm 'kubectl get secrets | grep pmem- | wc -l') -ne 2 ]; then \
+		KUBECONFIG=$(PWD)/_work/clear-kvm-kube.config PATH='$(PWD)/_work/bin/:$(PATH)' ./test/setup-ca-kubernetes.sh && \
+		touch _work/clear-kvm.secretsdone; \
+	fi
 	@ echo
 	@ echo "The test cluster is ready. Log in with _work/ssh-clear-kvm, run kubectl once logged in."
 	@ echo "Alternatively, KUBECONFIG=$$(pwd)/_work/clear-kvm-kube.config can also be used directly."

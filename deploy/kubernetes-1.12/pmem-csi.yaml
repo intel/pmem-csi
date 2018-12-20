@@ -88,7 +88,10 @@ spec:
             "--csi-address=$(ADDRESS)" ]
         env:
         - name: ADDRESS
-          value: "0.0.0.0:10000"
+          value: "/csi/csi-controller.sock"
+        volumeMounts:
+        - name: socket-dir
+          mountPath: /csi
         ## external-provisioner:
         #    Watches PVClaim objects and triggers Create/DeleteVolume
       - name: external-provisioner
@@ -97,7 +100,10 @@ spec:
         args: [ "--v=5", "--provisioner=pmem-csi", "--csi-address=$(ADDRESS)" ]
         env:
         - name: ADDRESS
-          value: "0.0.0.0:10000"
+          value: "/csi/csi-controller.sock"
+        volumeMounts:
+        - name: socket-dir
+          mountPath: /csi
         ## external-attacher: sidecar
         #    Watches VolumeAttachment objects and triggers
         #    ControllerPublish/Unpublish
@@ -107,7 +113,10 @@ spec:
         args: [ "--v=5", "--csi-address=$(ADDRESS)" ]
         env:
         - name: ADDRESS
-          value: "0.0.0.0:10000"
+          value: "/csi/csi-controller.sock"
+        volumeMounts:
+        - name: socket-dir
+          mountPath: /csi
       - name: pmem-driver
         image: 192.168.8.1:5000/pmem-csi-driver:canary
         imagePullPolicy: Always
@@ -115,10 +124,22 @@ spec:
                  "-drivername=pmem-csi",
                  "-mode=controller",
                  "-endpoint=$(CSI_ENDPOINT)",
-                 "-nodeid=$(KUBE_NODE_NAME)" ]
+                 "-registryEndpoint=$(REGISTRY_ENDPOINT)",
+                 "-nodeid=$(KUBE_NODE_NAME)",
+                 "-caFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+                 "-certFile=/certs/pmem-registry.crt",
+                 "-keyFile=/certs/pmem-registry.key"
+               ]
+        volumeMounts:
+        - name: registry-cert
+          mountPath: /certs/
+        - name: socket-dir
+          mountPath: /csi
         env:
-        - name: CSI_ENDPOINT
+        - name: REGISTRY_ENDPOINT
           value: "tcp://0.0.0.0:10000"
+        - name: CSI_ENDPOINT
+          value: "unix:///csi/csi-controller.sock"
         - name: KUBE_NODE_NAME
           valueFrom:
             fieldRef:
@@ -126,6 +147,19 @@ spec:
               fieldPath: spec.nodeName
         securityContext:
           privileged: true
+      volumes:
+      - name: socket-dir
+        hostPath:
+          path: /var/lib/kubelet/plugins/pmem-csi/
+          type: DirectoryOrCreate
+      - name: registry-cert
+        secret:
+          secretName: pmem-registry-secrets
+          items:
+          - key: tls.crt
+            path: pmem-registry.crt
+          - key: tls.key
+            path: pmem-registry.key
 ---
 kind: DaemonSet
 apiVersion: apps/v1beta2
@@ -191,7 +225,11 @@ spec:
                   "-endpoint=$(CSI_ENDPOINT)",
                   "-nodeid=$(KUBE_NODE_NAME)",
                   "-controllerEndpoint=tcp://$(KUBE_POD_IP):10001",
-                  "-registryEndpoint=$(PMEM_CONTROLLER_PORT_10000_TCP)" ]
+                  "-registryEndpoint=$(PMEM_CONTROLLER_PORT_10000_TCP)",
+                  "-caFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+                  "-certFile=/certs/$(KUBE_NODE_NAME).crt",
+                  "-keyFile=/certs/$(KUBE_NODE_NAME).key"
+              ]
         securityContext:
           privileged: true
         env:
@@ -216,6 +254,8 @@ spec:
         - name: mountpoint-dir
           mountPath: /var/lib/kubelet/pods
           mountPropagation: Bidirectional
+        - name: registry-cert
+          mountPath: /certs/
       volumes:
         - name: socket-dir
           hostPath:
@@ -229,4 +269,6 @@ spec:
           hostPath:
             path: /var/lib/kubelet/pods
             type: DirectoryOrCreate
-
+        - name: registry-cert
+          secret:
+            secretName: pmem-node-secrets
