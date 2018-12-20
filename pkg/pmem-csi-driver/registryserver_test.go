@@ -1,0 +1,213 @@
+package pmemcsidriver_test
+
+import (
+	"crypto/tls"
+	"flag"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/container-storage-interface/spec/lib/go/csi/v0"
+	pmemcsidriver "github.com/intel/pmem-csi/pkg/pmem-csi-driver"
+	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
+	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+	"k8s.io/klog"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+)
+
+func init() {
+	klog.InitFlags(nil)
+	flag.Set("logtostderr", "true")
+	flag.Parse()
+}
+
+type mockNodeController struct {
+}
+
+func (m *mockNodeController) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
+	return &csi.ControllerPublishVolumeResponse{}, nil
+}
+
+func (m *mockNodeController) ControllerUnpublishVolume(ctx context.Context, req *csi.ControllerUnpublishVolumeRequest) (*csi.ControllerUnpublishVolumeResponse, error) {
+	return &csi.ControllerUnpublishVolumeResponse{}, nil
+}
+
+func TestPmemRegistry(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Registry Suite")
+}
+
+var tmpDir string
+
+var _ = BeforeSuite(func() {
+	var err error
+	tmpDir, err = ioutil.TempDir("", "pmem-test-")
+	Expect(err).NotTo(HaveOccurred())
+})
+
+var _ = AfterSuite(func() {
+	os.RemoveAll(tmpDir)
+})
+
+var _ = Describe("pmem registry", func() {
+
+	registryServerSocketFile := filepath.Join(tmpDir, "pmem-registry.sock")
+	registryServerEndpoint := "unix://" + registryServerSocketFile
+
+	var (
+		tlsConfig          *tls.Config
+		nbServer           *pmemcsidriver.NonBlockingGRPCServer
+		registryClientConn *grpc.ClientConn
+		registryClient     registry.RegistryClient
+		registryServer     = pmemcsidriver.NewRegistryServer(nil)
+	)
+
+	BeforeEach(func() {
+		var err error
+
+		caFile := os.ExpandEnv("${TEST_WORK}/pmem-ca/ca.pem")
+		certFile := os.ExpandEnv("${TEST_WORK}/pmem-ca/pmem-registry.pem")
+		keyFile := os.ExpandEnv("${TEST_WORK}/pmem-ca/pmem-registry-key.pem")
+		tlsConfig, err = pmemgrpc.LoadServerTLS(caFile, certFile, keyFile, "pmem-node-controller")
+		Expect(err).NotTo(HaveOccurred())
+
+		nbServer = pmemcsidriver.NewNonBlockingGRPCServer()
+		err = nbServer.Start(registryServerEndpoint, tlsConfig, registryServer)
+		Expect(err).NotTo(HaveOccurred())
+		_, err = os.Stat(registryServerSocketFile)
+		Expect(err).NotTo(HaveOccurred())
+
+		// set up node controller client
+		nodeCertFile := os.ExpandEnv("${TEST_WORK}/pmem-ca/pmem-node-controller.pem")
+		nodeCertKey := os.ExpandEnv("${TEST_WORK}/pmem-ca/pmem-node-controller-key.pem")
+		tlsConfig, err = pmemgrpc.LoadClientTLS(caFile, nodeCertFile, nodeCertKey, "pmem-registry")
+		Expect(err).NotTo(HaveOccurred())
+
+		registryClientConn, err = pmemgrpc.Connect(registryServerEndpoint, tlsConfig, 10*time.Second)
+		Expect(err).NotTo(HaveOccurred())
+		registryClient = registry.NewRegistryClient(registryClientConn)
+	})
+
+	AfterEach(func() {
+		if registryServer != nil {
+			nbServer.ForceStop()
+			nbServer.Wait()
+		}
+		os.Remove(registryServerSocketFile)
+		if registryClientConn != nil {
+			registryClientConn.Close()
+		}
+	})
+
+	Context("Registry API", func() {
+		controllerServerSocketFile := filepath.Join(tmpDir, "pmem-controller.sock")
+		controllerServerEndpoint := "unix://" + controllerServerSocketFile
+		var (
+			nodeId      = "pmem-test"
+			registerReq = registry.RegisterControllerRequest{
+				NodeId:   nodeId,
+				Endpoint: controllerServerEndpoint,
+				Capacity: map[string]uint64{
+					"fsdax": 1 * 1024 * 1024, // 1GB
+				},
+			}
+
+			unregisterReq = registry.UnregisterControllerRequest{
+				NodeId: nodeId,
+			}
+		)
+
+		It("Register node controller", func() {
+			Expect(registryClient).ShouldNot(BeNil())
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_, err := registryClient.RegisterController(ctx, &registerReq)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = registryServer.GetNodeController(nodeId)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Unregister node controller", func() {
+			Expect(registryClient).ShouldNot(BeNil())
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_, err := registryClient.RegisterController(ctx, &registerReq)
+			Expect(err).NotTo(HaveOccurred())
+
+			ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_, err = registryClient.UnregisterController(ctx, &unregisterReq)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = registryServer.GetNodeController(nodeId)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("Unregister non existing node controller", func() {
+			Expect(registryClient).ShouldNot(BeNil())
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_, err := registryClient.UnregisterController(ctx, &unregisterReq)
+			Expect(err.Error()).To(ContainSubstring("No entry with id '" + nodeId + "' found in registry"))
+		})
+	})
+
+	Context("Registry Security", func() {
+		var (
+			evilEndpoint = "unix:///tmp/pmem-evil.sock"
+			ca           = os.ExpandEnv("${TEST_WORK}/pmem-ca/ca.pem")
+			cert         = os.ExpandEnv("${TEST_WORK}/pmem-ca/pmem-node-controller.pem")
+			key          = os.ExpandEnv("${TEST_WORK}/pmem-ca/pmem-node-controller-key.pem")
+			wrongCert    = os.ExpandEnv("${TEST_WORK}/pmem-ca/wrong-node-controller.pem")
+			wrongKey     = os.ExpandEnv("${TEST_WORK}/pmem-ca/wrong-node-controller-key.pem")
+
+			evilCA   = os.ExpandEnv("${TEST_WORK}/evil-ca/ca.pem")
+			evilCert = os.ExpandEnv("${TEST_WORK}/evil-ca/pmem-node-controller.pem")
+			evilKey  = os.ExpandEnv("${TEST_WORK}/evil-ca/pmem-node-controller-key.pem")
+		)
+
+		// This covers different scenarios for connections to the OIM registry.
+		cases := []struct {
+			name, ca, cert, key, peerName, errorText string
+		}{
+			{"registry should detect man-in-the-middle", ca, evilCert, evilKey, "pmem-registry", "authentication handshake failed: remote error: tls: bad certificate"},
+			{"client should detect man-in-the-middle", evilCA, evilCert, evilKey, "pmem-registry", "transport: authentication handshake failed: x509: certificate signed by unknown authority"},
+			{"client should detect wrong peer", ca, cert, key, "unknown-registry", "transport: authentication handshake failed: x509: certificate is valid for pmem-registry, not unknown-registry"},
+			{"server should detect wrong peer", ca, wrongCert, wrongKey, "pmem-registry", "transport: authentication handshake failed: remote error: tls: bad certificate"},
+		}
+
+		for _, c := range cases {
+			c := c
+			It(c.name, func() {
+				tlsConfig, err := pmemgrpc.LoadClientTLS(c.ca, c.cert, c.key, c.peerName)
+				Expect(err).NotTo(HaveOccurred())
+				clientConn, err := pmemgrpc.Connect(registryServerEndpoint, tlsConfig, 10*time.Second)
+				Expect(err).NotTo(HaveOccurred())
+				client := registry.NewRegistryClient(clientConn)
+
+				req := registry.RegisterControllerRequest{
+					NodeId:   "pmem-evil",
+					Endpoint: evilEndpoint,
+					Capacity: map[string]uint64{
+						"fsdax": 1 * 1024 * 1024, // 1GB
+					},
+				}
+
+				_, err = client.RegisterController(context.Background(), &req)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring(c.errorText))
+			})
+		}
+	})
+
+})
