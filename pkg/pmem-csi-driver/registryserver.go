@@ -5,12 +5,15 @@ import (
 
 	"github.com/intel/pmem-csi/pkg/pmem-registry"
 	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 	"k8s.io/klog/glog"
 )
 
 type registryServer struct {
 	nodeClients map[string]NodeInfo
 }
+
+var _ PmemService = &registryServer{}
 
 type NodeInfo struct {
 	//NodeID controller node id
@@ -25,6 +28,10 @@ func NewRegistryServer() *registryServer {
 	return &registryServer{
 		nodeClients: map[string]NodeInfo{},
 	}
+}
+
+func (rs *registryServer) RegisterService(rpcServer *grpc.Server) {
+	registry.RegisterRegistryServer(rpcServer, rs)
 }
 
 //GetNodeController returns the node controller info for given nodeID, error if not found

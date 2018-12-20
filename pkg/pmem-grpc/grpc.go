@@ -48,51 +48,29 @@ func Connect(endpoint string, timeout time.Duration) (*grpc.ClientConn, error) {
 	}
 }
 
-type RegisterService func(*grpc.Server)
-
-func StartNewServer(endpoint string, serviceRegister RegisterService) error {
+func NewServer(endpoint string) (*grpc.Server, net.Listener, error) {
 	proto, addr, err := parseEndpoint(endpoint)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	if proto == "unix" {
 		if err = os.Remove(addr); err != nil && !os.IsNotExist(err) {
-			return err
+			return nil, nil, err
 		}
 	}
 
 	listener, err := net.Listen(proto, addr)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
-	// interceptor := grpc_middleware.ChainUnaryServer(
-	// 	otgrpc.OpenTracingServerInterceptor(
-	// 		opentracing.GlobalTracer(),
-	// 		otgrpc.SpanDecorator(pmemcommon.TraceGRPCPayload),
-	// 	),
-	// 	pmemcommon.LogGRPCServer,
-	// )
 	interceptor := pmemcommon.LogGRPCServer
 	opts := []grpc.ServerOption{
 		grpc.UnaryInterceptor(interceptor),
 	}
 
-	server := grpc.NewServer(opts...)
-
-	serviceRegister(server)
-
-	go func(server *grpc.Server, listener net.Listener) {
-		glog.Infof("Listening for connections on address: %#v", listener.Addr())
-
-		if err := server.Serve(listener); err != nil {
-			glog.Errorf("Server Listen failure: %s", err.Error())
-		}
-		glog.Infof("Server stopped !!!")
-	}(server, listener)
-
-	return nil
+	return grpc.NewServer(opts...), listener, nil
 }
 
 func parseEndpoint(ep string) (string, string, error) {
