@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"golang.org/x/net/context"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/klog/glog"
@@ -59,8 +60,9 @@ type controllerServer struct {
 
 var _ csi.ControllerServer = &controllerServer{}
 var volumeMutex = keymutex.NewHashed(-1)
+var _ PmemService = &controllerServer{}
 
-func NewControllerServer(driver *CSIDriver, mode DriverMode, rs *registryServer, dm pmdmanager.PmemDeviceManager) csi.ControllerServer {
+func NewControllerServer(driver *CSIDriver, mode DriverMode, rs *registryServer, dm pmdmanager.PmemDeviceManager) *controllerServer {
 	serverCaps := []csi.ControllerServiceCapability_RPC_Type{}
 	switch mode {
 	case Controller:
@@ -83,6 +85,10 @@ func NewControllerServer(driver *CSIDriver, mode DriverMode, rs *registryServer,
 		pmemVolumes:       map[string]pmemVolume{},
 		publishVolumeInfo: map[string]string{},
 	}
+}
+
+func (cs *controllerServer) RegisterService(rpcServer *grpc.Server) {
+	csi.RegisterControllerServer(rpcServer, cs)
 }
 
 func (cs *controllerServer) GetVolumeByID(volumeID string) *pmemVolume {

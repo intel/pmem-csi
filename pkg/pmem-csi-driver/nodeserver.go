@@ -13,6 +13,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/kubernetes/pkg/util/mount"
@@ -30,8 +31,9 @@ type nodeServer struct {
 }
 
 var _ csi.NodeServer = &nodeServer{}
+var _ PmemService = &nodeServer{}
 
-func NewNodeServer(driver *CSIDriver, dm pmdmanager.PmemDeviceManager) csi.NodeServer {
+func NewNodeServer(driver *CSIDriver, dm pmdmanager.PmemDeviceManager) *nodeServer {
 	driver.AddNodeServiceCapabilities([]csi.NodeServiceCapability_RPC_Type{
 		csi.NodeServiceCapability_RPC_STAGE_UNSTAGE_VOLUME,
 	})
@@ -40,6 +42,10 @@ func NewNodeServer(driver *CSIDriver, dm pmdmanager.PmemDeviceManager) csi.NodeS
 		dm:                dm,
 		volInfo:           map[string]string{},
 	}
+}
+
+func (ns *nodeServer) RegisterService(rpcServer *grpc.Server) {
+	csi.RegisterNodeServer(rpcServer, ns)
 }
 
 func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {

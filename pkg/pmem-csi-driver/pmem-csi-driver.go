@@ -59,9 +59,9 @@ type Config struct {
 type pmemDriver struct {
 	driver *CSIDriver
 	cfg    Config
-	ids    csi.IdentityServer
-	ns     csi.NodeServer
-	cs     csi.ControllerServer
+	ids    *identityServer
+	ns     *nodeServer
+	cs     *controllerServer
 	rs     *registryServer
 }
 
@@ -108,23 +108,14 @@ func (pmemd *pmemDriver) Run() error {
 		pmemd.cs = NewControllerServer(pmemd.driver, pmemd.cfg.Mode, pmemd.rs, nil)
 
 		if pmemd.cfg.Endpoint != pmemd.cfg.RegistryEndpoint {
-			if err := s.Start(pmemd.cfg.Endpoint, func(server *grpc.Server) {
-				csi.RegisterIdentityServer(server, pmemd.ids)
-				csi.RegisterControllerServer(server, pmemd.cs)
-			}); err != nil {
+			if err := s.Start(pmemd.cfg.Endpoint, pmemd.ids, pmemd.cs); err != nil {
 				return err
 			}
-			if err := s.Start(pmemd.cfg.RegistryEndpoint, func(server *grpc.Server) {
-				registry.RegisterRegistryServer(server, pmemd.rs)
-			}); err != nil {
+			if err := s.Start(pmemd.cfg.RegistryEndpoint, pmemd.rs); err != nil {
 				return err
 			}
 		} else {
-			if err := s.Start(pmemd.cfg.Endpoint, func(server *grpc.Server) {
-				csi.RegisterIdentityServer(server, pmemd.ids)
-				csi.RegisterControllerServer(server, pmemd.cs)
-				registry.RegisterRegistryServer(server, pmemd.rs)
-			}); err != nil {
+			if err := s.Start(pmemd.cfg.Endpoint, pmemd.ids, pmemd.cs, pmemd.rs); err != nil {
 				return err
 			}
 		}
@@ -138,24 +129,14 @@ func (pmemd *pmemDriver) Run() error {
 
 		if pmemd.cfg.Mode == Node {
 			if pmemd.cfg.Endpoint != pmemd.cfg.ControllerEndpoint {
-				if err := s.Start(pmemd.cfg.Endpoint, func(server *grpc.Server) {
-					csi.RegisterIdentityServer(server, pmemd.ids)
-					csi.RegisterNodeServer(server, pmemd.ns)
-				}); err != nil {
+				if err := s.Start(pmemd.cfg.Endpoint, pmemd.ids, pmemd.ns); err != nil {
 					return err
 				}
-				if err := s.Start(pmemd.cfg.ControllerEndpoint, func(server *grpc.Server) {
-					csi.RegisterControllerServer(server, pmemd.cs)
-					//registry.RegisterNodeControllerServer(server, pmemd.ncs)
-				}); err != nil {
+				if err := s.Start(pmemd.cfg.ControllerEndpoint, pmemd.cs); err != nil {
 					return err
 				}
 			} else {
-				if err := s.Start(pmemd.cfg.Endpoint, func(server *grpc.Server) {
-					csi.RegisterIdentityServer(server, pmemd.ids)
-					csi.RegisterControllerServer(server, pmemd.cs)
-					csi.RegisterNodeServer(server, pmemd.ns)
-				}); err != nil {
+				if err := s.Start(pmemd.cfg.Endpoint, pmemd.ids, pmemd.cs, pmemd.ns); err != nil {
 					return err
 				}
 			}
@@ -163,11 +144,7 @@ func (pmemd *pmemDriver) Run() error {
 				return err
 			}
 		} else /* if pmemd.cfg.Mode == Unified */ {
-			if err := s.Start(pmemd.cfg.Endpoint, func(server *grpc.Server) {
-				csi.RegisterIdentityServer(server, pmemd.ids)
-				csi.RegisterControllerServer(server, pmemd.cs)
-				csi.RegisterNodeServer(server, pmemd.ns)
-			}); err != nil {
+			if err := s.Start(pmemd.cfg.Endpoint, pmemd.ids, pmemd.cs, pmemd.ns); err != nil {
 				return err
 			}
 		}
@@ -187,7 +164,7 @@ func (pmemd *pmemDriver) registerNodeController(dm pmdmanager.PmemDeviceManager)
 	for {
 		conn, err = pmemgrpc.Connect(pmemd.cfg.RegistryEndpoint, connectionTimeout)
 		if err == nil {
-			glog.Infof("Conneted to RegistryServer!!!")
+			glog.Infof("Connected to RegistryServer!!!")
 			break
 		}
 		/* TODO: Retry loop */
