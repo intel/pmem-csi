@@ -187,8 +187,9 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 	if opts.Size != 0 {
 		ways := uint32(C.ndctl_region_get_interleave_ways(ndr))
 		if opts.Size%uint64(opts.Align*ways) != 0 {
-			return nil, fmt.Errorf("size(%v) must align to interleave-width(%v) and alignment: %v",
-				opts.Size, ways, opts.Align)
+			opts.Size &= ^uint64(opts.Align*ways - 1)
+			glog.Warningf("%s: NS size must align to interleave-width(%v) and alignment: %v, force-align to %v",
+				regionName, ways, opts.Align, opts.Size)
 		}
 	}
 
