@@ -21,6 +21,7 @@ import (
 	"github.com/intel/pmem-csi/pkg/pmem-common"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	"github.com/intel/pmem-csi/pkg/pmem-grpc"
+	"k8s.io/kubernetes/pkg/util/keymutex" // TODO: move to k8s.io/utils (https://github.com/kubernetes/utils/issues/62)
 )
 
 //VolumeStatus type representation for volume status
@@ -57,6 +58,7 @@ type controllerServer struct {
 }
 
 var _ csi.ControllerServer = &controllerServer{}
+var volumeMutex = keymutex.NewHashed(-1)
 
 func NewControllerServer(driver *CSIDriver, mode DriverMode, rs *registryServer, dm pmdmanager.PmemDeviceManager) csi.ControllerServer {
 	serverCaps := []csi.ControllerServiceCapability_RPC_Type{}
@@ -211,6 +213,11 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 		pmemcommon.Infof(3, ctx, "invalid delete volume req: %v", req)
 		return nil, err
 	}
+
+	// Serialize by VolumeId
+	volumeMutex.LockKey(req.VolumeId)
+	defer volumeMutex.UnlockKey(req.VolumeId)
+
 	pmemcommon.Infof(4, ctx, "DeleteVolume: volumeID: %v", req.GetVolumeId())
 	vol := cs.GetVolumeByID(req.GetVolumeId())
 	if vol == nil {
@@ -299,11 +306,15 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Node ID must be provided")
 	}
 
-	glog.Infof("ControllerPublishVolume: cs.Node: %s req.volume_id: %s, req.node_id: %s ", cs.Driver.nodeID, req.VolumeId, req.NodeId)
-
 	if req.GetVolumeCapability() == nil {
 		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Volume capability must be provided")
 	}
+
+	// Serialize by VolumeId
+	volumeMutex.LockKey(req.VolumeId)
+	defer volumeMutex.UnlockKey(req.VolumeId)
+
+	glog.Infof("ControllerPublishVolume: cs.Node: %s req.volume_id: %s, req.node_id: %s ", cs.Driver.nodeID, req.VolumeId, req.NodeId)
 
 	if cs.mode == Controller {
 		vol, ok := cs.pmemVolumes[req.VolumeId]
@@ -393,6 +404,10 @@ func (cs *controllerServer) ControllerUnpublishVolume(ctx context.Context, req *
 	if req.GetVolumeId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Volume ID must be provided")
 	}
+
+	// Serialize by VolumeId
+	volumeMutex.LockKey(req.VolumeId)
+	defer volumeMutex.UnlockKey(req.VolumeId)
 
 	glog.Infof("ControllerUnpublishVolume : volume_id: %s, node_id: %s ", req.VolumeId, req.NodeId)
 
