@@ -1357,7 +1357,7 @@
 
 [[projects]]
   branch = "storage-volume-testsuites-avoid-tests"
-  digest = "1:9e551719cb96f6eafcc6a010b6eae69e64ce90b9ffdf7c6ddb75786709765173"
+  digest = "1:f7ab5d6d771a04caf8952926fc4749f596e21c234b860301d290f90238e0c2f2"
   name = "k8s.io/kubernetes"
   packages = [
     "cmd/kubeadm/app/apis/kubeadm",
@@ -1513,9 +1513,9 @@
     "pkg/scheduler/algorithm/predicates",
     "pkg/scheduler/algorithm/priorities/util",
     "pkg/scheduler/api",
-    "pkg/scheduler/cache",
     "pkg/scheduler/internal/cache",
     "pkg/scheduler/metrics",
+    "pkg/scheduler/nodeinfo",
     "pkg/scheduler/util",
     "pkg/scheduler/volumebinder",
     "pkg/security/apparmor",
@@ -1528,6 +1528,7 @@
     "pkg/util/goroutinemap/exponentialbackoff",
     "pkg/util/hash",
     "pkg/util/io",
+    "pkg/util/keymutex",
     "pkg/util/labels",
     "pkg/util/metrics",
     "pkg/util/mount",
@@ -1561,7 +1562,7 @@
     "third_party/forked/golang/expansion",
   ]
   pruneopts = "UT"
-  revision = "007ebd8e62b39cd982c13bfb798fd21d15ad99ab"
+  revision = "d6a43ccb52414c3a808726207d147bc416b1513c"
   source = "github.com/pohly/kubernetes"
 
 [[projects]]
@@ -1605,6 +1606,7 @@
     "k8s.io/client-go/kubernetes",
     "k8s.io/klog",
     "k8s.io/klog/glog",
+    "k8s.io/kubernetes/pkg/util/keymutex",
     "k8s.io/kubernetes/pkg/util/mount",
     "k8s.io/kubernetes/pkg/version",
     "k8s.io/kubernetes/test/e2e/framework",

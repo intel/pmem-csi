@@ -61,8 +61,8 @@ func (t *volumeModeTestSuite) getTestSuiteInfo() TestSuiteInfo {
 	return t.tsInfo
 }
 
-func (t *volumeModeTestSuite) skipUnsupportedTest(pattern testpatterns.TestPattern, driver TestDriver) bool {
-	return false
+func (t *volumeModeTestSuite) isTestSupported(pattern testpatterns.TestPattern, driver TestDriver) bool {
+	return true
 }
 
 func createVolumeModeTestInput(pattern testpatterns.TestPattern, resource volumeModeTestResource) volumeModeTestInput {
@@ -78,13 +78,13 @@ func createVolumeModeTestInput(pattern testpatterns.TestPattern, resource volume
 		testVolType:      pattern.VolType,
 		nodeName:         dInfo.Config.ClientNodeName,
 		volMode:          pattern.VolMode,
-		isBlockSupported: dInfo.IsBlockSupported,
+		isBlockSupported: dInfo.Capabilities[CapBlock],
 	}
 }
 
 func getVolumeModeTestFunc(pattern testpatterns.TestPattern, driver TestDriver) func(*volumeModeTestInput) {
 	dInfo := driver.GetDriverInfo()
-	isBlockSupported := dInfo.IsBlockSupported
+	isBlockSupported := dInfo.Capabilities[CapBlock]
 	volMode := pattern.VolMode
 	volType := pattern.VolType
 

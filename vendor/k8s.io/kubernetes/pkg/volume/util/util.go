@@ -201,9 +201,9 @@ func PathExists(path string) (bool, error) {
 		return false, nil
 	} else if IsCorruptedMnt(err) {
 		return true, err
-	} else {
-		return false, err
 	}
+
+	return false, err
 }
 
 // IsCorruptedMnt return true if err is about corrupted mount point
@@ -825,9 +825,10 @@ func GetUniqueVolumeName(pluginName, volumeName string) v1.UniqueVolumeName {
 	return v1.UniqueVolumeName(fmt.Sprintf("%s/%s", pluginName, volumeName))
 }
 
-// GetUniqueVolumeNameForNonAttachableVolume returns the unique volume name
-// for a non-attachable volume.
-func GetUniqueVolumeNameForNonAttachableVolume(
+// GetUniqueVolumeNameFromSpecWithPod returns a unique volume name with pod
+// name included. This is useful to generate different names for different pods
+// on same volume.
+func GetUniqueVolumeNameFromSpecWithPod(
 	podName types.UniquePodName, volumePlugin volume.VolumePlugin, volumeSpec *volume.Spec) v1.UniqueVolumeName {
 	return v1.UniqueVolumeName(
 		fmt.Sprintf("%s/%v-%s", volumePlugin.GetPluginName(), podName, volumeSpec.Name()))

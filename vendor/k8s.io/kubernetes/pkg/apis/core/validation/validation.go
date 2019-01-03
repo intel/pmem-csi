@@ -2299,11 +2299,7 @@ func ValidateVolumeMounts(mounts []core.VolumeMount, voldevices map[string]strin
 		}
 
 		if len(mnt.SubPath) > 0 {
-			if !utilfeature.DefaultFeatureGate.Enabled(features.VolumeSubpath) {
-				allErrs = append(allErrs, field.Forbidden(fldPath.Child("subPath"), "subPath is disabled by feature-gate"))
-			} else {
-				allErrs = append(allErrs, validateLocalDescendingPath(mnt.SubPath, fldPath.Child("subPath"))...)
-			}
+			allErrs = append(allErrs, validateLocalDescendingPath(mnt.SubPath, fldPath.Child("subPath"))...)
 		}
 
 		if mnt.MountPropagation != nil {
@@ -4062,7 +4058,7 @@ func ValidatePodTemplateSpecForRC(template *core.PodTemplateSpec, selectorMap ma
 			allErrs = append(allErrs, field.NotSupported(fldPath.Child("spec", "restartPolicy"), template.Spec.RestartPolicy, []string{string(core.RestartPolicyAlways)}))
 		}
 		if template.Spec.ActiveDeadlineSeconds != nil {
-			allErrs = append(allErrs, field.Invalid(fldPath.Child("spec", "activeDeadlineSeconds"), template.Spec.ActiveDeadlineSeconds, "must not be specified"))
+			allErrs = append(allErrs, field.Forbidden(fldPath.Child("spec", "activeDeadlineSeconds"), "activeDeadlineSeconds in ReplicationController is not Supported"))
 		}
 	}
 	return allErrs
