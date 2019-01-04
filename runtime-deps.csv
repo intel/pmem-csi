@@ -3,3 +3,4 @@ golang-protobuf,https://github.com/golang/protobuf
 google uuid,https://github.com/google/uuid
 grpc-go,https://github.com/grpc/grpc-go
 kubernetes,https://github.com/kubernetes/kubernetes
+pkg/errors,https://github.com/pkg/errors
