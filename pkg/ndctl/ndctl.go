@@ -6,7 +6,12 @@ package ndctl
 //#include <ndctl/libndctl.h>
 //#include <ndctl/ndctl.h>
 import "C"
-import "fmt"
+
+import (
+	"fmt"
+	"github.com/pkg/errors"
+	"k8s.io/klog/glog"
+)
 
 const (
 	kib  uint64 = 1024
@@ -62,14 +67,19 @@ func (ctx *Context) GetBuses() []*Bus {
 
 //CreateNamespace create new namespace with given opts
 func (ctx *Context) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
+	var err error
+	var ns *Namespace
 	for _, bus := range ctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
-			if ns, err := r.CreateNamespace(opts); err == nil {
+			if ns, err = r.CreateNamespace(opts); err == nil {
+				glog.Infof("Namespace %s created in %s", ns.Name(), r.DeviceName())
 				return ns, nil
+			} else {
+				glog.Errorf("Namespace creation failure in %s: %s", r.DeviceName(), err.Error())
 			}
 		}
 	}
-	return nil, fmt.Errorf("Failed to create namespace")
+	return nil, errors.Wrap(err, "failed to create namespace")
 }
 
 //DestroyNamespaceByName deletes namespace with given name
