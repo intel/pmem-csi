@@ -453,32 +453,27 @@ func (ns *Namespace) nullify() error {
 	var file *os.File
 
 	C.ndctl_namespace_set_raw_mode(ndns, 1)
+	defer C.ndctl_namespace_set_raw_mode(ndns, 0)
 	if err = ns.Enable(); err != nil {
-		C.ndctl_namespace_set_raw_mode(ndns, 0)
 		return err
 	}
 
-	if rc = C.posix_memalign(&buf, C.size_t(kib), C.size_t(kib)); rc < 0 {
-		C.ndctl_namespace_set_raw_mode(ndns, 0)
+	if rc = C.posix_memalign(&buf, C.size_t(kib4), C.size_t(kib4)); rc < 0 {
 		return fmt.Errorf("memory error: %s", cErrorString(rc))
 	}
+	defer C.free(buf)
+	C.memset(buf, 0, C.size_t(kib4))
 
-	file, err = os.OpenFile(ns.BlockDeviceName(), os.O_RDWR|syscall.O_DIRECT|os.O_EXCL, os.ModeDevice)
+	file, err = os.OpenFile("/dev/"+ns.BlockDeviceName(), os.O_RDWR|syscall.O_DIRECT|os.O_EXCL, os.ModeDevice)
 	if err != nil {
-		C.ndctl_namespace_set_raw_mode(ndns, 0)
 		return err
 	}
+	defer file.Close()
 
-	C.memset(buf, 0, C.size_t(kib4))
-	bytes := make([]byte, kib4)
-	copy(bytes, (*(*[]byte)(buf))[:kib4])
+	bytes := *(*[]byte)(buf)
 	if _, err = file.Write(bytes); err != nil {
 		err = fmt.Errorf("failed to zero info block %s", err.Error())
 	}
-
-	file.Close()
-
-	C.ndctl_namespace_set_raw_mode(ndns, 0)
 
 	return err
 }
