@@ -37,8 +37,8 @@ import (
 type TestSuite interface {
 	// getTestSuiteInfo returns the TestSuiteInfo for this TestSuite
 	getTestSuiteInfo() TestSuiteInfo
-	// skipUnsupportedTest returns true if this TestSuite is not suitable to be tested with the combination of TestPattern and TestDriver
-	skipUnsupportedTest(testpatterns.TestPattern, TestDriver) bool
+	// isTestSupported returns false if this TestSuite cannot be tested with the combination of TestPattern and TestDriver
+	isTestSupported(testpatterns.TestPattern, TestDriver) bool
 	// execTest executes test of the testpattern for the driver
 	execTest(TestDriver, testpatterns.TestPattern)
 }
@@ -71,14 +71,14 @@ func RunTestSuite(f *framework.Framework, driver TestDriver, tsInits []func() Te
 		patterns := tunePatternFunc(suite.getTestSuiteInfo().testPatterns)
 
 		for _, pattern := range patterns {
-			if skipUnsupportedTest(suite, driver, pattern) {
+			if !isTestSupported(suite, driver, pattern) {
 				continue
 			}
 
 			if bTestDriver, ok := driver.(BeforeEachTestDriver); ok {
-				pattern := pattern
+				p := pattern
 				BeforeEach(func() {
-					bTestDriver.BeforeEach(pattern)
+					bTestDriver.BeforeEach(p)
 				})
 			}
 
@@ -87,14 +87,15 @@ func RunTestSuite(f *framework.Framework, driver TestDriver, tsInits []func() Te
 	}
 }
 
-// skipUnsupportedTest will determine if the combination of driver, testsuite, and testpattern
-// is unsuitable to be tested.
+// isTestSupported will determine if the combination of driver, testsuite, and testpattern
+// can be tested.
+//
 // Whether it needs to be skipped is checked by following steps:
 // 1. Check if Whether volType is supported by driver from its interface
 // 2. Check if fsType is supported by driver
 // 3. Check with driver specific logic
 // 4. Check with testSuite specific logic
-func skipUnsupportedTest(suite TestSuite, driver TestDriver, pattern testpatterns.TestPattern) bool {
+func isTestSupported(suite TestSuite, driver TestDriver, pattern testpatterns.TestPattern) bool {
 	dInfo := driver.GetDriverInfo()
 
 	// 1. Check if Whether volType is supported by driver from its interface
@@ -111,25 +112,25 @@ func skipUnsupportedTest(suite TestSuite, driver TestDriver, pattern testpattern
 	}
 
 	if !isSupported {
-		return true
+		return false
 	}
 
 	// 2. Check if fsType is supported by driver
 	if !dInfo.SupportedFsType.Has(pattern.FsType) {
-		return true
+		return false
 	}
 
 	// 3. Check with driver specific logic
-	if sDriver, ok := driver.(StaticSkipTestDriver); ok && sDriver.SkipUnsupportedTest(pattern) {
-		return true
+	if fDriver, ok := driver.(FilterTestDriver); ok && !fDriver.IsTestSupported(pattern) {
+		return false
 	}
 
 	// 4. Check with testSuite specific logic
-	if suite.skipUnsupportedTest(pattern, driver) {
-		return true
+	if !suite.isTestSupported(pattern, driver) {
+		return false
 	}
 
-	return false
+	return true
 }
 
 // genericVolumeTestResource is a generic implementation of TestResource that wil be able to

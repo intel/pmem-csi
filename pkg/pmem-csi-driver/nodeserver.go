@@ -59,6 +59,10 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		return nil, status.Error(codes.InvalidArgument, "Staging target path missing in request")
 	}
 
+	// Serialize by VolumeId
+	volumeMutex.LockKey(req.GetVolumeId())
+	defer volumeMutex.UnlockKey(req.GetVolumeId())
+
 	targetPath := req.TargetPath
 	stagingtargetPath := req.StagingTargetPath
 	// TODO: check is bind-mount already made
@@ -114,6 +118,10 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	}
 	volumeID := req.GetVolumeId()
 
+	// Serialize by VolumeId
+	volumeMutex.LockKey(volumeID)
+	defer volumeMutex.UnlockKey(volumeID)
+
 	// Unmounting the image
 	glog.Infof("NodeUnpublishVolume: unmount %s", targetPath)
 	err := mount.New("").Unmount(targetPath)
@@ -144,6 +152,11 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	attrs := req.GetVolumeAttributes()
 
 	requestedFsType := req.GetVolumeCapability().GetMount().GetFsType()
+
+	// Serialize by VolumeId
+	volumeMutex.LockKey(req.GetVolumeId())
+	defer volumeMutex.UnlockKey(req.GetVolumeId())
+
 	// showing for debug:
 	glog.Infof("NodeStageVolume: VolumeID is %v", req.GetVolumeId())
 	glog.Infof("NodeStageVolume: VolumeName is %v", attrs["name"])
@@ -243,6 +256,11 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	}
 
 	volName := ns.volInfo[req.VolumeId]
+
+	// Serialize by VolumeId
+	volumeMutex.LockKey(req.GetVolumeId())
+	defer volumeMutex.UnlockKey(req.GetVolumeId())
+
 	// showing for debug:
 	glog.Infof("NodeUnStageVolume: VolumeID is %v", req.GetVolumeId())
 	glog.Infof("NodeUnStageVolume: VolumeName is %v", volName)

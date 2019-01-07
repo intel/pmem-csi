@@ -38,14 +38,14 @@ type TestDriver interface {
 	CleanupDriver()
 }
 
-// StaticSkipTestDriver is an optional interface that drivers can
-// implement to filter out unsuitable tests.
-type StaticSkipTestDriver interface {
-	// SkipUnsupportedTest returns true if the Testpattern is not
+// FilterTestDriver is an optional interface that drivers can
+// implement to filter out unsuitable tests while tests get defined.
+type FilterTestDriver interface {
+	// IsTestSupported returns false if the Testpattern is not
 	// suitable to test with the TestDriver. This will be called
-	// already while defining tests and skipped tests will not even
+	// already while defining tests and unsupported tests will not even
 	// be added to the test suite.
-	SkipUnsupportedTest(testpatterns.TestPattern) bool
+	IsTestSupported(testpatterns.TestPattern) bool
 }
 
 // BeforeEachTestDriver is an optional interface that drivers can
@@ -98,18 +98,26 @@ type DynamicPVTestDriver interface {
 	GetClaimSize() string
 }
 
+// Capability represents a feature that a volume plugin supports
+type Capability string
+
+const (
+	CapPersistence Capability = "persistence" // data is persisted across pod restarts
+	CapBlock       Capability = "block"       // raw block mode
+	CapFsGroup     Capability = "fsGroup"     // volume ownership via fsGroup
+	CapExec        Capability = "exec"        // exec a file in the volume
+)
+
 // DriverInfo represents a combination of parameters to be used in implementation of TestDriver
 type DriverInfo struct {
 	Name       string // Name of the driver
 	FeatureTag string // FeatureTag for the driver
 
-	MaxFileSize          int64       // Max file size to be tested for this driver
-	SupportedFsType      sets.String // Map of string for supported fs type
-	SupportedMountOption sets.String // Map of string for supported mount option
-	RequiredMountOption  sets.String // Map of string for required mount option (Optional)
-	IsPersistent         bool        // Flag to represent whether it provides persistency
-	IsFsGroupSupported   bool        // Flag to represent whether it supports fsGroup
-	IsBlockSupported     bool        // Flag to represent whether it supports Block Volume
+	MaxFileSize          int64               // Max file size to be tested for this driver
+	SupportedFsType      sets.String         // Map of string for supported fs type
+	SupportedMountOption sets.String         // Map of string for supported mount option
+	RequiredMountOption  sets.String         // Map of string for required mount option (Optional)
+	Capabilities         map[Capability]bool // Map that represents plugin capabilities
 
 	Config TestConfig // Test configuration for the current test.
 }
@@ -132,18 +140,11 @@ type TestConfig struct {
 	// pick a node.
 	ClientNodeName string
 
-	// If non-empty, then pods using a volume will be scheduled
-	// onto nodes with these label/value pairs.
+	// Some tests also support scheduling pods onto nodes with
+	// these label/value pairs. As not all tests use this field,
+	// a driver that absolutely needs the pods on a specific
+	// node must use ClientNodeName.
 	ClientNodeSelector map[string]string
-
-	// Some tests run two pods. If this is non-empty, then the
-	// second pod is schedule to this node, otherwise to the one
-	// set in ClientNodeName.
-	SecondClientNodeName string
-
-	// If non-empty, then the second pod will be schedule with this
-	// node selector, otherwise ClientNodeSelector.
-	SecondClientNodeSelector map[string]string
 
 	// Some test drivers initialize a storage server. This is
 	// the configuration that then has to be used to run tests.
