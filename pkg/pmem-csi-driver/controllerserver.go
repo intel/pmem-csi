@@ -235,10 +235,8 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 			}
 		}
 		delete(cs.pmemVolumes, vol.ID)
+		pmemcommon.Infof(4, ctx, "DeleteVolume: volume deleted %s", req.GetVolumeId())
 	}
-
-	pmemcommon.Infof(4, ctx, "DeleteVolume: volume deleted %s", req.GetVolumeId())
-
 	return &csi.DeleteVolumeResponse{}, nil
 }
 
