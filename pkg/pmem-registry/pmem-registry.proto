@@ -15,8 +15,6 @@ message RegisterControllerRequest {
     // Node controller's address that can be used for grpc.Dial to
     // connect to the controller
     string endpoint = 2;
-    // Available capacity of the node.
-    map<string, uint64> capacity = 3;
 }
 
 message RegisterControllerReply {
@@ -30,17 +28,4 @@ message UnregisterControllerRequest {
 
 message UnregisterControllerReply {
     // empty
-}
-
-// interface that supposed to implemented by Node controllers along with CSI.Controller interface
-service NodeController {
-    rpc GetCapacity(GetCapacityRequest) returns (GetCapacityReply) {}
-}
-
-message GetCapacityRequest {
-    // empty
-}
-
-message GetCapacityReply {
-    map<string, uint64> capacity = 1;
 }
