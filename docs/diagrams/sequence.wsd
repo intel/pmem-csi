@@ -47,8 +47,13 @@ admin->k8s:create PVC object\nkubectl create -f pmem-pvc.yaml
 k8s->admin
 k8s-->provisioner:<<Event>>\nPersistentVolumeClaim created
 activate provisioner
-provisioner->masterdriver:CSI.ControllerCreateVolume()
-masterdriver->masterdriver:create volume
+provisioner->masterdriver:CSI.Controller.CreateVolume()
+note right of masterdriver
+    * gets available pmem capacity at each worker node
+    * does the sanity check if volume can be created with requested volume size
+end note
+masterdriver->nodedriver:csi.Controller.GetCapacity()
+nodedriver->masterdriver:{capacity: xxx}
 masterdriver->provisioner:success
 provisioner->k8s:Create PV object
 deactivate provisioner
@@ -59,9 +64,9 @@ k8s->user
 
 k8s-->attacher:<<Event>>\nVolumeAttachment object create
 activate attacher
-attacher-->masterdriver:CSI.ControllerPublishVolume()
+attacher-->masterdriver:csi.Controller.ControllerPublishVolume()
 activate masterdriver
-masterdriver-->nodedriver:CSI.ControllerPublishVolume()
+masterdriver-->nodedriver:csi.Controller.ControllerPublishVolume()
 nodedriver->nodedriver:create pmem device
 nodedriver->masterdriver:success
 masterdriver->attacher:success
@@ -70,13 +75,13 @@ deactivate masterdriver
 deactivate attacher
 
 k8s-->nodekubelet:make available volume to pod
-nodekubelet->nodedriver:CSI.NodeStageVolume()
+nodekubelet->nodedriver:csi.Node.StageVolume()
 activate nodedriver
 nodedriver->nodedriver:mount pmem device
 nodedriver->nodekubelet:success
 deactivate nodedriver
 
-nodekubelet->nodedriver:CSI.NodePublishVolume()
+nodekubelet->nodedriver:csi.Node.PublishVolume()
 activate nodedriver
 nodedriver->nodedriver:bind mount pmem device
 nodedriver->nodekubelet:success

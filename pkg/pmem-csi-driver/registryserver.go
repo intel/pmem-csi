@@ -24,8 +24,6 @@ type NodeInfo struct {
 	NodeID string
 	//Endpoint node controller endpoint
 	Endpoint string
-	//Capacity node capacity, map by namespacemode type, current values fsdax,sector
-	Capacity map[string]uint64
 }
 
 func NewRegistryServer(tlsConfig *tls.Config) *registryServer {
@@ -71,7 +69,6 @@ func (rs *registryServer) RegisterController(ctx context.Context, req *registry.
 	rs.nodeClients[req.NodeId] = NodeInfo{
 		NodeID:   req.NodeId,
 		Endpoint: req.Endpoint,
-		Capacity: req.GetCapacity(),
 	}
 
 	return &registry.RegisterControllerReply{}, nil
@@ -90,16 +87,4 @@ func (rs *registryServer) UnregisterController(ctx context.Context, req *registr
 	delete(rs.nodeClients, req.NodeId)
 
 	return &registry.UnregisterControllerReply{}, nil
-}
-
-func (rs *registryServer) UpdateNodeCapacity(nodeID string, nsmode string, capacity uint64) error {
-	info, ok := rs.nodeClients[nodeID]
-	if !ok {
-		return fmt.Errorf("No entry with id '%s' found in registry", nodeID)
-	}
-
-	info.Capacity[nsmode] = capacity
-	rs.nodeClients[nodeID] = info
-
-	return nil
 }

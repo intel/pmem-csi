@@ -186,7 +186,7 @@ func (pmemd *pmemDriver) Run() error {
 					return err
 				}
 			}
-			if err := pmemd.registerNodeController(dm); err != nil {
+			if err := pmemd.registerNodeController(); err != nil {
 				return err
 			}
 		} else /* if pmemd.cfg.Mode == Unified */ {
@@ -202,7 +202,7 @@ func (pmemd *pmemDriver) Run() error {
 	return nil
 }
 
-func (pmemd *pmemDriver) registerNodeController(dm pmdmanager.PmemDeviceManager) error {
+func (pmemd *pmemDriver) registerNodeController() error {
 	fmt.Printf("Connecting to Registry at : %s\n", pmemd.cfg.RegistryEndpoint)
 	var err error
 	var conn *grpc.ClientConn
@@ -218,14 +218,9 @@ func (pmemd *pmemDriver) registerNodeController(dm pmdmanager.PmemDeviceManager)
 		time.Sleep(10 * time.Second)
 	}
 	client := registry.NewRegistryClient(conn)
-	capacity, err := dm.GetCapacity()
-	if err != nil {
-		glog.Warningf("Error while preparing node capacity: %s", err.Error())
-	}
 	req := registry.RegisterControllerRequest{
 		NodeId:   pmemd.driver.nodeID,
 		Endpoint: pmemd.cfg.ControllerEndpoint,
-		Capacity: capacity,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()

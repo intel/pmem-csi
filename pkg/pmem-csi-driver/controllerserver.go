@@ -41,7 +41,7 @@ const (
 type pmemVolume struct {
 	ID     string
 	Name   string
-	Size   uint64
+	Size   int64
 	Status VolumeStatus
 	NodeID string
 	Erase  bool
@@ -68,11 +68,14 @@ func NewControllerServer(driver *CSIDriver, mode DriverMode, rs *registryServer,
 		serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME)
 		serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME)
 		serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_LIST_VOLUMES)
+		serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_GET_CAPACITY)
 	case Node:
 		serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME)
+		serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_GET_CAPACITY)
 	case Unified:
 		serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME)
 		serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_LIST_VOLUMES)
+		serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_GET_CAPACITY)
 	}
 	driver.AddControllerServiceCapabilities(serverCaps)
 
@@ -140,18 +143,24 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 				}
 			}
 		}
+	} else {
+		/* set default parameters */
+		params = map[string]string{
+			"nsmode":     nsmode,
+			"eraseafter": "true",
+		}
 	}
 
-	asked := uint64(req.GetCapacityRange().GetRequiredBytes())
+	asked := req.GetCapacityRange().GetRequiredBytes()
 	// Required==zero means unspecified by CSI spec, we create a small 4 Mbyte volume
 	// as lvcreate does not allow zero size (csi-sanity creates zero-sized volumes)
-	if asked == 0 {
+	if asked <= 0 {
 		asked = 4 * 1024 * 1024
 	}
 
 	glog.Infof("CreateVolume: Name: %v req.Required: %v req.Limit: %v", req.Name, asked, req.GetCapacityRange().GetLimitBytes())
 	if vol = cs.GetVolumeByName(req.Name); vol != nil {
-		// Check if the size of exisiting volume new can cover the new request
+		// Check if the size of existing volume can cover the new request
 		glog.Infof("CreateVolume: Vol %s exists, Size: %v", vol.Name, vol.Size)
 		if vol.Size < asked {
 			return nil, status.Error(codes.AlreadyExists, fmt.Sprintf("Volume with the same name: %s but with different size already exist", vol.Name))
@@ -161,19 +170,28 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		volumeID := id.String()
 		if cs.mode == Unified || cs.mode == Node {
 			glog.Infof("CreateVolume: Special create volume in Unified mode")
-			if err := cs.dm.CreateDevice(volumeID, asked, nsmode); err != nil {
+			if err := cs.dm.CreateDevice(volumeID, uint64(asked), nsmode); err != nil {
 				return nil, status.Errorf(codes.Internal, "CreateVolume: failed to create volume: %s", err.Error())
 			}
-		} else /*if cs.mode == Unified */ {
-			foundNode := false
-			for _, nodeInfo := range cs.rs.nodeClients {
-				if nodeInfo.Capacity[nsmode] >= asked {
-					foundNode = true
-					break
+		} else /*if cs.mode == Controller */ {
+			capReq := &csi.GetCapacityRequest{
+				Parameters:         params,
+				VolumeCapabilities: req.GetVolumeCapabilities(),
+			}
+			foundNodes := []string{}
+			for _, node := range cs.rs.nodeClients {
+				cap, err := cs.getNodeCapacity(ctx, node, capReq)
+				if err != nil {
+					glog.Warningf("Error while fetching '%s' node capacity: %s", node.NodeID, err.Error())
+					continue
+				}
+				if cap >= asked {
+					glog.Infof("node %s has requested capacity", node.NodeID)
+					foundNodes = append(foundNodes, node.NodeID)
 				}
 			}
 
-			if !foundNode {
+			if len(foundNodes) == 0 {
 				return nil, status.Error(codes.Unavailable, fmt.Sprintf("No node found with %v capacaity", asked))
 			}
 		}
@@ -196,10 +214,10 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 	return &csi.CreateVolumeResponse{
 		Volume: &csi.Volume{
 			Id:            vol.ID,
-			CapacityBytes: int64(vol.Size),
+			CapacityBytes: vol.Size,
 			Attributes: map[string]string{
 				"name":   req.GetName(),
-				"size":   strconv.FormatUint(asked, 10),
+				"size":   strconv.FormatInt(asked, 10),
 				"nsmode": nsmode,
 			},
 		},
@@ -280,7 +298,7 @@ func (cs *controllerServer) ListVolumes(ctx context.Context, req *csi.ListVolume
 			CapacityBytes: int64(vol.Size),
 			Attributes: map[string]string{
 				"name": vol.Name,
-				"size": strconv.FormatUint(vol.Size, 10),
+				"size": strconv.FormatInt(vol.Size, 10),
 			},
 		}
 		entries = append(entries, &csi.ListVolumesResponse_Entry{
@@ -338,7 +356,7 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		glog.Infof("Initiating Publishing volume ....")
 
 		req.VolumeAttributes["name"] = vol.Name
-		req.VolumeAttributes["size"] = strconv.FormatUint(vol.Size, 10)
+		req.VolumeAttributes["size"] = strconv.FormatInt(vol.Size, 10)
 		req.VolumeAttributes["nsmode"] = vol.NsMode
 		resp, err := csiClient.ControllerPublishVolume(ctx, req)
 		glog.Infof("Got response")
@@ -346,10 +364,6 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		if err == nil {
 			vol.Status = Attached
 			vol.NodeID = req.NodeId
-			// Update node capacity
-			// FIXME: Does this update should done via Registry API?
-			// like RegistryServer.UpdateCapacity(uint64 request)
-			cs.rs.UpdateNodeCapacity(node.NodeID, vol.NsMode, node.Capacity[vol.NsMode]-vol.Size)
 		}
 		return resp, err
 	}
@@ -375,7 +389,7 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 			return nil, status.Error(codes.NotFound, fmt.Sprintf("No volume with id '%s' found", req.VolumeId))
 		}
 		volumeName = vol.Name
-		volumeSize = vol.Size
+		volumeSize = uint64(vol.Size)
 		nsmode = vol.NsMode
 	}
 	// Check have we already published this volume.
@@ -413,10 +427,6 @@ func (cs *controllerServer) ControllerUnpublishVolume(ctx context.Context, req *
 	glog.Infof("ControllerUnpublishVolume : volume_id: %s, node_id: %s ", req.VolumeId, req.NodeId)
 
 	if cs.mode == Controller {
-		node, err := cs.rs.GetNodeController(req.NodeId)
-		if err != nil {
-			return nil, status.Error(codes.NotFound, err.Error())
-		}
 		conn, err := cs.rs.ConnectToNodeController(req.NodeId, connectionTimeout)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
@@ -427,10 +437,6 @@ func (cs *controllerServer) ControllerUnpublishVolume(ctx context.Context, req *
 		if err == nil {
 			if vol, ok := cs.pmemVolumes[req.GetVolumeId()]; ok {
 				vol.Status = Unattached
-				// Update node capacity
-				// FIXME: Does this should be invoked from node controller?
-				// like RegistryServer.UpdateNodeCapacity(uint64 request)
-				cs.rs.UpdateNodeCapacity(node.NodeID, vol.NsMode, node.Capacity[vol.NsMode]+vol.Size)
 			}
 		}
 
@@ -453,4 +459,58 @@ func (cs *controllerServer) ControllerUnpublishVolume(ctx context.Context, req *
 	delete(cs.publishVolumeInfo, req.GetVolumeId())
 
 	return &csi.ControllerUnpublishVolumeResponse{}, nil
+}
+
+func (cs *controllerServer) GetCapacity(ctx context.Context, req *csi.GetCapacityRequest) (*csi.GetCapacityResponse, error) {
+	var capacity int64
+
+	if cs.mode == Controller {
+		for _, node := range cs.rs.nodeClients {
+			cap, err := cs.getNodeCapacity(ctx, node, req)
+			if err != nil {
+				glog.Warningf("Error while fetching '%s' node capacity: %s", node.NodeID, err.Error())
+				continue
+			}
+			capacity += cap
+		}
+
+		return &csi.GetCapacityResponse{
+			AvailableCapacity: capacity,
+		}, nil
+	}
+
+	/* Unified/Node */
+	cap, err := cs.dm.GetCapacity()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, err.Error())
+	}
+
+	if params := req.GetParameters(); params != nil {
+		if nsmode, ok := params["nsmode"]; ok {
+			if c, ok := cap[nsmode]; ok {
+				capacity = int64(c)
+			} else {
+				return nil, fmt.Errorf("Unknown namespace mode :%s", nsmode)
+			}
+		}
+	}
+
+	return &csi.GetCapacityResponse{
+		AvailableCapacity: capacity,
+	}, nil
+}
+
+func (cs *controllerServer) getNodeCapacity(ctx context.Context, node NodeInfo, req *csi.GetCapacityRequest) (int64, error) {
+	conn, err := cs.rs.ConnectToNodeController(node.NodeID, connectionTimeout)
+	if err != nil {
+		return 0, fmt.Errorf("failed to connect to node %s: %s", node.NodeID, err.Error())
+	}
+
+	csiClient := csi.NewControllerClient(conn)
+	resp, err := csiClient.GetCapacity(ctx, req)
+	if err != nil {
+		return 0, fmt.Errorf("Error while fetching '%s' node capacity: %s", node.NodeID, err.Error())
+	}
+
+	return resp.AvailableCapacity, nil
 }
