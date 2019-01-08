@@ -172,7 +172,7 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 			glog.Infof("%s mode does not support setting an alignment, hence ignoring alignment", opts.Mode)
 		} else {
 			resource := uint64(C.ndctl_region_get_resource(ndr))
-			if resource < uint64(C.ULLONG_MAX) && resource&(mib2-1) == 0 {
+			if resource < uint64(C.ULLONG_MAX) && resource&(mib2-1) != 0 {
 				glog.Infof("%s: falling back to a 4K alignment", regionName)
 				opts.Align = uint32(kib4)
 			}
