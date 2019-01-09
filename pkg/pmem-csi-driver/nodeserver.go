@@ -130,11 +130,6 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	}
 	pmemcommon.Infof(4, ctx, "volume %s/%s has been unmounted.", targetPath, volumeID)
 
-	glog.Infof("NodeUnpublishVolume: removing mount target directory: %s", targetPath)
-	if err := os.Remove(targetPath); err != nil {
-		pmemcommon.Infof(3, ctx, "failed to remove directory %v: %v", targetPath, err)
-	}
-
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
