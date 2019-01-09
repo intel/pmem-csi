@@ -70,7 +70,11 @@ func (pmem *pmemNdctl) DeleteDevice(name string, flush bool) error {
 }
 
 func (pmem *pmemNdctl) FlushDeviceData(name string) error {
-	return fmt.Errorf("Unsupported for pmem devices")
+	device, err := pmem.GetDevice(name)
+	if err != nil {
+		return err
+	}
+	return flushDevice(device)
 }
 
 func (pmem *pmemNdctl) GetDevice(name string) (PmemDeviceInfo, error) {
