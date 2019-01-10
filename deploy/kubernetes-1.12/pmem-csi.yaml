@@ -97,7 +97,7 @@ spec:
       - name: external-provisioner
         imagePullPolicy: Always
         image: quay.io/k8scsi/csi-provisioner:v0.4.1
-        args: [ "--v=5", "--provisioner=pmem-csi", "--csi-address=$(ADDRESS)" ]
+        args: [ "--v=5", "--provisioner=pmem-csi", "--csi-address=$(ADDRESS)", "--feature-gates=Topology=true" ]
         env:
         - name: ADDRESS
           value: "/csi/csi-controller.sock"
