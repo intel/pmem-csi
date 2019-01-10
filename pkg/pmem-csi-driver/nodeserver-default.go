@@ -37,6 +37,11 @@ func (ns *DefaultNodeServer) NodeGetId(ctx context.Context, req *csi.NodeGetIdRe
 func (ns *DefaultNodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
 	return &csi.NodeGetInfoResponse{
 		NodeId: ns.Driver.nodeID,
+		AccessibleTopology: &csi.Topology{
+			Segments: map[string]string{
+				"kubernetes.io/hostname": ns.Driver.nodeID,
+			},
+		},
 	}, nil
 }
 

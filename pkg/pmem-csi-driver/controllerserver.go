@@ -19,7 +19,7 @@ import (
 
 	"github.com/container-storage-interface/spec/lib/go/csi/v0"
 
-	"github.com/intel/pmem-csi/pkg/pmem-common"
+	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	"k8s.io/kubernetes/pkg/util/keymutex" // TODO: move to k8s.io/utils (https://github.com/kubernetes/utils/issues/62)
 )
@@ -157,7 +157,7 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 	if asked <= 0 {
 		asked = 4 * 1024 * 1024
 	}
-
+	topology := []*csi.Topology{}
 	glog.Infof("CreateVolume: Name: %v req.Required: %v req.Limit: %v", req.Name, asked, req.GetCapacityRange().GetLimitBytes())
 	if vol = cs.GetVolumeByName(req.Name); vol != nil {
 		// Check if the size of existing volume can cover the new request
@@ -173,6 +173,11 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 			if err := cs.dm.CreateDevice(volumeID, uint64(asked), nsmode); err != nil {
 				return nil, status.Errorf(codes.Internal, "CreateVolume: failed to create volume: %s", err.Error())
 			}
+			topology = append(topology, &csi.Topology{
+				Segments: map[string]string{
+					"kubernetes.io/hostname": cs.Driver.nodeID,
+				},
+			})
 		} else /*if cs.mode == Controller */ {
 			capReq := &csi.GetCapacityRequest{
 				Parameters:         params,
@@ -192,7 +197,17 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 			}
 
 			if len(foundNodes) == 0 {
-				return nil, status.Error(codes.Unavailable, fmt.Sprintf("No node found with %v capacaity", asked))
+				return nil, status.Error(codes.Unavailable, fmt.Sprintf("No node found with %v capacity", asked))
+			}
+
+			glog.Infof("Found nodes: %v", foundNodes)
+
+			for _, id := range foundNodes {
+				topology = append(topology, &csi.Topology{
+					Segments: map[string]string{
+						"kubernetes.io/hostname": id,
+					},
+				})
 			}
 		}
 
@@ -213,8 +228,9 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 
 	return &csi.CreateVolumeResponse{
 		Volume: &csi.Volume{
-			Id:            vol.ID,
-			CapacityBytes: vol.Size,
+			Id:                 vol.ID,
+			CapacityBytes:      vol.Size,
+			AccessibleTopology: topology,
 			Attributes: map[string]string{
 				"name":   req.GetName(),
 				"size":   strconv.FormatInt(asked, 10),

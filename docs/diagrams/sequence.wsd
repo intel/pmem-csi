@@ -51,6 +51,8 @@ provisioner->masterdriver:CSI.Controller.CreateVolume()
 note right of masterdriver
     * gets available pmem capacity at each worker node
     * does the sanity check if volume can be created with requested volume size
+    * prepare Topology information with node ids which have enough capacity
+      {accessible_topology: {segments:{key:"kubernetes.io/hostname" value:"node-x"}}
 end note
 masterdriver->nodedriver:csi.Controller.GetCapacity()
 nodedriver->masterdriver:{capacity: xxx}
