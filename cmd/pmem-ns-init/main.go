@@ -100,6 +100,10 @@ func createNS(r *ndctl.Region, nsSize uint64, uselimit int, nsmode ndctl.Namespa
 			glog.Infof("MaxAvailableExtent in Region:%v is less than desired nsSize, limit nsSize to that", r.MaxAvailableExtent())
 			nsSize = r.MaxAvailableExtent()
 		}
+		// In typical case, NSize drops to zero at some point, avoid zero-size create request
+		if nsSize == 0 {
+			break
+		}
 		glog.Infof("Create next %v-bytes %s-namespace", nsSize, nsmode)
 		_, err := r.CreateNamespace(ndctl.CreateNamespaceOpts{
 			Name: "pmem-csi",
