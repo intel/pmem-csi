@@ -2,10 +2,11 @@ FROM golang:alpine AS build
 #pull dependencies required for downloading and building libndctl
 RUN apk add --update build-base autoconf automake bash-completion libtool libuuid json-c kmod asciidoc xmlto kmod-dev eudev-dev util-linux-dev json-c-dev linux-headers wget tar file
 
+ARG NDCTLVER
 WORKDIR /
-RUN wget https://github.com/pmem/ndctl/archive/v63.tar.gz
-RUN tar zxvf v63.tar.gz
-WORKDIR /ndctl-63
+RUN wget https://github.com/pmem/ndctl/archive/v${NDCTLVER}.tar.gz
+RUN tar zxvf v${NDCTLVER}.tar.gz && mv ndctl-${NDCTLVER} ndctl
+WORKDIR /ndctl
 RUN ./autogen.sh
 RUN ./configure CFLAGS='-g -O2' --prefix=/usr --sysconfdir=/etc --libdir=/usr/lib --disable-docs --without-systemd
 RUN make install
