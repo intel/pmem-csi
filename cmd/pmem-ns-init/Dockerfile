@@ -1,13 +1,13 @@
 FROM golang:alpine AS build
 #pull dependencies required for downloading and building libndctl
-RUN apk add --update build-base autoconf automake libtool libuuid json-c kmod asciidoc xmlto kmod-dev eudev-dev util-linux-dev json-c-dev linux-headers wget tar file
+RUN apk add --update build-base autoconf automake bash-completion libtool libuuid json-c kmod asciidoc xmlto kmod-dev eudev-dev util-linux-dev json-c-dev linux-headers wget tar file
 
 WORKDIR /
-RUN wget https://github.com/pmem/ndctl/archive/v62.tar.gz
-RUN tar zxvf v62.tar.gz
-WORKDIR /ndctl-62
+RUN wget https://github.com/pmem/ndctl/archive/v63.tar.gz
+RUN tar zxvf v63.tar.gz
+WORKDIR /ndctl-63
 RUN ./autogen.sh
-RUN ./configure CFLAGS='-g -O2' --prefix=/usr --sysconfdir=/etc --libdir=/usr/lib --disable-docs with_systemd_unit_dir=no
+RUN ./configure CFLAGS='-g -O2' --prefix=/usr --sysconfdir=/etc --libdir=/usr/lib --disable-docs --without-systemd
 RUN make install
 
 # build pmem-ns-init
