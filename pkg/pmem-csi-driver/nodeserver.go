@@ -70,14 +70,12 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	if !notMnt {
 		return &csi.NodePublishVolumeResponse{}, nil
 	}
-	fsType := req.GetVolumeCapability().GetMount().GetFsType()
-
 	readOnly := req.GetReadonly()
 	attrib := req.GetVolumeAttributes()
 	mountFlags := req.GetVolumeCapability().GetMount().GetMountFlags()
 
-	glog.Infof("NodePublishVolume: targetpath %v\nStagingtargetpath %v\nfstype %v\nreadonly %v\nattributes %v\n mountflags %v\n",
-		targetPath, stagingtargetPath, fsType, readOnly, attrib, mountFlags)
+	glog.Infof("NodePublishVolume: targetpath %v\nStagingtargetpath %v\nreadonly %v\nattributes %v\n mountflags %v\n",
+		targetPath, stagingtargetPath, readOnly, attrib, mountFlags)
 
 	options := []string{"bind"}
 	if readOnly {
