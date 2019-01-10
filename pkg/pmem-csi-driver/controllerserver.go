@@ -78,11 +78,11 @@ func NewControllerServer(driver *CSIDriver, mode DriverMode, rs *registryServer,
 
 	return &controllerServer{
 		DefaultControllerServer: NewDefaultControllerServer(driver),
-		mode:              mode,
-		rs:                rs,
-		dm:                dm,
-		pmemVolumes:       map[string]pmemVolume{},
-		publishVolumeInfo: map[string]string{},
+		mode:                    mode,
+		rs:                      rs,
+		dm:                      dm,
+		pmemVolumes:             map[string]pmemVolume{},
+		publishVolumeInfo:       map[string]string{},
 	}
 }
 
