@@ -55,7 +55,7 @@ func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) err
 		return err
 	}
 	data, _ := ns.MarshalJSON() //nolint: gosec
-	glog.Infof("Namespace crated: %v", data)
+	glog.Infof("Namespace created: %v", data)
 
 	return nil
 }

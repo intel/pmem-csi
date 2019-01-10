@@ -174,7 +174,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	// Check does devicepath already contain a filesystem?
 	existingFsType, err := determineFilesystemType(device.Path)
 	if err != nil {
-		glog.Infof("NodeStageVolume: determine failed: %v", err)
+		glog.Infof("NodeStageVolume: determineFilesystemType failed: %v", err)
 		return nil, err
 	}
 
@@ -202,7 +202,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 			cmd = "mkfs.xfs"
 			args = []string{"-f", device.Path}
 		} else {
-			glog.Infof("NodeStageVolume: Unsupported fstype: [%v]", requestedFsType)
+			glog.Infof("NodeStageVolume: Unsupported fstype: %v", requestedFsType)
 			return nil, status.Error(codes.InvalidArgument, "xfs, ext4 are supported as file system types")
 		}
 		output, err := pmemexec.RunCommand(cmd, args...)
@@ -262,10 +262,8 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	defer volumeMutex.UnlockKey(req.GetVolumeId())
 
 	// showing for debug:
-	glog.Infof("NodeUnStageVolume: VolumeID is %v", req.GetVolumeId())
-	glog.Infof("NodeUnStageVolume: VolumeName is %v", volName)
-	glog.Infof("NodeUnStageVolume: Staging target path is %v", stagingtargetPath)
-	glog.Infof("NodeUnStageVolume: umount %s", stagingtargetPath)
+	glog.Infof("NodeUnStageVolume: VolumeID:%v VolumeName:%v Staging target path:%v",
+		req.GetVolumeId(), volName, stagingtargetPath)
 
 	// by spec, we have to return OK if asked volume is not mounted on asked path,
 	// so we look up the current device by volumeID and see is that device
@@ -287,7 +285,8 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 		pmemcommon.Infof(3, ctx, "NodeUnstageVolume: No device name for mount point")
 		return nil, status.Error(codes.InvalidArgument, "No device found for mount point")
 	}
-	glog.Infof("NodeUnstageVolume: detected mountedDev: [%v]", mountedDev)
+	glog.Infof("NodeUnstageVolume: detected mountedDev: %v", mountedDev)
+	glog.Infof("NodeUnStageVolume: umount %s", stagingtargetPath)
 	if err := mounter.Unmount(stagingtargetPath); err != nil {
 		glog.Infof("NodeUnstageVolume: Umount failed: %v", err)
 		return nil, err

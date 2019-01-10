@@ -220,7 +220,7 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 	}
 
 	if err == nil {
-		glog.Infof("setting namespace sector size ...: %v", opts.SectorSize)
+		glog.Infof("setting namespace sector size: %v", opts.SectorSize)
 		err = ns.SetSectorSize(opts.SectorSize)
 	}
 	if err == nil {
@@ -241,7 +241,7 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 		}
 	}
 	if err == nil {
-		glog.Infof("enabling namespace...")
+		glog.Infof("enabling namespace")
 		err = ns.Enable()
 	}
 

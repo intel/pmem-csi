@@ -120,10 +120,9 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 	// Process plugin-specific parameters given as key=value pairs
 	params := req.GetParameters()
 	if params != nil {
-		glog.Infof("CreateVolume: parameters detected")
 		// We recognize eraseafter=false/true, defaulting to true
 		for key, val := range params {
-			glog.Infof("CreateVolume: seeing param: [%v] [%v]", key, val)
+			glog.Infof("CreateVolume: parameter: [%v] [%v]", key, val)
 			if key == "eraseafter" {
 				if val == "true" {
 					eraseafter = true
@@ -145,7 +144,7 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		asked = 4 * 1024 * 1024
 	}
 
-	glog.Infof("CreateVolume: Name: %v, req.Required: %v req.Limit; %v", req.Name, asked, req.GetCapacityRange().GetLimitBytes())
+	glog.Infof("CreateVolume: Name: %v req.Required: %v req.Limit: %v", req.Name, asked, req.GetCapacityRange().GetLimitBytes())
 	if vol = cs.GetVolumeByName(req.Name); vol != nil {
 		// Check if the size of exisiting volume new can cover the new request
 		glog.Infof("CreateVolume: Vol %s exists, Size: %v", vol.Name, vol.Size)
@@ -186,7 +185,7 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 			vol.Status = Attached
 		}
 		cs.pmemVolumes[volumeID] = *vol
-		glog.Infof("CreateVolume: Record new volume as [%v]", *vol)
+		glog.Infof("CreateVolume: Record new volume as %v", *vol)
 	}
 
 	return &csi.CreateVolumeResponse{
@@ -224,7 +223,7 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 		pmemcommon.Infof(3, ctx, "Volume %s not created by this controller", req.GetVolumeId())
 	} else {
 		if vol.Status != Unattached {
-			pmemcommon.Infof(3, ctx, "Volume %s is attached to %s but not dittached", vol.Name, vol.NodeID)
+			pmemcommon.Infof(3, ctx, "Volume %s is attached to %s but not detached", vol.Name, vol.NodeID)
 		}
 		if cs.mode == Unified || cs.mode == Node {
 			glog.Infof("DeleteVolume: Special Delete in Unified mode")
@@ -235,10 +234,8 @@ func (cs *controllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 			}
 		}
 		delete(cs.pmemVolumes, vol.ID)
+		pmemcommon.Infof(4, ctx, "DeleteVolume: volume %s deleted", req.GetVolumeId())
 	}
-
-	pmemcommon.Infof(4, ctx, "DeleteVolume: volume deleted %s", req.GetVolumeId())
-
 	return &csi.DeleteVolumeResponse{}, nil
 }
 
@@ -332,7 +329,6 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		}
 		defer conn.Close()
 
-		glog.Infof("Getting New Controller Client ....")
 		csiClient := csi.NewControllerClient(conn)
 		glog.Infof("Initiating Publishing volume ....")
 
