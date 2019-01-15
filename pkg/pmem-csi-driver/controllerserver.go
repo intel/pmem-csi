@@ -21,7 +21,6 @@ import (
 
 	"github.com/intel/pmem-csi/pkg/pmem-common"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
-	"github.com/intel/pmem-csi/pkg/pmem-grpc"
 	"k8s.io/kubernetes/pkg/util/keymutex" // TODO: move to k8s.io/utils (https://github.com/kubernetes/utils/issues/62)
 )
 
@@ -329,7 +328,7 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 			return nil, status.Error(codes.NotFound, err.Error())
 		}
 
-		conn, err := pmemgrpc.Connect(node.Endpoint, connectionTimeout)
+		conn, err := cs.rs.ConnectToNodeController(node.NodeID, connectionTimeout)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
@@ -365,7 +364,7 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 	if cs.mode == Node {
 		attrs := req.GetVolumeAttributes()
 		if attrs == nil {
-			return nil, status.Error(codes.InvalidArgument, "Volume attribultes must be provided")
+			return nil, status.Error(codes.InvalidArgument, "Volume attributes must be provided")
 		}
 		volumeName = attrs["name"]
 		volumeSize, _ = strconv.ParseUint(attrs["size"], 10, 64)
@@ -418,9 +417,9 @@ func (cs *controllerServer) ControllerUnpublishVolume(ctx context.Context, req *
 		if err != nil {
 			return nil, status.Error(codes.NotFound, err.Error())
 		}
-		conn, errr := pmemgrpc.Connect(node.Endpoint, connectionTimeout)
-		if errr != nil {
-			return nil, status.Error(codes.Internal, errr.Error())
+		conn, err := cs.rs.ConnectToNodeController(req.NodeId, connectionTimeout)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
 		}
 
 		csiClient := csi.NewControllerClient(conn)

@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
+	"crypto/tls"
 	"fmt"
 	"sync"
 
@@ -31,11 +32,11 @@ func NewNonBlockingGRPCServer() *NonBlockingGRPCServer {
 	return &NonBlockingGRPCServer{}
 }
 
-func (s *NonBlockingGRPCServer) Start(endpoint string, services ...PmemService) error {
+func (s *NonBlockingGRPCServer) Start(endpoint string, tlsConfig *tls.Config, services ...PmemService) error {
 	if endpoint == "" {
 		return fmt.Errorf("endpoint cannot be empty")
 	}
-	rpcServer, l, err := pmemgrpc.NewServer(endpoint)
+	rpcServer, l, err := pmemgrpc.NewServer(endpoint, tlsConfig)
 	if err != nil {
 		return nil
 	}

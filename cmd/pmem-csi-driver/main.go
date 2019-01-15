@@ -23,8 +23,13 @@ var (
 	nodeID           = flag.String("nodeid", "nodeid", "node id")
 	endpoint         = flag.String("endpoint", "unix:///tmp/pmem-csi.sock", "PMEM CSI endpoint")
 	mode             = flag.String("mode", "unified", "driver run mode : controller, node or unified")
-	registryEndpoint = flag.String("registryEndpoint", "", "endpoint to connect/listen resgistery server")
-	/* node mode options */
+	registryEndpoint = flag.String("registryEndpoint", "", "endpoint to connect/listen registry server")
+	caFile           = flag.String("caFile", "", "Root CA certificate file to use for verifying connections")
+	certFile         = flag.String("certFile", "", "SSL certificate file to use for authenticating client connections(RegistryServer/NodeControllerServer)")
+	keyFile          = flag.String("keyFile", "", "Private key file associated to certificate")
+	clientCertFile   = flag.String("clientCertFile", "", "Client SSL certificate file to use for authenticating peer connections, defaults to 'certFile'")
+	clientKeyFile    = flag.String("clientKeyFile", "", "Client private key associated to client certificate, defaults to 'keyFile'")
+	/* Node mode options */
 	controllerEndpoint = flag.String("controllerEndpoint", "", "internal node controller endpoint")
 	deviceManager      = flag.String("deviceManager", "lvm", "device manager to use to manage pmem devices. supported types: 'lvm' or 'ndctl'")
 )
@@ -40,6 +45,11 @@ func main() {
 		Endpoint:           *endpoint,
 		Mode:               pmemcsidriver.DriverMode(*mode),
 		RegistryEndpoint:   *registryEndpoint,
+		CAFile:             *caFile,
+		CertFile:           *certFile,
+		KeyFile:            *keyFile,
+		ClientCertFile:     *clientCertFile,
+		ClientKeyFile:      *clientKeyFile,
 		ControllerEndpoint: *controllerEndpoint,
 		DeviceManager:      *deviceManager,
 	})
