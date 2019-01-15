@@ -1,54 +1,53 @@
 package pmemgrpc
 
 import (
-	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"strings"
 	"time"
 
-	"k8s.io/klog/glog"
-	// "github.com/grpc-ecosystem/go-grpc-middleware"
-	// "github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
-	// "github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/resolver"
+	"k8s.io/klog/glog"
 
-	"github.com/intel/pmem-csi/pkg/pmem-common"
+	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 )
 
-func Connect(endpoint string, timeout time.Duration) (*grpc.ClientConn, error) {
-	_, address, err := parseEndpoint(endpoint)
-	if err != nil {
-		return nil, err
-	}
-	glog.V(2).Infof("Connecting to %s", address)
-	dialOptions := []grpc.DialOption{
-		grpc.WithInsecure(),
-		grpc.WithBackoffMaxDelay(time.Second),
-	}
-
-	conn, err := grpc.Dial(address, dialOptions...)
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	for {
-		if !conn.WaitForStateChange(ctx, conn.GetState()) {
-			glog.V(4).Infof("Connection timed out")
-			return conn, nil // return nil, subsequent GetPluginInfo will show the real connection error
-		}
-		if conn.GetState() == connectivity.Ready {
-			glog.V(3).Infof("Connected")
-			return conn, nil
-		}
-		glog.V(4).Infof("Still trying, connection is %s", conn.GetState())
-	}
+func unixDialer(addr string, timeout time.Duration) (net.Conn, error) {
+	return net.DialTimeout("unix", addr, timeout)
 }
 
-func NewServer(endpoint string) (*grpc.Server, net.Listener, error) {
+//Connect is a helper function to initiate a grpc client connection to server running at endpoint using tlsConfig
+func Connect(endpoint string, tlsConfig *tls.Config, timeout time.Duration) (*grpc.ClientConn, error) {
+	proto, address, err := parseEndpoint(endpoint)
+	if err != nil {
+		return nil, err
+	}
+	glog.Infof("Connecting to %s", address)
+	dialOptions := []grpc.DialOption{grpc.WithBackoffMaxDelay(time.Second)}
+	if tlsConfig != nil {
+		dialOptions = append(dialOptions, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+	} else {
+		dialOptions = append(dialOptions, grpc.WithInsecure())
+	}
+
+	if proto == "tcp" {
+		resolver.SetDefaultScheme("dns")
+	} else if proto == "unix" {
+		dialOptions = append(dialOptions, grpc.WithDialer(unixDialer))
+	}
+
+	return grpc.Dial(address, dialOptions...)
+
+}
+
+//NewServer is a helper function to start a grpc server at given endpoint and uses provided tlsConfig
+func NewServer(endpoint string, tlsConfig *tls.Config) (*grpc.Server, net.Listener, error) {
 	proto, addr, err := parseEndpoint(endpoint)
 	if err != nil {
 		return nil, nil, err
@@ -65,12 +64,76 @@ func NewServer(endpoint string) (*grpc.Server, net.Listener, error) {
 		return nil, nil, err
 	}
 
-	interceptor := pmemcommon.LogGRPCServer
-	opts := []grpc.ServerOption{
-		grpc.UnaryInterceptor(interceptor),
+	opts := []grpc.ServerOption{grpc.UnaryInterceptor(pmemcommon.LogGRPCServer)}
+	if tlsConfig != nil {
+		opts = append(opts, grpc.Creds(credentials.NewTLS(tlsConfig)))
 	}
 
 	return grpc.NewServer(opts...), listener, nil
+}
+
+//LoadServerTLS prepares the TLS configuration needed for a server with the given certificate files
+func LoadServerTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, error) {
+	certPool, peerCert, err := loadCertificate(caFile, certFile, keyFile)
+	if err != nil {
+		return nil, err
+	}
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{*peerCert},
+		ClientCAs:    certPool,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+			// Common name check when accepting a connection from a client.
+			if peerName == "" {
+				// All names allowed.
+				return nil
+			}
+			if len(verifiedChains) == 0 ||
+				len(verifiedChains[0]) == 0 {
+				return fmt.Errorf("no valid certificate")
+			}
+			commonName := verifiedChains[0][0].Subject.CommonName
+			if commonName != peerName {
+				return fmt.Errorf("expected CN %q, got %q", peerName, commonName)
+			}
+			return nil
+		},
+	}, nil
+}
+
+//LoadClientTLS prepares the TLS configuration that can be used by a client while connecting to a server.
+// peerName must be provided when expecting the server to offer a certificate with that CommonName
+func LoadClientTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, error) {
+	certPool, peerCert, err := loadCertificate(caFile, certFile, keyFile)
+	if err != nil {
+		return nil, err
+	}
+	glog.Infof("Using Servername: %s", peerName)
+	return &tls.Config{
+		ServerName:   peerName,
+		Certificates: []tls.Certificate{*peerCert},
+		RootCAs:      certPool,
+	}, nil
+}
+
+func loadCertificate(caFile, certFile, keyFile string) (*x509.CertPool, *tls.Certificate, error) {
+	peerCert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	caCert, err := ioutil.ReadFile(caFile)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	certPool := x509.NewCertPool()
+	if ok := certPool.AppendCertsFromPEM(caCert); !ok {
+		return nil, nil, fmt.Errorf("failed to append certs from %s", caFile)
+	}
+
+	return certPool, &peerCert, nil
 }
 
 func parseEndpoint(ep string) (string, string, error) {

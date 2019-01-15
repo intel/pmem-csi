@@ -1,8 +1,11 @@
 package pmemcsidriver
 
 import (
+	"crypto/tls"
 	"fmt"
+	"time"
 
+	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	"github.com/intel/pmem-csi/pkg/pmem-registry"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -10,7 +13,8 @@ import (
 )
 
 type registryServer struct {
-	nodeClients map[string]NodeInfo
+	clientTLSConfig *tls.Config
+	nodeClients     map[string]NodeInfo
 }
 
 var _ PmemService = &registryServer{}
@@ -24,9 +28,10 @@ type NodeInfo struct {
 	Capacity map[string]uint64
 }
 
-func NewRegistryServer() *registryServer {
+func NewRegistryServer(tlsConfig *tls.Config) *registryServer {
 	return &registryServer{
-		nodeClients: map[string]NodeInfo{},
+		clientTLSConfig: tlsConfig,
+		nodeClients:     map[string]NodeInfo{},
 	}
 }
 
@@ -41,6 +46,16 @@ func (rs *registryServer) GetNodeController(nodeID string) (NodeInfo, error) {
 	}
 
 	return NodeInfo{}, fmt.Errorf("No node registered with id: %v", nodeID)
+}
+
+// ConnectToNodeController initiates a connection to controller running at nodeId
+func (rs *registryServer) ConnectToNodeController(nodeId string, timeout time.Duration) (*grpc.ClientConn, error) {
+	nodeInfo, err := rs.GetNodeController(nodeId)
+	if err != nil {
+		return nil, err
+	}
+
+	return pmemgrpc.Connect(nodeInfo.Endpoint, rs.clientTLSConfig, timeout)
 }
 
 func (rs *registryServer) RegisterController(ctx context.Context, req *registry.RegisterControllerRequest) (*registry.RegisterControllerReply, error) {
