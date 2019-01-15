@@ -46,6 +46,14 @@ func (pmem *pmemNdctl) GetCapacity() (map[string]uint64, error) {
 }
 
 func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) error {
+	// force-align namespace size up to next GB-boundary, to avoid alignement issues
+	var align uint64 = 1024 * 1024 * 1024
+	if size%align != 0 {
+		size /= align
+		size += 1
+		size *= align
+		glog.Infof("CreateDevice: force-align namespace size up to %v", size)
+	}
 	ns, err := pmem.ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
 		Name: name,
 		Size: size,
