@@ -8,7 +8,6 @@ package pmemcsidriver
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"golang.org/x/net/context"
@@ -67,31 +66,16 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	stagingtargetPath := req.StagingTargetPath
 	// TODO: check is bind-mount already made
 	// (happens when publish is asked repeatedly for already published namespace)
-	// Repeated bind-mount does not seem to cause OS level error though, likely just No-op
-	notMnt, err := mount.New("").IsLikelyNotMountPoint(targetPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			if err = os.MkdirAll(targetPath, 0750); err != nil {
-				return nil, status.Error(codes.Internal, err.Error())
-			}
-			notMnt = true
-		} else {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-
+	notMnt, _ := mount.New("").IsLikelyNotMountPoint(targetPath)
 	if !notMnt {
 		return &csi.NodePublishVolumeResponse{}, nil
 	}
-
-	fsType := req.GetVolumeCapability().GetMount().GetFsType()
-
 	readOnly := req.GetReadonly()
 	attrib := req.GetVolumeAttributes()
 	mountFlags := req.GetVolumeCapability().GetMount().GetMountFlags()
 
-	glog.Infof("NodePublishVolume: targetpath %v\nStagingtargetpath %v\nfstype %v\nreadonly %v\nattributes %v\n mountflags %v\n",
-		targetPath, stagingtargetPath, fsType, readOnly, attrib, mountFlags)
+	glog.Infof("NodePublishVolume: targetpath %v\nStagingtargetpath %v\nreadonly %v\nattributes %v\n mountflags %v\n",
+		targetPath, stagingtargetPath, readOnly, attrib, mountFlags)
 
 	options := []string{"bind"}
 	if readOnly {
@@ -129,11 +113,6 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	pmemcommon.Infof(4, ctx, "volume %s/%s has been unmounted.", targetPath, volumeID)
-
-	glog.Infof("NodeUnpublishVolume: removing mount target directory: %s", targetPath)
-	if err := os.Remove(targetPath); err != nil {
-		pmemcommon.Infof(3, ctx, "failed to remove directory %v: %v", targetPath, err)
-	}
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
