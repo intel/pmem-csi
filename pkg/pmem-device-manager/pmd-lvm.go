@@ -15,7 +15,7 @@ type pmemLvm struct {
 }
 
 var _ PmemDeviceManager = &pmemLvm{}
-var lvsArgs = []string{"--noheadings", "-o", "lv_name,lv_path,lv_size", "--units", "B"}
+var lvsArgs = []string{"--noheadings", "--nosuffix", "-o", "lv_name,lv_path,lv_size", "--units", "B"}
 var vgsArgs = []string{"--noheadings", "--nosuffix", "-o", "vg_name,vg_size,vg_free,vg_tags", "--units", "B"}
 
 // NewPmemDeviceManagerLVM Instantiates a new LVM based pmem device manager
