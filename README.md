@@ -158,13 +158,11 @@ The driver does not create persistent memory Regions, but expects Regions to exi
 
 ## Supported Kubernetes versions
 
-The driver deployment in Kubernetes cluster has been verified on:
+PMEM-CSI driver implements CSI specification version 1.0.0, which only supported by Kubernetes versions >= v1.13. The driver deployment in Kubernetes cluster has been verified on:
 
-| Branch            | Kubernetes branch/version      |
-|-------------------|--------------------------------|
-| devel             | Kubernetes 1.11 branch v1.11.3 |
-| devel             | Kubernetes 1.12                |
-| devel             | Kubernetes 1.13                |
+| Branch            | Kubernetes branch/version      | Required Alfa feature-gates |
+|-------------------|--------------------------------|---------------------------- |
+| devel             | Kubernetes 1.13                | CSINodeInfo, CSIDriverRegistry |
 
 ## Setup
 
