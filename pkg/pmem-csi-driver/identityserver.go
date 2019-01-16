@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
-	csi "github.com/container-storage-interface/spec/lib/go/csi/v0"
+	csi "github.com/container-storage-interface/spec/lib/go/csi"
 	"google.golang.org/grpc"
 )
 

@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
-	"github.com/container-storage-interface/spec/lib/go/csi/v0"
+	"github.com/container-storage-interface/spec/lib/go/csi"
 )
 
 func NewVolumeCapabilityAccessMode(mode csi.VolumeCapability_AccessMode_Mode) *csi.VolumeCapability_AccessMode {

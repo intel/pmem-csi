@@ -12,13 +12,13 @@ import (
 
 	"golang.org/x/net/context"
 
-	"github.com/container-storage-interface/spec/lib/go/csi/v0"
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/kubernetes/pkg/util/mount"
 
-	"github.com/intel/pmem-csi/pkg/pmem-common"
+	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 	"k8s.io/klog/glog"
@@ -77,7 +77,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		return &csi.NodePublishVolumeResponse{}, nil
 	}
 	readOnly := req.GetReadonly()
-	attrib := req.GetVolumeAttributes()
+	attrib := req.GetVolumeContext()
 	mountFlags := req.GetVolumeCapability().GetMount().GetMountFlags()
 
 	glog.Infof("NodePublishVolume: targetpath %v\nStagingtargetpath %v\nreadonly %v\nattributes %v\n mountflags %v\n",
@@ -134,7 +134,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		return nil, status.Error(codes.InvalidArgument, "Target path missing in request")
 	}
 
-	attrs := req.GetVolumeAttributes()
+	attrs := req.GetVolumeContext()
 
 	requestedFsType := req.GetVolumeCapability().GetMount().GetFsType()
 

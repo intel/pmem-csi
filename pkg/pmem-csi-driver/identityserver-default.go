@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
-	"github.com/container-storage-interface/spec/lib/go/csi/v0"
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -53,7 +53,7 @@ func (ids *DefaultIdentityServer) GetPluginCapabilities(ctx context.Context, req
 			{
 				Type: &csi.PluginCapability_Service_{
 					Service: &csi.PluginCapability_Service{
-						Type: csi.PluginCapability_Service_ACCESSIBILITY_CONSTRAINTS,
+						Type: csi.PluginCapability_Service_VOLUME_ACCESSIBILITY_CONSTRAINTS,
 					},
 				},
 			},

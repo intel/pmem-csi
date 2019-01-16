@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/container-storage-interface/spec/lib/go/csi/v0"
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	pmemcsidriver "github.com/intel/pmem-csi/pkg/pmem-csi-driver"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"

@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/status"
 	"k8s.io/klog/glog"
 
-	"github.com/container-storage-interface/spec/lib/go/csi/v0"
+	"github.com/container-storage-interface/spec/lib/go/csi"
 )
 
 type CSIDriver struct {

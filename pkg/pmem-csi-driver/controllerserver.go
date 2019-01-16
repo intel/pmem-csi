@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 	"k8s.io/klog/glog"
 
-	"github.com/container-storage-interface/spec/lib/go/csi/v0"
+	"github.com/container-storage-interface/spec/lib/go/csi"
 
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
@@ -228,10 +228,10 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 
 	return &csi.CreateVolumeResponse{
 		Volume: &csi.Volume{
-			Id:                 vol.ID,
+			VolumeId:           vol.ID,
 			CapacityBytes:      vol.Size,
 			AccessibleTopology: topology,
-			Attributes: map[string]string{
+			VolumeContext: map[string]string{
 				"name":   req.GetName(),
 				"size":   strconv.FormatInt(asked, 10),
 				"nsmode": nsmode,
@@ -284,20 +284,34 @@ func (cs *controllerServer) ValidateVolumeCapabilities(ctx context.Context, req 
 	if len(req.GetVolumeId()) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Volume ID missing in request")
 	}
+
+	_, found := cs.pmemVolumes[req.VolumeId]
+	if !found {
+		return nil, status.Error(codes.NotFound, "No volume found with id %s"+req.VolumeId)
+	}
+
 	if req.GetVolumeCapabilities() == nil {
 		return nil, status.Error(codes.InvalidArgument, "Volume capabilities missing in request")
 	}
 
-	vol := cs.GetVolumeByID(req.GetVolumeId())
-	if vol == nil {
-		return nil, status.Error(codes.NotFound, "Volume not created by this controller")
-	}
 	for _, cap := range req.VolumeCapabilities {
 		if cap.GetAccessMode().GetMode() != csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER {
-			return &csi.ValidateVolumeCapabilitiesResponse{Supported: false, Message: ""}, nil
+			return &csi.ValidateVolumeCapabilitiesResponse{
+				Confirmed: nil,
+				Message:   "Driver does not support '" + cap.AccessMode.Mode.String() + "' mode",
+			}, nil
 		}
 	}
-	return &csi.ValidateVolumeCapabilitiesResponse{Supported: true, Message: ""}, nil
+
+	/*
+	 * FIXME(avalluri): Need to validate other capabilities against the existing volume
+	 */
+	return &csi.ValidateVolumeCapabilitiesResponse{
+		Confirmed: &csi.ValidateVolumeCapabilitiesResponse_Confirmed{
+			VolumeCapabilities: req.VolumeCapabilities,
+			VolumeContext:      req.GetVolumeContext(),
+		},
+	}, nil
 }
 
 func (cs *controllerServer) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
@@ -310,9 +324,9 @@ func (cs *controllerServer) ListVolumes(ctx context.Context, req *csi.ListVolume
 	var entries []*csi.ListVolumesResponse_Entry
 	for _, vol := range cs.pmemVolumes {
 		info := &csi.Volume{
-			Id:            vol.ID,
+			VolumeId:      vol.ID,
 			CapacityBytes: int64(vol.Size),
-			Attributes: map[string]string{
+			VolumeContext: map[string]string{
 				"name": vol.Name,
 				"size": strconv.FormatInt(vol.Size, 10),
 			},
@@ -371,9 +385,11 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 		csiClient := csi.NewControllerClient(conn)
 		glog.Infof("Initiating Publishing volume ....")
 
-		req.VolumeAttributes["name"] = vol.Name
-		req.VolumeAttributes["size"] = strconv.FormatInt(vol.Size, 10)
-		req.VolumeAttributes["nsmode"] = vol.NsMode
+		req.VolumeContext = map[string]string{
+			"name":   vol.Name,
+			"size":   strconv.FormatInt(vol.Size, 10),
+			"nsmode": vol.NsMode,
+		}
 		resp, err := csiClient.ControllerPublishVolume(ctx, req)
 		glog.Infof("Got response")
 
@@ -392,7 +408,7 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 	var volumeSize uint64
 	var nsmode string
 	if cs.mode == Node {
-		attrs := req.GetVolumeAttributes()
+		attrs := req.GetVolumeContext()
 		if attrs == nil {
 			return nil, status.Error(codes.InvalidArgument, "Volume attributes must be provided")
 		}
@@ -424,7 +440,7 @@ func (cs *controllerServer) ControllerPublishVolume(ctx context.Context, req *cs
 	}
 
 	return &csi.ControllerPublishVolumeResponse{
-		PublishInfo: map[string]string{
+		PublishContext: map[string]string{
 			"name": volumeName,
 			"size": strconv.FormatUint(volumeSize, 10),
 		},
