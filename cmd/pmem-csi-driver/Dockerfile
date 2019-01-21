@@ -21,7 +21,7 @@ RUN mv ./_output/pmem-csi-driver /go/bin/
 FROM golang:alpine
 LABEL maintainers="Intel"
 LABEL description="Pmem CSI Driver"
-RUN apk add --update kmod eudev util-linux libuuid e2fsprogs lvm2 file
+RUN apk add --update kmod eudev util-linux libuuid e2fsprogs xfsprogs lvm2 file
 # move required binaries and libraries to clean container
 COPY --from=build /usr/lib/libndctl* /usr/lib/
 COPY --from=build /usr/lib/libdaxctl* /usr/lib/
