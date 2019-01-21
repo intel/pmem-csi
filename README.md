@@ -27,7 +27,7 @@ The PMEM-CSI driver follows the [CSI specification](https://github.com/container
 
 ### Architecture and Operation
 
-The PMEM-CSI driver uses LVM for Logical Volumes Management to avoid the risk of fragmentation that would become an issue if Namespaces were served directly. The logical volumes of LVM are served to satisfy API requests. This also ensures the region-affinity of served volumes, because physical volumes on each region belong to a region-specific LVM volume group.
+The PMEM-CSI driver uses LVM for Logical Volumes Management to avoid the risk of fragmentation that would become an issue if Namespaces were served directly. The logical volumes of LVM are served to satisfy API requests. The use of LVM thus allows a single Volume to span multiple Regions and become larger than single Region. This also means that one Volume lacks Region affinity what would be achievable in direct-nvdimm mode.
 
 Currently the driver consists of three separate binaries that form two
 initialization stages and a third API-serving stage.

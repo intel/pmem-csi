@@ -23,63 +23,57 @@ func main() {
 	prepareVolumeGroups(ctx)
 }
 
-// for all regions:
-// - Check that VG exists for this region. Create if does not exist
-// - For all namespaces in region:
-//   - check that PVol exists provided by that namespace, is in current VG, add if does not exist
-// Edge cases are when no PVol or VG structures (or partially) dont exist yet
+// Prepare volume groups, one per Namespace mode
 func prepareVolumeGroups(ctx *ndctl.Context) {
+	nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
+	for _, nsmod := range nsmodes {
+		vgName := vgName(nsmod)
+		if err := createVolumeGroup(ctx, vgName, nsmod); err != nil {
+			glog.Errorf("Failed volumegroup creation: %s", err.Error())
+		}
+	}
+}
+
+func vgName(nsmode ndctl.NamespaceMode) string {
+	return "pmemcsi" + string(nsmode)
+}
+
+// - For all namespaces in all buses and all regions:
+//   - check that PVol exists provided by that namespace and belongs to correct VG.
+//   - Create Volume group if does not exist
+func createVolumeGroup(ctx *ndctl.Context, vgName string, nsmode ndctl.NamespaceMode) error {
+	cmd := ""
+	cmdArgs := []string{"--force", vgName}
 	for _, bus := range ctx.GetBuses() {
-		glog.Infof("CheckVG: Bus: %v", bus.DeviceName())
+		glog.Infof("createVolumeGroup: Bus: %s", bus.DeviceName())
 		for _, r := range bus.ActiveRegions() {
-			glog.Infof("Region: %v", r.DeviceName())
-			nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
-			for _, nsmod := range nsmodes {
-				glog.Infof("NsMode: %v", nsmod)
-				vgName := vgName(bus, r, nsmod)
-				if err := createVolumesForRegion(r, vgName, nsmod); err != nil {
-					glog.Errorf("Failed volumegroup creation: %s", err.Error())
+			glog.Infof("createVolumeGroup: Region: %s", r.DeviceName())
+			nsArray := r.ActiveNamespaces()
+			for _, ns := range nsArray {
+				// consider only namespaces in asked namespacemode,
+				// and having name given by this driver, to exclude foreign ones
+				if ns.Mode() == ndctl.NamespaceMode(nsmode) && ns.Name() == "pmem-csi" {
+					devName := "/dev/" + ns.BlockDeviceName()
+					glog.Infof("createVolumeGroup: %s has nsmode %s", ns.BlockDeviceName(), nsmode)
+					// check if this pv is already part of a group.
+					// if yes ignore this pv, if not add to arg list
+					output, err := pmemexec.RunCommand("pvs", "--noheadings", "-o", "vg_name", devName)
+					if err != nil || len(strings.TrimSpace(output)) == 0 {
+						cmdArgs = append(cmdArgs, devName)
+					}
 				}
 			}
 		}
 	}
-}
-
-func vgName(bus *ndctl.Bus, region *ndctl.Region, nsmode ndctl.NamespaceMode) string {
-	return bus.DeviceName() + region.DeviceName() + string(nsmode)
-}
-
-func createVolumesForRegion(r *ndctl.Region, vgName string, nsmode ndctl.NamespaceMode) error {
-	cmd := ""
-	cmdArgs := []string{"--force", vgName}
-	nsArray := r.ActiveNamespaces()
-	if len(nsArray) == 0 {
-		glog.Infof("No active namespaces in region %s", r.DeviceName())
-		return nil
-	}
-	for _, ns := range nsArray {
-		// consider only namespaces in asked namespacemode,
-		// and having name given by this driver, to exclude foreign ones
-		if ns.Mode() == ndctl.NamespaceMode(nsmode) && ns.Name() == "pmem-csi" {
-			devName := "/dev/" + ns.BlockDeviceName()
-			glog.Infof("createVolumesForRegion: %s has nsmode %s", ns.BlockDeviceName(), nsmode)
-			/* check if this pv is already part of a group, if yes ignore this pv
-			if not add to arg list */
-			output, err := pmemexec.RunCommand("pvs", "--noheadings", "-o", "vg_name", devName)
-			if err != nil || len(strings.TrimSpace(output)) == 0 {
-				cmdArgs = append(cmdArgs, devName)
-			}
-		}
-	}
 	if len(cmdArgs) == 2 {
-		glog.Infof("no new namespace found to add to this group: %s", vgName)
+		glog.Infof("createVolumeGroup: no new namespace found to add to this group: %s", vgName)
 		return nil
 	}
 	if _, err := pmemexec.RunCommand("vgdisplay", vgName); err != nil {
-		glog.Infof("No Vgroup with name %v, mark for creation", vgName)
+		glog.Infof("createVolumeGroup: No Vgroup with name %v, mark for creation", vgName)
 		cmd = "vgcreate"
 	} else {
-		glog.Infof("VolGroup '%v' exists", vgName)
+		glog.Infof("createVolumeGroup: VolGroup '%v' exists", vgName)
 		cmd = "vgextend"
 	}
 

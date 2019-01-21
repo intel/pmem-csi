@@ -27,20 +27,14 @@ func NewPmemDeviceManagerLVM() (PmemDeviceManager, error) {
 		return nil, fmt.Errorf("Failed to initialize pmem context: %s", err.Error())
 	}
 	volumeGroups := []string{}
-	for _, bus := range ctx.GetBuses() {
-		glog.Infof("NewPmemDeviceManagerLVM: Bus: %v", bus.DeviceName())
-		for _, r := range bus.ActiveRegions() {
-			glog.Infof("NewPmemDeviceManagerLVM: Region: %v", r.DeviceName())
-			nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
-			for _, nsmod := range nsmodes {
-				vgname := vgName(bus, r, nsmod)
-				if _, err := pmemexec.RunCommand("vgs", vgname); err != nil {
-					glog.Infof("NewPmemDeviceManagerLVM: VG %v non-existent, skip", vgname)
-				} else {
-					volumeGroups = append(volumeGroups, vgname)
-					glog.Infof("NewPmemDeviceManagerLVM: NsMode: %v", nsmod)
-				}
-			}
+	nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
+	for _, nsmod := range nsmodes {
+		vgname := vgName(nsmod)
+		if _, err := pmemexec.RunCommand("vgs", vgname); err != nil {
+			glog.Infof("NewPmemDeviceManagerLVM: VG %v non-existent, skip", vgname)
+		} else {
+			volumeGroups = append(volumeGroups, vgname)
+			glog.Infof("NewPmemDeviceManagerLVM: NsMode: %v", nsmod)
 		}
 	}
 	ctx.Free()
@@ -157,8 +151,8 @@ func (lvm *pmemLvm) ListDevices() ([]PmemDeviceInfo, error) {
 	return parseLVSOuput(output)
 }
 
-func vgName(bus *ndctl.Bus, region *ndctl.Region, nsmode ndctl.NamespaceMode) string {
-	return bus.DeviceName() + region.DeviceName() + string(nsmode)
+func vgName(nsmode ndctl.NamespaceMode) string {
+	return "pmemcsi" + string(nsmode)
 }
 
 func flushDevice(dev PmemDeviceInfo) error {
