@@ -3,12 +3,13 @@ FROM golang:alpine AS build
 RUN apk add --update build-base autoconf automake bash-completion libtool libuuid json-c kmod asciidoc xmlto kmod-dev eudev-dev util-linux-dev json-c-dev linux-headers wget tar file
 
 ARG NDCTLVER
+ARG NDCTL_CONFIGFLAGS
 WORKDIR /
 RUN wget https://github.com/pmem/ndctl/archive/v${NDCTLVER}.tar.gz
 RUN tar zxvf v${NDCTLVER}.tar.gz && mv ndctl-${NDCTLVER} ndctl
 WORKDIR /ndctl
 RUN ./autogen.sh
-RUN ./configure CFLAGS='-g -O2' --prefix=/usr --sysconfdir=/etc --libdir=/usr/lib --disable-docs --without-systemd
+RUN ./configure ${NDCTL_CONFIGFLAGS}
 RUN make install
 
 # build pmem-vgm
