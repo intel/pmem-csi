@@ -21,7 +21,7 @@ IMAGE_VERSION_pmem-csi-driver=canary
 IMAGE_VERSION_pmem-ns-init=canary
 IMAGE_VERSION_pmem-vgm=canary
 IMAGE_TAG=$(REGISTRY_NAME)/$*:$(IMAGE_VERSION_$*)
-IMAGE_BUILD_ARGS=--build-arg NDCTLVER=63
+IMAGE_BUILD_ARGS=--build-arg NDCTLVER=63 --build-arg NDCTL_CONFIGFLAGS='--libdir=/usr/lib --disable-docs --without-systemd'
 # Pass proxy config via --build-arg only if these are set,
 # enabling proxy config other way, like ~/.docker/config.json
 BUILD_ARGS=
