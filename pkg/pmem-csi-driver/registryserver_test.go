@@ -113,9 +113,6 @@ var _ = Describe("pmem registry", func() {
 			registerReq = registry.RegisterControllerRequest{
 				NodeId:   nodeId,
 				Endpoint: controllerServerEndpoint,
-				Capacity: map[string]uint64{
-					"fsdax": 1 * 1024 * 1024, // 1GB
-				},
 			}
 
 			unregisterReq = registry.UnregisterControllerRequest{
@@ -198,9 +195,6 @@ var _ = Describe("pmem registry", func() {
 				req := registry.RegisterControllerRequest{
 					NodeId:   "pmem-evil",
 					Endpoint: evilEndpoint,
-					Capacity: map[string]uint64{
-						"fsdax": 1 * 1024 * 1024, // 1GB
-					},
 				}
 
 				_, err = client.RegisterController(context.Background(), &req)
