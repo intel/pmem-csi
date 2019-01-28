@@ -26,7 +26,7 @@ fmt:
 test: test_vendor_bom
 test_vendor_bom:
 	@ if ! diff -c \
-		<(tail +2 vendor-bom.csv | sed -e 's/;.*//') \
+		<(tail -n +2 vendor-bom.csv | sed -e 's/;.*//') \
 		<((grep '^  name =' Gopkg.lock  | sed -e 's/.*"\(.*\)"/\1/') | sort); then \
 		echo; \
 		echo "vendor-bom.csv not in sync with vendor directory (aka Gopk.lock):"; \
