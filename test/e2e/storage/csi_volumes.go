@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"strings"
 
-	"k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	clientset "k8s.io/client-go/kubernetes"
@@ -54,23 +53,22 @@ var _ = Describe("PMEM Volumes", func() {
 
 	var (
 		cs     clientset.Interface
-		ns     *v1.Namespace
 		cancel context.CancelFunc
 	)
 
 	BeforeEach(func() {
 		cs = f.ClientSet
-		ns = f.Namespace
 		// Must be done this way to keep "go vet" happy.
 		ctx, cncl := context.WithCancel(context.Background())
 		cancel = cncl
 
+		// This assumes that the pmem-csi driver got installed in the default namespace.
 		to := podlogs.LogOutput{
 			StatusWriter: GinkgoWriter,
 			LogWriter:    GinkgoWriter,
 		}
-		podlogs.CopyAllLogs(ctx, cs, ns.Name, to)
-		podlogs.WatchPods(ctx, cs, ns.Name, GinkgoWriter)
+		podlogs.CopyAllLogs(ctx, cs, "default", to)
+		podlogs.WatchPods(ctx, cs, "default", GinkgoWriter)
 	})
 
 	AfterEach(func() {
@@ -99,14 +97,10 @@ var _ = Describe("PMEM Volumes", func() {
 					Config: testsuites.TestConfig{
 						Framework: f,
 						Prefix:    "pmem",
-						// Ensure that we land on the same node as the node controller below.
-						// TODO: automatically handle scheduling in pmem-csi and remove
-						// this.
+						// Ensure that all pods land on the same node. Works around
+						// https://github.com/intel/pmem-csi/issues/132.
 						ClientNodeName: "host-1",
 					},
-				},
-				manifests: []string{
-					"deploy/kubernetes/pmem-csi.yaml",
 				},
 				scManifest: "deploy/kubernetes/pmem-storageclass.yaml",
 				// Renaming of the driver *not* enabled. It doesn't support
@@ -115,10 +109,6 @@ var _ = Describe("PMEM Volumes", func() {
 				// control of the PMEM. As a result, tests have to be run
 				// sequentially becaust each test creates and removes
 				// the driver deployment.
-				patchOptions: utils.PatchCSIOptions{
-					// Same as for client above.
-					NodeName: "host-1",
-				},
 				claimSize: "1Mi",
 			}
 		},
