@@ -96,7 +96,7 @@ RUNTIME_DEPS += sort -u
 # running to debug test failures, it doesn't stop it
 .PHONY: test_e2e
 test_e2e: start
-	KUBECONFIG=`pwd`/_work/clear-kvm-kube.config REPO_ROOT=`pwd` go test -timeout 0 ./test/e2e
+	KUBECONFIG=`pwd`/_work/clear-kvm-kube.config REPO_ROOT=`pwd` go test -timeout 0 -v ./test/e2e
 
 .PHONY: run_tests
 test: run_tests

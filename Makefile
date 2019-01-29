@@ -35,7 +35,13 @@ ifneq ($(no_proxy),)
 	BUILD_ARGS:=${BUILD_ARGS} --build-arg no_proxy=${no_proxy}
 endif
 
+# Build main set of components.
 all: pmem-csi-driver pmem-ns-init pmem-vgm
+
+# Build all binaries, including tests.
+# Must use the workaround from https://github.com/golang/go/issues/15513
+build: all
+	go test -run none ./pkg/... ./test/e2e
 
 build-images: build-pmem-csi-driver-image build-pmem-ns-init-image build-pmem-vgm-image
 

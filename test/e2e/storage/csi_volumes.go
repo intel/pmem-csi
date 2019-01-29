@@ -90,9 +90,11 @@ var _ = Describe("PMEM Volumes", func() {
 					SupportedFsType: sets.NewString(
 						"", // Default fsType
 					),
-					IsPersistent:       true,
-					IsFsGroupSupported: true,
-					IsBlockSupported:   false,
+					Capabilities: map[testsuites.Capability]bool{
+						testsuites.CapPersistence: true,
+						testsuites.CapFsGroup:     true,
+						testsuites.CapExec:        true,
+					},
 
 					Config: testsuites.TestConfig{
 						Framework: f,
@@ -166,6 +168,9 @@ var _ testsuites.DynamicPVTestDriver = &manifestDriver{}
 
 func (m *manifestDriver) GetDriverInfo() *testsuites.DriverInfo {
 	return &m.driverInfo
+}
+
+func (m *manifestDriver) SkipUnsupportedTest(testpatterns.TestPattern) {
 }
 
 func (m *manifestDriver) GetDynamicProvisionStorageClass(fsType string) *storagev1.StorageClass {
