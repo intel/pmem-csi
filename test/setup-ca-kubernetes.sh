@@ -1,8 +1,10 @@
-#!/bin/sh
+#!/bin/sh -e
 
 # This script generates the certificates needed for securing pmem csi components.
 # This is supposed to run prior to deploying pmem-csi driver in a cluster.
-# KUBCONFIG must be set while calling this scriipt 
+
+# The default relies on a functional kubectl that uses the target cluster.
+: ${KUBECTL:=kubectl}
 
 # Directory to use for storing intermediate files
 WORKDIR=${WORKDIR:-$(mktemp -d -u -t pmem-XXXX)}
@@ -27,8 +29,8 @@ generate_csr()
     echo $cert_json | cfssl genkey - | cfssljson -bare $CSR_NAME
 
     echo "Creating kubernetes signing request: $CSR_NAME-csr"
-    kubectl delete csr $CSR_NAME-csr 2> /dev/null
-    cat <<EOF | kubectl create -f -
+    $KUBECTL delete csr $CSR_NAME-csr 2> /dev/null || true
+    cat <<EOF | $KUBECTL create -f -
 apiVersion: certificates.k8s.io/v1beta1
 kind: CertificateSigningRequest
 metadata:
@@ -43,11 +45,16 @@ spec:
 EOF
 
     echo "Approving signing request..."
-    kubectl certificate approve $CSR_NAME-csr
+    $KUBECTL certificate approve $CSR_NAME-csr
 
-    #retrieve certificate
-    echo "Created : $CSR_NAME.crt"
-    kubectl get csr $CSR_NAME-csr -o jsonpath='{.status.certificate}' | base64 --decode > $CSR_NAME.crt
+    # Retrieve certificate. Might take a while before it is ready.
+    echo "Waiting for signed certificate..."
+    rm -f $CSR_NAME.crt
+    while ! [ -s $CSR_NAME.crt ]; do
+        sleep 1
+        $KUBECTL get csr $CSR_NAME-csr -o jsonpath='{.status.certificate}' | base64 --decode > $CSR_NAME.crt
+    done
+    echo "Created: $CSR_NAME.crt"
 }
 
 echo "Generating certificates: $WORKDIR"
@@ -55,9 +62,9 @@ echo "Generating certificates: $WORKDIR"
 # Generate PMEM registry server certificate signing request
 generate_csr "pmem-registry"
 
-kubectl delete secret "pmem-registry" 2> /dev/null
-#store the approved registry certificate and key inside kubernetes secrtes
-cat <<EOF | kubectl create -f -
+$KUBECTL delete secret "pmem-registry-secrets" 2> /dev/null || true
+#store the approved registry certificate and key inside kubernetes secrets
+$KUBECTL create -f - <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
@@ -69,15 +76,15 @@ data:
 EOF
 
 # Find the nodes for which we need to create node certificates
-NODES=$(kubectl get no -l storage=pmem -o name | sed  -e 's;.*/;;')
+NODES=$($KUBECTL get no -l storage=pmem -o name | sed  -e 's;.*/;;')
 for node in $NODES; do
     generate_csr "pmem-node-controller" "$node"
 done
 
 # Store all node certificates into kubernetes secrets
-echo "Generating node secrtes: pmem-node-secrets."
-kubectl delete secret "pmem-node-secrets" 2> /dev/null
-cat <<EOF | kubectl create -f -
+echo "Generating node secrets: pmem-node-secrets."
+$KUBECTL delete secret "pmem-node-secrets" 2> /dev/null || true
+$KUBECTL create -f - <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
@@ -89,4 +96,3 @@ $(for name in ${NODES}; do
     echo "  $name.key: $(base64 -w 0 $name-key.pem)"
 done)
 EOF
-

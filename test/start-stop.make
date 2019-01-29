@@ -34,8 +34,8 @@ start: _work/clear-kvm.img _work/kube-clear-kvm _work/start-clear-kvm _work/ssh-
 		fi; \
 		_work/ssh-clear-kvm kubectl label --overwrite node host-$$i storage=pmem; \
 	done
-	if ! [ -e _work/clear-kvm.secretsdone ] || [ $$(_work/ssh-clear-kvm 'kubectl get secrets | grep pmem- | wc -l') -ne 2 ]; then \
-		KUBECONFIG=$(PWD)/_work/clear-kvm-kube.config PATH='$(PWD)/_work/bin/:$(PATH)' ./test/setup-ca-kubernetes.sh && \
+	if ! [ -e _work/clear-kvm.secretsdone ] || [ $$(_work/ssh-clear-kvm kubectl get secrets | grep pmem- | wc -l) -ne 2 ]; then \
+		KUBECTL="$(PWD)/_work/ssh-clear-kvm kubectl" PATH='$(PWD)/_work/bin/:$(PATH)' ./test/setup-ca-kubernetes.sh && \
 		touch _work/clear-kvm.secretsdone; \
 	fi
 	@ echo
