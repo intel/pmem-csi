@@ -3,6 +3,7 @@
 # - starts QEMU virtual machines with pmem NVDIMMs as described in https://github.com/qemu/qemu/blob/bd54b11062c4baa7d2e4efadcf71b8cfd55311fd/docs/nvdimm.txt
 # - starts a Kubernetes cluster
 # - generate pmem secrets if necessary
+# - installs pmem-csi driver
 start: _work/clear-kvm.img _work/kube-clear-kvm _work/start-clear-kvm _work/ssh-clear-kvm test/setup-ca-kubernetes.sh _work/.setupcfssl-stamp
 	. test/test-config.sh && \
 	for i in $$(seq 0 $$(($(NUM_NODES) - 1))); do \
@@ -38,9 +39,16 @@ start: _work/clear-kvm.img _work/kube-clear-kvm _work/start-clear-kvm _work/ssh-
 		KUBECONFIG=$(PWD)/_work/clear-kvm-kube.config PATH='$(PWD)/_work/bin/:$(PATH)' ./test/setup-ca-kubernetes.sh && \
 		touch _work/clear-kvm.secretsdone; \
 	fi
+	_work/ssh-clear-kvm kubectl version --short | grep 'Server Version' | sed -e 's/.*: v\([0-9]*\)\.\([0-9]*\)\..*/\1.\2/' >_work/clear-kvm-kubernetes.version
+	if ! _work/ssh-clear-kvm kubectl get statefulset.apps/pmem-csi-controller daemonset.apps/pmem-csi >/dev/null 2>&1; then \
+		_work/ssh-clear-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-csi.yaml; \
+	fi
 	@ echo
 	@ echo "The test cluster is ready. Log in with _work/ssh-clear-kvm, run kubectl once logged in."
 	@ echo "Alternatively, KUBECONFIG=$$(pwd)/_work/clear-kvm-kube.config can also be used directly."
+	@ echo "To try out the pmem-csi driver:"
+	@ echo "   cat deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-pvc.yaml | _work/ssh-clear-kvm kubectl create -f -"
+	@ echo "   cat deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-app.yaml | _work/ssh-clear-kvm kubectl create -f -"
 
 stop:
 	for i in $$(seq 0 $$(($(NUM_NODES) - 1))); do \
