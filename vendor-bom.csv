@@ -1,6 +1,10 @@
 Repo;Component;License
-github.com/asaskevich/govalidator;govalidator;MIT License
 github.com/Azure/go-ansiterm;go-ansiterm;MIT License
+github.com/NYTimes/gziphandler;NY Times gziphandler;Apache License 2.0
+github.com/PuerkitoBio/purell;purell;BSD 3-clause "New" or "Revised" License
+github.com/PuerkitoBio/urlesc;Urlesc;BSD 3-clause "New" or "Revised" License
+github.com/Sirupsen/logrus;logrus;MIT License
+github.com/asaskevich/govalidator;govalidator;MIT License
 github.com/beorn7/perks;Rabenstein Perks for Go;MIT License
 github.com/container-storage-interface/spec;Container Storage Interface Community spec;Apache License 2.0
 github.com/coreos/etcd;CoreOS etcd;Apache License 2.0
@@ -13,13 +17,6 @@ github.com/emicklei/go-restful;go-restful;MIT License
 github.com/evanphx/json-patch;Go-json-patch;BSD 3-clause "New" or "Revised" License
 github.com/fatih/camelcase;fatih camelcase;MIT License
 github.com/globalsign/mgo;mgo;BSD 2-clause "Simplified" License
-github.com/gogo/protobuf;gogo protobuf;BSD 3-clause "New" or "Revised" License
-github.com/golang/groupcache;groupcache;Apache License 2.0
-github.com/golang/protobuf;golang protobuf;BSD 3-clause "New" or "Revised" License
-github.com/googleapis/gnostic;googleapis gnostic;Apache License 2.0
-github.com/google/btree;google btree;Apache License 2.0
-github.com/google/gofuzz;Google gofuzz;Apache License 2.0
-github.com/google/uuid;Google uuid;BSD 3-clause "New" or "Revised" License
 github.com/go-openapi/analysis;go-openapi analysis;Apache License 2.0
 github.com/go-openapi/errors;go-opanapi-errors;Apache License 2.0
 github.com/go-openapi/jsonpointer;go-openapi jsonpointer;Apache License 2.0
@@ -30,6 +27,13 @@ github.com/go-openapi/spec;OpenAPI Specification for Go;Apache License 2.0
 github.com/go-openapi/strfmt;go-opanapi-strfmt;Apache License 2.0
 github.com/go-openapi/swag;go-openapi-swag;Apache License 2.0
 github.com/go-openapi/validate;go-openapi-validate;Apache License 2.0
+github.com/gogo/protobuf;gogo protobuf;BSD 3-clause "New" or "Revised" License
+github.com/golang/groupcache;groupcache;Apache License 2.0
+github.com/golang/protobuf;golang protobuf;BSD 3-clause "New" or "Revised" License
+github.com/google/btree;google btree;Apache License 2.0
+github.com/google/gofuzz;Google gofuzz;Apache License 2.0
+github.com/google/uuid;Google uuid;BSD 3-clause "New" or "Revised" License
+github.com/googleapis/gnostic;googleapis gnostic;Apache License 2.0
 github.com/gregjones/httpcache;httpcache;BSD 1-clause
 github.com/grpc-ecosystem/go-grpc-prometheus;Apache License 2.0
 github.com/hashicorp/golang-lru;golang-lru;Mozilla Public License 2.0
@@ -45,7 +49,6 @@ github.com/mitchellh/mapstructure;mapstructure;MIT License
 github.com/modern-go/concurrent;modern-go concurrent;Apache License 2.0
 github.com/modern-go/reflect2;modern-go reflect2;Apache License 2.0
 github.com/munnerz/goautoneg;ww goautoneg;BSD 3-clause "New" or "Revised" License
-github.com/NYTimes/gziphandler;NY Times gziphandler;Apache License 2.0
 github.com/onsi/ginkgo;ginkgo;MIT License
 github.com/onsi/gomega;gomega;MIT License
 github.com/opencontainers/go-digest;opencontainers go-digest;Apache License 2.0
@@ -58,9 +61,6 @@ github.com/prometheus/client_golang;client_golang;Apache License 2.0
 github.com/prometheus/client_model;Prometheus client-model;Apache License 2.0
 github.com/prometheus/common;Prometheus common;Apache License 2.0
 github.com/prometheus/procfs;Prometheus procfs;Apache License 2.0
-github.com/PuerkitoBio/purell;purell;BSD 3-clause "New" or "Revised" License
-github.com/PuerkitoBio/urlesc;Urlesc;BSD 3-clause "New" or "Revised" License
-github.com/Sirupsen/logrus;logrus;MIT License
 github.com/spf13/cobra;cobra;BSD 3-clause "New" or "Revised" License
 github.com/spf13/pflag;Steve Francia pflag;BSD 3-clause "New" or "Revised" License
 github.com/stretchr/testify;stretchr testify;BSD 3-clause "New" or "Revised" License
@@ -83,8 +83,8 @@ k8s.io/api;kubernetes api;Apache License 2.0
 k8s.io/apiextensions-apiserver;kubernetes apiextensions-apiserver;Apache License 2.0
 k8s.io/apimachinery;kubernetes apimachinery;Apache License 2.0
 k8s.io/apiserver;kubernetes apiserver;Apache License 2.0
-k8s.io/client-go;Kubernetes Go Client;Apache License 2.0
 k8s.io/cli-runtime;Kubernetes CLI runtime;Apache License 2.0
+k8s.io/client-go;Kubernetes Go Client;Apache License 2.0
 k8s.io/cloud-provider;kubernetes cloud-provider;Apache License 2.0
 k8s.io/cluster-bootstrap;kubernetes cluster-bootstrap;Apache License 2.0
 k8s.io/component-base;kubernetes component-base;Apache License 2.0

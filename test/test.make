@@ -27,7 +27,7 @@ test: test_vendor_bom
 test_vendor_bom:
 	@ if ! diff -c \
 		<(tail -n +2 vendor-bom.csv | sed -e 's/;.*//') \
-		<((grep '^  name =' Gopkg.lock  | sed -e 's/.*"\(.*\)"/\1/') | sort); then \
+		<((grep '^  name =' Gopkg.lock  | sed -e 's/.*"\(.*\)"/\1/') | LC_ALL=C LANG=C sort); then \
 		echo; \
 		echo "vendor-bom.csv not in sync with vendor directory (aka Gopk.lock):"; \
 		echo "+ new entry, missing in vendor-bom.csv"; \
@@ -89,7 +89,7 @@ RUNTIME_DEPS += sed \
 	| cat |
 
 # Ignore duplicates.
-RUNTIME_DEPS += sort -u
+RUNTIME_DEPS += LC_ALL=C LANG=C sort -u
 
 # E2E testing relies on a running QEMU test cluster. It therefore starts it,
 # but because it might have been running already and might have to be kept
