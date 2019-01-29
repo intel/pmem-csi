@@ -1,1 +1,1 @@
-../kubernetes/pmem-storageclass.yaml
+../kubernetes-1.11/pmem-storageclass.yaml

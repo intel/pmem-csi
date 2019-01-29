@@ -63,8 +63,9 @@ var _ = Describe("sanity", func() {
 		// The "unified" mode is needed only because of https://github.com/kubernetes-csi/csi-test/issues/142.
 		// TODO (?): address that issue, then remove "unified" mode to make the driver simpler
 		// and sanity testing more realistic.
+		// TODO: use the already deployed driver. That also gets rid of the hard-coded version number.
 		cl, err := f.CreateFromManifests(nil, /* patch function */
-			"deploy/kubernetes/pmem-unified-csi.yaml",
+			"deploy/kubernetes-1.13/pmem-unified-csi.yaml",
 		)
 		Expect(err).NotTo(HaveOccurred())
 		cleanup = cl

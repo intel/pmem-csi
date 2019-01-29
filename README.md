@@ -216,11 +216,6 @@ aware.
 - **Deploy the driver to Kubernetes**
 
 ```sh
-    $ sed -e 's/192.168.8.1:5000/<your registry>/' deploy/kubernetes/pmem-csi.yaml | kubectl create -f -
-```
-- **Use this variant to deploy on Kubernetes 1.12**
-
-```sh
     $ sed -e 's/192.168.8.1:5000/<your registry>/' deploy/kubernetes-1.12/pmem-csi.yaml | kubectl create -f -
 ```
 
@@ -228,28 +223,32 @@ This yaml file uses the registry address for the QEMU test cluster
 setup (see below). When deploying on a real cluster, some registry
 that can be accessed by that cluster has to be used.
 
+The `deploy` directory contains one directory or symlink for each
+tested Kubernetes release. The most recent one might also work on
+future, currently untested releases.
+
 - **Define a storage class using the driver**
 
 ```sh
-    $ kubectl create -f deploy/kubernetes/pmem-storageclass.yaml
+    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-storageclass.yaml
 ```
 
 - **Provision a pmem-csi volume**
 
 ```sh
-    $ kubectl create -f deploy/kubernetes/pmem-pvc.yaml
+    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-pvc.yaml
 ```
 
 - **Start an application requesting provisioned volume**
 
 ```sh
-    $ kubectl create -f deploy/kubernetes/pmem-app.yaml
+    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-app.yaml
 ```
 
 The application uses **storage: pmem** in its <i>nodeSelector</i>
 list to ensure that it runs on the right node.
 
-- **Once the application pod is in 'Running' status, provision it with a pmem volume**
+- **Once the application pod is in 'Running' status, check that it has a pmem volume**
 
 ```sh
     $ kubectl get po my-csi-app
