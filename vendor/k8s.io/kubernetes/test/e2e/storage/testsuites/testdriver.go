@@ -29,32 +29,12 @@ type TestDriver interface {
 	// GetDriverInfo returns DriverInfo for the TestDriver
 	GetDriverInfo() *DriverInfo
 	// CreateDriver creates all driver resources that is required for TestDriver method
-	// except CreateVolume. May be called more than once and should only do something on
-	// the first call.
+	// except CreateVolume
 	CreateDriver()
-	// CreateDriver cleanup all the resources that is created in CreateDriver. There is
-	// no guarantee that CreateDriver succeeded or even was called at all, so the test driver
-	// has to track resources.
+	// CreateDriver cleanup all the resources that is created in CreateDriver
 	CleanupDriver()
-}
-
-// FilterTestDriver is an optional interface that drivers can
-// implement to filter out unsuitable tests while tests get defined.
-type FilterTestDriver interface {
-	// IsTestSupported returns false if the Testpattern is not
-	// suitable to test with the TestDriver. This will be called
-	// already while defining tests and unsupported tests will not even
-	// be added to the test suite.
-	IsTestSupported(testpatterns.TestPattern) bool
-}
-
-// BeforeEachTestDriver is an optional interface that drivers can
-// implement to hook into test execution. It can be used to initialize
-// additional resources at a time when TestConfig (see below) is fully
-// populated or to skip tests based on some runtime criteria.
-type BeforeEachTestDriver interface {
-	// Called once per test.
-	BeforeEach(testpatterns.TestPattern)
+	// SkipUnsupportedTest skips test in Testpattern is not suitable to test with the TestDriver
+	SkipUnsupportedTest(testpatterns.TestPattern)
 }
 
 // PreprovisionedVolumeTestDriver represents an interface for a TestDriver that has pre-provisioned volume
@@ -150,4 +130,8 @@ type TestConfig struct {
 	// the configuration that then has to be used to run tests.
 	// The values above are ignored for such tests.
 	ServerConfig *framework.VolumeTestConfig
+
+	// TopologyEnabled indicates that the Topology feature gate
+	// should be enabled in external-provisioner
+	TopologyEnabled bool
 }

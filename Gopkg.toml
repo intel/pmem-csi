@@ -44,10 +44,26 @@
   name = "github.com/kubernetes-csi/csi-test"
   version = "0.3.0-4"
 
+# We need the refactored storage testsuites (https://github.com/kubernetes/kubernetes/pull/70862)
+# which did not make it into 1.13. Otherwise we end up pulling in all test drivers and that in
+# turn pulls in various cloud-provider specific code.
+#
+# To switch back to a stable version, we have to use:
+# [[constraint]]
+#  name = "k8s.io/kubernetes"
+#  version = "1.14.0"
+#
+# [[override]]
+#  name = "k8s.io/apimachinery"
+#  version = "kubernetes-1.14.0"
+# ...
+#
+# We have to select the right version by name because of the "kubernetes-" prefix, dep doesn't
+# recognize these as normal releases. Upstream is considering to change the tagging,
+# see https://github.com/kubernetes/kubernetes/issues/72638.
 [[constraint]]
   name = "k8s.io/kubernetes"
-  branch = "storage-volume-testsuites-avoid-tests"
-  source = "github.com/pohly/kubernetes"
+  branch = "master"
 
 [[override]]
   name = "k8s.io/apimachinery"
@@ -59,10 +75,35 @@
   name = "k8s.io/apiserver"
   branch = "master"
 [[override]]
-  name = "k8s.io/kube-aggregator"
+  name = "k8s.io/apiextensions-apiserver"
+  branch = "master"
+[[override]]
+  name = "k8s.io/cli-runtime"
   branch = "master"
 [[override]]
   name = "k8s.io/client-go"
+  branch = "master"
+[[override]]
+  name = "k8s.io/cloud-provider"
+  branch = "master"
+[[override]]
+  name = "k8s.io/cluster-bootstrap"
+  branch = "master"
+[[override]]
+  name = "k8s.io/csi-api"
+  branch = "master"
+[[override]]
+  name = "k8s.io/kube-aggregator"
+  branch = "master"
+
+# Doesn't do proper releases.
+[[override]]
+  name = "k8s.io/kube-openapi"
+  branch = "master"
+
+# Also no proper releases.
+[[override]]
+  name = "k8s.io/utils"
   branch = "master"
 
 [[override]]
