@@ -281,9 +281,12 @@ func (r *Region) DestroyNamespace(ns *Namespace, force bool) error {
 		return nil
 	}
 
+	/* originally here we try to clear 4k at start of block device,
+	* but that seems not work reliably so we use different method via flushDevice
+	* This here remains commented out
 	if err := ns.nullify(); err != nil {
 		return fmt.Errorf("failed to nullify namespace: %s", err.Error())
-	}
+	}*/
 
 	C.ndctl_namespace_disable_invalidate(ndns)
 

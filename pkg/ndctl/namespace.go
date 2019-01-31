@@ -10,8 +10,9 @@ import "C"
 import (
 	"encoding/json"
 	"fmt"
+	/* needed for nullify
 	"os"
-	"syscall"
+	"syscall"*/
 	"unsafe"
 
 	"github.com/google/uuid"
@@ -445,6 +446,7 @@ func (ns *Namespace) setBttSeed(sectorSize uint64) error {
 	return nil
 }
 
+/* nullify commented out as unused, was not reliable
 func (ns *Namespace) nullify() error {
 	ndns := (*C.struct_ndctl_namespace)(ns)
 	var rc C.int
@@ -476,4 +478,4 @@ func (ns *Namespace) nullify() error {
 	}
 
 	return err
-}
+}*/
