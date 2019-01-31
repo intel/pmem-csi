@@ -46,10 +46,16 @@ func (pmem *pmemNdctl) GetCapacity() (map[string]uint64, error) {
 }
 
 func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) error {
+	// align up by 1 GB, also compensate for libndctl giving us 1 GB less than we ask
+	var align uint64 = 1024 * 1024 * 1024
+	size /= align
+	size += 2
+	size *= align
 	ns, err := pmem.ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
-		Name: name,
-		Size: size,
-		Mode: ndctl.NamespaceMode(nsmode),
+		Name:  name,
+		Size:  size,
+		Align: uint32(align),
+		Mode:  ndctl.NamespaceMode(nsmode),
 	})
 	if err != nil {
 		return err

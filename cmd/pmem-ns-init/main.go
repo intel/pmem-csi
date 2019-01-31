@@ -49,7 +49,12 @@ func initNVdimms(ctx *ndctl.Context, namespacesize int, useforfsdax int, usefors
 		useforfsdax = 100
 		useforsector = 0
 	}
-	nsSize := uint64(namespacesize) * 1024 * 1024 * 1024
+	if namespacesize < 2 {
+		glog.Infof("namespacesize has to be at least 2 GB, forcing to 2")
+		namespacesize = 2
+	}
+	// we get 1GB smaller than we ask so lets ask for 1GB more
+	nsSize := uint64(namespacesize+1) * 1024 * 1024 * 1024
 	for _, bus := range ctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
 			createNS(r, nsSize, useforfsdax, ndctl.FsdaxMode)
@@ -100,15 +105,17 @@ func createNS(r *ndctl.Region, nsSize uint64, uselimit int, nsmode ndctl.Namespa
 			glog.Infof("MaxAvailableExtent in Region:%v is less than desired nsSize, limit nsSize to that", r.MaxAvailableExtent())
 			nsSize = r.MaxAvailableExtent()
 		}
-		// In typical case, NSize drops to zero at some point, avoid zero-size create request
-		if nsSize == 0 {
+		// If NSize drops to less than 2GB, stop as creation would fail
+		if nsSize < 2*1024*1024*1024 {
+			glog.Infof("nsSize:%v is less then 2 GB, stop creating", nsSize)
 			break
 		}
 		glog.Infof("Create next %v-bytes %s-namespace", nsSize, nsmode)
 		_, err := r.CreateNamespace(ndctl.CreateNamespaceOpts{
-			Name: "pmem-csi",
-			Mode: nsmode,
-			Size: nsSize,
+			Name:  "pmem-csi",
+			Mode:  nsmode,
+			Size:  nsSize,
+			Align: 1024 * 1024 * 1024,
 		})
 		if err != nil {
 			glog.Warning("Failed to create namespace:", err.Error())
