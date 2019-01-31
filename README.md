@@ -27,10 +27,20 @@ The PMEM-CSI driver follows the [CSI specification](https://github.com/container
 
 ### Architecture and Operation
 
-The PMEM-CSI driver uses LVM for Logical Volumes Management to avoid the risk of fragmentation that would become an issue if Namespaces were served directly. The logical volumes of LVM are served to satisfy API requests. This also ensures the region-affinity of served volumes, because physical volumes on each region belong to a region-specific LVM volume group.
+The PMEM-CSI driver can operate in two different DeviceModes: LVM and Direct
 
-Currently the driver consists of three separate binaries that form two
-initialization stages and a third API-serving stage.
+### DeviceMode:LVM
+
+The following diagram illustrates the operation in DeviceMode:LVM:
+![devicemode-lvm diagram](/docs/images/devicemodes/pmem-csi-lvm.png)
+
+In DeviceMode:LVM PMEM-CSI driver uses LVM for Logical Volumes Management to avoid the risk of fragmentation. The LVM logical volumes are served to satisfy API requests. There is one Volume Group created per Region, ensuring the region-affinity of served volumes.
+
+<!-- this to be used in place of above if/after we change to put multiple regions in one VGroup:
+One Volume group is created per Namespace Mode, combining Phys.Volumes from all Regions. This allows one provisioned Volume to be larger than one Region, which is not possible in DeviceMode:direct.
+-->
+
+The driver consists of three separate binaries that form two initialization stages and a third API-serving stage.
 
 During startup, the driver scans persistent memory for regions and namespaces, and tries to create more namespaces using all or part (selectable via option) of the remaining available space. The namespace size can be specified as a driver parameter and defaults to 32 GB. This first stage is performed by a separate entity _pmem-ns-init_.
 
@@ -38,24 +48,30 @@ The second stage of initialization arranges physical volumes provided by namespa
 
 After two initialization stages, the third binary _pmem-csi-driver_ starts serving CSI API requests.
 
-### Namespace modes
+#### Namespace modes in DeviceMode:LVM
 
-The PMEM-CSI driver can pre-create Namespaces in two modes, forming corresponding LVM Volume groups, to serve volumes based on `fsdax` or `sector` (alias `safe`) mode Namespaces. The amount of space to be used is determined using two options `-useforfsdax` and `-useforsector` given to _pmem-ns-init_. These options specify an integer presenting limit as percentage, which is applied separately in each Region. The default values are `useforfsdax=100` and `useforsector=0`. A CSI request for volume can specify the Namespace mode using the plugin-specific argument `nsmode` which has a value of either "fsdax" (default) or "sector". A volume provisioned in `fsdax` mode will have the `dax` option added to mount options.
+The PMEM-CSI driver can pre-create Namespaces in two modes, forming corresponding LVM Volume groups, to serve volumes based on `fsdax` or `sector` (alias `safe`) mode Namespaces. The amount of space to be used is determined using two options `-useforfsdax` and `-useforsector` given to _pmem-ns-init_. These options specify an integer presenting limit as percentage, which is applied separately in each Region. The default values are `useforfsdax=100` and `useforsector=0`. A CSI request for volume can specify the Namespace mode using the driver-specific argument `nsmode` which has a value of either "fsdax" (default) or "sector". A volume provisioned in `fsdax` mode will have the `dax` option added to mount options.
 
-**Note:** Currently, the kernel (tested with current latest 4.19.3) overrides the ext4-type filesystem `dax` mount option like this:
-```
-[  232.584035] EXT4-fs (dm-0): DAX enabled. Warning: EXPERIMENTAL, use at your own risk
-[  232.584038] EXT4-fs (dm-0): DAX unsupported by block device. Turning off DAX.
-[  232.585125] EXT4-fs (dm-0): mounted filesystem with ordered data mode. Opts: dax
-```
-
-This happens when Volume is provisioned on top of LVM. The override does not happen if a persistent memory phys.volume is directly formatted and mounted.
-
-The similar override does not happen when volume is formatted as an XFS file system.
-
-### Using limited amount of total space
+#### Using limited amount of total space in DeviceMode:LVM
 
 The PMEM-CSI driver can leave space on devices for others, and recognize "own" namespaces. Leaving space for others can be achieved by specifying lower-than-100 values to `-useforfsdax` and/or `-useforsector` options. The distinction "own" vs. "foreign" is implemented by setting the _Name_ field in Namespace to a static string "pmem-csi" during Namespace creation. When adding Physical Volumes to Volume Groups, only Physical Volumes that are based on Namespaces with the name "pmem-csi" are considered.
+
+### DeviceMode:Direct
+
+The following diagram illustrates the operation in DeviceMode:Direct:
+![devicemode-direct diagram](/docs/images/devicemodes/pmem-csi-direct.png)
+
+In DeviceMode:Direct PMEM-CSI driver allocates Namespaces directly from the storage device. This creates device space fragmentation risk, but reduces complexity and run-time overhead by avoiding additional device mapping layer. Direct mode also ensures the region-affinity of served volumes, because provisioned volume can belong to one Region only. In Direct mode, one provisioned volume can be larger than one Namespace on the device. 
+
+In Direct mode, the two preparation stages used in LVM mode, are not needed.
+
+#### Namespace modes in DeviceMode:Direct
+
+The PMEM-CSI driver creates a Namespace directly in the mode which is asked by Volume creation request, thus bypassing the complexity of pre-allocated pools that are used in DeviceMode:LVM.
+
+#### Using limited amount of total space in DeviceMode:Direct
+
+In DeviceMode:Direct, the driver does not attempt to limit space use. It also does not mark "own" namespaces. The _Name_ field of a Namespace gets value of the VolumeID.
 
 ### Driver modes
 
@@ -151,6 +167,8 @@ The driver deployment in Kubernetes cluster has been verified on:
 | Branch            | Kubernetes branch/version      |
 |-------------------|--------------------------------|
 | devel             | Kubernetes 1.11 branch v1.11.3 |
+| devel             | Kubernetes 1.12                |
+| devel             | Kubernetes 1.13                |
 
 ## Setup
 
@@ -191,8 +209,9 @@ See the [Makefile](Makefile) for additional make targets and possible make varia
 
 This is useful in development/trial mode.
 
-Use `run_driver` as user:root.
+Use `util/run-lvm-unified` as user:root.
 This runs two preparation parts, and starts the driver binary, which listens and responds to API use on a TCP socket. You can modify this to use a Unix socket, if needed.
+Use `util/run-direct-unified` as user:root to start the driver in DeviceMode:direct. This script skips the two preparation stages and starts the driver binary with corresponding DeviceMode option.
 
 #### Run as Kubernetes deployment
 
@@ -213,13 +232,19 @@ Clusters with multiple nodes with persistent memory are not fully supported at
 the moment. Support for this will be added when making the CSI driver topology-
 aware.
 
-- **Deploy the driver to Kubernetes**
+- **Deploy the driver to Kubernetes using DeviceMode:LVM **
 
 ```sh
-    $ sed -e 's/192.168.8.1:5000/<your registry>/' deploy/kubernetes-1.12/pmem-csi.yaml | kubectl create -f -
+    $ sed -e 's/192.168.8.1:5000/<your registry>/' deploy/kubernetes-1.12/pmem-csi-lvm.yaml | kubectl create -f -
 ```
 
-This yaml file uses the registry address for the QEMU test cluster
+- **Deploy the driver to Kubernetes using DeviceMode:Direct **
+
+```sh
+    $ sed -e 's/192.168.8.1:5000/<your registry>/' deploy/kubernetes-1.12/pmem-csi-direct.yaml | kubectl create -f -
+```
+
+The deployment yaml file uses the registry address for the QEMU test cluster
 setup (see below). When deploying on a real cluster, some registry
 that can be accessed by that cluster has to be used.
 
