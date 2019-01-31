@@ -102,7 +102,7 @@ var _ = Describe("PMEM Volumes", func() {
 						ClientNodeName: "host-1",
 					},
 				},
-				scManifest: "deploy/kubernetes/pmem-storageclass.yaml",
+				scManifest: "deploy/kubernetes-1.13/pmem-storageclass.yaml",
 				// Renaming of the driver *not* enabled. It doesn't support
 				// that because there is only one instance of the registry
 				// and on each node the driver assumes that it has exclusive
