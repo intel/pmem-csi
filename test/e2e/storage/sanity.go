@@ -105,7 +105,7 @@ var _ = Describe("sanity", func() {
 		// the case when using a fixed port.
 		var port int32
 		Eventually(func() bool {
-			service, err := cs.CoreV1().Services(f.Namespace.Name).Get("pmem-controller", metav1.GetOptions{})
+			service, err := cs.CoreV1().Services(f.Namespace.Name).Get("pmem-unified", metav1.GetOptions{})
 			if err != nil {
 				return false
 			}

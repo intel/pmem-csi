@@ -51,29 +51,29 @@ subjects:
 apiVersion: v1
 kind: Service
 metadata:
-  name: pmem-controller
+  name: pmem-unified
 spec:
   type: NodePort
   selector:
-    app: pmem-csi-controller
+    app: pmem-csi-unified
   ports:
   - port: 10000
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: pmem-csi-controller
+  name: pmem-csi-unified
   namespace: default
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: pmem-csi-controller
-  serviceName: pmem-csi-controller
+      app: pmem-csi-unified
+  serviceName: pmem-csi-unified
   template:
     metadata:
       labels:
-        app: pmem-csi-controller
+        app: pmem-csi-unified
     spec:
       serviceAccount: csi-service-account
       initContainers:
@@ -108,3 +108,14 @@ spec:
               fieldPath: spec.nodeName
         securityContext:
           privileged: true
+        volumeMounts:
+          # We create temporary staging and target directories under /var/tmp
+          # during csi-sanity testing and must have those visible inside the
+          # container (see test/e2e/storage/sanity.go).
+          - name: var-tmp
+            mountPath: /var/tmp
+      volumes:
+        - name: var-tmp
+          hostPath:
+            path: /var/tmp
+            type: DirectoryOrCreate
