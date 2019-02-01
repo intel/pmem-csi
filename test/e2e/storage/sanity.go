@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/kubernetes-csi/csi-test/pkg/sanity"
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/framework/podlogs"
@@ -64,7 +65,15 @@ var _ = Describe("sanity", func() {
 		// TODO (?): address that issue, then remove "unified" mode to make the driver simpler
 		// and sanity testing more realistic.
 		// TODO: use the already deployed driver. That also gets rid of the hard-coded version number.
-		cl, err := f.CreateFromManifests(nil, /* patch function */
+		cl, err := f.CreateFromManifests(func(item interface{}) error {
+			switch item := item.(type) {
+			case *appsv1.StatefulSet:
+				// Lock the unified driver onto a well-known host. We need to know that
+				// for ssh below.
+				item.Spec.Template.Spec.NodeName = "host-1"
+			}
+			return nil
+		},
 			"deploy/kubernetes-1.13/pmem-unified-csi.yaml",
 		)
 		Expect(err).NotTo(HaveOccurred())
