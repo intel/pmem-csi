@@ -75,6 +75,73 @@ The PMEM-CSI driver supports running in different modes, which can be controlled
 
 * **_Unified_** mode is intended to run the driver in a single host, mostly for testing the driver in a non-clustered environment.
 
+### Volume Persistency
+
+Normally, volumes are provided by a storage backend that is independent
+of a particular node. When a node goes offline, the volume can be
+mounted elsewhere. With PMEM-CSI, volumes are *local* and thus can
+only be used on the node where they were created.
+
+This limitation needs to be considered when designing and deploying
+applications that are to use local storage:
+
+* Persistent Volumes  
+A volume gets created independently of the application, on some node
+where there is enough free space. Applications using such a volume are
+then forced to run on that node and cannot run when the node is
+down. Data is retained until the volume gets deleted.
+* Ephemeral Volumes  
+An application is assigned to a node and when it starts to run, a new
+volume is created for it on that node. When the application stops, the
+volume is deleted.
+* Cache Volumes  
+Volumes are created on a certain set of nodes, each with its own local
+data. Applications are started on those nodes and then get to use the
+volume on their node. Data persists across application restarts. This
+is useful when the data is only cached information that can be
+discarded and reconstructed at any time *and* the application can
+reuse existing local data when restarting.
+* Delayed Persistent Volumes  
+This is a variant of persistent volumes. The only difference is that
+creating the volume is delayed until the first application using the
+volume is started, and then the volume is created on the node chosen
+for that first application run. From then on, applications will always
+have to run on that node.
+
+Not all of these modes are supported in CSI, Kubernetes and PMEM-CSI. This table shows the current status and known limitations:
+
+Volume | Kubernetes | PMEM-CSI | Limitations
+--- | --- | --- | ---
+Persistent | supported | supported | topology aware scheduling
+Ephemeral | [in design](https://github.com/kubernetes/enhancements/blob/master/keps/sig-storage/20190122-csi-inline-volumes.md#proposal) | supported via a fake volume | topology aware scheduling, resource constraints
+Cache | supported | not implemented | topology aware scheduling
+Delayed Persistent | supported, [CSI support might be faulty](https://github.com/kubernetes-csi/external-provisioner/issues/221) | not implemented | topology aware scheduling, topology aware volume provisioning
+
+[Topology aware scheduling](https://github.com/kubernetes/enhancements/issues/490)
+ensures that an application runs on a node where the volume was
+created. This is obviously needed for persistent volumes, but also for
+delayed persistent volumes because otherwise a restarted application
+might end up on the wrong node. Usage of cache volumes is more flexible,
+but an application still can only run on one of the nodes where the
+a cache volume is available. For CSI-based drivers like PMEM-CSI,
+Kubernetes >= 1.13 is needed. On older Kubernetes releases, pods must
+be scheduled manually onto the right node(s).
+
+[Topology aware volume provisioning](https://kubernetes.io/blog/2018/10/11/topology-aware-volume-provisioning-in-kubernetes/)
+is needed for delayed persistent volumes.
+
+The upstream design for ephemeral volumes currently does not take
+[resource constraints](https://github.com/kubernetes/enhancements/pull/716#discussion_r250536632)
+into account. If an application gets scheduled onto a node and then
+creating the ephemeral volume on that node fails, the application on
+the node cannot start until resources become available. The same
+applies to how this is currently implemented in PMEM-CSI: a fake
+volume gets created initially, without actually allocating space. Then
+when an application starts and it is time to mount that "existing"
+volume, an attempt is made to allocate the space required for the
+volume locally. Only if there is enough space can application startup
+continue.
+
 ### Driver Components
 
 #### Identity Server
@@ -83,19 +150,52 @@ This gRPC server operates on a given endpoint in all driver modes and implements
 
 #### Node Registry Server
 
-When the PMEM-CSI driver runs in _Controller_ mode, it starts a gRPC server on a given endpoint(_-registryEndpoint_) and serves the [RegistryServer](pkg/pmem-registry/pmem-registry.proto) interface. The driver(s) running in _Node_ mode can register themselves with node specific information such as node id, [NodeControllerServer](#node-controller-server) endpoint, and their available persistent memory capacity.
+When the PMEM-CSI driver runs in _Controller_ mode, it starts a gRPC server on a given endpoint(_-registryEndpoint_) and serves the [RegistryServer](pkg/pmem-registry/pmem-registry.proto) interface. The driver(s) running in _Node_ mode can register themselves with node specific information such as node id and [NodeControllerServer](#node-controller-server) endpoint.
 
 #### Master Controller Server
 
-This gRPC server is started by the PMEM-CSI driver running in _Controller_ mode and serves the [Controller](https://github.com/container-storage-interface/spec/blob/master/spec.md#controller-service-rpc) interface defined by the CSI specification. The server responds to CreateVolume(), DeleteVolume(), ControllerPublishVolume(), ControllerUnpublishVolume(), and ListVolumes() calls coming from [external-provisioner]() and [external-attacher]() sidecars. It forwards the publish and unpublish volume requests to the appropriate [Node controller server](#node-controller-server) running on a worker node that was registered with the driver.
+This gRPC server is started by the PMEM-CSI driver running in _Controller_ mode and serves the [Controller](https://github.com/container-storage-interface/spec/blob/master/spec.md#controller-service-rpc) interface defined by the CSI specification. The server responds to CreateVolume(), DeleteVolume(), ControllerPublishVolume(), ControllerUnpublishVolume(), and ListVolumes() calls coming from [external-provisioner]() and [external-attacher]() sidecars.
+
+How it handles publish and unpublish requests depends on the desired persistency of the volume:
+
+Volume | Implementation | Resulting Volume Topology
+--- | --- | ---
+Persistent | ask registered [node controller servers](#node-controller-server) about available space and creates the volume on the node with most free space | single node
+Ephemeral | checks which nodes a registered, without checking current space usage (because that will change over time) | a set of nodes
 
 #### Node Controller Server
 
-This gRPC server is started by the PMEM-CSI driver running in _Node_ mode and implements the [ControllerPublishVolume](https://github.com/container-storage-interface/spec/blob/master/spec.md#controllerpublishvolume)  and [ControllerUnpublishVolume](https://github.com/container-storage-interface/spec/blob/master/spec.md#controllerunpublishvolume) methods of the [Controller service](https://github.com/container-storage-interface/spec/blob/master/spec.md#controller-service-rpc) interface defined by the CSI specification. It serves the ControllerPublishVolume() and ControllerUnpublish() requests coming from the [Master controller server](#master-controller-server) and creates/deletes persistent memory devices.
+This gRPC server is started by the PMEM-CSI driver running in _Node_
+mode.
+
+For persistent volumes, it implements the
+[ControllerPublishVolume](https://github.com/container-storage-interface/spec/blob/master/spec.md#controllerpublishvolume)
+and
+[ControllerUnpublishVolume](https://github.com/container-storage-interface/spec/blob/master/spec.md#controllerunpublishvolume)
+methods of the
+[Controller service](https://github.com/container-storage-interface/spec/blob/master/spec.md#controller-service-rpc)
+interface defined by the CSI specification. It serves the
+ControllerPublishVolume() and ControllerUnpublish() requests coming
+from the [Master controller server](#master-controller-server) and
+creates/deletes persistent memory devices.
+
+It is not used for ephemeral volumes.
 
 #### Node Server
 
-This gRPC server is started by the driver running in _Node_ mode and implements the [Node service](https://github.com/container-storage-interface/spec/blob/master/spec.md#node-service-rpc) interface defined in the CSI specification. It serves the NodeStageVolume(), NodeUnstageVolume(), NodePublishVolume(), and NodeUnpublishVolume() requests coming from the Container Orchestrator (CO).
+This gRPC server is started by the driver running in _Node_ mode and
+implements the
+[Node service](https://github.com/container-storage-interface/spec/blob/master/spec.md#node-service-rpc)
+interface defined in the CSI specification. It serves the
+NodeStageVolume(), NodeUnstageVolume(), NodePublishVolume(), and
+NodeUnpublishVolume() requests coming from the Container Orchestrator
+(CO).
+
+For persistent volumes, the same previously allocated space is
+used each time.
+
+For ephemeral volumes, new space is allocated in
+NodeStageVolume() and released in NodeUnstageVolume().
 
 ### Communication channels
 
@@ -117,6 +217,8 @@ A production deployment can improve upon that by using some other key delivery m
 
 The following diagram illustrates how the PMEM-CSI driver performs dynamic volume provisioning in Kubernetes:
 ![sequence diagram](/docs/images/sequence/pmem-csi-sequence-diagram.png)
+<!-- TODO: update the diagram to show how ephemeral volumes get created and deleted -->
+
 <!-- FILL TEMPLATE:
 * Target users and use cases
 * Design decisions & tradeoffs that were made
@@ -228,6 +330,8 @@ tested Kubernetes release. The most recent one might also work on
 future, currently untested releases.
 
 - **Define a storage class using the driver**
+
+<!-- TODO: define and document how persistency can be selected - probably via parameter on storageclass -->
 
 ```sh
     $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-storageclass.yaml
