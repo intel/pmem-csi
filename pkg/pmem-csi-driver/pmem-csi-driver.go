@@ -72,7 +72,6 @@ type pmemDriver struct {
 	cfg             Config
 	ids             *identityServer
 	ns              *nodeServer
-	cs              *controllerServer
 	rs              *registryServer
 	serverTLSConfig *tls.Config
 	clientTLSConfig *tls.Config
@@ -151,17 +150,17 @@ func (pmemd *pmemDriver) Run() error {
 
 	if pmemd.cfg.Mode == Controller {
 		pmemd.rs = NewRegistryServer(pmemd.clientTLSConfig)
-		pmemd.cs = NewControllerServer(pmemd.driver, pmemd.cfg.Mode, pmemd.rs, nil)
+		cs := NewMasterControllerServer(pmemd.driver, pmemd.rs)
 
 		if pmemd.cfg.Endpoint != pmemd.cfg.RegistryEndpoint {
-			if err := s.Start(pmemd.cfg.Endpoint, nil, pmemd.ids, pmemd.cs); err != nil {
+			if err := s.Start(pmemd.cfg.Endpoint, nil, pmemd.ids, cs); err != nil {
 				return err
 			}
 			if err := s.Start(pmemd.cfg.RegistryEndpoint, pmemd.serverTLSConfig, pmemd.rs); err != nil {
 				return err
 			}
 		} else {
-			if err := s.Start(pmemd.cfg.Endpoint, pmemd.serverTLSConfig, pmemd.ids, pmemd.cs, pmemd.rs); err != nil {
+			if err := s.Start(pmemd.cfg.Endpoint, pmemd.serverTLSConfig, pmemd.ids, cs, pmemd.rs); err != nil {
 				return err
 			}
 		}
@@ -171,18 +170,18 @@ func (pmemd *pmemDriver) Run() error {
 			return err
 		}
 		pmemd.ns = NewNodeServer(pmemd.driver, dm)
-		pmemd.cs = NewControllerServer(pmemd.driver, pmemd.cfg.Mode, nil, dm)
+		cs := NewNodeControllerServer(pmemd.driver, dm)
 
 		if pmemd.cfg.Mode == Node {
 			if pmemd.cfg.Endpoint != pmemd.cfg.ControllerEndpoint {
 				if err := s.Start(pmemd.cfg.Endpoint, nil, pmemd.ids, pmemd.ns); err != nil {
 					return err
 				}
-				if err := s.Start(pmemd.cfg.ControllerEndpoint, pmemd.serverTLSConfig, pmemd.cs); err != nil {
+				if err := s.Start(pmemd.cfg.ControllerEndpoint, pmemd.serverTLSConfig, cs); err != nil {
 					return err
 				}
 			} else {
-				if err := s.Start(pmemd.cfg.Endpoint, nil, pmemd.ids, pmemd.cs, pmemd.ns); err != nil {
+				if err := s.Start(pmemd.cfg.Endpoint, nil, pmemd.ids, cs, pmemd.ns); err != nil {
 					return err
 				}
 			}
@@ -190,7 +189,7 @@ func (pmemd *pmemDriver) Run() error {
 				return err
 			}
 		} else /* if pmemd.cfg.Mode == Unified */ {
-			if err := s.Start(pmemd.cfg.Endpoint, pmemd.serverTLSConfig, pmemd.ids, pmemd.cs, pmemd.ns); err != nil {
+			if err := s.Start(pmemd.cfg.Endpoint, pmemd.serverTLSConfig, pmemd.ids, cs, pmemd.ns); err != nil {
 				return err
 			}
 		}

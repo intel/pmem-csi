@@ -133,9 +133,6 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	if len(stagingtargetPath) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Target path missing in request")
 	}
-
-	attrs := req.GetVolumeContext()
-
 	requestedFsType := req.GetVolumeCapability().GetMount().GetFsType()
 
 	// Serialize by VolumeId
@@ -144,15 +141,12 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 
 	// showing for debug:
 	glog.Infof("NodeStageVolume: VolumeID is %v", req.GetVolumeId())
-	glog.Infof("NodeStageVolume: VolumeName is %v", attrs["name"])
-	glog.Infof("NodeStageVolume: VolumeSize is %v", attrs["size"])
-	glog.Infof("NodeStageVolume: Namespacemode is %v", attrs["nsmode"])
 	glog.Infof("NodeStageVolume: Staging target path is %v", stagingtargetPath)
 	glog.Infof("NodeStageVolume: Requested fsType is %v", requestedFsType)
 
 	device, err := ns.dm.GetDevice(req.VolumeId)
 	if err != nil {
-		pmemcommon.Infof(3, ctx, "NodeStageVolume: did not find volume %s", attrs["name"])
+		pmemcommon.Infof(3, ctx, "NodeStageVolume: did not find volume %s", req.VolumeId)
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
@@ -214,10 +208,12 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	// Without -c mounted path will look like /dev/mapper/... and its more difficult to match it to lvpath when unmounting
 	// TODO: perhaps what's explained above can be revisited-cleaned somehow
 
-	// Add dax option if namespacemode == fsdax
-	if attrs["nsmode"] == "fsdax" {
-		glog.Infof("NodeStageVolume: namespacemode FSDAX, add dax mount option")
-		args = append(args, "-o", "dax")
+	if params := req.GetVolumeContext(); params != nil {
+		// Add dax option if namespacemode == fsdax
+		if params["nsmode"] == "fsdax" {
+			glog.Infof("NodeStageVolume: namespacemode FSDAX, add dax mount option")
+			args = append(args, "-o", "dax")
+		}
 	}
 	args = append(args, device.Path, stagingtargetPath)
 	glog.Infof("NodeStageVolume: mount args: [%v]", args)
@@ -225,7 +221,6 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		return nil, status.Error(codes.InvalidArgument, "mount filesystem failed"+err.Error())
 	}
 
-	ns.volInfo[req.VolumeId] = attrs["name"]
 	return &csi.NodeStageVolumeResponse{}, nil
 }
 
