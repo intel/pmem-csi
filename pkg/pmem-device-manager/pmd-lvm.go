@@ -105,6 +105,15 @@ func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error 
 			if _, err := pmemexec.RunCommand("lvcreate", "-L", strSz, "-n", name, vg.name); err != nil {
 				glog.Infof("lvcreate failed with error: %v, trying for next free region", err)
 			} else {
+				// clear start of device to avoid old data being recognized as file system
+				device, err := lvm.GetDevice(name)
+				if err != nil {
+					return err
+				}
+				err = ClearDevice(device, false)
+				if err != nil {
+					return err
+				}
 				return nil
 			}
 		}
@@ -117,13 +126,11 @@ func (lvm *pmemLvm) DeleteDevice(name string, flush bool) error {
 	if err != nil {
 		return err
 	}
-	glog.Infof("DeleteDevice: Matching LVpath: %v erase:%v", device.Path, flush)
-	if flush {
-		flushDevice(device)
+	err = ClearDevice(device, flush)
+	if err != nil {
+		return err
 	}
-
 	_, err = pmemexec.RunCommand("lvremove", "-fy", device.Path)
-
 	return err
 }
 
@@ -132,7 +139,7 @@ func (lvm *pmemLvm) FlushDeviceData(name string) error {
 	if err != nil {
 		return err
 	}
-	return flushDevice(device)
+	return ClearDevice(device, true)
 }
 
 func (lvm *pmemLvm) GetDevice(id string) (PmemDeviceInfo, error) {
@@ -159,16 +166,6 @@ func (lvm *pmemLvm) ListDevices() ([]PmemDeviceInfo, error) {
 
 func vgName(bus *ndctl.Bus, region *ndctl.Region, nsmode ndctl.NamespaceMode) string {
 	return bus.DeviceName() + region.DeviceName() + string(nsmode)
-}
-
-func flushDevice(dev PmemDeviceInfo) error {
-	// erase data on block device, if not disabled by driver option
-	// use one iteration instead of shred's default=3 for speed
-	glog.Infof("Wiping data on: %s", dev.Path)
-	if _, err := pmemexec.RunCommand("shred", "-n", "1", dev.Path); err != nil {
-		return fmt.Errorf("device flush failure: %v", err.Error())
-	}
-	return nil
 }
 
 //lvs options "lv_name,lv_path,lv_size,lv_free"

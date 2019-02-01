@@ -1,6 +1,0 @@
-#!/bin/bash -eu
-# Run this as root to start PMEM-CSI driver as singlehost, drivermode=Unified
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
-$DIR/_output/pmem-ns-init
-$DIR/_output/pmem-vgm
-$DIR/_output/pmem-csi-driver --endpoint tcp://127.0.0.1:10000

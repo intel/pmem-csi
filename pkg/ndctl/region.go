@@ -188,9 +188,8 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 		ways := uint32(C.ndctl_region_get_interleave_ways(ndr))
 		align := uint64(opts.Align * ways)
 		if opts.Size%align != 0 {
-			// force-align up to next block boundary
+			// force-align down to block boundary. More sensible would be to align up, but then it may fail because we ask more then there is left
 			opts.Size /= align
-			opts.Size += 1
 			opts.Size *= align
 			glog.Warningf("%s: namespace size must align to interleave-width:%d * alignment:%d, force-align to %d",
 				regionName, ways, opts.Align, opts.Size)
@@ -281,9 +280,12 @@ func (r *Region) DestroyNamespace(ns *Namespace, force bool) error {
 		return nil
 	}
 
+	/* originally here we try to clear 4k at start of block device,
+	* but that seems not work reliably so we use different method via flushDevice
+	* This here remains commented out
 	if err := ns.nullify(); err != nil {
 		return fmt.Errorf("failed to nullify namespace: %s", err.Error())
-	}
+	}*/
 
 	C.ndctl_namespace_disable_invalidate(ndns)
 

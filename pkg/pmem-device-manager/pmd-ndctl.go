@@ -46,31 +46,53 @@ func (pmem *pmemNdctl) GetCapacity() (map[string]uint64, error) {
 }
 
 func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) error {
+	// align up by 1 GB, also compensate for libndctl giving us 1 GB less than we ask
+	var align uint64 = 1024 * 1024 * 1024
+	size /= align
+	size += 2
+	size *= align
 	ns, err := pmem.ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
-		Name: name,
-		Size: size,
-		Mode: ndctl.NamespaceMode(nsmode),
+		Name:  name,
+		Size:  size,
+		Align: uint32(align),
+		Mode:  ndctl.NamespaceMode(nsmode),
 	})
 	if err != nil {
 		return err
 	}
 	data, _ := ns.MarshalJSON() //nolint: gosec
 	glog.Infof("Namespace created: %s", data)
+	// clear start of device to avoid old data being recognized as file system
+	device, err := pmem.GetDevice(name)
+	if err != nil {
+		return err
+	}
+	err = ClearDevice(device, false)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
 func (pmem *pmemNdctl) DeleteDevice(name string, flush bool) error {
-	if flush {
-		if err := pmem.FlushDeviceData(name); err != nil {
-			glog.Warningf("DeleteDevice: %s\n", err.Error())
-		}
+	device, err := pmem.GetDevice(name)
+	if err != nil {
+		return err
+	}
+	err = ClearDevice(device, flush)
+	if err != nil {
+		return err
 	}
 	return pmem.ctx.DestroyNamespaceByName(name)
 }
 
 func (pmem *pmemNdctl) FlushDeviceData(name string) error {
-	return fmt.Errorf("Unsupported for pmem devices")
+	device, err := pmem.GetDevice(name)
+	if err != nil {
+		return err
+	}
+	return ClearDevice(device, true)
 }
 
 func (pmem *pmemNdctl) GetDevice(name string) (PmemDeviceInfo, error) {
