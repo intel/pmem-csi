@@ -94,7 +94,7 @@ var _ = Describe("sanity", func() {
 
 		// Wait for pod before proceeding. StatefulSet gives
 		// us a well-known name that we can wait for.
-		f.WaitForPodRunning("pmem-csi-controller-0")
+		f.WaitForPodRunning("pmem-csi-unified-0")
 
 		// We let Kubernetes pick a new port for each test run dynamically.
 		// That way we don't need to hard-code something that might
