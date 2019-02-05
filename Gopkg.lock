@@ -1365,7 +1365,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:67a398838206aacb10bee7290bdc94c8e7f9dc9732a63fe4339f946505966a12"
+  digest = "1:85b4602be822a3367279751cf237bb10a44d449beff9d8e6508c2a185a16f3ca"
   name = "k8s.io/kubernetes"
   packages = [
     "cmd/kubeadm/app/apis/kubeadm",
@@ -1534,7 +1534,6 @@
     "pkg/util/goroutinemap",
     "pkg/util/goroutinemap/exponentialbackoff",
     "pkg/util/hash",
-    "pkg/util/keymutex",
     "pkg/util/labels",
     "pkg/util/metrics",
     "pkg/util/mount",
@@ -1571,13 +1570,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:0974b2c209c1015282e59f825230cf95a8e164682d43b498b9d2a2e3c0207969"
+  digest = "1:f5695ac5e3c45b191ca7028b5801fff33643a80ec56a5af4484ee090b92ee7c0"
   name = "k8s.io/utils"
   packages = [
     "buffer",
     "exec",
     "integer",
     "io",
+    "keymutex",
     "nsenter",
     "pointer",
     "trace",
@@ -1603,20 +1603,20 @@
     "github.com/kubernetes-csi/csi-test/pkg/sanity",
     "github.com/onsi/ginkgo",
     "github.com/onsi/gomega",
+    "github.com/pkg/errors",
     "golang.org/x/net/context",
     "google.golang.org/grpc",
     "google.golang.org/grpc/codes",
     "google.golang.org/grpc/credentials",
     "google.golang.org/grpc/resolver",
     "google.golang.org/grpc/status",
-    "k8s.io/api/core/v1",
+    "k8s.io/api/apps/v1",
     "k8s.io/api/storage/v1",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
     "k8s.io/apimachinery/pkg/util/sets",
     "k8s.io/client-go/kubernetes",
     "k8s.io/klog",
     "k8s.io/klog/glog",
-    "k8s.io/kubernetes/pkg/util/keymutex",
     "k8s.io/kubernetes/pkg/util/mount",
     "k8s.io/kubernetes/pkg/version",
     "k8s.io/kubernetes/test/e2e/framework",
@@ -1626,6 +1626,7 @@
     "k8s.io/kubernetes/test/e2e/storage/testpatterns",
     "k8s.io/kubernetes/test/e2e/storage/testsuites",
     "k8s.io/kubernetes/test/e2e/storage/utils",
+    "k8s.io/utils/keymutex",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -21,7 +21,7 @@ import (
 
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
-	"k8s.io/kubernetes/pkg/util/keymutex" // TODO: move to k8s.io/utils (https://github.com/kubernetes/utils/issues/62)
+	"k8s.io/utils/keymutex"
 )
 
 //VolumeStatus type representation for volume status
