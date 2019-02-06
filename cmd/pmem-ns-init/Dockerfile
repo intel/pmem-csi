@@ -1,9 +1,11 @@
 FROM golang:alpine AS build
-#pull dependencies required for downloading and building libndctl
-RUN apk add --update build-base autoconf automake bash-completion libtool libuuid json-c kmod asciidoc xmlto kmod-dev eudev-dev util-linux-dev json-c-dev linux-headers wget tar file
 
 ARG NDCTLVER
 ARG NDCTL_CONFIGFLAGS
+ARG NDCTL_BUILD_DEPS
+#pull dependencies required for downloading and building libndctl
+RUN apk add --update ${NDCTL_BUILD_DEPS}
+
 WORKDIR /
 RUN wget https://github.com/pmem/ndctl/archive/v${NDCTLVER}.tar.gz
 RUN tar zxvf v${NDCTLVER}.tar.gz && mv ndctl-${NDCTLVER} ndctl
