@@ -1,14 +1,14 @@
 FROM golang:alpine AS build
 
-ARG NDCTLVER
+ARG NDCTL_VERSION
 ARG NDCTL_CONFIGFLAGS
 ARG NDCTL_BUILD_DEPS
 #pull dependencies required for downloading and building libndctl
 RUN apk add --update ${NDCTL_BUILD_DEPS}
 
 WORKDIR /
-RUN wget https://github.com/pmem/ndctl/archive/v${NDCTLVER}.tar.gz
-RUN tar zxvf v${NDCTLVER}.tar.gz && mv ndctl-${NDCTLVER} ndctl
+RUN wget https://github.com/pmem/ndctl/archive/v${NDCTL_VERSION}.tar.gz
+RUN tar zxvf v${NDCTL_VERSION}.tar.gz && mv ndctl-${NDCTL_VERSION} ndctl
 WORKDIR /ndctl
 RUN ./autogen.sh
 RUN ./configure ${NDCTL_CONFIGFLAGS}
