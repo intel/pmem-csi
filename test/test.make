@@ -93,10 +93,11 @@ RUNTIME_DEPS += LC_ALL=C LANG=C sort -u
 
 # E2E testing relies on a running QEMU test cluster. It therefore starts it,
 # but because it might have been running already and might have to be kept
-# running to debug test failures, it doesn't stop it
+# running to debug test failures, it doesn't stop it.
+# Use count=1 to avoid test results caching, does not make sense for e2e test.
 .PHONY: test_e2e
 test_e2e: start
-	KUBECONFIG=`pwd`/_work/clear-kvm-kube.config REPO_ROOT=`pwd` go test -timeout 0 -v ./test/e2e
+	KUBECONFIG=`pwd`/_work/clear-kvm-kube.config REPO_ROOT=`pwd` go test -count=1 -timeout 0 -v ./test/e2e
 
 .PHONY: run_tests
 test: run_tests
