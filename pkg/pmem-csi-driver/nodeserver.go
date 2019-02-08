@@ -60,7 +60,7 @@ func (ns *nodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoReque
 		NodeId: ns.nodeID,
 		AccessibleTopology: &csi.Topology{
 			Segments: map[string]string{
-				"kubernetes.io/hostname": ns.nodeID,
+				PmemDriverTopologyKey: ns.nodeID,
 			},
 		},
 	}, nil
@@ -238,7 +238,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 
 	if params := req.GetVolumeContext(); params != nil {
 		// Add dax option if namespacemode == fsdax
-		if params["nsmode"] == "fsdax" {
+		if params[pmemParameterKeyNamespaceMode] == pmemNamespaceModeFsdax {
 			glog.Infof("NodeStageVolume: namespacemode FSDAX, add dax mount option")
 			args = append(args, "-o", "dax")
 		}

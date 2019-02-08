@@ -125,15 +125,47 @@ The [`test/setup-ca-kubernetes.sh`](test/setup-ca-kubernetes.sh) script shows ho
 
 A production deployment can improve upon that by using some other key delivery mechanism, like for example [Vault](https://www.vaultproject.io/).
 
-### Dynamic provisioning
-
-The following diagram illustrates how the PMEM-CSI driver performs dynamic volume provisioning in Kubernetes:
-![sequence diagram](/docs/images/sequence/pmem-csi-sequence-diagram.png)
 <!-- FILL TEMPLATE:
 * Target users and use cases
 * Design decisions & tradeoffs that were made
 * What is in scope and outside of scope
 -->
+
+### Volume Persistency
+
+In a typical CSI deployment, volumes are provided by a storage backend that is independent of a particular node. When a node goes offline, the volume can be mounted elsewhere. But PMEM volumes are *local* to node and thus can only be used on the node where they were created. This means the applications using PMEM volume cannot freely move between nodes. This limitation needs to be considered when designing and deploying applications that are to use *local storage*.
+
+Below are the volume persistency models considered for implementation in PMEM-CSI to serve different application use cases:
+
+* Persistent Volumes  
+A volume gets created independently of the application, on some node where there is enough free space. Applications using such a volume are then forced to run on that node and cannot run when the node is down. Data is retained until the volume gets deleted.
+
+* Ephemeral Volumes  
+Each time an application starts to run on a node, a new volume is created for it on that node. When the application stops, the volume is deleted. The volume cannot be shared with other applications. Data on this volume is retained only while the application runs.
+
+* Cache Volumes  
+Volumes are pre-created on a certain set of nodes, each with its own local data. Applications are started on those nodes and then get to use the volume on their node. Data persists across application restarts. This is useful when the data is only cached information that can be discarded and reconstructed at any time *and* the application can reuse existing local data when restarting.
+
+Volume | Kubernetes | PMEM-CSI | Limitations
+--- | --- | --- | ---
+Persistent | supported | supported | topology aware scheduling<sup>1</sup>
+Ephemeral | [in design](https://github.com/kubernetes/enhancements/blob/master/keps/sig-storage/20190122-csi-inline-volumes.md#proposal) | in design | topology aware scheduling<sup>1</sup>, resource constraints<sup>2</sup>
+Cache | supported | supported | topology aware scheduling<sup>1</sup>
+
+<sup>1 </sup>[Topology aware scheduling](https://github.com/kubernetes/enhancements/issues/490)
+ensures that an application runs on a node where the volume was created. For CSI-based drivers like PMEM-CSI, Kubernetes >= 1.13 is needed. On older Kubernetes releases, pods must be scheduled manually onto the right node(s).
+
+<sup>2 </sup>The upstream design for ephemeral volumes currently does not take [resource constraints](https://github.com/kubernetes/enhancements/pull/716#discussion_r250536632) into account. If an application gets scheduled onto a node and then creating the ephemeral volume on that node fails, the application on the node cannot start until resources become available.
+
+#### Usage on Kubernetes
+
+Kubernetes cluster administrators can expose above mentioned [volume persistency types](#volume-persistency) to applications using [`StorageClass Parameters`](https://kubernetes.io/docs/concepts/storage/storage-classes/#parameters). An optional `persistencyModel` parameter differentiates how the provisioned volume can be used.
+
+* if no `persistencyModel` parameter specified in `StorageClass` then it is treated as normal Kubernetes persistent volume. In this case PMEM-CSI creates PMEM volume on a node and the application that claims to use this volume is supposed to be scheduled onto this node by Kubernetes. Choosing of node is depend on StorageClass `volumeBindingMode`. In case of `volumeBindingMode: Immediate` PMEM-CSI chooses a node randomly, and in case of `volumeBindingMode: WaitForFirstConsumer` Kubernetes first chooses a node for scheduling the application, and PMEM-CSI creates the volume on that node. Applications which claim a normal persistent volume has to use `ReadOnlyOnce` access mode in its `accessModes` list. This [diagram](/docs/images/sequence/pmem-csi-persistent-sequence-diagram.png) illustrates how a normal persistent volume gets provisioned in Kubernetes using PMEM-CSI driver.
+
+* `persistencyModel: cache`  
+Volumes of this type shall be used in combination with `volumeBindingMode: Immediate`. In this case, PMEM-CSI creates a set of PMEM volumes each volume on different node. The number of PMEM volumes to create can be specified by `cacheSize` StorageClass parameter. Applications which claim a `cache` volume can use `ReadWriteMany` in its `accessModes` list. Check with provided [cache StorageClass](deploy/kubernetes-1.13/pmem-storageclass-cache.yaml) example. This [diagram](/docs/images/sequence/pmem-csi-cache-sequence-diagram.png) illustrates how a cache volume gets provisioned in Kubernetes using PMEM-CSI driver.  
+**NOTE**: Cache volumes are local to node not Pod. If two Pods using the same cache volume runs on the same node, will not get their own local volume, instead they endup sharing the same PMEM volume. Applications has to consider this and use available Kubernetes mechanisms like [node aniti-affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) while deploying. Check with provided [cache application](deploy/kubernetes-1.13/pmem-app-cache.yaml) example.
 
 ## Prerequisites
 
@@ -160,7 +192,7 @@ The driver does not create persistent memory Regions, but expects Regions to exi
 
 PMEM-CSI driver implements CSI specification version 1.0.0, which only supported by Kubernetes versions >= v1.13. The driver deployment in Kubernetes cluster has been verified on:
 
-| Branch            | Kubernetes branch/version      | Required Alfa feature-gates |
+| Branch            | Kubernetes branch/version      | Required alfa feature-gates |
 |-------------------|--------------------------------|---------------------------- |
 | devel             | Kubernetes 1.13                | CSINodeInfo, CSIDriverRegistry |
 

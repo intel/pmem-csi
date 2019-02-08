@@ -95,11 +95,9 @@ var _ = Describe("PMEM Volumes", func() {
 					},
 
 					Config: testsuites.TestConfig{
-						Framework: f,
-						Prefix:    "pmem",
-						// Ensure that all pods land on the same node. Works around
-						// https://github.com/intel/pmem-csi/issues/132.
-						ClientNodeName: "host-1",
+						Framework:       f,
+						Prefix:          "pmem",
+						TopologyEnabled: true,
 					},
 				},
 				scManifest: "deploy/kubernetes-1.13/pmem-storageclass.yaml",

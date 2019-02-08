@@ -1,0 +1,170 @@
+@startuml "pmem-csi-cache-sequence-diagram"
+
+title \nDynamic provisioning of pmem-csi "cache" volume\n
+
+skinparam BoxPadding 40
+
+actor Admin as admin #red
+actor User as user
+entity Kubernetes as k8s
+box "Master node"
+entity kubelet as masterkubelet
+participant "external-provisioner" as provisioner
+participant "external-attacher" as attacher
+participant "pmem-csi-driver" as masterdriver
+endbox
+
+box "Compute node X"
+entity kubelet as nodekubeletX
+participant "pmem-csi-driver" as nodedriverX
+endbox
+
+box "Compute node Y"
+entity kubelet as nodekubeletY
+participant "pmem-csi-driver" as nodedriverY
+endbox
+
+== Driver setup ==
+admin->k8s:Label nvdimm nodes: <b>storage=nvdimm</b>
+k8s->admin
+
+' deploy driver
+admin->k8s:deploy driver\nkubectl create -f pmem-csi.yaml
+k8s->admin
+k8s->masterkubelet:start driver pod
+masterkubelet-->provisioner:start container
+masterkubelet-->attacher:start container
+masterkubelet-->masterdriver:start container
+note right of masterdriver
+    listen on tcp port 10000
+end note
+k8s-->nodekubeletX:start driver pod
+nodekubeletX-->nodedriverX:start container
+note left of nodedriverX
+    * prepare logical volume groups
+    * listen on port 10001
+    * listen on unix socket:
+      /var/lib/kubelet/plugins/pmem-csi/csi.sock
+end note
+nodedriverX->masterdriver:RegistryServer.RegisterNodeController(\n{nodeId:"node-x", endpoint:"http://ip:10001"})
+
+k8s-->nodekubeletY:start driver pod
+nodekubeletY-->nodedriverY:start container
+note left of nodedriverY
+    * prepare logical volume groups
+    * listen on port 10001
+    * listen on unix socket:
+      /var/lib/kubelet/plugins/pmem-csi/csi.sock
+end note
+nodedriverY->masterdriver:RegistryServer.RegisterNodeController(\n{nodeId:"node-y", endpoint:"http://ip:10001"})
+
+' install a storage class
+admin->k8s:create StorageClass\nkubectl create -f pmem-storageclass-cache.yaml
+note left of k8s
+  metadata:
+    name: pmem-csi-sc-cache
+  volumeBindingMode: <b>Immediate
+  paramters:
+    persistencyModel: cache
+    cacheSize: "2"
+end note
+k8s->admin
+
+' provision a cache volume
+== Volume provisioning ==
+admin->k8s:create PVC object\nkubectl create -f pmem-pvc-cache.yaml
+note left of k8s
+  metatdata:
+    name: pmem-csi-pvc-cache
+  spec:
+    storageClassName: pmem-csi-sc-cache
+end note
+k8s->admin
+k8s-->provisioner:<<Event>>\nPersistentVolumeClaim created
+activate provisioner
+provisioner->masterdriver:CSI.Controller.CreateVolume()
+masterdriver->nodedriverX:csi.Controller.CreateVolume()
+nodedriverX->nodedriverX:create pmem volume
+nodedriverX->masterdriver:success
+masterdriver->nodedriverY:csi.Controller.CreateVolume()
+nodedriverY->nodedriverY:create pmem volume
+nodedriverY->masterdriver:success
+masterdriver->provisioner:success
+note left of masterdriver
+  prepare Topology information:
+  Volume{
+    accessible_topology: [
+      segments:{ "pmem-csi.intel.com/node":"node-x"},
+      segments:{ "pmem-csi.intel.com/node":"node-y"} ]
+  }
+end note
+provisioner->k8s:Create PV object
+deactivate provisioner
+
+== Volume usage ==
+' Start an application
+user->k8s:Create application pod
+note left of k8s
+  volumes:
+  - name: my-csi-volume
+    persistentVolumeClaim:
+      claimName: pmem-csi-pvc-cache
+end note
+
+k8s->user:success
+
+k8s->nodekubeletX:schedules pod on node-x
+note right of k8s
+  Kubernetes is might choose <b>node-x</b> or <b>node-y</b>.
+end note
+
+k8s-->nodekubeletX:make available volume to pod
+nodekubeletX->nodedriverX:csi.Node.StageVolume()
+activate nodedriverX
+nodedriverX->nodedriverX:mount pmem device
+nodedriverX->nodekubeletX:success
+deactivate nodedriverX
+
+nodekubeletX->nodedriverX:csi.Node.PublishVolume()
+activate nodedriverX
+nodedriverX->nodedriverX:bind mount pmem device
+nodedriverX->nodekubeletX:success
+deactivate nodedriverX
+
+' deprovision a cache volume
+== Volume Deletion ==
+' stop pod
+user->k8s:stop applicaiton pod
+k8s->user:success
+k8s->nodekubeletX:stop pod containers
+
+nodekubeletX->nodedriverX:csi.Node.UnPublishVolume()
+activate nodedriverX
+nodedriverX->nodedriverX:unmout pod's bind mount
+nodedriverX->nodekubeletX:success
+deactivate nodedriverX
+
+nodekubeletX->nodedriverX:csi.Node.UnstageVolume()
+activate nodedriverX
+nodedriverX->nodedriverX:unmount pmem device
+nodedriverX->nodekubeletX:success
+deactivate nodedriverX
+
+'''''''''''''''''''''''''''
+admin->k8s:Delete PVC object\nkubectl delete pvc pmem-pvc-cache
+k8s->admin
+k8s-->provisioner:<<Event>>\nPersistentVolumeClaim deleted
+activate provisioner
+provisioner->masterdriver:CSI.Controller.DeleteVolume()
+masterdriver->nodedriverX:csi.Controller.DeleteVolume()
+nodedriverX->nodedriverX:delete pmem volume
+nodedriverX->masterdriver:success
+masterdriver->nodedriverY:csi.Controller.DeleteVolume()
+nodedriverY->nodedriverY:delete pmem volume
+nodedriverY->masterdriver:success
+masterdriver->provisioner:success
+provisioner->k8s:Delete PV object
+deactivate provisioner
+
+
+@enduml

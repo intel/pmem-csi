@@ -1,6 +1,6 @@
-@startuml "pmem-csi-sequence-diagram"
+@startuml "pmem-csi-persistent-sequence-diagram"
 
-title \nDynamic volume provisioning with pmem-csi driver\n
+title \nDynamic provisioning of a pmem-csi persistent volume\n
 
 skinparam BoxPadding 40
 
@@ -42,39 +42,45 @@ note left of nodedriver
 end note
 nodedriver->masterdriver:RegistryServer.RegisterNodeController(\n{nodeId:"node-xyz", endpoint:"http://ip:10001"})
 
+' install a storage class
+admin->k8s:create StorageClass\nkubectl create -f pmem-storageclass.yaml
+note left of k8s
+  metadata:
+    name: pmem-csi-sc
+  volumeBindingMode: <b>Immediate
+end note
+k8s->admin
+
 == Volume provisioning ==
 admin->k8s:create PVC object\nkubectl create -f pmem-pvc.yaml
 k8s->admin
 k8s-->provisioner:<<Event>>\nPersistentVolumeClaim created
 activate provisioner
 provisioner->masterdriver:CSI.Controller.CreateVolume()
-note right of masterdriver
-    * gets available pmem capacity at each worker node
-    * does the sanity check if volume can be created with requested volume size
-    * prepare Topology information with node ids which have enough capacity
-      {accessible_topology: {segments:{key:"kubernetes.io/hostname" value:"node-x"}}
-end note
-masterdriver->nodedriver:csi.Controller.GetCapacity()
-nodedriver->masterdriver:{capacity: xxx}
+masterdriver->nodedriver:csi.Controller.CreateVolume()
+nodedriver->nodedriver:create pmem volume
+nodedriver->masterdriver:success
 masterdriver->provisioner:success
+note left of masterdriver
+  prepare Topology information:
+  Volume{
+    accessible_topology: [ segments:{ "pmem-csi.intel.com/node":"node-xyz"} ]
+  }
+end note
 provisioner->k8s:Create PV object
 deactivate provisioner
 
 == Volume usage ==
 user->k8s:Create application pod
-k8s->user
+note left of k8s
+  volumes:
+  - name: my-csi-volume
+    persistentVolumeClaim:
+      claimName: pmem-csi-pvc
+end note
+k8s->user:success
 
-k8s-->attacher:<<Event>>\nVolumeAttachment object create
-activate attacher
-attacher-->masterdriver:csi.Controller.ControllerPublishVolume()
-activate masterdriver
-masterdriver-->nodedriver:csi.Controller.ControllerPublishVolume()
-nodedriver->nodedriver:create pmem device
-nodedriver->masterdriver:success
-masterdriver->attacher:success
-attacher->k8s:volume attached
-deactivate masterdriver
-deactivate attacher
+k8s->nodekubelet:schedules pod on node-xyz
 
 k8s-->nodekubelet:make available volume to pod
 nodekubelet->nodedriver:csi.Node.StageVolume()
@@ -88,5 +94,40 @@ activate nodedriver
 nodedriver->nodedriver:bind mount pmem device
 nodedriver->nodekubelet:success
 deactivate nodedriver
+
+' deprovision a cache volume
+== Volume Deletion ==
+' stop pod
+user->k8s:stop applicaiton pod
+k8s->user:success
+k8s->nodekubelet:stop pod containers
+
+nodekubelet->nodedriver:csi.Node.UnPublishVolume()
+activate nodedriver
+nodedriver->nodedriver:unmout pod's bind mount
+nodedriver->nodekubelet:success
+deactivate nodedriver
+
+nodekubelet->nodedriver:csi.Node.UnstageVolume()
+activate nodedriver
+nodedriver->nodedriver:unmount pmem device
+nodedriver->nodekubelet:success
+deactivate nodedriver
+
+'''''''''''''''''''''''''''
+admin->k8s:Delete PVC object\nkubectl delete pvc pmem-pvc-cache
+k8s->admin
+k8s-->provisioner:<<Event>>\nPersistentVolumeClaim deleted
+activate provisioner
+provisioner->masterdriver:CSI.Controller.DeleteVolume()
+masterdriver->nodedriver:csi.Controller.DeleteVolume()
+nodedriver->nodedriver:delete pmem volume
+nodedriver->masterdriver:success
+masterdriver->nodedriver:csi.Controller.DeleteVolume()
+nodedriver->nodedriver:delete pmem volume
+nodedriver->masterdriver:success
+masterdriver->provisioner:success
+provisioner->k8s:Delete PV object
+deactivate provisioner
 
 @enduml
