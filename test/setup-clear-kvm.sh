@@ -241,6 +241,14 @@ EOF
     # We don't use Kata Containers, so that particular change is not made to /etc/crio/crio.conf
     # at this time.
 
+    # /opt/cni/bin is where runtimes like CRI-O expect CNI plugins. But cloud-native-basic installs into
+    # /usr/libexec/cni. Instructions at https://clearlinux.org/documentation/clear-linux/tutorials/kubernetes#id2
+    # are inconsistent at this time (https://github.com/clearlinux/clear-linux-documentation/issues/388).
+    #
+    # We solve this by creating the directory and symlinking all existing CNI plugins into it.
+    _work/ssh-clear-kvm.$imagenum mkdir -p /opt/cni/bin
+    _work/ssh-clear-kvm.$imagenum 'for i in /usr/libexec/cni/*; do ln -s $i /opt/cni/bin/; done'
+
     # Reconfiguration done, start daemons. Starting kubelet must wait until kubeadm has created
     # the necessary config files.
     _work/ssh-clear-kvm.$imagenum "systemctl daemon-reload && systemctl restart $cri_daemon && systemctl enable $cri_daemon kubelet"
