@@ -6,7 +6,7 @@ import (
 	"time"
 
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
-	"github.com/intel/pmem-csi/pkg/pmem-registry"
+	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"k8s.io/klog/glog"

@@ -46,12 +46,18 @@ start: _work/clear-kvm.img _work/kube-clear-kvm _work/start-clear-kvm _work/ssh-
 	if ! _work/ssh-clear-kvm kubectl get storageclass/pmem-csi-sc >/dev/null 2>&1; then \
 		_work/ssh-clear-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-storageclass.yaml; \
 	fi
+	if ! _work/ssh-clear-kvm kubectl get storageclass/pmem-csi-sc-cache >/dev/null 2>&1; then \
+		_work/ssh-clear-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-storageclass-cache.yaml; \
+	fi
 	@ echo
 	@ echo "The test cluster is ready. Log in with _work/ssh-clear-kvm, run kubectl once logged in."
 	@ echo "Alternatively, KUBECONFIG=$$(pwd)/_work/clear-kvm-kube.config can also be used directly."
-	@ echo "To try out the pmem-csi driver:"
+	@ echo "To try out the pmem-csi driver persistent volumes:"
 	@ echo "   cat deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-pvc.yaml | _work/ssh-clear-kvm kubectl create -f -"
 	@ echo "   cat deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-app.yaml | _work/ssh-clear-kvm kubectl create -f -"
+	@ echo "To try out the pmem-csi driver cache volumes:"
+	@ echo "   cat deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-pvc-cache.yaml | _work/ssh-clear-kvm kubectl create -f -"
+	@ echo "   cat deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-app-cache.yaml | _work/ssh-clear-kvm kubectl create -f -"
 
 stop:
 	for i in $$(seq 0 $$(($(NUM_NODES) - 1))); do \

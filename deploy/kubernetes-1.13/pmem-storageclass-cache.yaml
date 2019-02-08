@@ -1,0 +1,10 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: pmem-csi-sc-cache
+provisioner: pmem-csi
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+parameters:
+  persistencyModel: cache
+  cacheSize: "2"

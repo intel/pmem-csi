@@ -36,6 +36,8 @@ const (
 	Node DriverMode = "node"
 	//Unified defintion for unified driver mode
 	Unified DriverMode = "unified"
+	//PmemDriverTopologyKey key to use for topology constraint
+	PmemDriverTopologyKey = "pmem-csi.intel.com/node"
 )
 
 //Config type for driver configuration
