@@ -36,10 +36,6 @@ The following diagram illustrates the operation in DeviceMode:LVM:
 
 In DeviceMode:LVM PMEM-CSI driver uses LVM for Logical Volumes Management to avoid the risk of fragmentation. The LVM logical volumes are served to satisfy API requests. There is one Volume Group created per Region, ensuring the region-affinity of served volumes.
 
-<!-- this to be used in place of above if/after we change to put multiple regions in one VGroup:
-One Volume group is created per Namespace Mode, combining Phys.Volumes from all Regions. This allows one provisioned Volume to be larger than one Region, which is not possible in DeviceMode:direct.
--->
-
 The driver consists of three separate binaries that form two initialization stages and a third API-serving stage.
 
 During startup, the driver scans persistent memory for regions and namespaces, and tries to create more namespaces using all or part (selectable via option) of the remaining available space. The namespace size can be specified as a driver parameter and defaults to 32 GB. This first stage is performed by a separate entity _pmem-ns-init_.
@@ -61,7 +57,7 @@ The PMEM-CSI driver can leave space on devices for others, and recognize "own" n
 The following diagram illustrates the operation in DeviceMode:Direct:
 ![devicemode-direct diagram](/docs/images/devicemodes/pmem-csi-direct.png)
 
-In DeviceMode:Direct PMEM-CSI driver allocates Namespaces directly from the storage device. This creates device space fragmentation risk, but reduces complexity and run-time overhead by avoiding additional device mapping layer. Direct mode also ensures the region-affinity of served volumes, because provisioned volume can belong to one Region only. In Direct mode, one provisioned volume can be larger than one Namespace on the device. 
+In DeviceMode:Direct PMEM-CSI driver allocates Namespaces directly from the storage device. This creates device space fragmentation risk, but reduces complexity and run-time overhead by avoiding additional device mapping layer. Direct mode also ensures the region-affinity of served volumes, because provisioned volume can belong to one Region only.
 
 In Direct mode, the two preparation stages used in LVM mode, are not needed.
 
@@ -145,8 +141,8 @@ The following diagram illustrates how the PMEM-CSI driver performs dynamic volum
 
 Building has been verified using these components:
 
-- Go: version 1.10.1
-- [ndctl](https://github.com/pmem/ndctl) version 62, built on dev.host via autogen, configure, make, and install as per instruction in README.md
+- Go: version 1.10.1 (go 1.11 is required for 'make test`)
+- [ndctl](https://github.com/pmem/ndctl) versions 62..64, either built on dev.host via autogen, configure, make, and install as per instruction in README.md, or installed as ndctl package(s) from distribution repository.
 
 Building of Docker images has an additional requirement:
 
@@ -366,8 +362,8 @@ moment, the test setup uses:
 
 - `pmemtap0/1/2/3`
 - `pmembr0`
-- 192.168.7.1 for the build host side of the bridge interfaces
-- 192.168.7.2/4/6/8 for the virtual machines
+- 192.168.8.1 for the build host side of the bridge interfaces
+- 192.168.8.2/4/6/8 for the virtual machines
 - the same DNS server for the virtual machines as on the development
   host
 
