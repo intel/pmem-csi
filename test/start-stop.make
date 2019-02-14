@@ -43,6 +43,9 @@ start: _work/clear-kvm.img _work/kube-clear-kvm _work/start-clear-kvm _work/ssh-
 	if ! _work/ssh-clear-kvm kubectl get statefulset.apps/pmem-csi-controller daemonset.apps/pmem-csi >/dev/null 2>&1; then \
 		_work/ssh-clear-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-csi.yaml; \
 	fi
+	if ! _work/ssh-clear-kvm kubectl get storageclass/pmem-csi-sc >/dev/null 2>&1; then \
+		_work/ssh-clear-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-storageclass.yaml; \
+	fi
 	@ echo
 	@ echo "The test cluster is ready. Log in with _work/ssh-clear-kvm, run kubectl once logged in."
 	@ echo "Alternatively, KUBECONFIG=$$(pwd)/_work/clear-kvm-kube.config can also be used directly."
