@@ -32,6 +32,25 @@ bundles="$bundles containers-basic"
 
 kubeadm_args=
 kubeadm_args_init=
+kubeadm_config_init="apiVersion: kubeadm.k8s.io/v1beta1
+kind: InitConfiguration"
+kubeadm_config_cluster="apiVersion: kubeadm.k8s.io/v1beta1
+kind: ClusterConfiguration"
+kubeadm_config_kubelet="apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration"
+
+if [ ! -z ${TEST_FEATURE_GATES} ]; then
+    kubeadm_config_kubelet="$kubeadm_config_kubelet
+featureGates:
+$(IFS=","; for f in ${TEST_FEATURE_GATES};do
+echo "  $f" | sed 's/=/: /g'
+done)"
+    kubeadm_config_cluster="$kubeadm_config_cluster
+apiServer:
+  extraArgs:
+    feature-gates: ${TEST_FEATURE_GATES}"
+fi
+
 case $TEST_CRI in
     docker)
         cri_daemon=docker
@@ -41,7 +60,9 @@ case $TEST_CRI in
     crio)
         cri_daemon=cri-o
         # Needed for CRI-O (https://clearlinux.org/documentation/clear-linux/tutorials/kubernetes).
-        kubeadm_args="$kubeadm_args --cri-socket=/run/crio/crio.sock"
+        kubeadm_config_init="$kubeadm_config_init
+nodeRegistration:
+  criSocket: /run/crio/crio.sock"
         ;;
     *)
         echo "ERROR: unsupported TEST_CRI=$TEST_CRI"
@@ -50,7 +71,9 @@ case $TEST_CRI in
 esac
 
 # Needed for flannel (https://clearlinux.org/documentation/clear-linux/tutorials/kubernetes).
-kubeadm_args_init="$kubeadm_args_init --pod-network-cidr 10.244.0.0/16"
+kubeadm_config_cluster="$kubeadm_config_cluster
+networking:
+  podSubnet: \"10.244.0.0/16\""
 
 # Kills a process and all its children.
 kill_process_tree () {
@@ -309,9 +332,18 @@ while ! all_running; do
     fi
 done 2>/dev/null
 
+_work/ssh-clear-kvm.0 "cat >/tmp/kubeadm-config.yaml" <<EOF
+$kubeadm_config_init
+---
+$kubeadm_config_kubelet
+---
+$kubeadm_config_cluster
+EOF
+
 # TODO: it is possible to set up each node in parallel, see
 # https://kubernetes.io/docs/reference/setup-tools/kubeadm/kubeadm-init/#automating-kubeadm
 
+kubeadm_args_init="$kubeadm_args_init --config=/tmp/kubeadm-config.yaml"
 _work/ssh-clear-kvm.0 $PROXY_ENV kubeadm init $kubeadm_args $kubeadm_args_init | tee _work/clear-kvm-kubeadm.0.log
 _work/ssh-clear-kvm.0 mkdir -p .kube
 _work/ssh-clear-kvm.0 cp -i /etc/kubernetes/admin.conf .kube/config
@@ -349,6 +381,12 @@ done
 
 # From https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/#pod-network
 _work/ssh-clear-kvm $PROXY_ENV kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/bc79dd1505b0c8681ece4de4c0d86c5cd2643275/Documentation/kube-flannel.yml
+
+# Install addon storage CRDs, needed if CSINodeInfo feature-gate enabled
+if [[ "$TEST_FEATURE_GATES" == *"CSINodeInfo=true"* ]]; then
+    _work/ssh-clear-kvm $PROXY_ENV kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/storage-crds/csidriver.yaml
+    _work/ssh-clear-kvm $PROXY_ENV kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/storage-crds/csinodeinfo.yaml
+fi
 
 # Run additional commands specified in config.
 ${TEST_CONFIGURE_POST_ALL}

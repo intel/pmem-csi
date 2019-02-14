@@ -48,6 +48,10 @@ TEST_PMEM_MEM_SIZE=32768 # 32GB
 TEST_PMEM_SHARE=on
 TEST_PMEM_LABEL_SIZE=2097152
 
+# Kubernetes feature gates to enable/disable
+# featurename=true,feature=false
+TEST_FEATURE_GATES="CSINodeInfo=true,CSIDriverRegistry=true"
+
 # allow overriding the configuration in additional file(s)
 if [ -d test/test-config.d ]; then
     for i in $(ls test/test-config.d/*.sh 2>/dev/null | sort); do
