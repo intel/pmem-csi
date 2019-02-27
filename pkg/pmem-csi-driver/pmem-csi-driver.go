@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/container-storage-interface/spec/lib/go/csi"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
@@ -68,11 +67,7 @@ type Config struct {
 }
 
 type pmemDriver struct {
-	driver          *CSIDriver
 	cfg             Config
-	ids             *identityServer
-	ns              *nodeServer
-	rs              *registryServer
 	serverTLSConfig *tls.Config
 	clientTLSConfig *tls.Config
 }
@@ -127,17 +122,8 @@ func GetPMEMDriver(cfg Config) (*pmemDriver, error) {
 		}
 	}
 
-	driver, err := NewCSIDriver(cfg.DriverName, vendorVersion, cfg.NodeID)
-	if err != nil {
-		return nil, err
-	}
-	driver.AddVolumeCapabilityAccessModes([]csi.VolumeCapability_AccessMode_Mode{
-		csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
-	})
-
 	return &pmemDriver{
 		cfg:             cfg,
-		driver:          driver,
 		serverTLSConfig: serverConfig,
 		clientTLSConfig: clientConfig,
 	}, nil
@@ -145,22 +131,26 @@ func GetPMEMDriver(cfg Config) (*pmemDriver, error) {
 
 func (pmemd *pmemDriver) Run() error {
 	// Create GRPC servers
-	pmemd.ids = NewIdentityServer(pmemd)
+	ids, err := NewIdentityServer(pmemd.cfg.DriverName, vendorVersion)
+	if err != nil {
+		return err
+	}
+
 	s := NewNonBlockingGRPCServer()
 
 	if pmemd.cfg.Mode == Controller {
-		pmemd.rs = NewRegistryServer(pmemd.clientTLSConfig)
-		cs := NewMasterControllerServer(pmemd.driver, pmemd.rs)
+		rs := NewRegistryServer(pmemd.clientTLSConfig)
+		cs := NewMasterControllerServer(rs)
 
 		if pmemd.cfg.Endpoint != pmemd.cfg.RegistryEndpoint {
-			if err := s.Start(pmemd.cfg.Endpoint, nil, pmemd.ids, cs); err != nil {
+			if err := s.Start(pmemd.cfg.Endpoint, nil, ids, cs); err != nil {
 				return err
 			}
-			if err := s.Start(pmemd.cfg.RegistryEndpoint, pmemd.serverTLSConfig, pmemd.rs); err != nil {
+			if err := s.Start(pmemd.cfg.RegistryEndpoint, pmemd.serverTLSConfig, rs); err != nil {
 				return err
 			}
 		} else {
-			if err := s.Start(pmemd.cfg.Endpoint, pmemd.serverTLSConfig, pmemd.ids, cs, pmemd.rs); err != nil {
+			if err := s.Start(pmemd.cfg.Endpoint, pmemd.serverTLSConfig, ids, cs, rs); err != nil {
 				return err
 			}
 		}
@@ -169,19 +159,19 @@ func (pmemd *pmemDriver) Run() error {
 		if err != nil {
 			return err
 		}
-		pmemd.ns = NewNodeServer(pmemd.driver, dm)
-		cs := NewNodeControllerServer(pmemd.driver, dm)
+		ns := NewNodeServer(pmemd.cfg.NodeID, dm)
+		cs := NewNodeControllerServer(pmemd.cfg.NodeID, dm)
 
 		if pmemd.cfg.Mode == Node {
 			if pmemd.cfg.Endpoint != pmemd.cfg.ControllerEndpoint {
-				if err := s.Start(pmemd.cfg.Endpoint, nil, pmemd.ids, pmemd.ns); err != nil {
+				if err := s.Start(pmemd.cfg.Endpoint, nil, ids, ns); err != nil {
 					return err
 				}
 				if err := s.Start(pmemd.cfg.ControllerEndpoint, pmemd.serverTLSConfig, cs); err != nil {
 					return err
 				}
 			} else {
-				if err := s.Start(pmemd.cfg.Endpoint, nil, pmemd.ids, cs, pmemd.ns); err != nil {
+				if err := s.Start(pmemd.cfg.Endpoint, nil, ids, cs, ns); err != nil {
 					return err
 				}
 			}
@@ -189,7 +179,7 @@ func (pmemd *pmemDriver) Run() error {
 				return err
 			}
 		} else /* if pmemd.cfg.Mode == Unified */ {
-			if err := s.Start(pmemd.cfg.Endpoint, pmemd.serverTLSConfig, pmemd.ids, cs, pmemd.ns); err != nil {
+			if err := s.Start(pmemd.cfg.Endpoint, pmemd.serverTLSConfig, ids, cs, ns); err != nil {
 				return err
 			}
 		}
@@ -218,7 +208,7 @@ func (pmemd *pmemDriver) registerNodeController() error {
 	}
 	client := registry.NewRegistryClient(conn)
 	req := registry.RegisterControllerRequest{
-		NodeId:   pmemd.driver.nodeID,
+		NodeId:   pmemd.cfg.NodeID,
 		Endpoint: pmemd.cfg.ControllerEndpoint,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)

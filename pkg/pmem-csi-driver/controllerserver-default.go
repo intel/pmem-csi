@@ -14,7 +14,25 @@ import (
 )
 
 type DefaultControllerServer struct {
-	Driver *CSIDriver
+	serviceCaps []*csi.ControllerServiceCapability
+}
+
+func NewDefaultControllerServer(caps []csi.ControllerServiceCapability_RPC_Type) *DefaultControllerServer {
+
+	serviceCaps := []*csi.ControllerServiceCapability{}
+	for _, cap := range caps {
+		serviceCaps = append(serviceCaps, &csi.ControllerServiceCapability{
+			Type: &csi.ControllerServiceCapability_Rpc{
+				Rpc: &csi.ControllerServiceCapability_RPC{
+					Type: cap,
+				},
+			},
+		})
+	}
+
+	return &DefaultControllerServer{
+		serviceCaps: serviceCaps,
+	}
 }
 
 func (cs *DefaultControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
@@ -45,7 +63,7 @@ func (cs *DefaultControllerServer) GetCapacity(ctx context.Context, req *csi.Get
 // Default supports all capabilities
 func (cs *DefaultControllerServer) ControllerGetCapabilities(ctx context.Context, req *csi.ControllerGetCapabilitiesRequest) (*csi.ControllerGetCapabilitiesResponse, error) {
 	return &csi.ControllerGetCapabilitiesResponse{
-		Capabilities: cs.Driver.cap,
+		Capabilities: cs.serviceCaps,
 	}, nil
 }
 
@@ -59,4 +77,17 @@ func (cs *DefaultControllerServer) DeleteSnapshot(ctx context.Context, req *csi.
 
 func (cs *DefaultControllerServer) ListSnapshots(ctx context.Context, req *csi.ListSnapshotsRequest) (*csi.ListSnapshotsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
+}
+
+func (cs *DefaultControllerServer) ValidateControllerServiceRequest(c csi.ControllerServiceCapability_RPC_Type) error {
+	if c == csi.ControllerServiceCapability_RPC_UNKNOWN {
+		return nil
+	}
+
+	for _, cap := range cs.serviceCaps {
+		if c == cap.GetRpc().GetType() {
+			return nil
+		}
+	}
+	return status.Error(codes.InvalidArgument, string(c))
 }
