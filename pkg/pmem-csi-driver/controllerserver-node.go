@@ -33,6 +33,7 @@ type nodeVolume struct {
 
 type nodeControllerServer struct {
 	*DefaultControllerServer
+	nodeID      string
 	dm          pmdmanager.PmemDeviceManager
 	pmemVolumes map[string]*nodeVolume // map of reqID:nodeVolume
 }
@@ -42,15 +43,15 @@ var _ PmemService = &nodeControllerServer{}
 
 var nodeVolumeMutex = keymutex.NewHashed(-1)
 
-func NewNodeControllerServer(driver *CSIDriver, dm pmdmanager.PmemDeviceManager) *nodeControllerServer {
-	serverCaps := []csi.ControllerServiceCapability_RPC_Type{}
-	serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME)
-	serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_LIST_VOLUMES)
-	serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_GET_CAPACITY)
-	driver.AddControllerServiceCapabilities(serverCaps)
-
+func NewNodeControllerServer(nodeID string, dm pmdmanager.PmemDeviceManager) *nodeControllerServer {
+	serverCaps := []csi.ControllerServiceCapability_RPC_Type{
+		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
+		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
+		csi.ControllerServiceCapability_RPC_GET_CAPACITY,
+	}
 	return &nodeControllerServer{
-		DefaultControllerServer: NewDefaultControllerServer(driver),
+		DefaultControllerServer: NewDefaultControllerServer(serverCaps),
+		nodeID:                  nodeID,
 		dm:                      dm,
 		pmemVolumes:             map[string]*nodeVolume{},
 	}
@@ -67,7 +68,7 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 	eraseafter := true
 	nsmode := "fsdax"
 
-	if err := cs.Driver.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
+	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
 		pmemcommon.Infof(3, ctx, "invalid create volume req: %v", req)
 		return nil, err
 	}
@@ -138,7 +139,7 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 
 	topology = append(topology, &csi.Topology{
 		Segments: map[string]string{
-			"kubernetes.io/hostname": cs.Driver.nodeID,
+			"kubernetes.io/hostname": cs.nodeID,
 		},
 	})
 
@@ -158,7 +159,7 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 		return nil, status.Error(codes.InvalidArgument, "Volume ID missing in request")
 	}
 
-	if err := cs.Driver.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
+	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
 		pmemcommon.Infof(3, ctx, "invalid delete volume req: %v", req)
 		return nil, err
 	}
@@ -212,7 +213,7 @@ func (cs *nodeControllerServer) ValidateVolumeCapabilities(ctx context.Context, 
 
 func (cs *nodeControllerServer) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
 	pmemcommon.Infof(3, ctx, "ListVolumes")
-	if err := cs.Driver.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_LIST_VOLUMES); err != nil {
+	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_LIST_VOLUMES); err != nil {
 		pmemcommon.Infof(3, ctx, "invalid list volumes req: %v", req)
 		return nil, err
 	}

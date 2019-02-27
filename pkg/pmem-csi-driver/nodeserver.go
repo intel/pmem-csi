@@ -25,27 +25,55 @@ import (
 )
 
 type nodeServer struct {
-	*DefaultNodeServer
-	dm      pmdmanager.PmemDeviceManager
-	volInfo map[string]string
+	nodeCaps []*csi.NodeServiceCapability
+	nodeID   string
+	dm       pmdmanager.PmemDeviceManager
+	volInfo  map[string]string
 }
 
 var _ csi.NodeServer = &nodeServer{}
 var _ PmemService = &nodeServer{}
 
-func NewNodeServer(driver *CSIDriver, dm pmdmanager.PmemDeviceManager) *nodeServer {
-	driver.AddNodeServiceCapabilities([]csi.NodeServiceCapability_RPC_Type{
-		csi.NodeServiceCapability_RPC_STAGE_UNSTAGE_VOLUME,
-	})
+func NewNodeServer(nodeId string, dm pmdmanager.PmemDeviceManager) *nodeServer {
 	return &nodeServer{
-		DefaultNodeServer: NewDefaultNodeServer(driver),
-		dm:                dm,
-		volInfo:           map[string]string{},
+		nodeID: nodeId,
+		nodeCaps: []*csi.NodeServiceCapability{
+			{
+				Type: &csi.NodeServiceCapability_Rpc{
+					Rpc: &csi.NodeServiceCapability_RPC{
+						Type: csi.NodeServiceCapability_RPC_STAGE_UNSTAGE_VOLUME,
+					},
+				},
+			},
+		},
+		dm:      dm,
+		volInfo: map[string]string{},
 	}
 }
 
 func (ns *nodeServer) RegisterService(rpcServer *grpc.Server) {
 	csi.RegisterNodeServer(rpcServer, ns)
+}
+
+func (ns *nodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
+	return &csi.NodeGetInfoResponse{
+		NodeId: ns.nodeID,
+		AccessibleTopology: &csi.Topology{
+			Segments: map[string]string{
+				"kubernetes.io/hostname": ns.nodeID,
+			},
+		},
+	}, nil
+}
+
+func (ns *nodeServer) NodeGetCapabilities(ctx context.Context, req *csi.NodeGetCapabilitiesRequest) (*csi.NodeGetCapabilitiesResponse, error) {
+	return &csi.NodeGetCapabilitiesResponse{
+		Capabilities: ns.nodeCaps,
+	}, nil
+}
+
+func (ns *nodeServer) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeStatsRequest) (*csi.NodeGetVolumeStatsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
 }
 
 func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {

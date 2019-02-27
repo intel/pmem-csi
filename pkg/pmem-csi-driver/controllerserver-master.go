@@ -58,16 +58,15 @@ var _ csi.ControllerServer = &masterController{}
 var _ PmemService = &masterController{}
 var volumeMutex = keymutex.NewHashed(-1)
 
-func NewMasterControllerServer(driver *CSIDriver, rs *registryServer) *masterController {
-	serverCaps := []csi.ControllerServiceCapability_RPC_Type{}
-	serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME)
-	serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME)
-	serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_LIST_VOLUMES)
-	serverCaps = append(serverCaps, csi.ControllerServiceCapability_RPC_GET_CAPACITY)
-	driver.AddControllerServiceCapabilities(serverCaps)
-
+func NewMasterControllerServer(rs *registryServer) *masterController {
+	serverCaps := []csi.ControllerServiceCapability_RPC_Type{
+		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
+		csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
+		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
+		csi.ControllerServiceCapability_RPC_GET_CAPACITY,
+	}
 	return &masterController{
-		DefaultControllerServer: NewDefaultControllerServer(driver),
+		DefaultControllerServer: NewDefaultControllerServer(serverCaps),
 		rs:                      rs,
 		pmemVolumes:             map[string]*pmemVolume{},
 	}
@@ -80,7 +79,7 @@ func (cs *masterController) RegisterService(rpcServer *grpc.Server) {
 func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
 	var vol *pmemVolume
 
-	if err := cs.Driver.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
+	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
 		pmemcommon.Infof(3, ctx, "invalid create volume req: %v", req)
 		return nil, err
 	}
@@ -158,15 +157,14 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 }
 
 func (cs *masterController) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
+	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
+		pmemcommon.Infof(3, ctx, "invalid delete volume req: %v", req)
+		return nil, err
+	}
 
 	// Check arguments
 	if len(req.GetVolumeId()) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Volume ID missing in request")
-	}
-
-	if err := cs.Driver.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
-		pmemcommon.Infof(3, ctx, "invalid delete volume req: %v", req)
-		return nil, err
 	}
 
 	// Serialize by VolumeId
@@ -238,7 +236,7 @@ func (cs *masterController) ValidateVolumeCapabilities(ctx context.Context, req 
 
 func (cs *masterController) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
 	pmemcommon.Infof(3, ctx, "ListVolumes")
-	if err := cs.Driver.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_LIST_VOLUMES); err != nil {
+	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_LIST_VOLUMES); err != nil {
 		pmemcommon.Infof(3, ctx, "invalid list volumes req: %v", req)
 		return nil, err
 	}
@@ -264,6 +262,9 @@ func (cs *masterController) ListVolumes(ctx context.Context, req *csi.ListVolume
 }
 
 func (cs *masterController) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
+	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME); err != nil {
+		return nil, err
+	}
 	if req.GetVolumeId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Volume ID must be provided")
 	}
@@ -280,7 +281,7 @@ func (cs *masterController) ControllerPublishVolume(ctx context.Context, req *cs
 	volumeMutex.LockKey(req.VolumeId)
 	defer volumeMutex.UnlockKey(req.VolumeId) //nolint: errcheck
 
-	glog.Infof("ControllerPublishVolume: cs.Node: %s req.volume_id: %s, req.node_id: %s ", cs.Driver.nodeID, req.VolumeId, req.NodeId)
+	glog.Infof("ControllerPublishVolume: req.volume_id: %s, req.node_id: %s ", req.VolumeId, req.NodeId)
 
 	vol := cs.getVolumeByID(req.VolumeId)
 	if vol == nil {
@@ -342,6 +343,10 @@ func (cs *masterController) ControllerPublishVolume(ctx context.Context, req *cs
 }
 
 func (cs *masterController) ControllerUnpublishVolume(ctx context.Context, req *csi.ControllerUnpublishVolumeRequest) (*csi.ControllerUnpublishVolumeResponse, error) {
+	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME); err != nil {
+		return nil, err
+	}
+
 	if req.GetVolumeId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Volume ID must be provided")
 	}
@@ -361,6 +366,9 @@ func (cs *masterController) ControllerUnpublishVolume(ctx context.Context, req *
 
 func (cs *masterController) GetCapacity(ctx context.Context, req *csi.GetCapacityRequest) (*csi.GetCapacityResponse, error) {
 	var capacity int64
+	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_GET_CAPACITY); err != nil {
+		return nil, err
+	}
 
 	for _, node := range cs.rs.nodeClients {
 		cap, err := cs.getNodeCapacity(ctx, node, req)
