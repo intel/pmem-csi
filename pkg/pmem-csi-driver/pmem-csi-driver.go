@@ -17,6 +17,8 @@ import (
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"k8s.io/klog/glog"
 )
 
@@ -166,19 +168,22 @@ func (pmemd *pmemDriver) Run() error {
 
 		if pmemd.cfg.Mode == Node {
 			if pmemd.cfg.Endpoint != pmemd.cfg.ControllerEndpoint {
-				if err := s.Start(pmemd.cfg.Endpoint, nil, ids, ns); err != nil {
+				if err := s.Start(pmemd.cfg.ControllerEndpoint, pmemd.serverTLSConfig, cs); err != nil {
 					return err
 				}
-				if err := s.Start(pmemd.cfg.ControllerEndpoint, pmemd.serverTLSConfig, cs); err != nil {
+				if err := pmemd.registerNodeController(); err != nil {
+					return err
+				}
+				if err := s.Start(pmemd.cfg.Endpoint, nil, ids, ns); err != nil {
 					return err
 				}
 			} else {
 				if err := s.Start(pmemd.cfg.Endpoint, nil, ids, cs, ns); err != nil {
 					return err
 				}
-			}
-			if err := pmemd.registerNodeController(); err != nil {
-				return err
+				if err := pmemd.registerNodeController(); err != nil {
+					return err
+				}
 			}
 		} else /* if pmemd.cfg.Mode == Unified */ {
 			if err := s.Start(pmemd.cfg.Endpoint, pmemd.serverTLSConfig, ids, cs, ns); err != nil {
@@ -194,31 +199,40 @@ func (pmemd *pmemDriver) Run() error {
 }
 
 func (pmemd *pmemDriver) registerNodeController() error {
-	fmt.Printf("Connecting to Registry at : %s\n", pmemd.cfg.RegistryEndpoint)
 	var err error
 	var conn *grpc.ClientConn
 
-	for {
-		conn, err = pmemgrpc.Connect(pmemd.cfg.RegistryEndpoint, pmemd.clientTLSConfig, connectionTimeout)
-		if err == nil {
-			glog.Info("Connected to RegistryServer!!!")
-			break
-		}
-		/* TODO: Retry loop */
-		glog.Infof("Failed to connect RegistryServer : %s, retrying after 10 seconds...", err.Error())
-		time.Sleep(10 * time.Second)
-	}
-	client := registry.NewRegistryClient(conn)
 	req := registry.RegisterControllerRequest{
 		NodeId:   pmemd.cfg.NodeID,
 		Endpoint: pmemd.cfg.ControllerEndpoint,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
 
-	if _, err = client.RegisterController(ctx, &req); err != nil {
-		return fmt.Errorf("Fail to register with server at '%s' : %s", pmemd.cfg.RegistryEndpoint, err.Error())
+	for {
+		glog.Infof("Connecting to registry server at: %s\n", pmemd.cfg.RegistryEndpoint)
+		conn, err = pmemgrpc.Connect(pmemd.cfg.RegistryEndpoint, pmemd.clientTLSConfig, connectionTimeout)
+		if err == nil {
+			break
+		}
+		glog.Infof("Failed to connect registry server: %s, retrying after %v seconds...", err.Error(), retryTimeout.Seconds())
+		time.Sleep(retryTimeout)
 	}
+
+	client := registry.NewRegistryClient(conn)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	for {
+		glog.Info("Registering controller...")
+		if _, err = client.RegisterController(ctx, &req); err != nil {
+			if s, ok := status.FromError(err); ok && s.Code() == codes.InvalidArgument {
+				return fmt.Errorf("Registration failed: %s", s.Message())
+			}
+			glog.Infof("Failed to register: %s, retrying after %v seconds...", err.Error(), retryTimeout.Seconds())
+			time.Sleep(retryTimeout)
+		} else {
+			break
+		}
+	}
+	glog.Info("Registration success!!!")
 
 	return nil
 }
