@@ -21,7 +21,6 @@ import (
 )
 
 const (
-	vendorVersion     string        = "0.0.1"
 	connectionTimeout time.Duration = 10 * time.Second
 	retryTimeout      time.Duration = 10 * time.Second
 	requestTimeout    time.Duration = 10 * time.Second
@@ -66,6 +65,8 @@ type Config struct {
 	ControllerEndpoint string
 	//DeviceManager device manager to use
 	DeviceManager string
+	//Version driver release version
+	Version string
 }
 
 type pmemDriver struct {
@@ -133,7 +134,7 @@ func GetPMEMDriver(cfg Config) (*pmemDriver, error) {
 
 func (pmemd *pmemDriver) Run() error {
 	// Create GRPC servers
-	ids, err := NewIdentityServer(pmemd.cfg.DriverName, vendorVersion)
+	ids, err := NewIdentityServer(pmemd.cfg.DriverName, pmemd.cfg.Version)
 	if err != nil {
 		return err
 	}

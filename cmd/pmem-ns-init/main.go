@@ -18,12 +18,23 @@ var (
 	namespacesize = flag.Int("namespacesize", 32, "Namespace size in GB")
 	useforfsdax   = flag.Int("useforfsdax", 100, "Percentage of total to use in Fsdax mode")
 	useforsector  = flag.Int("useforsector", 0, "Percentage of total to use in Sector mode")
+	showVersion   = flag.Bool("version", false, "Show release version and exit")
+
+	version = "unknown"
 )
 
 func main() {
 	klog.InitFlags(nil)
 	flag.Set("logtostderr", "true")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		os.Exit(0)
+	}
+
+	glog.Info("Version: ", version)
+
 	ctx, err := ndctl.NewContext()
 	if err != nil {
 		fmt.Printf("Failed to initialize pmem context: %s", err.Error())

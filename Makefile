@@ -16,6 +16,10 @@
 IMPORT_PATH=github.com/intel/pmem-csi
 SHELL=bash
 
+ifeq ($(VERSION), )
+VERSION=$(shell git describe --long --dirty --tags --match='v*')
+endif
+
 REGISTRY_NAME=localhost:5000
 IMAGE_VERSION_pmem-csi-driver=canary
 IMAGE_VERSION_pmem-ns-init=canary
@@ -35,6 +39,8 @@ ifneq ($(no_proxy),)
 	BUILD_ARGS:=${BUILD_ARGS} --build-arg no_proxy=${no_proxy}
 endif
 
+BUILD_ARGS:=${BUILD_ARGS} --build-arg VERSION=${VERSION}
+
 # Build main set of components.
 all: pmem-csi-driver pmem-ns-init pmem-vgm
 
@@ -49,10 +55,10 @@ push-images: push-pmem-csi-driver-image push-pmem-ns-init-image push-pmem-vgm-im
 
 
 pmem-csi-driver pmem-vgm pmem-ns-init:
-	GOOS=linux go build -a -o _output/$@ ./cmd/$@
+	GOOS=linux go build -ldflags '-X main.version=${VERSION}' -a -o _output/$@ ./cmd/$@
 
 build-%-image:
-	docker build ${BUILD_ARGS} ${IMAGE_BUILD_ARGS} -t $(IMAGE_TAG) -f ./cmd/$*/Dockerfile .
+	docker build ${BUILD_ARGS} ${IMAGE_BUILD_ARGS} -t $(IMAGE_TAG) -f ./cmd/$*/Dockerfile . --label revision=${VERSION}
 
 push-%-image: build-%-image
 	docker push $(IMAGE_TAG)

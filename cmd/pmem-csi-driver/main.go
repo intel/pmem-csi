@@ -13,8 +13,9 @@ import (
 	"os"
 
 	"k8s.io/klog"
+	"k8s.io/klog/glog"
 
-	"github.com/intel/pmem-csi/pkg/pmem-csi-driver"
+	pmemcsidriver "github.com/intel/pmem-csi/pkg/pmem-csi-driver"
 )
 
 var (
@@ -32,12 +33,22 @@ var (
 	/* Node mode options */
 	controllerEndpoint = flag.String("controllerEndpoint", "", "internal node controller endpoint")
 	deviceManager      = flag.String("deviceManager", "lvm", "device manager to use to manage pmem devices. supported types: 'lvm' or 'ndctl'")
+	showVersion        = flag.Bool("version", false, "Show release version and exit")
+
+	version = "unknown" // Set version during build time
 )
 
 func main() {
 	klog.InitFlags(nil)
 	flag.Set("logtostderr", "true")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		os.Exit(0)
+	}
+
+	glog.Info("Version: ", version)
 
 	driver, err := pmemcsidriver.GetPMEMDriver(pmemcsidriver.Config{
 		DriverName:         *driverName,
@@ -52,6 +63,7 @@ func main() {
 		ClientKeyFile:      *clientKeyFile,
 		ControllerEndpoint: *controllerEndpoint,
 		DeviceManager:      *deviceManager,
+		Version:            version,
 	})
 	if err != nil {
 		fmt.Printf("Failed to Initialized driver: %s", err.Error())
