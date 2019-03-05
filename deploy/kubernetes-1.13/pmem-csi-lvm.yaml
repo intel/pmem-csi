@@ -35,6 +35,10 @@ rules:
 - apiGroups: [ "csi.storage.k8s.io" ]
   resources: [ "csinodeinfos" ] # attacher
   verbs: [ "get", "list", "watch" ]
+- apiGroups: [ "csi.storage.k8s.io" ]
+  resources: [ "csidrivers" ] # driver-registrar
+  verbs: [ "create", "delete" ]
+
 # NOTE: cluster-driver-registrar v1.0.1 RBAC rules are broken and does not list
 # customresourcedefinitions in its RBAC rules:
 # https://github.com/kubernetes-csi/cluster-driver-registrar/blob/v1.0.1/deploy/kubernetes/rbac.yaml
