@@ -1,5 +1,6 @@
 FROM golang:alpine AS build
 
+ARG VERSION
 ARG NDCTL_VERSION
 ARG NDCTL_CONFIGFLAGS
 ARG NDCTL_BUILD_DEPS
@@ -17,7 +18,7 @@ RUN make install
 # build pmem-ns-init
 ADD . /go/src/github.com/intel/pmem-csi
 WORKDIR /go/src/github.com/intel/pmem-csi
-RUN make pmem-ns-init
+RUN make pmem-ns-init VERSION=${VERSION}
 RUN mv ./_output/pmem-ns-init /go/bin/
 
 # build clean container
