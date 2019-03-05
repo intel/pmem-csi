@@ -161,6 +161,9 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	if len(stagingtargetPath) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Target path missing in request")
 	}
+	if req.GetVolumeCapability() == nil {
+		return nil, status.Error(codes.InvalidArgument, "Volume capability missing in request")
+	}
 	requestedFsType := req.GetVolumeCapability().GetMount().GetFsType()
 
 	// Serialize by VolumeId
