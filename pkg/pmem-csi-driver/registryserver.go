@@ -9,6 +9,8 @@ import (
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"k8s.io/klog/glog"
 )
 
@@ -58,11 +60,11 @@ func (rs *registryServer) ConnectToNodeController(nodeId string, timeout time.Du
 
 func (rs *registryServer) RegisterController(ctx context.Context, req *registry.RegisterControllerRequest) (*registry.RegisterControllerReply, error) {
 	if req.GetNodeId() == "" {
-		return nil, fmt.Errorf("Missing NodeId parameter")
+		return nil, status.Error(codes.InvalidArgument, "Missing NodeId parameter")
 	}
 
 	if req.GetEndpoint() == "" {
-		return nil, fmt.Errorf("Missing endpoint address")
+		return nil, status.Error(codes.InvalidArgument, "Missing endpoint address")
 	}
 	glog.Infof("Registering node: %s, endpoint: %s", req.NodeId, req.Endpoint)
 
@@ -76,11 +78,11 @@ func (rs *registryServer) RegisterController(ctx context.Context, req *registry.
 
 func (rs *registryServer) UnregisterController(ctx context.Context, req *registry.UnregisterControllerRequest) (*registry.UnregisterControllerReply, error) {
 	if req.GetNodeId() == "" {
-		return nil, fmt.Errorf("Missing NodeId parameter")
+		return nil, status.Error(codes.InvalidArgument, "Missing NodeId parameter")
 	}
 
 	if _, ok := rs.nodeClients[req.NodeId]; !ok {
-		return nil, fmt.Errorf("No entry with id '%s' found in registry", req.NodeId)
+		return nil, status.Errorf(codes.NotFound, "No entry with id '%s' found in registry", req.NodeId)
 	}
 
 	glog.Infof("Unregistering node: %s", req.NodeId)
