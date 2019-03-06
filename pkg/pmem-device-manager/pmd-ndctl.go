@@ -5,6 +5,7 @@ import (
 
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	"k8s.io/klog/glog"
+	"k8s.io/kubernetes/pkg/util/mount"
 )
 
 type pmemNdctl struct {
@@ -19,6 +20,24 @@ func NewPmemDeviceManagerNdctl() (PmemDeviceManager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Failed to initialize pmem context: %s", err.Error())
 	}
+	// Check is /sys writable. If not then there is no point starting
+	mounter := mount.New("")
+	mounts, err := mounter.List()
+	for i := range mounts {
+		glog.Infof("NewPmemDeviceManagerNdctl: Check mounts: device=%s path=%s opts=%s",
+			mounts[i].Device, mounts[i].Path, mounts[i].Opts)
+		if mounts[i].Device == "sysfs" && mounts[i].Path == "/sys" {
+			for _, opt := range mounts[i].Opts {
+				if opt == "rw" {
+					glog.Infof("NewPmemDeviceManagerNdctl: /sys mounted read-write, good")
+				} else if opt == "ro" {
+					return nil, fmt.Errorf("FATAL: /sys mounted read-only, can not operate\n")
+				}
+			}
+			break
+		}
+	}
+
 	return &pmemNdctl{
 		ctx: ctx,
 	}, nil
