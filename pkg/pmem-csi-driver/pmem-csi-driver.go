@@ -35,8 +35,11 @@ const (
 	Node DriverMode = "node"
 	//Unified defintion for unified driver mode
 	Unified DriverMode = "unified"
+)
+
+var (
 	//PmemDriverTopologyKey key to use for topology constraint
-	PmemDriverTopologyKey = "pmem-csi.intel.com/node"
+	PmemDriverTopologyKey = ""
 )
 
 //Config type for driver configuration
@@ -124,6 +127,8 @@ func GetPMEMDriver(cfg Config) (*pmemDriver, error) {
 			return nil, err
 		}
 	}
+
+	PmemDriverTopologyKey = cfg.DriverName + "/node"
 
 	return &pmemDriver{
 		cfg:             cfg,

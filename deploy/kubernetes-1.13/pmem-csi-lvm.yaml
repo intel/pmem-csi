@@ -130,7 +130,7 @@ spec:
       - name: external-provisioner
         imagePullPolicy: Always
         image: quay.io/k8scsi/csi-provisioner:v1.0.1
-        args: [ "--v=5", "--provisioner=pmem-csi", "--csi-address=/csi/csi-controller.sock", "--feature-gates=Topology=true" ]
+        args: [ "--v=5", "--provisioner=pmem-csi.intel.com", "--csi-address=/csi/csi-controller.sock", "--feature-gates=Topology=true" ]
         volumeMounts:
         - name: plugin-socket-dir
           mountPath: /csi
@@ -148,7 +148,7 @@ spec:
         image: 192.168.8.1:5000/pmem-csi-driver:canary
         imagePullPolicy: Always
         args:  [ "-v=5",
-                 "-drivername=pmem-csi",
+                 "-drivername=pmem-csi.intel.com",
                  "-mode=controller",
                  "-endpoint=unix:///csi/csi-controller.sock",
                  "-registryEndpoint=tcp://0.0.0.0:10000",
@@ -219,7 +219,7 @@ spec:
         imagePullPolicy: Always
         image: quay.io/k8scsi/csi-node-driver-registrar:v1.0.2
         args: [ "--v=5",
-            "--kubelet-registration-path=/var/lib/kubelet/plugins/pmem-csi/csi.sock",
+            "--kubelet-registration-path=/var/lib/kubelet/plugins/pmem-csi.intel.com/csi.sock",
             "--csi-address=/csi/csi.sock" ]
         volumeMounts:
         - name: plugin-socket-dir
@@ -232,7 +232,7 @@ spec:
         imagePullPolicy: Always
         image: 192.168.8.1:5000/pmem-csi-driver:canary
         args: [ "-v=5",
-                  "-drivername=pmem-csi",
+                  "-drivername=pmem-csi.intel.com",
                   "-mode=node",
                   "-endpoint=$(CSI_ENDPOINT)",
                   "-nodeid=$(KUBE_NODE_NAME)",
@@ -271,7 +271,7 @@ spec:
       volumes:
         - name: plugin-socket-dir
           hostPath:
-            path: /var/lib/kubelet/plugins/pmem-csi/
+            path: /var/lib/kubelet/plugins/pmem-csi.intel.com/
             type: DirectoryOrCreate
         - name: registration-dir
           hostPath:
