@@ -28,17 +28,14 @@ func NewPmemDeviceManagerLVM() (PmemDeviceManager, error) {
 	}
 	volumeGroups := []string{}
 	for _, bus := range ctx.GetBuses() {
-		glog.Infof("NewPmemDeviceManagerLVM: Bus: %v", bus.DeviceName())
 		for _, r := range bus.ActiveRegions() {
-			glog.Infof("NewPmemDeviceManagerLVM: Region: %v", r.DeviceName())
 			nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
 			for _, nsmod := range nsmodes {
 				vgname := vgName(bus, r, nsmod)
 				if _, err := pmemexec.RunCommand("vgs", vgname); err != nil {
-					glog.Infof("NewPmemDeviceManagerLVM: VG %v non-existent, skip", vgname)
+					glog.V(5).Infof("NewPmemDeviceManagerLVM: VG %v non-existent, skip", vgname)
 				} else {
 					volumeGroups = append(volumeGroups, vgname)
-					glog.Infof("NewPmemDeviceManagerLVM: NsMode: %v", nsmod)
 				}
 			}
 		}
@@ -103,7 +100,7 @@ func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error 
 		if vg.free >= size {
 			// lvcreate takes size in MBytes if no unit
 			if _, err := pmemexec.RunCommand("lvcreate", "-L", strSz, "-n", name, vg.name); err != nil {
-				glog.Infof("lvcreate failed with error: %v, trying for next free region", err)
+				glog.V(3).Infof("lvcreate failed with error: %v, trying for next free region", err)
 			} else {
 				// clear start of device to avoid old data being recognized as file system
 				device, err := lvm.GetDevice(name)
