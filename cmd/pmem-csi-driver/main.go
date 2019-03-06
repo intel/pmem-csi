@@ -20,7 +20,7 @@ import (
 
 var (
 	/* generic options */
-	driverName       = flag.String("drivername", "pmem-csi", "name of the driver")
+	driverName       = flag.String("drivername", "pmem-csi.intel.com", "name of the driver")
 	nodeID           = flag.String("nodeid", "nodeid", "node id")
 	endpoint         = flag.String("endpoint", "unix:///tmp/pmem-csi.sock", "PMEM CSI endpoint")
 	mode             = flag.String("mode", "unified", "driver run mode : controller, node or unified")

@@ -47,7 +47,7 @@ spec:
         image: 192.168.8.1:5000/pmem-csi-driver:canary
         imagePullPolicy: Always
         args:  [ "-v=5",
-                 "-drivername=pmem-csi",
+                 "-drivername=pmem-csi.intel.com",
                  "-mode=unified",
                  "-endpoint=$(CSI_ENDPOINT)",
                  "-nodeid=$(KUBE_NODE_NAME)" ]
