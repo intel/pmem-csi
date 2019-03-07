@@ -171,14 +171,7 @@ Volumes of this type shall be used in combination with `volumeBindingMode: Immed
 
 ### Software required
 
-Building has been verified using these components:
-
-- Go: version 1.10.1 (go 1.11 is required for 'make test`)
-- [ndctl](https://github.com/pmem/ndctl) versions 62..64, either built on dev.host via autogen, configure, make, and install as per instruction in README.md, or installed as ndctl package(s) from distribution repository.
-
-Building of Docker images has an additional requirement:
-
-- Docker-ce: verified using version 18.06.1
+Building of Docker images has been verified using Docker-ce: version 18.06.1
 
 ### Hardware required
 
@@ -198,48 +191,25 @@ PMEM-CSI driver implements CSI specification version 1.0.0, which only supported
 
 ## Setup
 
-### Development system using Virtual Machine
-
-Early development and verification was performed on QEMU-emulated persistent memory devices.
-
-The build was verified on the system described below:
-
-* Host: Dell Poweredge R620, distro: openSUSE Leap 15.0, kernel 4.12.14, qemu 2.11.2
-* Guest VM: 32GB RAM, 8 vCPUs, Ubuntu 18.04.1 server, kernel 4.15.0, 4.18.0, 4.19.1
-* See [README-qemu-notes](README-qemu-notes.md) for more details about VM config
-
 ### Get source code
 
-Use the command: `git clone https://github.com/intel/pmem-csi`
+Use these commands:
+
+```
+mkdir -p $GOPATH/src/github.com/intel
+git clone https://github.com/intel/pmem-csi $GOPATH/src/github.com/intel/pmem-csi
+```
 
 ### Build plugin
 
-1.  Use `make`
+1.  Use `make build-images` to produce Docker container images.
 
-    This produces the following binaries in the `_output` directory:
-
-    * `pmem-ns-init`: Helper utility for namespace initialization.
-    * `pmem-vgm`: Helper utility for creating logical volume groups over PMEM devices created.
-    * `pmem-csi-driver`: PMEM-CSI driver.
-
-2.  Use `make build-images` to produce Docker container images.
-
-3.  Use `make push-images` to push Docker container images to a Docker images registry. The
+2.  Use `make push-images` to push Docker container images to a Docker images registry. The
     default is to push to a local [Docker registry](https://docs.docker.com/registry/deploying/).
 
 See the [Makefile](Makefile) for additional make targets and possible make variables.
 
 ### Run plugin
-
-#### Run driver as standalone
-
-This is useful in development/trial mode.
-
-Use `util/run-lvm-unified` as user:root.
-This runs two preparation parts, and starts the driver binary, which listens and responds to API use on a TCP socket. You can modify this to use a Unix socket, if needed.
-Use `util/run-direct-unified` as user:root to start the driver in DeviceMode:direct. This script skips the two preparation stages and starts the driver binary with corresponding DeviceMode option.
-
-#### Run as Kubernetes deployment
 
 This section assumes that a Kubernetes cluster is already available
 with at least one node that has persistent memory device(s). For development or
@@ -254,26 +224,23 @@ machines, see the ["End-to-end testing"](#end-to-end-testing) section below.
 
 The label **storage: pmem** needs to be added to the cluster node that provides persistent memory device(s).
 
-Clusters with multiple nodes with persistent memory are not fully supported at
-the moment. Support for this will be added when making the CSI driver topology-
-aware.
-
-- **Deploy the driver to Kubernetes using DeviceMode:LVM **
+- **Deploy the driver to Kubernetes using DeviceMode:LVM**
 
 ```sh
-    $ sed -e 's/192.168.8.1:5000/<your registry>/' deploy/kubernetes-1.12/pmem-csi-lvm.yaml | kubectl create -f -
+    $ sed -e 's/192.168.8.1:5000/<your registry>/' deploy/kubernetes-<kubernetes version>/pmem-csi-lvm.yaml | kubectl create -f -
 ```
 
-- **Deploy the driver to Kubernetes using DeviceMode:Direct **
+- **Alternatively, deploy the driver to Kubernetes using DeviceMode:Direct**
 
 ```sh
-    $ sed -e 's/192.168.8.1:5000/<your registry>/' deploy/kubernetes-1.12/pmem-csi-direct.yaml | kubectl create -f -
+    $ sed -e 's/192.168.8.1:5000/<your registry>/' deploy/kubernetes-<kubernetes version>/pmem-csi-direct.yaml | kubectl create -f -
 ```
 
 The deployment yaml file uses the registry address for the QEMU test cluster
 setup (see below). When deploying on a real cluster, some registry
 that can be accessed by that cluster has to be used.
-
+If the Docker registry runs on the local development
+host, then the `sed` command which replaces the Docker registry is not needed.
 The `deploy` directory contains one directory or symlink for each
 tested Kubernetes release. The most recent one might also work on
 future, currently untested releases.
@@ -343,35 +310,6 @@ Use the `make test` command.
 
 **Note:** Testing code is not completed yet. Currently it runs some passes using `gofmt, go vet`.
 
-### Verify driver in unified mode
-
-The driver can be verified in the single-host context. This running mode is called "Unified"
-in the driver. Both Controller and Node service run combined in local host, without Kubernetes context.
-
-The endpoint for driver access can be specified either:
-
-* with each csc command as `--endpoint tcp://127.0.0.1:10000`
-* export endpoint as env.variable, see `util/lifecycle-unified.sh`
-
-These run-time dependencies are used by the plugin in Unified mode:
-
-- lvm2
-- shred
-- mount
-- file
-- blkid
-
-#### Scripts in util/ directory
-
-* [lifecycle-unified](util/lifecycle-unified.sh) example steps verifying a volume lifecycle
-* [sanity-unified](util/sanity-unified.sh) API test using csi-sanity
-* [get-capabilities-unified](util/get-capabilities-unified.sh) Query Controller and Node capabilities
-
-These utilities are required by scripts residing in `util/` directory:
-
-- [csc](http://github.com/rexray/gocsi) v0.5.0
-- [csi-sanity](http://github.com/kubernetes-csi/csi-test) v0.2.0-1-95-g3bc4135
-
 ### End-to-end testing (E2E)
 
 #### QEMU + Kubernetes
@@ -380,7 +318,7 @@ E2E testing relies on a cluster running inside multiple QEMU virtual
 machines. This is known to work on a Linux development host system.
 The `qemu-system-x86_64` binary must be installed, either from
 [upstream QEMU](https://www.qemu.org/) or the Linux distribution.
-
+The user must be able to run commands as root via `sudo`.
 For networking, the `ip` tool from the `iproute2` package must be
 installed. The following command must be run once after booting the
 host machine and before starting the virtual machine:
@@ -450,19 +388,24 @@ version supported by Clear Linux installed.
 `make start` will bring up a Kubernetes test cluster inside four QEMU
 virtual machines. It can be called multiple times in a row and will
 attempt to bring up missing pieces each time it is invoked.
-
-Once it completes, everything is ready for interactive use via
+The first node `host-0` is the Kubernetes master without persistent memory.
+The other three nodes are worker nodes with one emulated 32GB NVDIMM each.
+After the cluster has been formed, `make start` adds `storage=pmem` label
+to the worker nodes and deploys the pmem-csi driver.
+Once `make start` completes, the cluster is ready for interactive use via
 `kubectl` inside the virtual machine. Alternatively, you can also
 set `KUBECONFIG` as shown at the end of the `make start` output
-and use a local `kubectl` binary.
+and use `kubectl` binary on the host running VMs.
 
-The first node is the Kubernetes master without persistent memory. The other
-three nodes are worker nodes with one 32GB NVDIMM each. The worker nodes have
-already been labeled with `storage=pmem`, but the pmem-csi driver still needs to be installed manually as shown in ["Run as Kubernetes deployment"](#run-as-
-kubernetes-deployment). If the Docker registry runs on the local development
-host, then the `sed` command which replaces the Docker registry is not needed.
+Use `make stop` to stop the virtual machines. The cluster state remains preserved and will be restored after next `make start`.
 
-Once done, `make stop` will clean up the cluster and shut everything down.
+#### Running commands on test cluster nodes over ssh
+
+`make start` generates ssh-wrappers `_work/ssh-clear-kvm.N` for each test cluster node which are handy for running a single command or to start interactive shell. Examples:
+
+`_work/ssh-clear-kvm.0 kubectl get pods` runs a kubectl command on node-0 which is cluster master.
+
+`_work/ssh-clear-kvm.1` starts a shell on node-1.
 
 #### Running E2E tests
 
@@ -471,9 +414,6 @@ Once done, `make stop` will clean up the cluster and shut everything down.
 tests and some
 [Kubernetes storage tests](https://github.com/kubernetes/kubernetes/tree/master/test/e2e/storage/testsuites)
 against the pmem-csi driver.
-
-The driver will get deployed automatically and thus must not be
-installed yet on the cluster.
 
 When [ginkgo](https://onsi.github.io/ginkgo/) is installed, then it
 can be used to run individual tests and to control additional aspects

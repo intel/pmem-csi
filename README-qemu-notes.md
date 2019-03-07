@@ -1,10 +1,8 @@
 # Notes about VM config for Pmem-CSI development environment
 
-
-> **About hugepages:**
-> Emulated NVDIMM appears not fully working if the VM is configured to use Hugepages. With Hugepages configured, no data survives guest reboots and nothing is ever written into backing store file in host. Configured backing store file is not even part of command line options to qemu. Instead of that, there is some dev/hugepages/libvirt/... path which in reality remains empty in host.
-
-These are some notes documenting VM configuration for pmem-csi development using emulated NVDIMM as host-backed files. For more choices of VM setup, please also check the test/ directory where there is automated method of VM creation implemented.
+These are some notes about manually created VM configuration for pmem-csi development using emulated NVDIMM as host-backed files.
+There exists a newer, more convenient automated method using code in test/ directory, where a four node Kubernetes cluster
+can be create by simply typing `make start`.
 
 VM configuration described here was used in early pmem-csi development where a VM was manually created and then used as development host. The initial VM config was created by libvirt/GUI (also doable using virt-install CLI), with some configuration changes made directly in VM-config xml file to emulate a NVDIMM device backed by host file. Two emulated NVDIMMs were tried at some point, but operations on namespaces appear to be more reliable with single emulated NVDIMM.
 
@@ -56,7 +54,7 @@ Another, quicker way of creating such file is to use `truncate -s` which creates
 truncate -s 16G /var/lib/libvirt/images/nvdimm0
 ```
 
-qemu, if using libvirt-created config will then that file with zeroes, as it uses prealloc=yes` attribute for backing file
+qemu using libvirt-created configuration will fill that file with zeroes, as it uses `prealloc=yes` attribute for backing file.
 
 ## Labels initialization is needed once per emulated NVDIMM
 
@@ -70,3 +68,7 @@ ndctl init-labels nmem0
 ndctl enable-region region0
 
 ```
+
+## Note about hugepages
+
+Emulated NVDIMM appears not fully working if the VM is configured to use Hugepages. With Hugepages configured, no data survives guest reboots and nothing is ever written into backing store file in host. Configured backing store file is not even part of command line options to qemu. Instead of that, there is some dev/hugepages/libvirt/... path which in reality remains empty in host.
