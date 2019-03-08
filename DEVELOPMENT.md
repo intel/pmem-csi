@@ -2,10 +2,33 @@ Table of Contents
 ----------------
 
 - [Code quality](#code-quality)
+    - [Coding style](#coding-style)
+    - [Input validation](#input-validation)
 - [APIs](#apis)
+    - [CSI API](#csi-api)
+    - [Network ports](#network-ports)
+    - [Local sockets](#local-sockets)
+    - [Command line arguments](#command-line-arguments)
+    - [Common arguments](#common-arguments)
+    - [Specific arguments to pmem-ns-init](#specific-arguments-to-pmem-ns-init)
+    - [Specific arguments to pmem-vgm](#specific-arguments-to-pmem-vgm)
+    - [Specific arguments to pmem-csi-driver](#specific-arguments-to-pmem-csi-driver)
+    - [Environment variables](#environment-variables)
 - [Development mode build and run](#development-mode-build-and-run)
+    - [Development system using Virtual Machine with emulated devices](#development-system-using-virtual-machine-with-emulated-devices)
+    - [Build plugin for stand-alone use](#build-plugin-for-stand-alone-use)
+    - [Stand-alone mode build potential issues](#stand-alone-mode-build-potential-issues)
+    - [Run driver as stand-alone program](#run-driver-as-stand-alone-program)
+    - [Verify driver in unified mode](#verify-driver-in-unified-mode)
+    - [Scripts in util/ directory](#scripts-in-util-directory)
+    - [Override registry address](#override-registry-address)
 - [Notes about switching DeviceMode](#notes-about-switching-devicemode)
+    - [Going from DeviceMode:LVM to DeviceMode:Direct](#going-from-devicemodelvm-to-devicemodedirect)
+    - [Going from DeviceMode:Direct to DeviceMode:LVM](#going-from-devicemodedirect-to-devicemodelvm)
 - [Notes about accessing system directories in a container](#notes-about-accessing-system-directories-in-a-container)
+    - [Read-only access to /sys](#read-only-access-to-sys)
+    - [Access to /dev of host](#access-to-dev-of-host)
+
 
 Code quality
 ============
@@ -39,11 +62,17 @@ Nonetheless, input needs to be validated to catch mistakes:
 APIs
 ============
 
-​CSI API
+CSI API
 ----------------
-Kubernetes CSI API is exposed over Unix domain socket. CSI operations are executed as gRPC calls. Input data is allowed as permitted by CSI specification. Output data is formatted as gRPC response.
 
-Following CSI operations are supported, with arguments as specified by CSI specification: CreateVolume, DeleteVolume, StageVolume, UnstageVolume, PublishVolume, UnpublishVolume, ListVolumes, GetCapacity, GetCapabilities, GetPluginInfo, GetPluginCapabilities.
+Kubernetes CSI API is exposed over Unix domain socket. CSI operations
+are executed as gRPC calls. Input data is allowed as permitted by CSI
+specification. Output data is formatted as gRPC response.
+
+Following CSI operations are supported, with arguments as specified by
+CSI specification: CreateVolume, DeleteVolume, StageVolume,
+UnstageVolume, PublishVolume, UnpublishVolume, ListVolumes,
+GetCapacity, GetCapabilities, GetPluginInfo, GetPluginCapabilities.
 
 
 Network ports
@@ -57,6 +86,7 @@ Network ports are opened as configured in manifest files:
 
 Local sockets
 -------------
+
 Kubernetes CSI API used over local socket inside same host.
 
 - unix:///var/lib/kubelet/plugins/pmem-csi-reg.sock
@@ -66,7 +96,11 @@ Kubernetes CSI API used over local socket inside same host.
 
 Command line arguments
 ----------------------
-Note that different set of programs is used in different DeviceModes. Three stages: *pmem-ns-init*, *pmem-vgm*, *pmem-csi-driver* run in DeviceMode:LVM. Only *pmem-csi-driver* runs in DeviceMode:Direct.
+
+Note that different set of programs is used in different
+DeviceModes. Three stages: *pmem-ns-init*, *pmem-vgm*,
+*pmem-csi-driver* run in DeviceMode:LVM. Only *pmem-csi-driver* runs
+in DeviceMode:Direct.
 
 Common arguments
 ----------------
@@ -97,6 +131,7 @@ Note: useforfsdax + useforsector must be <=100
 
 Specific arguments to pmem-vgm
 -------------------------------
+
 NO SPECIFIC arguments
 
 Specific arguments to pmem-csi-driver
@@ -216,7 +251,12 @@ These utilities are required by scripts residing in `util/` directory:
 
 Override registry address
 -------------------------
-Sometimes images need to be deployed from specific registry instead of what is written in deployment files. You can use this example command to change registry address in all manifest files under deploy/ directory:
+
+Sometimes images need to be deployed from specific registry instead of
+what is written in deployment files. You can use this example command
+to change registry address in all manifest files under deploy/
+directory:
+
 ```
 for f in $(find ./deploy -type f); do sed -i -e 's/192.168.8.1:5000/MY_REGISTRY/' $f; done
 ```
@@ -224,33 +264,63 @@ for f in $(find ./deploy -type f); do sed -i -e 's/192.168.8.1:5000/MY_REGISTRY/
 Notes about switching DeviceMode
 ================================
 
-If DeviceMode is switched between LVM and Direct(ndctl), please keep in mind that pmem-csi driver does not clean up or reclaim Namespaces, therefore Namespaces plus other related context (possibly LVM state) created in previous mode will remain stored on device and most likely will create trouble in another DeviceMode.
+If DeviceMode is switched between LVM and Direct(ndctl), please keep
+in mind that pmem-csi driver does not clean up or reclaim Namespaces,
+therefore Namespaces plus other related context (possibly LVM state)
+created in previous mode will remain stored on device and most likely
+will create trouble in another DeviceMode.
 
 Going from DeviceMode:LVM to DeviceMode:Direct
 ----------------------------------------------
+
 - examine LV Groups state on a node: `vgs`
 - examine LV Phys.Volumes state on a node: `pvs`
-- Delete LV Groups before deleting namespaces: `vgremove VGNAME`, to avoid orphaned VGroups
+- Delete LV Groups before deleting namespaces: `vgremove VGNAME`, to
+  avoid orphaned VGroups
 
 NOTE: The next **WILL DELETE ALL NAMESPACES** so be careful!
+
 - Delete Namespaces on a node using CLI: `ndctl destroy-namespace all --force`
 
 Going from DeviceMode:Direct to DeviceMode:LVM
 ----------------------------------------------
+
 No special steps are needed to clean up Namespaces state.
 
-If pmem-csi driver has been operating correctly, there should not be existing Namespaces as CSI Volume lifecycle should have been deleted those after end of life of Volume. If there are, you can either keep those (DeviceMode:LVM does honor "foreign" Namespaces and leaves those alone) if you have enough space, or you can choose to delete those using `ndctl` on node.
+If pmem-csi driver has been operating correctly, there should not be
+existing Namespaces as CSI Volume lifecycle should have been deleted
+those after end of life of Volume. If there are, you can either keep
+those (DeviceMode:LVM does honor "foreign" Namespaces and leaves those
+alone) if you have enough space, or you can choose to delete those
+using `ndctl` on node.
 
 Notes about accessing system directories in a container
 =======================================================
 
-The pmem-csi driver will run as container, but it needs access to system directories /sys and /dev. Two related potential problems have been diagnosed so far.
+The pmem-csi driver will run as container, but it needs access to
+system directories /sys and /dev. Two related potential problems have
+been diagnosed so far.
 
 Read-only access to /sys
 ------------------------
-In some deployment schemes /sys remains mounted read-only in the container running pmsm-csi-driver. This is not problem in DeviceMode:LVM, but is a blocking problem in DeviceMode:Direct where the driver needs write access to /sys for Namespaces management operations. There is start-time check for read-write mount of /sys in the code. An error in pod log `pmem-driver: Failed to run driver: FATAL: /sys mounted read-only, can not operate` is the sign of such state.
+
+In some deployment schemes /sys remains mounted read-only in the
+container running pmsm-csi-driver. This is not problem in
+DeviceMode:LVM, but is a blocking problem in DeviceMode:Direct where
+the driver needs write access to /sys for Namespaces management
+operations. There is start-time check for read-write mount of /sys in
+the code. An error in pod log `pmem-driver: Failed to run driver:
+FATAL: /sys mounted read-only, can not operate` is the sign of such
+state.
 
 Access to /dev of host
 ----------------------
-Containers runtime may not pass /dev from host into the container. This is, again, problem in DeviceMode:Direct. If the /dev/ of the host is not accessible in the pmem-csi container, there will be failure in accessing of newly created block device /dev/pmemX.Y which will not be visible inside container. The driver does not detect the root cause of that problem during start-up, but only when a volume creation has failed. This problem can be avoided by specifying explicit mount of /dev in the pmem-csi manifest. 
 
+Containers runtime may not pass /dev from host into the
+container. This is, again, problem in DeviceMode:Direct. If the /dev/
+of the host is not accessible in the pmem-csi container, there will be
+failure in accessing of newly created block device /dev/pmemX.Y which
+will not be visible inside container. The driver does not detect the
+root cause of that problem during start-up, but only when a volume
+creation has failed. This problem can be avoided by specifying
+explicit mount of /dev in the pmem-csi manifest.
