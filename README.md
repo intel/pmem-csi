@@ -611,6 +611,8 @@ and use `kubectl` binary on the host running VMs.
 Use `make stop` to stop the virtual machines. The cluster state
 remains preserved and will be restored after next `make start`.
 
+The DeviceMode (lvm or direct) used in testing is selected using variable TEST_DEVICEMODE in [test-config.sh](test/test-config.sh).
+
 ### Running commands on test cluster nodes over ssh
 
 `make start` generates ssh-wrappers `_work/ssh-clear-kvm.N` for each

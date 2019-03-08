@@ -52,6 +52,11 @@ TEST_PMEM_LABEL_SIZE=2097152
 # featurename=true,feature=false
 TEST_FEATURE_GATES="CSINodeInfo=true,CSIDriverRegistry=true"
 
+# DeviceMode to be used during testing.
+# Allowed values: lvm, direct
+# This string is used as part of deployment file name.
+TEST_DEVICEMODE=lvm
+
 # allow overriding the configuration in additional file(s)
 if [ -d test/test-config.d ]; then
     for i in $(ls test/test-config.d/*.sh 2>/dev/null | sort); do

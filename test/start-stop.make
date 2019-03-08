@@ -41,7 +41,7 @@ start: _work/clear-kvm.img _work/kube-clear-kvm _work/start-clear-kvm _work/ssh-
 	fi
 	_work/ssh-clear-kvm kubectl version --short | grep 'Server Version' | sed -e 's/.*: v\([0-9]*\)\.\([0-9]*\)\..*/\1.\2/' >_work/clear-kvm-kubernetes.version
 	if ! _work/ssh-clear-kvm kubectl get statefulset.apps/pmem-csi-controller daemonset.apps/pmem-csi >/dev/null 2>&1; then \
-		_work/ssh-clear-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-csi.yaml; \
+		_work/ssh-clear-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-csi-$${TEST_DEVICEMODE}.yaml; \
 	fi
 	if ! _work/ssh-clear-kvm kubectl get storageclass/pmem-csi-sc >/dev/null 2>&1; then \
 		_work/ssh-clear-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-storageclass.yaml; \
