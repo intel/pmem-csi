@@ -218,6 +218,7 @@ spec:
         - -caFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
         - -certFile=/certs/$(KUBE_NODE_NAME).crt
         - -keyFile=/certs/$(KUBE_NODE_NAME).key
+        - -statePath=/var/lib/pmem-csi.intel.com
         env:
         - name: CSI_ENDPOINT
           value: unix:///csi/csi.sock
@@ -252,6 +253,8 @@ spec:
           name: registry-cert
         - mountPath: /dev
           name: dev-dir
+        - mountPath: /var/lib/pmem-csi.intel.com
+          name: pmem-state-dir
       - args:
         - -v=3
         - --kubelet-registration-path=/var/lib/kubelet/plugins/pmem-csi.intel.com/csi.sock
@@ -318,6 +321,10 @@ spec:
       - name: registry-cert
         secret:
           secretName: pmem-csi-node-secrets
+      - hostPath:
+          path: /var/lib/pmem-csi.intel.com
+          type: DirectoryOrCreate
+        name: pmem-state-dir
       - hostPath:
           path: /dev
           type: DirectoryOrCreate

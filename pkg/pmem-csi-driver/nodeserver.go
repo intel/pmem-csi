@@ -187,6 +187,10 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		return nil, status.Error(codes.InvalidArgument, "Volume capability missing in request")
 	}
 	requestedFsType := req.GetVolumeCapability().GetMount().GetFsType()
+	if requestedFsType == "" {
+		// Default to ext4 filesystem
+		requestedFsType = "ext4"
+	}
 
 	// Serialize by VolumeId
 	volumeMutex.LockKey(req.GetVolumeId())
