@@ -29,7 +29,6 @@ Table of Contents
     - [Read-only access to /sys](#read-only-access-to-sys)
     - [Access to /dev of host](#access-to-dev-of-host)
 
-
 Code quality
 ============
 
@@ -80,7 +79,7 @@ Network ports
 
 Network ports are opened as configured in manifest files:
 
-- registry endpoint: typical port value 10000, used for pmem-csi internal communication
+- registry endpoint: typical port value 10000, used for PMEM-CSI internal communication
 - controller endpoint: typical port value 10001, used for serving CSI API
 
 
@@ -265,7 +264,7 @@ Notes about switching DeviceMode
 ================================
 
 If DeviceMode is switched between LVM and Direct(ndctl), please keep
-in mind that pmem-csi driver does not clean up or reclaim Namespaces,
+in mind that PMEM-CSI driver does not clean up or reclaim Namespaces,
 therefore Namespaces plus other related context (possibly LVM state)
 created in previous mode will remain stored on device and most likely
 will create trouble in another DeviceMode.
@@ -287,7 +286,7 @@ Going from DeviceMode:Direct to DeviceMode:LVM
 
 No special steps are needed to clean up Namespaces state.
 
-If pmem-csi driver has been operating correctly, there should not be
+If PMEM-CSI driver has been operating correctly, there should not be
 existing Namespaces as CSI Volume lifecycle should have been deleted
 those after end of life of Volume. If there are, you can either keep
 those (DeviceMode:LVM does honor "foreign" Namespaces and leaves those
@@ -297,7 +296,7 @@ using `ndctl` on node.
 Notes about accessing system directories in a container
 =======================================================
 
-The pmem-csi driver will run as container, but it needs access to
+The PMEM-CSI driver will run as container, but it needs access to
 system directories /sys and /dev. Two related potential problems have
 been diagnosed so far.
 
@@ -318,9 +317,9 @@ Access to /dev of host
 
 Containers runtime may not pass /dev from host into the
 container. This is, again, problem in DeviceMode:Direct. If the /dev/
-of the host is not accessible in the pmem-csi container, there will be
+of the host is not accessible in the PMEM-CSI container, there will be
 failure in accessing of newly created block device /dev/pmemX.Y which
 will not be visible inside container. The driver does not detect the
 root cause of that problem during start-up, but only when a volume
 creation has failed. This problem can be avoided by specifying
-explicit mount of /dev in the pmem-csi manifest.
+explicit mount of /dev in the PMEM-CSI manifest.

@@ -1,10 +1,10 @@
 <!-- based on template now, remaining parts marked as FILL TEMPLATE:  -->
 
-# Intel PMEM-CSI plugin for Kubernetes
+# Intel PMEM-CSI for Kubernetes
 
 ## Table of Contents
 
-- [Intel PMEM-CSI plugin for Kubernetes](#intel-pmem-csi-plugin-for-kubernetes)
+- [Intel PMEM-CSI for Kubernetes](#intel-pmem-csi-for-kubernetes)
     - [Table of Contents](#table-of-contents)
     - [About](#about)
     - [Design](#design)
@@ -33,8 +33,8 @@
     - [Supported Kubernetes versions](#supported-kubernetes-versions)
     - [Setup](#setup)
         - [Get source code](#get-source-code)
-        - [Build plugin](#build-plugin)
-        - [Run plugin](#run-plugin)
+        - [Build PMEM-CSI](#build-pmem-csi)
+        - [Run PMEM-CSI on Kubernetes](#run-pmem-csi-on-kubernetes)
     - [Automated testing](#automated-testing)
         - [Unit testing and code quality](#unit-testing-and-code-quality)
         - [End-to-end testing (E2E)](#end-to-end-testing-e2e)
@@ -44,18 +44,18 @@
             - [Running E2E tests](#running-e2e-tests)
     - [Communication and contribution](#communication-and-contribution)
 
-
 ## About
 
 ---
  *Note: This is Alpha code and not production ready.*
 ---
 
-This [Kubernetes
-plugin](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/resource-management/device-plugin.md)
-is a Persistent Memory Container Storage Interface (PMEM-CSI) driver
-for provisioning of node-local non-volatile memory to Kubernetes as
-block devices. The driver can currently utilize non-volatile memory
+Intel PMEM-CSI is a storage driver for container orchestrators like
+Kubernetes. It makes local persistent memory
+([PMEM](https://pmem.io/)) available as a filesystem volume to
+container applications.
+
+It can currently utilize non-volatile memory
 devices that can be controlled via the [libndctl utility
 library](https://github.com/pmem/ndctl). In this readme, we use
 *persistent memory* to refer to a non-volatile dual in-line memory
@@ -245,7 +245,7 @@ The following diagram illustrates the communication channels between driver comp
 
 ### Security
 
-All pmem-csi specific communication [shown in above
+All PMEM-CSI specific communication [shown in above
 section](#communication-channels) between Master
 Controller([RegistryServer](#node-registry-server),
 [MasterControllerServer](#master-controller-server)) and
@@ -419,7 +419,7 @@ mkdir -p $GOPATH/src/github.com/intel
 git clone https://github.com/intel/pmem-csi $GOPATH/src/github.com/intel/pmem-csi
 ```
 
-### Build plugin
+### Build PMEM-CSI
 
 1.  Use `make build-images` to produce Docker container images.
 
@@ -428,7 +428,7 @@ git clone https://github.com/intel/pmem-csi $GOPATH/src/github.com/intel/pmem-cs
 
 See the [Makefile](Makefile) for additional make targets and possible make variables.
 
-### Run plugin
+### Run PMEM-CSI on Kubernetes
 
 This section assumes that a Kubernetes cluster is already available
 with at least one node that has persistent memory device(s). For development or
@@ -502,7 +502,7 @@ list to ensure that it runs on the right node.
 
   ### How to extend the plugin
 
-You can modify the plugin to support more xxx by changing the `variable` from Y to Z.
+You can modify PMEM-CSI to support more xxx by changing the `variable` from Y to Z.
 
 
   ## Maintenance
@@ -610,7 +610,7 @@ attempt to bring up missing pieces each time it is invoked.
 The first node `host-0` is the Kubernetes master without persistent memory.
 The other three nodes are worker nodes with one emulated 32GB NVDIMM each.
 After the cluster has been formed, `make start` adds `storage=pmem` label
-to the worker nodes and deploys the pmem-csi driver.
+to the worker nodes and deploys the PMEM-CSI driver.
 Once `make start` completes, the cluster is ready for interactive use via
 `kubectl` inside the virtual machine. Alternatively, you can also
 set `KUBECONFIG` as shown at the end of the `make start` output
@@ -636,7 +636,7 @@ node-0 which is cluster master.
 sanity](https://github.com/kubernetes-csi/csi-test/tree/master/pkg/sanity)
 tests and some [Kubernetes storage
 tests](https://github.com/kubernetes/kubernetes/tree/master/test/e2e/storage/testsuites)
-against the pmem-csi driver.
+against the PMEM-CSI driver.
 
 When [ginkgo](https://onsi.github.io/ginkgo/) is installed, then it
 can be used to run individual tests and to control additional aspects
@@ -686,7 +686,6 @@ Contact the development team (*TBD: slack or email?*)
 
 Pointers to other useful documentation.
 
-* Upstream documentation of [device plugins](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/).
 * Video tutorial
     * Simple youtube style. Demo installation following steps in readme.
       Useful to show relevant paths. Helps with troubleshooting.
