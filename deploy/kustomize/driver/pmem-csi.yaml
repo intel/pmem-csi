@@ -113,7 +113,8 @@ spec:
                   "-registryEndpoint=$(PMEM_CSI_CONTROLLER_PORT_10000_TCP)",
                   "-caFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
                   "-certFile=/certs/$(KUBE_NODE_NAME).crt",
-                  "-keyFile=/certs/$(KUBE_NODE_NAME).key"
+                  "-keyFile=/certs/$(KUBE_NODE_NAME).key",
+                  "-statePath=/var/lib/pmem-csi.intel.com"
               ]
         # Passing /dev to container may cause container creation error because
         # termination-log is located on /dev/ by default, re-locate to /tmp
@@ -148,6 +149,8 @@ spec:
           mountPath: /certs/
         - name : dev-dir
           mountPath: /dev
+        - name: pmem-state-dir
+          mountPath: /var/lib/pmem-csi.intel.com
       - name: driver-registrar
         imagePullPolicy: Always
         image: quay.io/k8scsi/csi-node-driver-registrar:v1.X.Y
@@ -179,6 +182,10 @@ spec:
         - name: registry-cert
           secret:
             secretName: pmem-csi-node-secrets
+        - name: pmem-state-dir
+          hostPath:
+            path: /var/lib/pmem-csi.intel.com
+            type: DirectoryOrCreate
         - name: dev-dir
           hostPath:
             path: /dev

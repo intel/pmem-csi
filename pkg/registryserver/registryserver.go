@@ -14,10 +14,18 @@ import (
 	"k8s.io/klog/glog"
 )
 
+type RegistryListener interface {
+	// OnNodeAdded is called by RegistryServer whenever a node controller registered.
+	OnNodeAdded(ctx context.Context, node *NodeInfo)
+	// OnNodeDeleted is called by RegistryServer whenever a node controller unregistered.
+	OnNodeDeleted(ctx context.Context, node *NodeInfo)
+}
+
 type RegistryServer struct {
 	mutex           sync.Mutex
 	clientTLSConfig *tls.Config
 	nodeClients     map[string]*NodeInfo
+	listeners       map[RegistryListener]struct{}
 }
 
 type NodeInfo struct {
@@ -31,6 +39,7 @@ func New(tlsConfig *tls.Config) *RegistryServer {
 	return &RegistryServer{
 		clientTLSConfig: tlsConfig,
 		nodeClients:     map[string]*NodeInfo{},
+		listeners:       map[RegistryListener]struct{}{},
 	}
 }
 
@@ -57,13 +66,16 @@ func (rs *RegistryServer) ConnectToNodeController(nodeId string) (*grpc.ClientCo
 		return nil, err
 	}
 
+	glog.V(3).Infof("Connecting to node controller : %s", nodeInfo.Endpoint)
+
 	return pmemgrpc.Connect(nodeInfo.Endpoint, rs.clientTLSConfig)
 }
 
-func (rs *RegistryServer) RegisterController(ctx context.Context, req *registry.RegisterControllerRequest) (*registry.RegisterControllerReply, error) {
-	rs.mutex.Lock()
-	defer rs.mutex.Unlock()
+func (rs *RegistryServer) AddListener(l RegistryListener) {
+	rs.listeners[l] = struct{}{}
+}
 
+func (rs *RegistryServer) RegisterController(ctx context.Context, req *registry.RegisterControllerRequest) (*registry.RegisterControllerReply, error) {
 	if req.GetNodeId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Missing NodeId parameter")
 	}
@@ -73,28 +85,48 @@ func (rs *RegistryServer) RegisterController(ctx context.Context, req *registry.
 	}
 	glog.V(3).Infof("Registering node: %s, endpoint: %s", req.NodeId, req.Endpoint)
 
-	rs.nodeClients[req.NodeId] = &NodeInfo{
+	node := &NodeInfo{
 		NodeID:   req.NodeId,
 		Endpoint: req.Endpoint,
+	}
+
+	rs.mutex.Lock()
+	n, found := rs.nodeClients[req.NodeId]
+	if found {
+		if n.Endpoint != req.Endpoint {
+			found = false
+		}
+	}
+	rs.nodeClients[req.NodeId] = node
+	rs.mutex.Unlock()
+
+	if !found {
+		for l := range rs.listeners {
+			l.OnNodeAdded(ctx, node)
+		}
 	}
 
 	return &registry.RegisterControllerReply{}, nil
 }
 
 func (rs *RegistryServer) UnregisterController(ctx context.Context, req *registry.UnregisterControllerRequest) (*registry.UnregisterControllerReply, error) {
-	rs.mutex.Lock()
-	defer rs.mutex.Unlock()
-
 	if req.GetNodeId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Missing NodeId parameter")
 	}
 
-	if _, ok := rs.nodeClients[req.NodeId]; !ok {
-		return nil, status.Errorf(codes.NotFound, "No entry with id '%s' found in registry", req.NodeId)
-	}
-
-	glog.V(3).Infof("Unregistering node: %s", req.NodeId)
+	rs.mutex.Lock()
+	node, ok := rs.nodeClients[req.NodeId]
 	delete(rs.nodeClients, req.NodeId)
+	rs.mutex.Unlock()
+
+	if ok {
+		for l := range rs.listeners {
+			l.OnNodeDeleted(ctx, node)
+		}
+		glog.V(3).Infof("Unregistered node: %s", req.NodeId)
+	} else {
+		glog.V(3).Infof("No node registered with id '%s'", req.NodeId)
+	}
 
 	return &registry.UnregisterControllerReply{}, nil
 }

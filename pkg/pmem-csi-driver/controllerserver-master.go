@@ -54,8 +54,6 @@ type pmemVolume struct {
 	// ID of nodes where the volume provisioned/attached
 	// It would be one if simple volume, else would be more than one for "cached" volume
 	nodeIDs map[string]VolumeStatus
-	// VolumeType
-	volumeType PmemPersistencyModel
 }
 
 type masterController struct {
@@ -67,6 +65,7 @@ type masterController struct {
 
 var _ csi.ControllerServer = &masterController{}
 var _ PmemService = &masterController{}
+var _ registryserver.RegistryListener = &masterController{}
 var volumeMutex = keymutex.NewHashed(-1)
 
 func NewMasterControllerServer(rs *registryserver.RegistryServer) *masterController {
@@ -75,15 +74,63 @@ func NewMasterControllerServer(rs *registryserver.RegistryServer) *masterControl
 		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
 		csi.ControllerServiceCapability_RPC_GET_CAPACITY,
 	}
-	return &masterController{
+	cs := &masterController{
 		DefaultControllerServer: NewDefaultControllerServer(serverCaps),
 		rs:                      rs,
 		pmemVolumes:             map[string]*pmemVolume{},
 	}
+
+	rs.AddListener(cs)
+
+	return cs
 }
 
 func (cs *masterController) RegisterService(rpcServer *grpc.Server) {
 	csi.RegisterControllerServer(rpcServer, cs)
+}
+
+// OnNodeAdded retrieves the existing volumes at recently added Node.
+// It uses ControllerServer.ListVolume() CSI call to retrieve volumes.
+func (cs *masterController) OnNodeAdded(ctx context.Context, node *registryserver.NodeInfo) {
+	conn, err := cs.rs.ConnectToNodeController(node.NodeID)
+	if err != nil {
+		glog.Warningf("Failed to connect to node controller at : %s on node %s: %s", node.Endpoint, node.NodeID, err.Error())
+		return
+	}
+
+	csiClient := csi.NewControllerClient(conn)
+	resp, err := csiClient.ListVolumes(ctx, &csi.ListVolumesRequest{})
+	if err != nil {
+		glog.Warningf("Failed to get volumes on node %s: %s", node.NodeID, err.Error())
+	}
+
+	glog.V(5).Infof("Found Volumes at %s: %v", node.NodeID, resp.Entries)
+
+	cs.mutex.Lock()
+	defer cs.mutex.Unlock()
+
+	for _, entry := range resp.Entries {
+		v := entry.GetVolume()
+		if v == nil { /* this shouldn't happen */
+			continue
+		}
+		if vol, ok := cs.pmemVolumes[v.VolumeId]; ok && vol != nil {
+			// This is possibly Cache volume, so just add this node id.
+			vol.nodeIDs[node.NodeID] = Created
+		} else {
+			cs.pmemVolumes[v.VolumeId] = &pmemVolume{
+				id:   v.VolumeId,
+				size: v.CapacityBytes,
+				name: v.VolumeContext["Name"],
+				nodeIDs: map[string]VolumeStatus{
+					node.NodeID: Created,
+				},
+			}
+		}
+	}
+}
+
+func (cs *masterController) OnNodeDeleted(ctx context.Context, node *registryserver.NodeInfo) {
 }
 
 func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
@@ -119,14 +166,13 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 		id, _ := uuid.NewUUID() //nolint: gosec
 		volumeID := id.String()
 		inTopology := []*csi.Topology{}
-		volumeType := pmemPersistencyModelNone
 		cacheCount := uint64(1)
 
 		if req.Parameters == nil {
 			req.Parameters = map[string]string{}
 		} else {
 			if val, ok := req.Parameters[pmemParameterKeyPersistencyModel]; ok {
-				volumeType = PmemPersistencyModel(val)
+				volumeType := PmemPersistencyModel(val)
 				if volumeType == pmemPersistencyModelCache {
 					if val, ok := req.Parameters[pmemParameterKeyCacheSize]; ok {
 						c, err := strconv.ParseUint(val, 10, 64)
@@ -193,11 +239,10 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 		glog.V(3).Infof("Chosen nodes: %v", chosenNodes)
 
 		vol = &pmemVolume{
-			id:         volumeID,
-			name:       req.Name,
-			size:       asked,
-			nodeIDs:    chosenNodes,
-			volumeType: volumeType,
+			id:      volumeID,
+			name:    req.Name,
+			size:    asked,
+			nodeIDs: chosenNodes,
 		}
 		cs.mutex.Lock()
 		defer cs.mutex.Unlock()

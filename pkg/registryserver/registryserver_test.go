@@ -136,7 +136,7 @@ var _ = Describe("pmem registry", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			_, err := registryClient.UnregisterController(ctx, &unregisterReq)
-			Expect(err.Error()).To(ContainSubstring("No entry with id '" + nodeId + "' found in registry"))
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 
