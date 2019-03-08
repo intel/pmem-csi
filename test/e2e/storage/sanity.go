@@ -74,7 +74,7 @@ var _ = Describe("sanity", func() {
 			}
 			return nil
 		},
-			"deploy/kubernetes-1.13/pmem-unified-csi.yaml",
+			"deploy/kubernetes-1.13/pmem-unified-csi-" + os.Getenv("TEST_DEVICEMODE") + ".yaml",
 		)
 		Expect(err).NotTo(HaveOccurred())
 		cleanup = cl
