@@ -19,6 +19,7 @@ import (
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
+	pmemstate "github.com/intel/pmem-csi/pkg/pmem-state"
 	"github.com/intel/pmem-csi/pkg/registryserver"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -73,6 +74,8 @@ type Config struct {
 	ControllerEndpoint string
 	//DeviceManager device manager to use
 	DeviceManager string
+	//Directory where to persist the node driver state
+	StateBasePath string
 	//Version driver release version
 	Version string
 }
@@ -103,6 +106,10 @@ func GetPMEMDriver(cfg Config) (*pmemDriver, error) {
 	}
 	if cfg.ControllerEndpoint == "" {
 		cfg.ControllerEndpoint = cfg.Endpoint
+	}
+
+	if cfg.Mode == Node && cfg.StateBasePath == "" {
+		cfg.StateBasePath = "/var/lib/" + cfg.DriverName
 	}
 
 	peerName := "pmem-registry"
@@ -176,8 +183,12 @@ func (pmemd *pmemDriver) Run() error {
 		if err != nil {
 			return err
 		}
+		sm, err := pmemstate.NewFileState(pmemd.cfg.StateBasePath)
+		if err != nil {
+			return err
+		}
+		cs := NewNodeControllerServer(pmemd.cfg.NodeID, dm, sm)
 		ns := NewNodeServer(pmemd.cfg.NodeID, dm)
-		cs := NewNodeControllerServer(pmemd.cfg.NodeID, dm)
 
 		if pmemd.cfg.Endpoint != pmemd.cfg.ControllerEndpoint {
 			if err := s.Start(pmemd.cfg.ControllerEndpoint, pmemd.serverTLSConfig, cs); err != nil {
