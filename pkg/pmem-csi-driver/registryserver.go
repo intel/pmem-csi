@@ -3,7 +3,6 @@ package pmemcsidriver
 import (
 	"crypto/tls"
 	"fmt"
-	"time"
 
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
@@ -49,13 +48,13 @@ func (rs *registryServer) GetNodeController(nodeID string) (NodeInfo, error) {
 }
 
 // ConnectToNodeController initiates a connection to controller running at nodeId
-func (rs *registryServer) ConnectToNodeController(nodeId string, timeout time.Duration) (*grpc.ClientConn, error) {
+func (rs *registryServer) ConnectToNodeController(nodeId string) (*grpc.ClientConn, error) {
 	nodeInfo, err := rs.GetNodeController(nodeId)
 	if err != nil {
 		return nil, err
 	}
 
-	return pmemgrpc.Connect(nodeInfo.Endpoint, rs.clientTLSConfig, timeout)
+	return pmemgrpc.Connect(nodeInfo.Endpoint, rs.clientTLSConfig)
 }
 
 func (rs *registryServer) RegisterController(ctx context.Context, req *registry.RegisterControllerRequest) (*registry.RegisterControllerReply, error) {

@@ -164,7 +164,7 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 				break
 			}
 			node := top.Segments[PmemDriverTopologyKey]
-			conn, err := cs.rs.ConnectToNodeController(node, connectionTimeout)
+			conn, err := cs.rs.ConnectToNodeController(node)
 			if err != nil {
 				glog.Warningf("failed to connect to %s: %s", node, err.Error())
 				continue
@@ -237,7 +237,7 @@ func (cs *masterController) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 	glog.V(4).Infof("DeleteVolume: volumeID: %v", req.GetVolumeId())
 	if vol := cs.getVolumeByID(req.GetVolumeId()); vol != nil {
 		for node := range vol.nodeIDs {
-			conn, err := cs.rs.ConnectToNodeController(node, connectionTimeout)
+			conn, err := cs.rs.ConnectToNodeController(node)
 			if err != nil {
 				glog.Warningf("Failed to connect to node controller:%s, stale volume(%s) on %s should be cleaned manually", err.Error(), vol.id, node)
 			}
@@ -391,7 +391,7 @@ func (cs *masterController) GetCapacity(ctx context.Context, req *csi.GetCapacit
 }
 
 func (cs *masterController) getNodeCapacity(ctx context.Context, node NodeInfo, req *csi.GetCapacityRequest) (int64, error) {
-	conn, err := cs.rs.ConnectToNodeController(node.NodeID, connectionTimeout)
+	conn, err := cs.rs.ConnectToNodeController(node.NodeID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to connect to node %s: %s", node.NodeID, err.Error())
 	}

@@ -222,7 +222,7 @@ func (pmemd *pmemDriver) registerNodeController() error {
 
 	for {
 		glog.V(3).Infof("Connecting to registry server at: %s\n", pmemd.cfg.RegistryEndpoint)
-		conn, err = pmemgrpc.Connect(pmemd.cfg.RegistryEndpoint, pmemd.clientTLSConfig, connectionTimeout)
+		conn, err = pmemgrpc.Connect(pmemd.cfg.RegistryEndpoint, pmemd.clientTLSConfig)
 		if err == nil {
 			break
 		}
