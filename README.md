@@ -1,35 +1,24 @@
 <!-- based on template now, remaining parts marked as FILL TEMPLATE:  -->
 
-# Intel PMEM-CSI for Kubernetes
+# PMEM-CSI for Kubernetes
 
 ## Table of Contents
 
-- [Intel PMEM-CSI for Kubernetes](#intel-pmem-csi-for-kubernetes)
+- [PMEM-CSI for Kubernetes](#pmem-csi-for-kubernetes)
     - [Table of Contents](#table-of-contents)
     - [About](#about)
     - [Design](#design)
         - [Architecture and Operation](#architecture-and-operation)
         - [DeviceMode:LVM](#devicemodelvm)
-            - [Namespace modes in DeviceMode:LVM](#namespace-modes-in-devicemodelvm)
-            - [Using limited amount of total space in DeviceMode:LVM](#using-limited-amount-of-total-space-in-devicemodelvm)
         - [DeviceMode:Direct](#devicemodedirect)
-            - [Namespace modes in DeviceMode:Direct](#namespace-modes-in-devicemodedirect)
-            - [Using limited amount of total space in DeviceMode:Direct](#using-limited-amount-of-total-space-in-devicemodedirect)
         - [Driver modes](#driver-modes)
         - [Driver Components](#driver-components)
-            - [Identity Server](#identity-server)
-            - [Node Registry Server](#node-registry-server)
-            - [Master Controller Server](#master-controller-server)
-            - [Node Controller Server](#node-controller-server)
-            - [Node Server](#node-server)
-        - [Communication channels](#communication-channels)
+        - [Communication between components](#communication-between-components)
         - [Security](#security)
         - [Volume Persistency](#volume-persistency)
-            - [Usage on Kubernetes](#usage-on-kubernetes)
     - [Prerequisites](#prerequisites)
         - [Software required](#software-required)
         - [Hardware required](#hardware-required)
-        - [Persistent memory device initialization](#persistent-memory-device-initialization)
     - [Supported Kubernetes versions](#supported-kubernetes-versions)
     - [Setup](#setup)
         - [Get source code](#get-source-code)
@@ -37,12 +26,14 @@
         - [Run PMEM-CSI on Kubernetes](#run-pmem-csi-on-kubernetes)
     - [Automated testing](#automated-testing)
         - [Unit testing and code quality](#unit-testing-and-code-quality)
-        - [End-to-end testing (E2E)](#end-to-end-testing-e2e)
-            - [QEMU + Kubernetes](#qemu--kubernetes)
-            - [Starting and stopping a test cluster](#starting-and-stopping-a-test-cluster)
-            - [Running commands on test cluster nodes over ssh](#running-commands-on-test-cluster-nodes-over-ssh)
-            - [Running E2E tests](#running-e2e-tests)
+        - [QEMU + Kubernetes](#qemu--kubernetes)
+        - [Starting and stopping a test cluster](#starting-and-stopping-a-test-cluster)
+        - [Running commands on test cluster nodes over ssh](#running-commands-on-test-cluster-nodes-over-ssh)
+        - [Running E2E tests](#running-e2e-tests)
     - [Communication and contribution](#communication-and-contribution)
+
+<!-- markdown-toc end -->
+
 
 ## About
 
@@ -238,7 +229,7 @@ NodeStageVolume(), NodeUnstageVolume(), NodePublishVolume(), and
 NodeUnpublishVolume() requests coming from the Container Orchestrator
 (CO).
 
-### Communication channels
+### Communication between components
 
 The following diagram illustrates the communication channels between driver components:
 ![communication diagram](/docs/images/communication/pmem-csi-communication-diagram.png)
@@ -389,9 +380,9 @@ Building of Docker images has been verified using Docker-ce: version 18.06.1
 
 Persistent memory device(s) are required for operation. However, some
 development and testing can be done using QEMU-emulated persistent
-memory devices, see [README-qemu-notes](README-qemu-notes.md).
-
-### Persistent memory device initialization
+memory devices, see [README-qemu-notes](README-qemu-notes.md) for
+technical details and the ["QEMU + Kubernetes"](#qemu--kubernetes)
+section for the commands that create such a virtual test cluster.
 
 The driver does not create persistent memory Regions, but expects
 Regions to exist when the driver starts. The utility
@@ -404,8 +395,8 @@ PMEM-CSI driver implements CSI specification version 1.0.0, which only
 supported by Kubernetes versions >= v1.13. The driver deployment in
 Kubernetes cluster has been verified on:
 
-| Branch            | Kubernetes branch/version      | Required alfa feature-gates |
-|-------------------|--------------------------------|---------------------------- |
+| Branch            | Kubernetes branch/version      | Required alpha feature gates   |
+|-------------------|--------------------------------|------------------------------- |
 | devel             | Kubernetes 1.13                | CSINodeInfo, CSIDriverRegistry |
 
 ## Setup
@@ -433,7 +424,7 @@ See the [Makefile](Makefile) for additional make targets and possible make varia
 This section assumes that a Kubernetes cluster is already available
 with at least one node that has persistent memory device(s). For development or
 testing, it is also possible to use a cluster that runs on QEMU virtual
-machines, see the ["End-to-end testing"](#end-to-end-testing) section below.
+machines, see the ["QEMU + Kubernetes"](#qemu--kubernetes) section below.
 
 - **Label the cluster nodes that have persistent memory support**
 
@@ -529,12 +520,13 @@ Use the `make test` command.
 
 **Note:** Testing code is not completed yet. Currently it runs some passes using `gofmt, go vet`.
 
-### End-to-end testing (E2E)
-
-#### QEMU + Kubernetes
+### QEMU + Kubernetes
 
 E2E testing relies on a cluster running inside multiple QEMU virtual
-machines. This is known to work on a Linux development host system.
+machines. The same cluster can also be used interactively when
+real hardware is not available.
+
+This is known to work on a Linux development host system.
 The `qemu-system-x86_64` binary must be installed, either from
 [upstream QEMU](https://www.qemu.org/) or the Linux distribution.
 The user must be able to run commands as root via `sudo`.
@@ -602,7 +594,7 @@ The images will contain the latest
 [Clear Linux OS](https://clearlinux.org/) and have the Kubernetes
 version supported by Clear Linux installed.
 
-#### Starting and stopping a test cluster
+### Starting and stopping a test cluster
 
 `make start` will bring up a Kubernetes test cluster inside four QEMU
 virtual machines. It can be called multiple times in a row and will
@@ -619,7 +611,7 @@ and use `kubectl` binary on the host running VMs.
 Use `make stop` to stop the virtual machines. The cluster state
 remains preserved and will be restored after next `make start`.
 
-#### Running commands on test cluster nodes over ssh
+### Running commands on test cluster nodes over ssh
 
 `make start` generates ssh-wrappers `_work/ssh-clear-kvm.N` for each
 test cluster node which are handy for running a single command or to
@@ -630,7 +622,7 @@ node-0 which is cluster master.
 
 `_work/ssh-clear-kvm.1` starts a shell on node-1.
 
-#### Running E2E tests
+### Running E2E tests
 
 `make test_e2e` will run [csi-test
 sanity](https://github.com/kubernetes-csi/csi-test/tree/master/pkg/sanity)
