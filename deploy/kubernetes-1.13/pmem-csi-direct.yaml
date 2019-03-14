@@ -262,7 +262,6 @@ spec:
           mountPath: /certs/
         - name: dev-dir
           mountPath: /dev
-          mountPropagation: Bidirectional
       volumes:
         - name: plugin-socket-dir
           hostPath:
