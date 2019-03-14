@@ -65,6 +65,16 @@ func (pmem *pmemNdctl) GetCapacity() (map[string]uint64, error) {
 }
 
 func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) error {
+	// Check that such name does not exist. In certain error states, for example when
+	// namespace creation works but device zeroing fails (missing /dev/pmemX.Y in container),
+	// this function is asked to create new devices repeatedly, forcing running out of space.
+	// Avoid device filling with garbage entries by returning error.
+	// Overall, no point having more than one namespace with same name.
+	_, err := pmem.GetDevice(name)
+	if err == nil {
+		glog.Infof("Device with name: %s already exists, refuse to create another", name)
+		return fmt.Errorf("CreateDevice: Failed: namespace with that name exists")
+	}
 	// align up by 1 GB, also compensate for libndctl giving us 1 GB less than we ask
 	var align uint64 = 1024 * 1024 * 1024
 	size /= align
