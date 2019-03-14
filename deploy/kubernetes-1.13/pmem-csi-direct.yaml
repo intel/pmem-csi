@@ -262,7 +262,8 @@ spec:
           mountPath: /certs/
         - name: dev-dir
           mountPath: /dev
-          mountPropagation: Bidirectional
+        - name: sys-dir
+          mountPath: /sys
       volumes:
         - name: plugin-socket-dir
           hostPath:
@@ -286,4 +287,8 @@ spec:
         - name: dev-dir
           hostPath:
             path: /dev
+            type: DirectoryOrCreate
+        - name: sys-dir
+          hostPath:
+            path: /sys
             type: DirectoryOrCreate
