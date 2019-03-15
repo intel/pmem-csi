@@ -1,38 +1,34 @@
+-   [PMEM-CSI for Kubernetes](#pmem-csi-for-kubernetes)
+    -   [About](#about)
+    -   [Design](#design)
+        -   [Architecture and Operation](#architecture-and-operation)
+        -   [DeviceMode:LVM](#devicemodelvm)
+        -   [DeviceMode:Direct](#devicemodedirect)
+        -   [Driver modes](#driver-modes)
+        -   [Driver Components](#driver-components)
+        -   [Communication between components](#communication-between-components)
+        -   [Security](#security)
+        -   [Volume Persistency](#volume-persistency)
+    -   [Prerequisites](#prerequisites)
+        -   [Software required](#software-required)
+        -   [Hardware required](#hardware-required)
+    -   [Supported Kubernetes versions](#supported-kubernetes-versions)
+    -   [Setup](#setup)
+        -   [Get source code](#get-source-code)
+        -   [Build PMEM-CSI](#build-pmem-csi)
+        -   [Run PMEM-CSI on Kubernetes](#run-pmem-csi-on-kubernetes)
+    -   [Automated testing](#automated-testing)
+        -   [Unit testing and code quality](#unit-testing-and-code-quality)
+        -   [QEMU + Kubernetes](#qemu-kubernetes)
+        -   [Starting and stopping a test cluster](#starting-and-stopping-a-test-cluster)
+        -   [Running commands on test cluster nodes over ssh](#running-commands-on-test-cluster-nodes-over-ssh)
+        -   [Running E2E tests](#running-e2e-tests)
+    -   [Communication and contribution](#communication-and-contribution)
+
 <!-- based on template now, remaining parts marked as FILL TEMPLATE:  -->
 
-# PMEM-CSI for Kubernetes
-
-## Table of Contents
-
-- [PMEM-CSI for Kubernetes](#pmem-csi-for-kubernetes)
-    - [Table of Contents](#table-of-contents)
-    - [About](#about)
-    - [Design](#design)
-        - [Architecture and Operation](#architecture-and-operation)
-        - [DeviceMode:LVM](#devicemodelvm)
-        - [DeviceMode:Direct](#devicemodedirect)
-        - [Driver modes](#driver-modes)
-        - [Driver Components](#driver-components)
-        - [Communication between components](#communication-between-components)
-        - [Security](#security)
-        - [Volume Persistency](#volume-persistency)
-    - [Prerequisites](#prerequisites)
-        - [Software required](#software-required)
-        - [Hardware required](#hardware-required)
-    - [Supported Kubernetes versions](#supported-kubernetes-versions)
-    - [Setup](#setup)
-        - [Get source code](#get-source-code)
-        - [Build PMEM-CSI](#build-pmem-csi)
-        - [Run PMEM-CSI on Kubernetes](#run-pmem-csi-on-kubernetes)
-    - [Automated testing](#automated-testing)
-        - [Unit testing and code quality](#unit-testing-and-code-quality)
-        - [QEMU + Kubernetes](#qemu--kubernetes)
-        - [Starting and stopping a test cluster](#starting-and-stopping-a-test-cluster)
-        - [Running commands on test cluster nodes over ssh](#running-commands-on-test-cluster-nodes-over-ssh)
-        - [Running E2E tests](#running-e2e-tests)
-    - [Communication and contribution](#communication-and-contribution)
-
-<!-- markdown-toc end -->
+PMEM-CSI for Kubernetes
+=======================
 
 
 ## About

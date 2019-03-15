@@ -1,6 +1,5 @@
 # Deploys the pmem-csi driver onto exactly one node, running in unified mode.
-# That CSI drivers gets exposed with a NodePort service and the fixed port
-# 30123 for use with csi-test sanity testing.
+# That CSI driver gets exposed with a NodePort service.
 
 apiVersion: v1
 kind: Service
@@ -34,6 +33,8 @@ spec:
       - name: pmem-driver
         image: 192.168.8.1:5000/pmem-csi-driver:canary
         imagePullPolicy: Always
+        # Passing /dev to container may cause container creation error because termination-log is located on /dev/ by default.
+        # Adding this clause works around failure, although it's bogus as this file is not actually used.
         terminationMessagePath: /tmp/termination-log
         args:  [ "-v=5",
                  "-drivername=pmem-csi.intel.com",
