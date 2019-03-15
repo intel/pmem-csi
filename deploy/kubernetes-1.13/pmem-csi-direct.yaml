@@ -150,6 +150,8 @@ spec:
       - name: pmem-driver
         image: 192.168.8.1:5000/pmem-csi-driver:canary
         imagePullPolicy: Always
+        # Passing /dev to container may cause container creation error because termination-log is located on /dev/ by default.
+        # Adding this clause works around failure, although it's bogus as this file is not actually used.
         terminationMessagePath: /tmp/termination-log
         args:  [ "-v=5",
                  "-drivername=pmem-csi.intel.com",

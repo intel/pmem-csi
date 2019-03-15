@@ -1,6 +1,5 @@
 # Deploys the pmem-csi driver onto exactly one node, running in unified mode.
-# That CSI drivers gets exposed with a NodePort service and the fixed port
-# 30123 for use with csi-test sanity testing.
+# That CSI driver gets exposed with a NodePort service.
 
 apiVersion: v1
 kind: Service

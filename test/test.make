@@ -98,8 +98,10 @@ RUNTIME_DEPS += LC_ALL=C LANG=C sort -u
 .PHONY: test_e2e
 test_e2e: start
 	. test/test-config.sh && \
-	export TEST_DEVICEMODE && \
-	KUBECONFIG=`pwd`/_work/clear-kvm-kube.config REPO_ROOT=`pwd` go test -count=1 -timeout 0 -v ./test/e2e
+	TEST_DEVICEMODE=$$TEST_DEVICEMODE \
+	KUBECONFIG=`pwd`/_work/clear-kvm-kube.config \
+	REPO_ROOT=`pwd` \
+	go test -count=1 -timeout 0 -v ./test/e2e
 
 .PHONY: run_tests
 test: run_tests
