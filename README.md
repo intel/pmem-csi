@@ -19,7 +19,7 @@
         -   [Run PMEM-CSI on Kubernetes](#run-pmem-csi-on-kubernetes)
     -   [Automated testing](#automated-testing)
         -   [Unit testing and code quality](#unit-testing-and-code-quality)
-        -   [QEMU + Kubernetes](#qemu-kubernetes)
+        -   [QEMU and Kubernetes](#qemu-and-kubernetes)
         -   [Starting and stopping a test cluster](#starting-and-stopping-a-test-cluster)
         -   [Running commands on test cluster nodes over ssh](#running-commands-on-test-cluster-nodes-over-ssh)
         -   [Running E2E tests](#running-e2e-tests)
@@ -377,7 +377,7 @@ Building of Docker images has been verified using Docker-ce: version 18.06.1
 Persistent memory device(s) are required for operation. However, some
 development and testing can be done using QEMU-emulated persistent
 memory devices, see [README-qemu-notes](README-qemu-notes.md) for
-technical details and the ["QEMU + Kubernetes"](#qemu--kubernetes)
+technical details and the ["QEMU and Kubernetes"](#qemu-and-kubernetes)
 section for the commands that create such a virtual test cluster.
 
 The driver does not create persistent memory Regions, but expects
@@ -420,7 +420,7 @@ See the [Makefile](Makefile) for additional make targets and possible make varia
 This section assumes that a Kubernetes cluster is already available
 with at least one node that has persistent memory device(s). For development or
 testing, it is also possible to use a cluster that runs on QEMU virtual
-machines, see the ["QEMU + Kubernetes"](#qemu--kubernetes) section below.
+machines, see the ["QEMU and Kubernetes"](#qemu-and-kubernetes) section below.
 
 - **Label the cluster nodes that have persistent memory support**
 
@@ -516,7 +516,7 @@ Use the `make test` command.
 
 **Note:** Testing code is not completed yet. Currently it runs some passes using `gofmt, go vet`.
 
-### QEMU + Kubernetes
+### QEMU and Kubernetes
 
 E2E testing relies on a cluster running inside multiple QEMU virtual
 machines. The same cluster can also be used interactively when
