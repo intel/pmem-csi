@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pmem-csi-pvc-block-volume
+spec:
+  volumeMode: Block
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 8Gi
+  storageClassName: pmem-csi-sc-ext4 # defined in deploy/kubernetes-1.13/pmem-storageclass-ext4.yaml
