@@ -513,7 +513,7 @@ Kubernetes cluster has been verified on:
 
 | Branch            | Kubernetes branch/version      | Required alpha feature gates   |
 |-------------------|--------------------------------|------------------------------- |
-| devel             | Kubernetes 1.13                | CSINodeInfo, CSIDriverRegistry |
+| devel             | Kubernetes 1.13                | CSINodeInfo, CSIDriverRegistry, CSIBlockVolume |
 | devel             | Kubernetes 1.14                |                                |
 | devel             | Kubernetes 1.15                |                                |
 
@@ -743,6 +743,10 @@ parameters:
          command:
          - /go/bin/pmem-ns-init
 ```
+
+#### Note about raw block volumes
+
+Applications can use volumes provisioned by PMEM-CSI as [raw block devices](https://kubernetes.io/blog/2019/03/07/raw-block-volume-support-to-beta/). For provisioning a PMEM volume as raw block device, one has to create a `PersistentVolumeClaim` with `volumeMode: Block`. See example [PVC](deploy/common/pmem-pvc-block-volume.yaml) and [application](deploy/common/pmem-app-block-volume.yaml) for usage reference.
 
 <!-- FILL TEMPLATE:
 
