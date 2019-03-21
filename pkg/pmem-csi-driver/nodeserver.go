@@ -9,6 +9,7 @@ package pmemcsidriver
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/net/context"
@@ -97,30 +98,56 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	defer volumeMutex.UnlockKey(req.GetVolumeId())
 
 	targetPath := req.TargetPath
-	stagingtargetPath := req.StagingTargetPath
-	// TODO: check is bind-mount already made
-	// (happens when publish is asked repeatedly for already published namespace)
-	notMnt, err := mount.New("").IsLikelyNotMountPoint(targetPath)
-	if err != nil && !os.IsNotExist(err) {
-		return nil, status.Error(codes.Internal, "validate target path: "+err.Error())
-	}
-	if !notMnt {
-		// TODO(https://github.com/kubernetes-sigs/gcp-compute-persistent-disk-csi-driver/issues/95): check if mount is compatible. Return OK if it is, or appropriate error.
-		/*
-			1) Target Path MUST be the vol referenced by vol ID
-			2) VolumeCapability MUST match
-			3) Readonly MUST match
-		*/
-		return &csi.NodePublishVolumeResponse{}, nil
-	}
+	sourcePath := req.StagingTargetPath
+	mounter := mount.New("")
 
-	if err := os.Mkdir(targetPath, os.FileMode(0755)); err != nil {
-		// Kubernetes is violating the CSI spec and creates the
-		// directory for us
-		// (https://github.com/kubernetes/kubernetes/issues/75535). We
-		// allow that by ignoring the "already exists" error.
-		if !os.IsExist(err) {
-			return nil, status.Error(codes.Internal, "make target dir: "+err.Error())
+	switch req.VolumeCapability.GetAccessType().(type) {
+	case *csi.VolumeCapability_Block:
+		dev, err := ns.dm.GetDevice(req.VolumeId)
+		if err != nil {
+			return nil, status.Error(codes.NotFound, "No device found with volume id "+req.VolumeId+": "+err.Error())
+		}
+		// For block volumes, source path is the actual Device path
+		sourcePath = dev.Path
+		targetDir := filepath.Dir(targetPath)
+		// Make sure that parent directory of target path is existing, otherwise create it
+		targetPreExisting, err := ensureDirectory(mounter, targetDir)
+		if err != nil {
+			return nil, err
+		}
+		f, err := os.OpenFile(targetPath, os.O_CREATE, os.FileMode(0644))
+		defer f.Close()
+		if err != nil && !os.IsExist(err) {
+			if !targetPreExisting {
+				if rerr := os.Remove(targetDir); rerr != nil {
+					klog.Warningf("Could not remove created mount target %q: %v", targetDir, rerr)
+				}
+			}
+			return nil, status.Errorf(codes.Internal, "Could not create target device file %q: %v", targetPath, err)
+		}
+	case *csi.VolumeCapability_Mount:
+		notMnt, err := mount.IsNotMountPoint(mounter, targetPath)
+		if err != nil && !os.IsNotExist(err) {
+			return nil, status.Error(codes.Internal, "validate target path: "+err.Error())
+		}
+		if !notMnt {
+			// TODO(https://github.com/kubernetes-sigs/gcp-compute-persistent-disk-csi-driver/issues/95): check if mount is compatible. Return OK if it is, or appropriate error.
+			/*
+				1) Target Path MUST be the vol referenced by vol ID
+				2) VolumeCapability MUST match
+				3) Readonly MUST match
+			*/
+			return &csi.NodePublishVolumeResponse{}, nil
+		}
+
+		if err := os.Mkdir(targetPath, os.FileMode(0755)); err != nil {
+			// Kubernetes is violating the CSI spec and creates the
+			// directory for us
+			// (https://github.com/kubernetes/kubernetes/issues/75535). We
+			// allow that by ignoring the "already exists" error.
+			if !os.IsExist(err) {
+				return nil, status.Error(codes.Internal, "make target dir: "+err.Error())
+			}
 		}
 	}
 
@@ -128,16 +155,16 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	attrib := req.GetVolumeContext()
 	mountFlags := req.GetVolumeCapability().GetMount().GetMountFlags()
 
-	klog.V(3).Infof("NodePublishVolume: id:%s targetpath:%v stagingtargetpath:%v readonly:%v attributes:%v mountflags:%v",
-		req.GetVolumeId(), targetPath, stagingtargetPath, readOnly, attrib, mountFlags)
+	klog.V(3).Infof("NodePublishVolume: \nsourcepath: %v\ntargetpath: %v\nreadonly: %v\nattributes: %v\n mountflags: %v\n",
+		sourcePath, targetPath, readOnly, attrib, mountFlags)
 
 	options := []string{"bind"}
 	if readOnly {
 		options = append(options, "ro")
 	}
-	klog.V(5).Infof("NodePublishVolume: bind-mount %s %s", stagingtargetPath, targetPath)
-	mounter := mount.New("")
-	if err := mounter.Mount(stagingtargetPath, targetPath, "", options); err != nil {
+	klog.V(5).Infof("NodePublishVolume: bind-mount %s %s", sourcePath, targetPath)
+
+	if err := mounter.Mount(sourcePath, targetPath, "", options); err != nil {
 		return nil, err
 	}
 
@@ -192,6 +219,13 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	if req.GetVolumeCapability() == nil {
 		return nil, status.Error(codes.InvalidArgument, "Volume capability missing in request")
 	}
+
+	// We should do nothing for block device usage
+	switch req.VolumeCapability.GetAccessType().(type) {
+	case *csi.VolumeCapability_Block:
+		return &csi.NodeStageVolumeResponse{}, nil
+	}
+
 	requestedFsType := req.GetVolumeCapability().GetMount().GetFsType()
 	if requestedFsType == "" {
 		// Default to ext4 filesystem
@@ -385,6 +419,23 @@ func determineFilesystemType(devicePath string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no filesystem type detected for %s", devicePath)
+}
+
+// ensureDirectory checks if the given directory is existing, if not attempts to create it.
+// retruns true, if direcotry pre-exists, otherwise false.
+func ensureDirectory(mounter mount.Interface, dir string) (bool, error) {
+	if _, err := os.Stat(dir); err != nil {
+		if os.IsNotExist(err) {
+			return true, nil
+		}
+		return false, status.Errorf(codes.Internal, "Failed to check existence of directory %q: %s", dir, err.Error())
+	}
+
+	if err := os.MkdirAll(dir, os.FileMode(0755)); err != nil && !os.IsExist(err) {
+		return false, status.Errorf(codes.Internal, "Could not create dir %q: %v", dir, err)
+	}
+
+	return false, nil
 }
 
 func (ns *nodeServer) NodeExpandVolume(context.Context, *csi.NodeExpandVolumeRequest) (*csi.NodeExpandVolumeResponse, error) {
