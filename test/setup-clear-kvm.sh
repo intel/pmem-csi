@@ -382,10 +382,15 @@ done
 # From https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/#pod-network
 _work/ssh-clear-kvm $PROXY_ENV kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/bc79dd1505b0c8681ece4de4c0d86c5cd2643275/Documentation/kube-flannel.yml
 
-# Install addon storage CRDs, needed if CSINodeInfo feature-gate enabled
-if [[ "$TEST_FEATURE_GATES" == *"CSINodeInfo=true"* ]]; then
-    _work/ssh-clear-kvm $PROXY_ENV kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/storage-crds/csidriver.yaml
-    _work/ssh-clear-kvm $PROXY_ENV kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/master/cluster/addons/storage-crds/csinodeinfo.yaml
+# Install addon storage CRDs, needed if certain feature gates are enabled.
+# Only applicable to Kubernetes 1.13 and older. 1.14 will have them as builtin APIs.
+if _work/ssh-clear-kvm $PROXY_ENV kubectl version | grep -q '^Server Version.*Major:"1", Minor:"1[0123]"'; then
+    if [[ "$TEST_FEATURE_GATES" == *"CSINodeInfo=true"* ]]; then
+        _work/ssh-clear-kvm $PROXY_ENV kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/release-1.13/cluster/addons/storage-crds/csidriver.yaml
+    fi
+    if [[ "$TEST_FEATURE_GATES" == *"CSIDriverRegistry=true"* ]]; then
+        _work/ssh-clear-kvm $PROXY_ENV kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/release-1.13/cluster/addons/storage-crds/csinodeinfo.yaml
+    fi
 fi
 
 # Run additional commands specified in config.
