@@ -428,6 +428,30 @@ machines, see the ["QEMU and Kubernetes"](#qemu-and-kubernetes) section below.
     $ kubectl label node <your node> storage=pmem
 ```
 
+- **Set up certificates**
+
+Certificates are required as explained in [Security](#security).
+If you are not using the test cluster described in
+[Starting and stopping a test cluster](#starting-and-stopping-a-test-cluster)
+where certificates are created automatically, you must set up certificates manually.
+This can be done by running the `./test/setup-ca-kubernetes.sh` script for your cluster.
+This script requires "cfssl" tools which can be downloaded.
+These are the steps for manual set-up of certificates:
+
+- Download cfssl tools
+
+```sh
+   $ curl -L https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 -o _work/bin/cfssl --create-dirs
+   $ curl -L https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64 -o _work/bin/cfssljson --create-dirs
+   $ chmod a+x _work/bin/cfssl _work/bin/cfssljson
+```
+
+- Run certificates set-up script
+
+```sh
+   $ KUBCONFIG="<<your cluster kubeconfig path>> PATH="$PATH:_work/bin" ./test/setup-ca-kubernetes.sh
+```
+
 - **Deploy the driver to Kubernetes using DeviceMode:LVM**
 
 ```sh
