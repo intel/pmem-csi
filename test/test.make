@@ -110,13 +110,13 @@ space:= $(empty) $(empty)
 test_e2e: start
 	KUBECONFIG=`pwd`/_work/clear-kvm-kube.config \
 	REPO_ROOT=`pwd` \
-	go test -count=1 -timeout 0 -v ./test/e2e -ginkgo.skip='$(subst $(space),|,$(TEST_E22_SKIP))'
+	$(TEST_CMD) -count=1 -timeout 0 -v ./test/e2e -ginkgo.skip='$(subst $(space),|,$(TEST_E22_SKIP))'
 
 .PHONY: run_tests
 test: run_tests
 run_tests: pmem-csi-driver _work/pmem-ca/.ca-stamp _work/evil-ca/.ca-stamp
 	TEST_WORK=$(abspath _work) \
-	$(TEST_CMD) $(shell go list $(TEST_ARGS) | sed -e 's;$(IMPORT_PATH);.;')
+	$(TEST_CMD) -cover $(shell go list $(TEST_ARGS) | sed -e 's;$(IMPORT_PATH);.;')
 
 _work/%/.ca-stamp: test/setup-ca.sh _work/.setupcfssl-stamp
 	rm -rf $(@D)
