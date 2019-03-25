@@ -33,7 +33,7 @@ rules:
   resources: [ "volumeattachments" ] #attacher 
   verbs: [ "get", "list", "watch", "update" ]
 - apiGroups: [ "csi.storage.k8s.io" ]
-  resources: [ "csinodeinfos" ] # attacher - {get, list, watch}
+  resources: [ "csinodeinfos" ] # attacher
   verbs: [ "get", "list", "watch" ]
 - apiGroups: [ "csi.storage.k8s.io" ]
   resources: [ "csidrivers" ] # driver-registrar
@@ -150,13 +150,9 @@ spec:
       - name: pmem-driver
         image: 192.168.8.1:5000/pmem-csi-driver:canary
         imagePullPolicy: Always
-        # Passing /dev to container may cause container creation error because termination-log is located on /dev/ by default.
-        # Adding this clause works around failure, although it's bogus as this file is not actually used.
-        terminationMessagePath: /tmp/termination-log
         args:  [ "-v=5",
                  "-drivername=pmem-csi.intel.com",
                  "-mode=controller",
-                 "-deviceManager=ndctl",
                  "-endpoint=unix:///csi/csi-controller.sock",
                  "-registryEndpoint=tcp://0.0.0.0:10000",
                  "-nodeid=$(KUBE_NODE_NAME)",
@@ -226,6 +222,8 @@ spec:
       - name: pmem-driver
         imagePullPolicy: Always
         image: 192.168.8.1:5000/pmem-csi-driver:canary
+        # Passing /dev to container may cause container creation error because termination-log is located on /dev/ by default.
+        # Adding this clause works around failure, although it's bogus as this file is not actually used.
         terminationMessagePath: /tmp/termination-log
         args: [ "-v=5",
                   "-drivername=pmem-csi.intel.com",
