@@ -479,7 +479,7 @@ list to ensure that it runs on the right node.
     
     $ kubectl exec my-csi-app -- df /data
     Filesystem           1K-blocks      Used Available Use% Mounted on
-    /dev/ndbus0region0/7a4cc7b2-ddd2-11e8-8275-0a580af40161
+    /dev/ndbus0region0fsdax/7a4cc7b2-ddd2-11e8-8275-0a580af40161
                            8191416     36852   7718752   0% /data
 ```
 
