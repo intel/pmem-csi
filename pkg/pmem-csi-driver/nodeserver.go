@@ -239,13 +239,19 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	// Without -c mounted path will look like /dev/mapper/... and its more difficult to match it to lvpath when unmounting
 	// TODO: perhaps what's explained above can be revisited-cleaned somehow
 
+	nsmode := pmemNamespaceModeFsdax //default volume namespace mode to fsdax
 	if params := req.GetVolumeContext(); params != nil {
-		// Add dax option if namespacemode == fsdax
-		if params[pmemParameterKeyNamespaceMode] == pmemNamespaceModeFsdax {
-			glog.Infof("NodeStageVolume: namespacemode FSDAX, add dax mount option")
-			args = append(args, "-o", "dax")
+		if v, ok := params[pmemParameterKeyNamespaceMode]; ok {
+			nsmode = v
 		}
 	}
+
+	if nsmode == pmemNamespaceModeFsdax {
+		glog.Infof("NodeStageVolume: namespacemode FSDAX, add dax mount option")
+		// Add dax option if namespacemode == fsdax
+		args = append(args, "-o", "dax")
+	}
+
 	args = append(args, device.Path, stagingtargetPath)
 	glog.Infof("NodeStageVolume: mount args: [%v]", args)
 	if _, err := pmemexec.RunCommand("mount", args...); err != nil {
