@@ -422,13 +422,11 @@ with at least one node that has persistent memory device(s). For development or
 testing, it is also possible to use a cluster that runs on QEMU virtual
 machines, see the ["QEMU and Kubernetes"](#qemu-and-kubernetes) section below.
 
-- **Label the cluster nodes that have persistent memory support**
+- **Label the cluster nodes that provide persistent memory device(s)**
 
 ```sh
-    $ kubectl label node pmem-csi-4 storage=pmem
+    $ kubectl label node <your node> storage=pmem
 ```
-
-The label **storage: pmem** needs to be added to the cluster node that provides persistent memory device(s).
 
 - **Deploy the driver to Kubernetes using DeviceMode:LVM**
 
@@ -481,7 +479,7 @@ list to ensure that it runs on the right node.
     
     $ kubectl exec my-csi-app -- df /data
     Filesystem           1K-blocks      Used Available Use% Mounted on
-    /dev/ndbus0region0/7a4cc7b2-ddd2-11e8-8275-0a580af40161
+    /dev/ndbus0region0fsdax/7a4cc7b2-ddd2-11e8-8275-0a580af40161
                            8191416     36852   7718752   0% /data
 ```
 
