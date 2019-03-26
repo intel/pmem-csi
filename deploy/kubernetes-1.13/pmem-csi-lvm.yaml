@@ -38,7 +38,6 @@ rules:
 - apiGroups: [ "csi.storage.k8s.io" ]
   resources: [ "csidrivers" ] # driver-registrar
   verbs: [ "create", "delete" ]
-
 # NOTE: cluster-driver-registrar v1.0.1 RBAC rules are broken and does not list
 # customresourcedefinitions in its RBAC rules:
 # https://github.com/kubernetes-csi/cluster-driver-registrar/blob/v1.0.1/deploy/kubernetes/rbac.yaml
@@ -238,6 +237,7 @@ spec:
         args: [ "-v=5",
                   "-drivername=pmem-csi.intel.com",
                   "-mode=node",
+                  "-deviceManager=lvm",
                   "-endpoint=$(CSI_ENDPOINT)",
                   "-nodeid=$(KUBE_NODE_NAME)",
                   "-controllerEndpoint=tcp://$(KUBE_POD_IP):10001",

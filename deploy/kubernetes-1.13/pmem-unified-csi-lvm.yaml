@@ -48,6 +48,7 @@ spec:
         args:  [ "-v=5",
                  "-drivername=pmem-csi.intel.com",
                  "-mode=unified",
+                 "-deviceManager=lvm",
                  "-endpoint=$(CSI_ENDPOINT)",
                  "-nodeid=$(KUBE_NODE_NAME)" ]
         env:
