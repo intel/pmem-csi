@@ -2,12 +2,28 @@ package pmdmanager
 
 import (
 	"fmt"
+	"sync"
 
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 	"k8s.io/klog/glog"
 	"os"
 	"strconv"
 )
+
+// Mutex protecting shared device access by threads running in parallel.
+// Create, Delete, Flush may operate on same phys.device from parallel threads.
+// The mutex is defined here and used in different device managers code.
+// Ndctl manager definitely will crash without this mutex protection
+// in 2-volume creation scenario on same Node.
+// For LVM manager, situation is likely not that risky,
+// but we use similar protection in LVM Manager for clarity and unified style,
+// as LVM state is also single instance for a Node.
+//
+// Note that while main idea is to protect against two parallel threads
+// accessing shared entity with different requests (like 2 creations), this
+// mutex also protects against repeated similar requests in different threads
+// which also have been seen when Kubernetes repeats operations rapidly.
+var devicemutex = &sync.Mutex{}
 
 func ClearDevice(device PmemDeviceInfo, flush bool) error {
 	glog.Infof("ClearDevice: path: %v flush:%v", device.Path, flush)

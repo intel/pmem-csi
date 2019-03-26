@@ -78,6 +78,8 @@ func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error 
 	if nsmode != string(ndctl.FsdaxMode) && nsmode != string(ndctl.SectorMode) {
 		return fmt.Errorf("Unknown nsmode(%v)", nsmode)
 	}
+	devicemutex.Lock()
+	defer devicemutex.Unlock()
 	// Check that such name does not exist. In certain error states, for example when
 	// namespace creation works but device zeroing fails (missing /dev/pmemX.Y in container),
 	// this function is asked to create new devices repeatedly, forcing running out of space.
@@ -129,6 +131,8 @@ func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error 
 }
 
 func (lvm *pmemLvm) DeleteDevice(name string, flush bool) error {
+	devicemutex.Lock()
+	defer devicemutex.Unlock()
 	device, err := lvm.GetDevice(name)
 	if err != nil {
 		return err
@@ -142,6 +146,8 @@ func (lvm *pmemLvm) DeleteDevice(name string, flush bool) error {
 }
 
 func (lvm *pmemLvm) FlushDeviceData(name string) error {
+	devicemutex.Lock()
+	defer devicemutex.Unlock()
 	device, err := lvm.GetDevice(name)
 	if err != nil {
 		return err
