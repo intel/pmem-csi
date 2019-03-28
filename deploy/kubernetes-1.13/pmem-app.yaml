@@ -10,8 +10,6 @@ spec:
       volumeMounts:
       - mountPath: "/data"
         name: my-csi-volume
-  nodeSelector:
-    storage: pmem
   volumes:
   - name: my-csi-volume
     persistentVolumeClaim:
@@ -29,8 +27,6 @@ spec:
       volumeMounts:
       - mountPath: "/data"
         name: my-csi-volume
-  nodeSelector:
-    storage: pmem
   volumes:
   - name: my-csi-volume
     persistentVolumeClaim:
