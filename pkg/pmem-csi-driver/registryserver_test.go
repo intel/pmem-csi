@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/container-storage-interface/spec/lib/go/csi"
 	pmemcsidriver "github.com/intel/pmem-csi/pkg/pmem-csi-driver"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
@@ -25,17 +24,6 @@ func init() {
 	klog.InitFlags(nil)
 	flag.Set("logtostderr", "true")
 	flag.Parse()
-}
-
-type mockNodeController struct {
-}
-
-func (m *mockNodeController) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
-	return &csi.ControllerPublishVolumeResponse{}, nil
-}
-
-func (m *mockNodeController) ControllerUnpublishVolume(ctx context.Context, req *csi.ControllerUnpublishVolumeRequest) (*csi.ControllerUnpublishVolumeResponse, error) {
-	return &csi.ControllerUnpublishVolumeResponse{}, nil
 }
 
 func TestPmemRegistry(t *testing.T) {
@@ -173,7 +161,7 @@ var _ = Describe("pmem registry", func() {
 			evilKey  = os.ExpandEnv("${TEST_WORK}/evil-ca/pmem-node-controller-key.pem")
 		)
 
-		// This covers different scenarios for connections to the OIM registry.
+		// This covers different scenarios for connections to the registry.
 		cases := []struct {
 			name, ca, cert, key, peerName, errorText string
 		}{
