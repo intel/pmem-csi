@@ -20,6 +20,12 @@ Table of Contents
 - [Notes about accessing system directories in a container](#notes-about-accessing-system-directories-in-a-container)
     - [Read-only access to /sys](#read-only-access-to-sys)
     - [Access to /dev of host](#access-to-dev-of-host)
+-   [Repository elements which are generated or created separately](#repository-elements-which-are-generated-or-created-separately)
+    -   [Top-level README diagrams describing LVM and Direct device modes](#top-level-readme-diagrams-describing-lvm-and-direct-device-modes)
+    -   [Top-level README diagram describing communication channels](#top-level-readme-diagram-describing-communication-channels)
+    -   [Diagrams describing provisioning sequence](#diagrams-describing-provisioning-sequence)
+    -   [RegistryServer spec](#registryserver-spec)
+    -   [Table of Contents in README and DEVELOPMENT](#table-of-contents-in-readme-and-development)
 
 Code quality
 ============
@@ -213,3 +219,63 @@ will not be visible inside container. The driver does not detect the
 root cause of that problem during start-up, but only when a volume
 creation has failed. This problem can be avoided by specifying
 explicit mount of /dev in the PMEM-CSI manifest.
+
+Repository elements which are generated or created separately
+=============================================================
+
+Here are creation and update notes for these elements in the repository
+which are not hand-edited
+
+Top-level README diagrams describing LVM and Direct device modes
+----------------------------------------------------------------
+Two diagrams are created using the [_dia_ drawing program](https://en.wikipedia.org/wiki/Dia_(software)).
+The [single source file](/docs/diagrams/pmem-csi.dia) has
+layers: {common, lvm, direct} so that two diagram variants can be produced from single source.
+Image files are produced by saving in PNG format with correct set of layers visible.
+The PNG files are committed as repository elements in docs/images/devicemodes/.
+
+Top-level README diagram describing communication channels
+----------------------------------------------------------
+This diagram was created using the [_dia_ drawing program](https://en.wikipedia.org/wiki/Dia_(software)).
+Image file is produced by saving in PNG format.
+The PNG file is committed as repository elements in docs/images/communication/.
+
+Diagrams describing provisioning sequence
+-----------------------------------------
+Two diagrams are generated using [plantuml program](http://plantuml.com/).
+Source files:
+- [source file for regular sequence](/docs/diagrams/sequence.wsd)
+- [source file for cache sequence](/docs/diagrams/sequence-cache.wsd)
+
+The PNG files are committed as repository elements in docs/images/sequence/.
+
+RegistryServer spec
+-------------------
+pkg/pmem-registry/pmem-registry.pb.go is generated from pkg/pmem-registry/pmem-registry.proto
+
+protoc comes from package _protobuf-compiler_ on Ubuntu 18.04
+- get protobuf for Go:
+```sh
+$ git clone https://github.com/golang/protobuf.git && cd protobuf
+$ make # installs needed binary in $GOPATH/bin/protoc-gen-go
+```
+
+- generate by running in ~/go/src/github.com/intel/pmem-csi/pkg/pmem-registry:
+```sh
+protoc --plugin=protoc-gen-go=$GOPATH/bin/protoc-gen-go --go_out=plugins=grpc:./ pmem-registry.proto
+```
+
+Table of Contents in README and DEVELOPMENT
+-------------------------------------------
+Table of Contents can be generated using multiple methods.
+- One possibility is to use [pandoc](https://pandoc.org/)
+
+```sh
+$ pandoc -s -t markdown_github --toc README.md -o /tmp/temp.md
+```
+
+Then check and hand-pick generated TOC part(s) from /tmp/temp.md and insert in desired location.
+Note that pandoc is known to produce incorrect TOC entries if headers contain special characters,
+means TOC generation will be more reliable if we avoid non-letter-or-number characters in the headers.
+
+- Another method is to use emacs package markdown-toc-generate-toc
