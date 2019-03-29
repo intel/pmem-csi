@@ -492,19 +492,30 @@ future, currently untested releases.
 ```
 
 The application uses **storage: pmem** in its <i>nodeSelector</i>
-list to ensure that it runs on the right node.
+list to ensure that it runs on the right node, and it requests mount of two volumes,
+one with ext4-format and another with xfs-format file system.
 
-- **Once the application pod is in 'Running' status, check that it has a pmem volume**
+- **Verify the application pod reaches 'Running' status**
 
 ```sh
     $ kubectl get po my-csi-app
     NAME                        READY     STATUS    RESTARTS   AGE
     my-csi-app                  1/1       Running   0          1m
-    
-    $ kubectl exec my-csi-app -- df /data
+```
+
+- **Check that application has two pmem volumes mounted with added dax option**
+
+```sh
+    $ kubectl exec my-csi-app -- df /data-ext4 /data-xfs
     Filesystem           1K-blocks      Used Available Use% Mounted on
-    /dev/ndbus0region0fsdax/7a4cc7b2-ddd2-11e8-8275-0a580af40161
-                           8191416     36852   7718752   0% /data
+    /dev/ndbus0region0fsdax/10c1dcbc-508a-11e9-934e-120f08717a12
+                           4062912     16376   3820440   0% /data-ext4
+    /dev/ndbus0region0fsdax/10a3673e-508a-11e9-934e-120f08717a12
+                           4184064     37264   4146800   1% /data-xfs
+
+    $ kubectl exec my-csi-app -- mount |grep /data
+    /dev/ndbus0region0fsdax/10c1dcbc-508a-11e9-934e-120f08717a12 on /data-ext4 type ext4 (rw,relatime,dax)
+    /dev/ndbus0region0fsdax/10a3673e-508a-11e9-934e-120f08717a12 on /data-xfs type xfs (rw,relatime,attr2,dax,inode64,noquota)
 ```
 
 <!-- FILL TEMPLATE:

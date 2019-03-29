@@ -8,11 +8,16 @@ spec:
       image: busybox
       command: [ "sleep", "100000" ]
       volumeMounts:
-      - mountPath: "/data"
-        name: my-csi-volume
+      - mountPath: "/data-ext4"
+        name: my-csi-volume-ext4
+      - mountPath: "/data-xfs"
+        name: my-csi-volume-xfs
   nodeSelector:
     storage: pmem
   volumes:
-  - name: my-csi-volume
+  - name: my-csi-volume-ext4
     persistentVolumeClaim:
-      claimName: pmem-csi-pvc
+      claimName: pmem-csi-pvc-ext4
+  - name: my-csi-volume-xfs
+    persistentVolumeClaim:
+      claimName: pmem-csi-pvc-xfs
