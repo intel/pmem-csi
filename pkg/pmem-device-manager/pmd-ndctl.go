@@ -65,6 +65,8 @@ func (pmem *pmemNdctl) GetCapacity() (map[string]uint64, error) {
 }
 
 func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) error {
+	devicemutex.Lock()
+	defer devicemutex.Unlock()
 	// Check that such name does not exist. In certain error states, for example when
 	// namespace creation works but device zeroing fails (missing /dev/pmemX.Y in container),
 	// this function is asked to create new devices repeatedly, forcing running out of space.
@@ -105,6 +107,8 @@ func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) err
 }
 
 func (pmem *pmemNdctl) DeleteDevice(name string, flush bool) error {
+	devicemutex.Lock()
+	defer devicemutex.Unlock()
 	device, err := pmem.GetDevice(name)
 	if err != nil {
 		return err
@@ -117,6 +121,8 @@ func (pmem *pmemNdctl) DeleteDevice(name string, flush bool) error {
 }
 
 func (pmem *pmemNdctl) FlushDeviceData(name string) error {
+	devicemutex.Lock()
+	defer devicemutex.Unlock()
 	device, err := pmem.GetDevice(name)
 	if err != nil {
 		return err
