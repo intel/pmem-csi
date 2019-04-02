@@ -473,49 +473,55 @@ The `deploy` directory contains one directory or symlink for each
 tested Kubernetes release. The most recent one might also work on
 future, currently untested releases.
 
-- **Define a storage class using the driver**
+- **Define two storage classes using the driver**
 
 ```sh
     $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-storageclass.yaml
 ```
 
-- **Provision a pmem-csi volume**
+- **Provision two pmem-csi volumes**
 
 ```sh
     $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-pvc.yaml
 ```
 
-- **Start an application requesting provisioned volume**
+- **Start two applications requesting one provisioned volume each**
 
 ```sh
-    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-app.yaml
+    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-app-1.yaml
+    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-app-2.yaml
 ```
 
-The application uses **storage: pmem** in its <i>nodeSelector</i>
-list to ensure that it runs on the right node, and it requests mount of two volumes,
+These applications use **storage: pmem** in the <i>nodeSelector</i>
+list to ensure scheduling to a node supporting pmem device, and each requests a mount of a volume,
 one with ext4-format and another with xfs-format file system.
 
-- **Verify the application pod reaches 'Running' status**
+- **Verify two application pods reach 'Running' status**
 
 ```sh
-    $ kubectl get po my-csi-app
-    NAME                        READY     STATUS    RESTARTS   AGE
-    my-csi-app                  1/1       Running   0          1m
+    $ kubectl get po my-csi-app-1 my-csi-app-2
+    NAME           READY   STATUS    RESTARTS   AGE
+    my-csi-app-1   1/1     Running   0          6m5s
+    NAME           READY   STATUS    RESTARTS   AGE
+    my-csi-app-2   1/1     Running   0          6m1s
 ```
 
-- **Check that application has two pmem volumes mounted with added dax option**
+- **Check that applications have a pmem volume mounted with added dax option**
 
 ```sh
-    $ kubectl exec my-csi-app -- df /data-ext4 /data-xfs
+    $ kubectl exec my-csi-app-1 -- df /data
     Filesystem           1K-blocks      Used Available Use% Mounted on
-    /dev/ndbus0region0fsdax/10c1dcbc-508a-11e9-934e-120f08717a12
-                           4062912     16376   3820440   0% /data-ext4
-    /dev/ndbus0region0fsdax/10a3673e-508a-11e9-934e-120f08717a12
-                           4184064     37264   4146800   1% /data-xfs
+    /dev/ndbus0region0fsdax/5ccaa889-551d-11e9-a584-928299ac4b17
+                           4062912     16376   3820440   0% /data
+    $ kubectl exec my-csi-app-2 -- df /data
+    Filesystem           1K-blocks      Used Available Use% Mounted on
+    /dev/ndbus0region0fsdax/5cc9b19e-551d-11e9-a584-928299ac4b17
+                           4184064     37264   4146800   1% /data
 
-    $ kubectl exec my-csi-app -- mount |grep /data
-    /dev/ndbus0region0fsdax/10c1dcbc-508a-11e9-934e-120f08717a12 on /data-ext4 type ext4 (rw,relatime,dax)
-    /dev/ndbus0region0fsdax/10a3673e-508a-11e9-934e-120f08717a12 on /data-xfs type xfs (rw,relatime,attr2,dax,inode64,noquota)
+    $ kubectl exec my-csi-app-1 -- mount |grep /data
+    /dev/ndbus0region0fsdax/5ccaa889-551d-11e9-a584-928299ac4b17 on /data type ext4 (rw,relatime,dax)
+    $ kubectl exec my-csi-app-2 -- mount |grep /data
+    /dev/ndbus0region0fsdax/5cc9b19e-551d-11e9-a584-928299ac4b17 on /data type xfs (rw,relatime,attr2,dax,inode64,noquota)
 ```
 
 <!-- FILL TEMPLATE:
