@@ -476,7 +476,8 @@ future, currently untested releases.
 - **Define two storage classes using the driver**
 
 ```sh
-    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-storageclass.yaml
+    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-storageclass-ext4.yaml
+    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-storageclass-xfs.yaml
 ```
 
 - **Provision two pmem-csi volumes**
