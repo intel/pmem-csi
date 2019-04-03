@@ -4,9 +4,10 @@ metadata:
   name: pmem-csi-sc-ext4
 provisioner: pmem-csi.intel.com
 reclaimPolicy: Delete
-volumeBindingMode: WaitForFirstConsumer
+volumeBindingMode: Immediate
 parameters:
   fsType: ext4
+  eraseafter: "true"
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
@@ -14,6 +15,7 @@ metadata:
   name: pmem-csi-sc-xfs
 provisioner: pmem-csi.intel.com
 reclaimPolicy: Delete
-volumeBindingMode: WaitForFirstConsumer
+volumeBindingMode: Immediate
 parameters:
   fsType: xfs
+  eraseafter: "false"
