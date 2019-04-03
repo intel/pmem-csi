@@ -93,13 +93,17 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 	// We recognize eraseafter=false/true, defaulting to true
 	if params := req.GetParameters(); params != nil {
 		if val, ok := params[pmemParameterKeyEraseAfter]; ok {
-			if bVal, err := strconv.ParseBool(val); err != nil {
+			if bVal, err := strconv.ParseBool(val); err == nil {
 				eraseafter = bVal
+			} else {
+				glog.Warningf("Ignoring parameter %s:%s, reason: %s", pmemParameterKeyEraseAfter, val, err.Error())
 			}
 		}
 		if val, ok := params[pmemParameterKeyNamespaceMode]; ok {
 			if val == pmemNamespaceModeFsdax || val == pmemNamespaceModeSector {
 				nsmode = val
+			} else {
+				glog.Warningf("Ignoring parameter %s:%s, reason: unknown namespace mode", pmemParameterKeyNamespaceMode, val)
 			}
 		}
 		if val, ok := params["_id"]; ok {
