@@ -91,6 +91,17 @@ RUNTIME_DEPS += sed \
 # Ignore duplicates.
 RUNTIME_DEPS += LC_ALL=C LANG=C sort -u
 
+# E2E tests which are known to be unsuitable (space separated list of regular expressions).
+TEST_E22_SKIP = no-such-test
+
+# The test's check whether a driver supports multiple nodes is incomplete and does
+# not work for the topology-based single-node access in PMEM-CSI:
+# https://github.com/kubernetes/kubernetes/blob/25ffbe633810609743944edd42d164cd7990071c/test/e2e/storage/testsuites/provisioning.go#L175-L181
+TEST_E22_SKIP += should.access.volume.from.different.nodes
+
+empty:=
+space:= $(empty) $(empty)
+
 # E2E testing relies on a running QEMU test cluster. It therefore starts it,
 # but because it might have been running already and might have to be kept
 # running to debug test failures, it doesn't stop it.
@@ -101,7 +112,7 @@ test_e2e: start
 	TEST_DEVICEMODE=$$TEST_DEVICEMODE \
 	KUBECONFIG=`pwd`/_work/clear-kvm-kube.config \
 	REPO_ROOT=`pwd` \
-	go test -count=1 -timeout 0 -v ./test/e2e
+	go test -count=1 -timeout 0 -v ./test/e2e -ginkgo.skip='$(subst $(space),|,$(TEST_E22_SKIP))'
 
 .PHONY: run_tests
 test: run_tests

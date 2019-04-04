@@ -355,3 +355,7 @@ func determineFilesystemType(devicePath string) (string, error) {
 	}
 	return "", fmt.Errorf("no filesystem type detected for %s", devicePath)
 }
+
+func (ns *nodeServer) NodeExpandVolume(context.Context, *csi.NodeExpandVolumeRequest) (*csi.NodeExpandVolumeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}

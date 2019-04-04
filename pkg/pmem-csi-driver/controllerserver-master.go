@@ -435,3 +435,7 @@ func (cs *masterController) getVolumeByName(Name string) *pmemVolume {
 	}
 	return nil
 }
+
+func (cs *masterController) ControllerExpandVolume(context.Context, *csi.ControllerExpandVolumeRequest) (*csi.ControllerExpandVolumeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
