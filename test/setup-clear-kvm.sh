@@ -375,8 +375,9 @@ fi
 ${TEST_CONFIGURE_POST_MASTER}
 
 # Let the other machines join the cluster.
+# Join multi-lines using 'sed' so that grep finds whole line
 for i in $(seq 1 $LAST_NODE); do
-    _work/ssh-clear-kvm.$i $(grep "kubeadm join.*token" _work/clear-kvm-kubeadm.0.log) $kubeadm_args
+    _work/ssh-clear-kvm.$i $(sed -z 's/\\\n//g' _work/clear-kvm-kubeadm.0.log |grep "kubeadm join.*token" ) $kubeadm_args
 done
 
 # From https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/#pod-network
