@@ -17,15 +17,12 @@ limitations under the License.
 package storage
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
-	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/test/e2e/framework"
-	"k8s.io/kubernetes/test/e2e/framework/podlogs"
 	"k8s.io/kubernetes/test/e2e/storage/testpatterns"
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
 	"k8s.io/kubernetes/test/e2e/storage/utils"
@@ -49,34 +46,6 @@ func csiTunePattern(patterns []testpatterns.TestPattern) []testpatterns.TestPatt
 }
 
 var _ = Describe("PMEM Volumes", func() {
-	f := framework.NewDefaultFramework("pmem")
-
-	var (
-		cs     clientset.Interface
-		cancel context.CancelFunc
-	)
-
-	BeforeEach(func() {
-		cs = f.ClientSet
-		// Must be done this way to keep "go vet" happy.
-		ctx, cncl := context.WithCancel(context.Background())
-		cancel = cncl
-
-		// This assumes that the pmem-csi driver got installed in the default namespace.
-		to := podlogs.LogOutput{
-			StatusWriter: GinkgoWriter,
-			LogWriter:    GinkgoWriter,
-		}
-		podlogs.CopyAllLogs(ctx, cs, "default", to)
-		podlogs.WatchPods(ctx, cs, "default", GinkgoWriter)
-	})
-
-	AfterEach(func() {
-		if cancel != nil {
-			cancel()
-		}
-	})
-
 	// List of testDrivers to be executed in below loop
 	var csiTestDrivers = []func() testsuites.TestDriver{
 		// pmem-csi

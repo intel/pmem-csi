@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"context"
 	"testing"
 
 	"github.com/onsi/ginkgo"
@@ -26,6 +27,7 @@ import (
 	"k8s.io/kubernetes/pkg/version"
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/framework/ginkgowrapper"
+	"k8s.io/kubernetes/test/e2e/framework/podlogs"
 )
 
 // There are certain operations we only want to run once per overall test invocation
@@ -91,6 +93,18 @@ var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 
 	// Log the version of the server and this client.
 	framework.Logf("e2e test version: %s", version.Get().GitVersion)
+
+	// PMEM-CSI needs to be installed already in the cluster, running in the default
+	// namespace. We want to see what the pods are doing while the test runs. This
+	// isn't perfect because we will get a dump also of log output from before the
+	// E2E test run, but better than nothing.
+	ctx := context.Background()
+	to := podlogs.LogOutput{
+		StatusWriter: ginkgo.GinkgoWriter,
+		LogWriter:    ginkgo.GinkgoWriter,
+	}
+	podlogs.CopyAllLogs(ctx, c, "default", to)
+	podlogs.WatchPods(ctx, c, "default", ginkgo.GinkgoWriter)
 
 	dc := c.DiscoveryClient
 

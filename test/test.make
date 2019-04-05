@@ -108,8 +108,6 @@ space:= $(empty) $(empty)
 # Use count=1 to avoid test results caching, does not make sense for e2e test.
 .PHONY: test_e2e
 test_e2e: start
-	. test/test-config.sh && \
-	TEST_DEVICEMODE=$$TEST_DEVICEMODE \
 	KUBECONFIG=`pwd`/_work/clear-kvm-kube.config \
 	REPO_ROOT=`pwd` \
 	go test -count=1 -timeout 0 -v ./test/e2e -ginkgo.skip='$(subst $(space),|,$(TEST_E22_SKIP))'

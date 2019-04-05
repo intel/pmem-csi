@@ -1,0 +1,11 @@
+- op: add
+  path: /spec/template/spec/containers/-
+  value:
+    name: socat
+    image: alpine/socat:1.0.3
+    args:
+    - tcp-listen:10001,fork,reuseaddr
+    - unix-connect:/csi/csi-controller.sock
+    volumeMounts:
+    - mountPath: /csi
+      name: plugin-socket-dir

@@ -40,7 +40,7 @@ start: _work/clear-kvm.img _work/kube-clear-kvm _work/start-clear-kvm _work/ssh-
 		touch _work/clear-kvm.secretsdone; \
 	fi
 	_work/ssh-clear-kvm kubectl version --short | grep 'Server Version' | sed -e 's/.*: v\([0-9]*\)\.\([0-9]*\)\..*/\1.\2/' >_work/clear-kvm-kubernetes.version
-	( . test/test-config.sh && _work/ssh-clear-kvm kubectl apply -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-csi-$${TEST_DEVICEMODE}.yaml )
+	( . test/test-config.sh && _work/ssh-clear-kvm kubectl apply -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-csi-$${TEST_DEVICEMODE}-testing.yaml )
 	_work/ssh-clear-kvm kubectl apply -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-storageclass-ext4.yaml
 	_work/ssh-clear-kvm kubectl apply -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-storageclass-xfs.yaml
 	_work/ssh-clear-kvm kubectl apply -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-storageclass-cache.yaml

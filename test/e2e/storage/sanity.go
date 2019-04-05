@@ -17,18 +17,15 @@ limitations under the License.
 package storage
 
 import (
-	"context"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/kubernetes-csi/csi-test/pkg/sanity"
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/test/e2e/framework"
-	"k8s.io/kubernetes/test/e2e/framework/podlogs"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -38,92 +35,87 @@ import (
 // unified mode.
 var _ = Describe("sanity", func() {
 	f := framework.NewDefaultFramework("pmem")
+	f.SkipNamespaceCreation = true // We don't need a per-test namespace and skipping it makes the tests run faster.
 
 	var (
 		cleanup func()
 		config  = sanity.Config{
 			TestVolumeSize: 1 * 1024 * 1024,
+			// The actual directories will be created as unique
+			// temp directories inside these directories.
+			// We intentionally do not use the real /var/lib/kubelet/pods as
+			// root for the target path, because kubelet is monitoring it
+			// and deletes all extra entries that it does not know about.
+			TargetPath:  "/var/lib/kubelet/plugins/kubernetes.io/csi/pv/pmem-sanity-target.XXXXXX",
+			StagingPath: "/var/lib/kubelet/plugins/kubernetes.io/csi/pv/pmem-sanity-staging.XXXXXX",
 		}
-		targetTmp string
-		cancel    context.CancelFunc
 	)
 
 	BeforeEach(func() {
 		cs := f.ClientSet
-		ns := f.Namespace
-		ctx, c := context.WithCancel(context.Background())
-		cancel = c
-		to := podlogs.LogOutput{
-			StatusWriter: GinkgoWriter,
-			LogWriter:    GinkgoWriter,
+
+		// This test expects that PMEM-CSI was deployed with
+		// socat port forwarding enabled (see deploy/kustomize/testing/README.md).
+		hosts, err := framework.NodeSSHHosts(cs)
+		Expect(err).NotTo(HaveOccurred(), "failed to find external/internal IPs for every node")
+		if len(hosts) <= 1 {
+			framework.Failf("not enough nodes with external IP")
 		}
-		podlogs.CopyAllLogs(ctx, cs, ns.Name, to)
-		podlogs.WatchPods(ctx, cs, ns.Name, GinkgoWriter)
+		// Node #1 is expected to have a PMEM-CSI node driver
+		// instance. If it doesn't, connecting to the PMEM-CSI
+		// node service will fail.
+		host := strings.Split(hosts[1], ":")[0] // Instead of duplicating the NodeSSHHosts logic we simply strip the ssh port.
+		config.Address = fmt.Sprintf("dns:///%s:%d", host, 9735)
+		config.ControllerAddress = fmt.Sprintf("dns:///%s:%d", host, getServicePort(cs, "pmem-csi-controller-testing"))
 
-		By("deploying pmem-csi")
-		// The "unified" mode is needed only because of https://github.com/kubernetes-csi/csi-test/issues/142.
-		// TODO (?): address that issue, then remove "unified" mode to make the driver simpler
-		// and sanity testing more realistic.
-		// TODO: use the already deployed driver. That also gets rid of the hard-coded version number.
-		cl, err := f.CreateFromManifests(func(item interface{}) error {
-			switch item := item.(type) {
-			case *appsv1.StatefulSet:
-				// Lock the unified driver onto a well-known host. We need to know that
-				// for ssh below.
-				item.Spec.Template.Spec.NodeName = "host-1"
+		// Wait for socat pod on that node. We need it for
+		// creating directories.  We could use the PMEM-CSI
+		// node container, but that then forces us to have
+		// mkdir and rmdir in that container, which we might
+		// not want long-term.
+		socat := getAppInstance(cs, "pmem-csi-node-testing", host)
+
+		// Determine how many nodes have the CSI-PMEM running.
+		set := getDaemonSet(cs, "pmem-csi-node")
+
+		// We have to ensure that volumes get provisioned on
+		// the host were we can do the node operations. We do
+		// that by creating cache volumes on each node.
+		config.TestVolumeParameters = map[string]string{
+			"persistencyModel": "cache",
+			"cacheSize":        fmt.Sprintf("%d", set.Status.DesiredNumberScheduled),
+		}
+
+		exec := func(args ...string) string {
+			// f.ExecCommandInContainerWithFullOutput assumes that we want a pod in the test's namespace,
+			// so we have to set one.
+			f.Namespace = &v1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
 			}
+			stdout, stderr, err := f.ExecCommandInContainerWithFullOutput(socat.Name, "socat", args...)
+			framework.ExpectNoError(err, "%s in socat container, stderr:\n%s", args, stderr)
+			Expect(stderr).To(BeEmpty(), "unexpected stderr from %s in socat container", args)
+			return stdout
+		}
+		mkdir := func(path string) (string, error) {
+			return exec("mktemp", "-d", path), nil
+		}
+		rmdir := func(path string) error {
+			exec("rmdir", path)
 			return nil
-		},
-			"deploy/kubernetes-1.13/pmem-unified-csi-" + os.Getenv("TEST_DEVICEMODE") + ".yaml",
-		)
-		Expect(err).NotTo(HaveOccurred())
-		cleanup = cl
+		}
 
-		targetTmp = ssh("mktemp", "-d", "-p", "/var/tmp")
-		targetTmp = strings.Trim(targetTmp, "\n")
-		config.TargetPath = filepath.Join(targetTmp, "target")
-		config.StagingPath = filepath.Join(targetTmp, "staging")
-
-		// The sanity packages creates these directories locally, but they are needed
-		// inside the cluster (https://github.com/kubernetes-csi/csi-test/issues/144).
-		// We work around that by creating them ourselves. However, the sanity package
-		// will also do that locally under /var/tmp, which therefore must exist
-		// and be writable.
-		ssh("mkdir", "-p", config.TargetPath)
-		ssh("mkdir", "-p", config.StagingPath)
-
-		// Wait for pod before proceeding. StatefulSet gives
-		// us a well-known name that we can wait for.
-		f.WaitForPodRunning("pmem-csi-unified-0")
-
-		// We let Kubernetes pick a new port for each test run dynamically.
-		// That way we don't need to hard-code something that might
-		// not be allowed by the kubelet configuration and more importantly,
-		// whatever connection reuse logic is implemented in gRPC and
-		// csi-test gets avoided. Such logic only works when dropped
-		// connections are detected quickly, which didn't seem to be
-		// the case when using a fixed port.
-		var port int32
-		Eventually(func() bool {
-			service, err := cs.CoreV1().Services(f.Namespace.Name).Get("pmem-unified", metav1.GetOptions{})
-			if err != nil {
-				return false
-			}
-			port = service.Spec.Ports[0].NodePort
-			return port != 0
-		}, "3m").Should(BeTrue(), "pmem-csi service running")
-		config.Address = fmt.Sprintf("192.168.8.2:%d", port)
+		config.CreateTargetDir = mkdir
+		config.CreateStagingDir = mkdir
+		config.RemoveTargetPath = rmdir
+		config.RemoveStagingPath = rmdir
 	})
 
 	AfterEach(func() {
-		if cancel != nil {
-			cancel()
-		}
 		if cleanup != nil {
 			cleanup()
-		}
-		if targetTmp != "" {
-			ssh("rm", "-rf", targetTmp)
 		}
 	})
 	// This adds several tests that just get skipped.
@@ -131,10 +123,47 @@ var _ = Describe("sanity", func() {
 	sanity.GinkgoTest(&config)
 })
 
-func ssh(args ...string) string {
-	sshWrapper := os.ExpandEnv("${REPO_ROOT}/_work/ssh-clear-kvm.1")
-	cmd := exec.Command(sshWrapper, args...)
-	out, err := cmd.CombinedOutput()
-	Expect(err).NotTo(HaveOccurred(), "%s %s failed with error %s: %s", sshWrapper, args, err, out)
-	return string(out)
+func getServicePort(cs clientset.Interface, serviceName string) int32 {
+	var port int32
+	Eventually(func() bool {
+		service, err := cs.CoreV1().Services("default").Get(serviceName, metav1.GetOptions{})
+		if err != nil {
+			return false
+		}
+		port = service.Spec.Ports[0].NodePort
+		return port != 0
+	}, "3m").Should(BeTrue(), "%s service running", serviceName)
+	return port
+}
+
+func getAppInstance(cs clientset.Interface, app string, ip string) *v1.Pod {
+	var pod *v1.Pod
+	Eventually(func() bool {
+		pods, err := cs.CoreV1().Pods("default").List(metav1.ListOptions{})
+		if err != nil {
+			return false
+		}
+		for _, p := range pods.Items {
+			if p.Labels["app"] == app &&
+				(p.Status.HostIP == ip || p.Status.PodIP == ip) {
+				pod = &p
+				return true
+			}
+		}
+		return false
+	}, "3m").Should(BeTrue(), "%s app running on host %s", app, ip)
+	return pod
+}
+
+func getDaemonSet(cs clientset.Interface, setName string) *appsv1.DaemonSet {
+	var set *appsv1.DaemonSet
+	Eventually(func() bool {
+		s, err := cs.AppsV1().DaemonSets("default").Get(setName, metav1.GetOptions{})
+		if err != nil {
+			return false
+		}
+		set = s
+		return set != nil
+	}, "3m").Should(BeTrue(), "%s pod running", setName)
+	return set
 }
