@@ -293,7 +293,7 @@ func (cs *masterController) ControllerPublishVolume(ctx context.Context, req *cs
 	state, ok := vol.nodeIDs[req.NodeId]
 	if !ok {
 		// This should not happen as we locked the topology while volume creation
-		return nil, status.Error(codes.FailedPrecondition, "Volume cannot be published on requested node "+req.NodeId)
+		return nil, status.Error(codes.NotFound, "Volume cannot be published on requested node "+req.NodeId)
 	} else if state == Attached {
 		return nil, status.Error(codes.AlreadyExists, "Volume already published on requested node "+req.NodeId)
 	} else {
