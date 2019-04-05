@@ -422,10 +422,39 @@ with at least one node that has persistent memory device(s). For development or
 testing, it is also possible to use a cluster that runs on QEMU virtual
 machines, see the ["QEMU and Kubernetes"](#qemu-and-kubernetes) section below.
 
+- **Make sure that the alpha feature gates CSINodeInfo and CSIDriverRegistry are enabled**
+
+The method to configure alpha feature gates may vary, depending on the Kubernetes deployment.
+
 - **Label the cluster nodes that provide persistent memory device(s)**
 
 ```sh
     $ kubectl label node <your node> storage=pmem
+```
+
+- **Verify that the node labels have been configured correctly**
+
+```sh
+    $ kubectl get nodes --show-labels
+```
+
+The command output must indicate that every node with PMEM has these two labels:
+```
+pmem-csi.intel.com/node=<NODE-NAME>,storage=pmem
+```
+
+If **storage=pmem** is missing, label manually as described above. If **pmem-csi.intel.com/node** is missing, then double-check that the alpha feature gates are enabled and the CSI driver is running.
+
+- **Install add-on storage CRDs if using Kubernetes 1.13 or 1.14**
+
+If you are not using the test cluster described in
+[Starting and stopping a test cluster](#starting-and-stopping-a-test-cluster)
+where CRDs are installed automatically, you must install those manually.
+Note: This is a temporary solution that will be removed once the Kubernetes CSI sidecars for Kubernetes 1.14 are released.
+
+```sh
+   $ kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/release-1.13/cluster/addons/storage-crds/csidriver.yaml
+   $ kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/release-1.13/cluster/addons/storage-crds/csinodeinfo.yaml
 ```
 
 - **Set up certificates**
