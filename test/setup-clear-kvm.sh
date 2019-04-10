@@ -387,10 +387,10 @@ _work/ssh-clear-kvm $PROXY_ENV kubectl apply -f https://raw.githubusercontent.co
 # Only applicable to Kubernetes 1.13 and older. 1.14 will have them as builtin APIs.
 if _work/ssh-clear-kvm $PROXY_ENV kubectl version | grep -q '^Server Version.*Major:"1", Minor:"1[0123]"'; then
     if [[ "$TEST_FEATURE_GATES" == *"CSINodeInfo=true"* ]]; then
-        _work/ssh-clear-kvm $PROXY_ENV kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/release-1.13/cluster/addons/storage-crds/csidriver.yaml
+        _work/ssh-clear-kvm $PROXY_ENV kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/release-1.13/cluster/addons/storage-crds/csinodeinfo.yaml
     fi
     if [[ "$TEST_FEATURE_GATES" == *"CSIDriverRegistry=true"* ]]; then
-        _work/ssh-clear-kvm $PROXY_ENV kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/release-1.13/cluster/addons/storage-crds/csinodeinfo.yaml
+        _work/ssh-clear-kvm $PROXY_ENV kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/release-1.13/cluster/addons/storage-crds/csidriver.yaml
     fi
 fi
 
