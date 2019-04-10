@@ -489,8 +489,7 @@ future, currently untested releases.
 - **Start two applications requesting one provisioned volume each**
 
 ```sh
-    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-app-1.yaml
-    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-app-2.yaml
+    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-app.yaml
 ```
 
 These applications use **storage: pmem** in the <i>nodeSelector</i>
