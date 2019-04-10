@@ -385,7 +385,8 @@ _work/ssh-clear-kvm $PROXY_ENV kubectl apply -f https://raw.githubusercontent.co
 
 # Install addon storage CRDs, needed if certain feature gates are enabled.
 # Only applicable to Kubernetes 1.13 and older. 1.14 will have them as builtin APIs.
-if _work/ssh-clear-kvm $PROXY_ENV kubectl version | grep -q '^Server Version.*Major:"1", Minor:"1[0123]"'; then
+# Temporarily install also on 1.14 until we migrate to sidecars which use the builtin beta API.
+if _work/ssh-clear-kvm $PROXY_ENV kubectl version | grep -q '^Server Version.*Major:"1", Minor:"1[01234]"'; then
     if [[ "$TEST_FEATURE_GATES" == *"CSINodeInfo=true"* ]]; then
         _work/ssh-clear-kvm $PROXY_ENV kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/release-1.13/cluster/addons/storage-crds/csinodeinfo.yaml
     fi
