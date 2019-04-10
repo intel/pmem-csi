@@ -42,7 +42,7 @@
 
 [[constraint]]
   name = "github.com/kubernetes-csi/csi-test"
-  version = "2.0.0"
+  branch = "master"
 
 # We have to select the right version by name because of the "kubernetes-" prefix, dep doesn't
 # recognize these as normal releases. Upstream is considering to change the tagging,
