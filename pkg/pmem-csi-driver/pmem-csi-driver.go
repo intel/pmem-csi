@@ -197,7 +197,7 @@ func (pmemd *pmemDriver) Run() error {
 			if err := pmemd.registerNodeController(); err != nil {
 				return err
 			}
-			if err := s.Start(pmemd.cfg.Endpoint, nil, ids, ns); err != nil {
+			if err := s.Start(pmemd.cfg.Endpoint, nil, ids, ns, cs /* cs only needed for testing */); err != nil {
 				return err
 			}
 		} else {

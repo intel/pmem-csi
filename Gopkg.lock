@@ -273,15 +273,15 @@
   version = "v0.6.1"
 
 [[projects]]
-  digest = "1:ff940aa6271f079bc9ca6b2662f1f1ec11d40b3b95d85d9f650ea90ee354f234"
+  branch = "master"
+  digest = "1:b9478f88c7897df2b4666aeaba4968c20bb0d434590afd7175776a64a7304746"
   name = "github.com/kubernetes-csi/csi-test"
   packages = [
     "pkg/sanity",
     "utils",
   ]
   pruneopts = "UT"
-  revision = "5421d9f3c37be3b95b241b44a094a3db11bee789"
-  version = "v2.0.0"
+  revision = "e1f2421c7f0a0cc7f9942fea1192392f253891db"
 
 [[projects]]
   branch = "master"
@@ -1407,6 +1407,7 @@
     "google.golang.org/grpc/resolver",
     "google.golang.org/grpc/status",
     "k8s.io/api/apps/v1",
+    "k8s.io/api/core/v1",
     "k8s.io/api/storage/v1",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
     "k8s.io/apimachinery/pkg/runtime/schema",
