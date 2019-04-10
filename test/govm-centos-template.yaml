@@ -1,0 +1,14 @@
+  - name: __HOST__
+    image: _work/__IMAGE__
+    cloud: true
+    flavor: medium
+    sshkey: ~/.ssh/id_rsa.pub
+    user-data: |
+      #!/bin/bash
+      echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
+      cp /home/centos/.ssh/authorized_keys /root/.ssh/authorized_keys
+      systemctl restart sshd
+    ContainerEnvVars:
+      - |
+        KVM_CPU_OPTS=
+        -m 2G,slots=2,maxmem=34G -smp 2 -machine pc
