@@ -44,8 +44,11 @@ start: _work/clear-kvm.img _work/kube-clear-kvm _work/start-clear-kvm _work/ssh-
 	if ! _work/ssh-clear-kvm kubectl get statefulset.apps/pmem-csi-controller daemonset.apps/pmem-csi >/dev/null 2>&1; then \
 		_work/ssh-clear-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-csi-$${TEST_DEVICEMODE}.yaml; \
 	fi
-	if ! _work/ssh-clear-kvm kubectl get storageclass/pmem-csi-sc >/dev/null 2>&1; then \
-		_work/ssh-clear-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-storageclass.yaml; \
+	if ! _work/ssh-clear-kvm kubectl get storageclass/pmem-csi-sc-ext4 >/dev/null 2>&1; then \
+		_work/ssh-clear-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-storageclass-ext4.yaml; \
+	fi
+	if ! _work/ssh-clear-kvm kubectl get storageclass/pmem-csi-sc-xfs >/dev/null 2>&1; then \
+		_work/ssh-clear-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-storageclass-xfs.yaml; \
 	fi
 	if ! _work/ssh-clear-kvm kubectl get storageclass/pmem-csi-sc-cache >/dev/null 2>&1; then \
 		_work/ssh-clear-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-storageclass-cache.yaml; \

@@ -1,0 +1,37 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: my-csi-app-1
+spec:
+  containers:
+    - name: my-frontend
+      image: busybox
+      command: [ "sleep", "100000" ]
+      volumeMounts:
+      - mountPath: "/data"
+        name: my-csi-volume
+  nodeSelector:
+    storage: pmem
+  volumes:
+  - name: my-csi-volume
+    persistentVolumeClaim:
+      claimName: pmem-csi-pvc-ext4
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: my-csi-app-2
+spec:
+  containers:
+    - name: my-frontend
+      image: busybox
+      command: [ "sleep", "100000" ]
+      volumeMounts:
+      - mountPath: "/data"
+        name: my-csi-volume
+  nodeSelector:
+    storage: pmem
+  volumes:
+  - name: my-csi-volume
+    persistentVolumeClaim:
+      claimName: pmem-csi-pvc-xfs
