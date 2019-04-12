@@ -1,0 +1,176 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pmem-csi-controller
+  namespace: default
+---
+# Required by StatefulSet, not actually used. See
+# https://github.com/kubernetes/kubernetes/issues/69608.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pmem-csi-controller
+spec:
+  selector:
+    app: pmem-csi-controller
+  ports:
+  - port: 10000
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pmem-csi-controller
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pmem-csi-controller
+  serviceName: pmem-csi-controller
+  template:
+    metadata:
+      labels:
+        app: pmem-csi-controller
+    spec:
+      serviceAccount: pmem-csi-controller
+      containers:
+      - name: external-provisioner
+        imagePullPolicy: Always
+        image: quay.io/k8scsi/csi-provisioner:v1.X.Y
+        args: [ "--v=5", "--provisioner=pmem-csi.intel.com", "--csi-address=/csi/csi-controller.sock", "--feature-gates=Topology=true" ]
+        volumeMounts:
+        - name: plugin-socket-dir
+          mountPath: /csi
+      - name: external-attacher
+        imagePullPolicy: Always
+        image: quay.io/k8scsi/csi-attacher:v1.X.Y
+        args: [ "--v=5", "--csi-address=/csi/csi-controller.sock" ]
+        volumeMounts:
+        - name: plugin-socket-dir
+          mountPath: /csi
+      - name: pmem-driver
+        image: 192.168.8.1:5000/pmem-csi-driver:canary
+        imagePullPolicy: Always
+        args:  [ "-v=5",
+                 "-drivername=pmem-csi.intel.com",
+                 "-mode=controller",
+                 "-endpoint=unix:///csi/csi-controller.sock",
+                 "-registryEndpoint=tcp://0.0.0.0:10000",
+                 "-nodeid=$(KUBE_NODE_NAME)",
+                 "-caFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+                 "-certFile=/certs/pmem-csi-registry.crt",
+                 "-keyFile=/certs/pmem-csi-registry.key"
+               ]
+        volumeMounts:
+        - name: registry-cert
+          mountPath: /certs/
+        - name: plugin-socket-dir
+          mountPath: /csi
+        env:
+        - name: KUBE_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        securityContext:
+          privileged: true
+      volumes:
+      - name: plugin-socket-dir
+        emptyDir:
+      - name: registry-cert
+        secret:
+          secretName: pmem-csi-registry-secrets
+          items:
+          - key: tls.crt
+            path: pmem-csi-registry.crt
+          - key: tls.key
+            path: pmem-csi-registry.key
+---
+kind: DaemonSet
+apiVersion: apps/v1beta2
+metadata:
+  name: pmem-csi-node
+spec:
+  selector:
+    matchLabels:
+      app: pmem-csi-node
+  template:
+    metadata:
+      labels:
+        app: pmem-csi-node
+    spec:
+      nodeSelector:
+        storage: pmem
+      hostNetwork: true
+      containers:
+      - name: pmem-driver
+        imagePullPolicy: Always
+        image: 192.168.8.1:5000/pmem-csi-driver:canary
+        args: [ "-v=5",
+                  "-drivername=pmem-csi.intel.com",
+                  "-mode=node",
+                  "-endpoint=$(CSI_ENDPOINT)",
+                  "-nodeid=$(KUBE_NODE_NAME)",
+                  "-controllerEndpoint=tcp://$(KUBE_POD_IP):10001",
+                  "-registryEndpoint=$(PMEM_CSI_CONTROLLER_PORT_10000_TCP)",
+                  "-caFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+                  "-certFile=/certs/$(KUBE_NODE_NAME).crt",
+                  "-keyFile=/certs/$(KUBE_NODE_NAME).key"
+              ]
+        securityContext:
+          privileged: true
+        env:
+        - name: CSI_ENDPOINT
+          value: unix:///csi/csi.sock
+        - name: KUBE_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: KUBE_POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        volumeMounts:
+        - name: plugin-socket-dir
+          mountPath: /csi
+        - name: mountpoint-dir
+          mountPath: /var/lib/kubelet/plugins/kubernetes.io/csi
+          mountPropagation: Bidirectional
+        - name: pods-dir
+          mountPath: /var/lib/kubelet/pods
+          mountPropagation: Bidirectional
+        - name: registry-cert
+          mountPath: /certs/
+      - name: driver-registrar
+        imagePullPolicy: Always
+        image: quay.io/k8scsi/csi-node-driver-registrar:v1.X.Y
+        args: [ "--v=5",
+            "--kubelet-registration-path=/var/lib/kubelet/plugins/pmem-csi.intel.com/csi.sock",
+            "--csi-address=/csi/csi.sock" ]
+        volumeMounts:
+        - name: plugin-socket-dir
+          mountPath: /csi
+        - name: registration-dir
+          mountPath: /registration
+      volumes:
+        - name: plugin-socket-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/pmem-csi.intel.com/
+            type: DirectoryOrCreate
+        - name: registration-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins_registry/
+            type: DirectoryOrCreate
+        - name: mountpoint-dir
+          hostPath:
+            path: /var/lib/kubelet/plugins/kubernetes.io/csi
+            type: DirectoryOrCreate
+        - name: pods-dir
+          hostPath:
+            path: /var/lib/kubelet/pods
+            type: DirectoryOrCreate
+        - name: registry-cert
+          secret:
+            secretName: pmem-csi-node-secrets

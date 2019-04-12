@@ -62,13 +62,13 @@ echo "Generating certificates: $WORKDIR"
 # Generate PMEM registry server certificate signing request
 generate_csr "pmem-registry"
 
-$KUBECTL delete secret "pmem-registry-secrets" 2> /dev/null || true
+$KUBECTL delete secret "pmem-csi-registry-secrets" 2> /dev/null || true
 #store the approved registry certificate and key inside kubernetes secrets
 $KUBECTL create -f - <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
-    name: pmem-registry-secrets
+    name: pmem-csi-registry-secrets
 type: kubernetes.io/tls
 data:
     tls.crt: $(base64 -w 0 pmem-registry.crt)
@@ -83,12 +83,12 @@ done
 
 # Store all node certificates into kubernetes secrets
 echo "Generating node secrets: pmem-node-secrets."
-$KUBECTL delete secret "pmem-node-secrets" 2> /dev/null || true
+$KUBECTL delete secret "pmem-csi-node-secrets" 2> /dev/null || true
 $KUBECTL create -f - <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
-  name: pmem-node-secrets
+  name: pmem-csi-node-secrets
 type: Opaque
 data:
 $(for name in ${NODES}; do

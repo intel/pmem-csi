@@ -1,104 +1,212 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: csi-service-account-controller
+  name: pmem-csi-controller
   namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pmem-csi-external-attacher-cfg
+  namespace: default
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - watch
+  - list
+  - delete
+  - update
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pmem-csi-external-provisioner-cfg
+  namespace: default
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - endpoints
+  verbs:
+  - get
+  - watch
+  - list
+  - delete
+  - update
+  - create
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: csi-cluster-role-controller
+  name: pmem-csi-external-attacher-runner
 rules:
-- apiGroups: [ "" ]
-  resources: [ "persistentvolumes" ]
-  #attacher:     {get, list, watch, update}
-  #provsisioner: {get, list, watch, create, delete}
-  verbs: [ "create", "delete", "get", "list", "watch", "update" ]
-- apiGroups: [ "" ]
-  resources: [ "secrets" ] #provisioner
-  verbs: [ "get", "list" ]
-- apiGroups: [ "" ]
-  resources: [ "persistentvolumeclaims" ] #provisioner
-  verbs: [ "get", "list", "watch", "update" ]
-- apiGroups: [ "storage.k8s.io" ]
-  resources: [ "storageclasses" ] #provisioner
-  verbs: [ "get", "list", "watch" ] 
-- apiGroups: [ "" ]
-  resources: [ "events" ] #provisioner, #driver-registrar
-  verbs: [ "get", "list", "watch", "create", "update", "patch" ]
-- apiGroups: [ "" ]
-  resources: [ "nodes" ] #attacher
-  verbs: [ "get", "list", "watch" ]
-- apiGroups: [ "storage.k8s.io" ]
-  resources: [ "volumeattachments" ] #attacher 
-  verbs: [ "get", "list", "watch", "update" ]
-- apiGroups: [ "csi.storage.k8s.io" ]
-  resources: [ "csinodeinfos" ] # attacher
-  verbs: [ "get", "list", "watch" ]
-- apiGroups: [ "csi.storage.k8s.io" ]
-  resources: [ "csidrivers" ] # driver-registrar
-  verbs: [ "create", "delete" ]
-# NOTE: cluster-driver-registrar v1.0.1 RBAC rules are broken and does not list
-# customresourcedefinitions in its RBAC rules:
-# https://github.com/kubernetes-csi/cluster-driver-registrar/blob/v1.0.1/deploy/kubernetes/rbac.yaml
-# but the driver-registrar tries to create CSIDriverCRD, that requires below
-# rule, which shall be removed when we move to later cluster-driver-registrar
-# releases
-- apiGroups: [ "apiextensions.k8s.io" ]
-  resources: [ "customresourcedefinitions" ]
-  verbs: [ "create", "update", "watch" ] #driver-registrar
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: csi-role-binding-controller
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: csi-cluster-role-controller
-subjects:
-- kind: ServiceAccount
-  name: csi-service-account-controller
-  namespace: default
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: csi-service-account-node
-  namespace: default
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumes
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - csi.storage.k8s.io
+  resources:
+  - csinodeinfos
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - volumeattachments
+  verbs:
+  - get
+  - list
+  - watch
+  - update
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: csi-cluster-role-node
+  name: pmem-csi-external-provisioner-runner
 rules:
-- apiGroups: [ "" ]
-  resources: [ "events" ] #driver-registrar
-  verbs: [ "get", "list", "watch", "create", "update", "patch" ]
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumes
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumeclaims
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - storageclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - list
+  - watch
+  - create
+  - update
+  - patch
+- apiGroups:
+  - snapshot.storage.k8s.io
+  resources:
+  - volumesnapshots
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - snapshot.storage.k8s.io
+  resources:
+  - volumesnapshotcontents
+  verbs:
+  - get
+  - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pmem-csi-csi-attacher-role-cfg
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pmem-csi-external-attacher-cfg
+subjects:
+- kind: ServiceAccount
+  name: pmem-csi-controller
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pmem-csi-csi-provisioner-role-cfg
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pmem-csi-external-provisioner-cfg
+subjects:
+- kind: ServiceAccount
+  name: pmem-csi-controller
+  namespace: default
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: csi-role-binding-node
+  name: pmem-csi-csi-attacher-role
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: csi-cluster-role-node
+  name: pmem-csi-external-attacher-runner
 subjects:
 - kind: ServiceAccount
-  name: csi-service-account-node
+  name: pmem-csi-controller
   namespace: default
 ---
-
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pmem-csi-csi-provisioner-role
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pmem-csi-external-provisioner-runner
+subjects:
+- kind: ServiceAccount
+  name: pmem-csi-controller
+  namespace: default
+---
 apiVersion: v1
 kind: Service
 metadata:
-  name: pmem-controller
+  name: pmem-csi-controller
 spec:
-  selector:
-    app: pmem-csi-controller
   ports:
   - port: 10000
+  selector:
+    app: pmem-csi-controller
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -110,135 +218,98 @@ spec:
   selector:
     matchLabels:
       app: pmem-csi-controller
-  serviceName: pmem-controller
+  serviceName: pmem-csi-controller
   template:
     metadata:
       labels:
         app: pmem-csi-controller
     spec:
-      serviceAccount: csi-service-account-controller
       containers:
-      - name: driver-registrar
-        imagePullPolicy: Always
-        image: quay.io/k8scsi/csi-cluster-driver-registrar:v1.0.1
-        args: [ "--v=5",
-            "--driver-requires-attachment=true",
-            "--pod-info-mount-version=v1",
-            "--csi-address=/csi/csi-controller.sock" ]
-        volumeMounts:
-        - name: plugin-socket-dir
-          mountPath: /csi
-        ## external-provisioner:
-        #    Watches PVClaim objects and triggers Create/DeleteVolume
-      - name: external-provisioner
-        imagePullPolicy: Always
+      - args:
+        - --v=5
+        - --provisioner=pmem-csi.intel.com
+        - --csi-address=/csi/csi-controller.sock
+        - --feature-gates=Topology=true
         image: quay.io/k8scsi/csi-provisioner:v1.0.1
-        args: [ "--v=5", "--provisioner=pmem-csi.intel.com", "--csi-address=/csi/csi-controller.sock", "--feature-gates=Topology=true" ]
-        volumeMounts:
-        - name: plugin-socket-dir
-          mountPath: /csi
-        ## external-attacher: sidecar
-        #    Watches VolumeAttachment objects and triggers
-        #    ControllerPublish/Unpublish
-      - name: external-attacher
         imagePullPolicy: Always
+        name: external-provisioner
+        volumeMounts:
+        - mountPath: /csi
+          name: plugin-socket-dir
+      - args:
+        - --v=5
+        - --csi-address=/csi/csi-controller.sock
         image: quay.io/k8scsi/csi-attacher:v1.0.1
-        args: [ "--v=5", "--csi-address=/csi/csi-controller.sock" ]
-        volumeMounts:
-        - name: plugin-socket-dir
-          mountPath: /csi
-      - name: pmem-driver
-        image: 192.168.8.1:5000/pmem-csi-driver:canary
         imagePullPolicy: Always
-        args:  [ "-v=5",
-                 "-drivername=pmem-csi.intel.com",
-                 "-mode=controller",
-                 "-endpoint=unix:///csi/csi-controller.sock",
-                 "-registryEndpoint=tcp://0.0.0.0:10000",
-                 "-nodeid=$(KUBE_NODE_NAME)",
-                 "-caFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
-                 "-certFile=/certs/pmem-registry.crt",
-                 "-keyFile=/certs/pmem-registry.key"
-               ]
+        name: external-attacher
         volumeMounts:
-        - name: registry-cert
-          mountPath: /certs/
-        - name: plugin-socket-dir
-          mountPath: /csi
+        - mountPath: /csi
+          name: plugin-socket-dir
+      - args:
+        - -v=5
+        - -drivername=pmem-csi.intel.com
+        - -mode=controller
+        - -endpoint=unix:///csi/csi-controller.sock
+        - -registryEndpoint=tcp://0.0.0.0:10000
+        - -nodeid=$(KUBE_NODE_NAME)
+        - -caFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        - -certFile=/certs/pmem-csi-registry.crt
+        - -keyFile=/certs/pmem-csi-registry.key
         env:
         - name: KUBE_NODE_NAME
           valueFrom:
             fieldRef:
               apiVersion: v1
               fieldPath: spec.nodeName
+        image: 192.168.8.1:5000/pmem-csi-driver:canary
+        imagePullPolicy: Always
+        name: pmem-driver
         securityContext:
           privileged: true
+        volumeMounts:
+        - mountPath: /certs/
+          name: registry-cert
+        - mountPath: /csi
+          name: plugin-socket-dir
+      serviceAccount: pmem-csi-controller
       volumes:
-      - name: plugin-socket-dir
-        emptyDir:
+      - emptyDir: null
+        name: plugin-socket-dir
       - name: registry-cert
         secret:
-          secretName: pmem-registry-secrets
           items:
           - key: tls.crt
-            path: pmem-registry.crt
+            path: pmem-csi-registry.crt
           - key: tls.key
-            path: pmem-registry.key
+            path: pmem-csi-registry.key
+          secretName: pmem-csi-registry-secrets
 ---
-kind: DaemonSet
 apiVersion: apps/v1beta2
+kind: DaemonSet
 metadata:
-  name: pmem-csi
+  name: pmem-csi-node
 spec:
   selector:
     matchLabels:
-      app: pmem-csi
+      app: pmem-csi-node
   template:
     metadata:
       labels:
-        app: pmem-csi
+        app: pmem-csi-node
     spec:
-      serviceAccount: csi-service-account-node
-      nodeSelector:
-        storage: pmem
-      hostNetwork: true
-      initContainers:
       containers:
-        ## driver-registrar:
-        # Registers the CSI driver with kubelet adds the driver's custom nodeId
-      - name: driver-registrar
-        imagePullPolicy: Always
-        image: quay.io/k8scsi/csi-node-driver-registrar:v1.0.2
-        args: [ "--v=5",
-            "--kubelet-registration-path=/var/lib/kubelet/plugins/pmem-csi.intel.com/csi.sock",
-            "--csi-address=/csi/csi.sock" ]
-        volumeMounts:
-        - name: plugin-socket-dir
-          mountPath: /csi
-        - name: registration-dir
-          mountPath: /registration
-        ## pmem-driver:
-        #
-      - name: pmem-driver
-        imagePullPolicy: Always
-        image: 192.168.8.1:5000/pmem-csi-driver:canary
-        # Passing /dev to container may cause container creation error because termination-log is located on /dev/ by default.
-        # Adding this clause works around failure, although it's bogus as this file is not actually used.
-        terminationMessagePath: /tmp/termination-log
-        args: [ "-v=5",
-                  "-drivername=pmem-csi.intel.com",
-                  "-mode=node",
-                  "-deviceManager=ndctl", 
-                  "-endpoint=$(CSI_ENDPOINT)",
-                  "-nodeid=$(KUBE_NODE_NAME)",
-                  "-controllerEndpoint=tcp://$(KUBE_POD_IP):10001",
-                  "-registryEndpoint=$(PMEM_CONTROLLER_PORT_10000_TCP)",
-                  "-caFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
-                  "-certFile=/certs/$(KUBE_NODE_NAME).crt",
-                  "-keyFile=/certs/$(KUBE_NODE_NAME).key"
-              ]
-        securityContext:
-          privileged: true
+      - args:
+        - -deviceManager=ndctl
+        - -v=5
+        - -drivername=pmem-csi.intel.com
+        - -mode=node
+        - -endpoint=$(CSI_ENDPOINT)
+        - -nodeid=$(KUBE_NODE_NAME)
+        - -controllerEndpoint=tcp://$(KUBE_POD_IP):10001
+        - -registryEndpoint=$(PMEM_CSI_CONTROLLER_PORT_10000_TCP)
+        - -caFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        - -certFile=/certs/$(KUBE_NODE_NAME).crt
+        - -keyFile=/certs/$(KUBE_NODE_NAME).key
         env:
         - name: CSI_ENDPOINT
           value: unix:///csi/csi.sock
@@ -252,46 +323,75 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: status.podIP
+        image: 192.168.8.1:5000/pmem-csi-driver:canary
+        imagePullPolicy: Always
+        name: pmem-driver
+        securityContext:
+          privileged: true
+        terminationMessagePath: /tmp/termination-log
         volumeMounts:
-        - name: plugin-socket-dir
-          mountPath: /csi
-        - name: mountpoint-dir
-          mountPath: /var/lib/kubelet/plugins/kubernetes.io/csi
+        - mountPath: /csi
+          name: plugin-socket-dir
+        - mountPath: /var/lib/kubelet/plugins/kubernetes.io/csi
           mountPropagation: Bidirectional
-        - name: pods-dir
-          mountPath: /var/lib/kubelet/pods
+          name: mountpoint-dir
+        - mountPath: /var/lib/kubelet/pods
           mountPropagation: Bidirectional
-        - name: registry-cert
-          mountPath: /certs/
-        - name: dev-dir
-          mountPath: /dev
-        - name: sys-dir
-          mountPath: /sys
+          name: pods-dir
+        - mountPath: /certs/
+          name: registry-cert
+        - mountPath: /dev
+          name: dev-dir
+        - mountPath: /sys
+          name: sys-dir
+      - args:
+        - --v=5
+        - --kubelet-registration-path=/var/lib/kubelet/plugins/pmem-csi.intel.com/csi.sock
+        - --csi-address=/csi/csi.sock
+        image: quay.io/k8scsi/csi-node-driver-registrar:v1.0.2
+        imagePullPolicy: Always
+        name: driver-registrar
+        volumeMounts:
+        - mountPath: /csi
+          name: plugin-socket-dir
+        - mountPath: /registration
+          name: registration-dir
+      hostNetwork: true
+      nodeSelector:
+        storage: pmem
       volumes:
-        - name: plugin-socket-dir
-          hostPath:
-            path: /var/lib/kubelet/plugins/pmem-csi.intel.com/
-            type: DirectoryOrCreate
-        - name: registration-dir
-          hostPath:
-            path: /var/lib/kubelet/plugins_registry/
-            type: DirectoryOrCreate
-        - name: mountpoint-dir
-          hostPath:
-            path: /var/lib/kubelet/plugins/kubernetes.io/csi
-            type: DirectoryOrCreate
-        - name: pods-dir
-          hostPath:
-            path: /var/lib/kubelet/pods
-            type: DirectoryOrCreate
-        - name: registry-cert
-          secret:
-            secretName: pmem-node-secrets
-        - name: dev-dir
-          hostPath:
-            path: /dev
-            type: DirectoryOrCreate
-        - name: sys-dir
-          hostPath:
-            path: /sys
-            type: DirectoryOrCreate
+      - hostPath:
+          path: /var/lib/kubelet/plugins/pmem-csi.intel.com/
+          type: DirectoryOrCreate
+        name: plugin-socket-dir
+      - hostPath:
+          path: /var/lib/kubelet/plugins_registry/
+          type: DirectoryOrCreate
+        name: registration-dir
+      - hostPath:
+          path: /var/lib/kubelet/plugins/kubernetes.io/csi
+          type: DirectoryOrCreate
+        name: mountpoint-dir
+      - hostPath:
+          path: /var/lib/kubelet/pods
+          type: DirectoryOrCreate
+        name: pods-dir
+      - name: registry-cert
+        secret:
+          secretName: pmem-csi-node-secrets
+      - hostPath:
+          path: /dev
+          type: DirectoryOrCreate
+        name: dev-dir
+      - hostPath:
+          path: /sys
+          type: DirectoryOrCreate
+        name: sys-dir
+---
+apiVersion: csi.storage.k8s.io/v1alpha1
+kind: CSIDriver
+metadata:
+  name: pmem-csi.intel.com
+spec:
+  attachRequired: true
+  podInfoOnMountVersion: v1

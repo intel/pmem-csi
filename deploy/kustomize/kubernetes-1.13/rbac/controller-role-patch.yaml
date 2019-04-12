@@ -1,0 +1,4 @@
+# Applies to a [Cluster]RoleBinding and sets the name of the first target to "controller".
+- op: replace
+  path: /subjects/0/name
+  value: pmem-csi-controller
