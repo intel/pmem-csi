@@ -432,19 +432,6 @@ The method to configure alpha feature gates may vary, depending on the Kubernete
     $ kubectl label node <your node> storage=pmem
 ```
 
-- **Verify that the node labels have been configured correctly**
-
-```sh
-    $ kubectl get nodes --show-labels
-```
-
-The command output must indicate that every node with PMEM has these two labels:
-```
-pmem-csi.intel.com/node=<NODE-NAME>,storage=pmem
-```
-
-If **storage=pmem** is missing, label manually as described above. If **pmem-csi.intel.com/node** is missing, then double-check that the alpha feature gates are enabled and the CSI driver is running.
-
 - **Install add-on storage CRDs if using Kubernetes 1.13 or 1.14**
 
 If you are not using the test cluster described in
@@ -501,6 +488,30 @@ host, then the `sed` command which replaces the Docker registry is not needed.
 The `deploy` directory contains one directory or symlink for each
 tested Kubernetes release. The most recent one might also work on
 future, currently untested releases.
+
+- **Wait until all pods reach 'Running' status**
+
+```sh
+    $ kubectl get pods
+    NAME                    READY   STATUS    RESTARTS   AGE
+    pmem-csi-8kmxf          2/2     Running   0          3m15s
+    pmem-csi-bvx7m          2/2     Running   2          3m15s
+    pmem-csi-controller-0   4/4     Running   1          3m15s
+    pmem-csi-fbmpg          2/2     Running   2          3m15s
+```
+
+- **Verify that the node labels have been configured correctly**
+
+```sh
+    $ kubectl get nodes --show-labels
+```
+
+The command output must indicate that every node with PMEM has these two labels:
+```
+pmem-csi.intel.com/node=<NODE-NAME>,storage=pmem
+```
+
+If **storage=pmem** is missing, label manually as described above. If **pmem-csi.intel.com/node** is missing, then double-check that the alpha feature gates are enabled and the CSI driver is running.
 
 - **Define two storage classes using the driver**
 
