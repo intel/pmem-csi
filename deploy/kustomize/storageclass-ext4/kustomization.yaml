@@ -1,0 +1,7 @@
+nameSuffix: -ext4
+
+bases:
+- ../storageclass
+
+patchesStrategicMerge:
+- ext4.yaml
