@@ -114,3 +114,9 @@ clean: clean-kustomize
 clean-kustomize:
 	rm -f _work/kustomize
 	rm -f _work/.kustomize-$(KUSTOMIZE_VERSION)-stamp
+
+PHONY: test-kustomize $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
+test: test-kustomize
+test-kustomize: $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
+$(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT)): test-kustomize-%: _work/kustomize
+	@ if ! diff <($< build $(KUSTOMIZATION_$*)) $*; then echo "$* was modified manually" && false; fi
