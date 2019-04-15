@@ -205,12 +205,13 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		// Empty FsType means "unspecified" and we pick default, currently hard-codes to ext4
 		cmd := ""
 		args := []string{}
+		// hard-code block size to 4k to avoid smaller values and trouble to dax mount option
 		if requestedFsType == "ext4" || requestedFsType == "" {
 			cmd = "mkfs.ext4"
-			args = []string{"-F", device.Path}
+			args = []string{"-b 4096", "-F", device.Path}
 		} else if requestedFsType == "xfs" {
 			cmd = "mkfs.xfs"
-			args = []string{"-f", device.Path}
+			args = []string{"-b", "size=4096", "-f", device.Path}
 		} else {
 			glog.Infof("NodeStageVolume: Unsupported fstype: %v", requestedFsType)
 			return nil, status.Error(codes.InvalidArgument, "xfs, ext4 are supported as file system types")
