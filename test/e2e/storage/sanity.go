@@ -132,7 +132,7 @@ var _ = Describe("sanity", func() {
 })
 
 func ssh(args ...string) string {
-	sshWrapper := os.ExpandEnv("${REPO_ROOT}/_work/ssh-clear-kvm.1")
+	sshWrapper := os.ExpandEnv("${REPO_ROOT}/_work/ssh-kvm.1")
 	cmd := exec.Command(sshWrapper, args...)
 	out, err := cmd.CombinedOutput()
 	Expect(err).NotTo(HaveOccurred(), "%s %s failed with error %s: %s", sshWrapper, args, err, out)

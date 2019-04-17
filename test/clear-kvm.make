@@ -110,7 +110,7 @@ _work/passwd:
 _work/kube-clear-kvm: test/start_kubernetes.sh
 	mkdir -p _work
 	cp $< $@
-	sed -i -e "s;SSH;$$(pwd)/_work/ssh-clear-kvm;g" $@
+	sed -i -e "s;SSH;$$(pwd)/_work/ssh-kvm;g" $@
 	chmod u+x $@
 
 _work/OVMF.fd:

@@ -690,14 +690,14 @@ The DeviceMode (lvm or direct) used in testing is selected using variable TEST_D
 
 ### Running commands on test cluster nodes over ssh
 
-`make start` generates ssh-wrappers `_work/ssh-clear-kvm.N` for each
+`make start` generates ssh-wrappers `_work/ssh-kvm.N` for each
 test cluster node which are handy for running a single command or to
 start interactive shell. Examples:
 
-`_work/ssh-clear-kvm.0 kubectl get pods` runs a kubectl command on
+`_work/ssh-kvm.0 kubectl get pods` runs a kubectl command on
 node-0 which is cluster master.
 
-`_work/ssh-clear-kvm.1` starts a shell on node-1.
+`_work/ssh-kvm.1` starts a shell on node-1.
 
 ### Running E2E tests
 

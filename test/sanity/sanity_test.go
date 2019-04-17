@@ -31,7 +31,7 @@ import (
 )
 
 var (
-	sshWrapper = os.ExpandEnv("${REPO_ROOT}/_work/ssh-clear-kvm.1")
+	sshWrapper = os.ExpandEnv("${REPO_ROOT}/_work/ssh-kvm.1")
 	binaries   = []string{
 		"pmem-csi-driver",
 		// Not used at the moment, see below.
