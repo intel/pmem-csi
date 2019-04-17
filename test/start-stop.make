@@ -39,29 +39,29 @@ start: _work/clear-kvm.img _work/kube-clear-kvm _work/start-clear-kvm _work/ssh-
 		KUBECTL="$(PWD)/_work/ssh-kvm kubectl" PATH='$(PWD)/_work/bin/:$(PATH)' ./test/setup-ca-kubernetes.sh && \
 		touch _work/clear-kvm.secretsdone; \
 	fi
-	_work/ssh-kvm kubectl version --short | grep 'Server Version' | sed -e 's/.*: v\([0-9]*\)\.\([0-9]*\)\..*/\1.\2/' >_work/clear-kvm-kubernetes.version
+	_work/ssh-kvm kubectl version --short | grep 'Server Version' | sed -e 's/.*: v\([0-9]*\)\.\([0-9]*\)\..*/\1.\2/' >_work/kvm-kubernetes.version
 	. test/test-config.sh && \
 	if ! _work/ssh-kvm kubectl get statefulset.apps/pmem-csi-controller daemonset.apps/pmem-csi >/dev/null 2>&1; then \
-		_work/ssh-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-csi-$${TEST_DEVICEMODE}.yaml; \
+		_work/ssh-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/kvm-kubernetes.version)/pmem-csi-$${TEST_DEVICEMODE}.yaml; \
 	fi
 	if ! _work/ssh-kvm kubectl get storageclass/pmem-csi-sc-ext4 >/dev/null 2>&1; then \
-		_work/ssh-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-storageclass-ext4.yaml; \
+		_work/ssh-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/kvm-kubernetes.version)/pmem-storageclass-ext4.yaml; \
 	fi
 	if ! _work/ssh-kvm kubectl get storageclass/pmem-csi-sc-xfs >/dev/null 2>&1; then \
-		_work/ssh-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-storageclass-xfs.yaml; \
+		_work/ssh-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/kvm-kubernetes.version)/pmem-storageclass-xfs.yaml; \
 	fi
 	if ! _work/ssh-kvm kubectl get storageclass/pmem-csi-sc-cache >/dev/null 2>&1; then \
-		_work/ssh-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-storageclass-cache.yaml; \
+		_work/ssh-kvm kubectl create -f - <deploy/kubernetes-$$(cat _work/kvm-kubernetes.version)/pmem-storageclass-cache.yaml; \
 	fi
 	@ echo
 	@ echo "The test cluster is ready. Log in with _work/ssh-kvm, run kubectl once logged in."
 	@ echo "Alternatively, KUBECONFIG=$$(pwd)/_work/clear-kvm-kube.config can also be used directly."
 	@ echo "To try out the pmem-csi driver persistent volumes:"
-	@ echo "   cat deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-pvc.yaml | _work/ssh-kvm kubectl create -f -"
-	@ echo "   cat deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-app.yaml | _work/ssh-kvm kubectl create -f -"
+	@ echo "   cat deploy/kubernetes-$$(cat _work/kvm-kubernetes.version)/pmem-pvc.yaml | _work/ssh-kvm kubectl create -f -"
+	@ echo "   cat deploy/kubernetes-$$(cat _work/kvm-kubernetes.version)/pmem-app.yaml | _work/ssh-kvm kubectl create -f -"
 	@ echo "To try out the pmem-csi driver cache volumes:"
-	@ echo "   cat deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-pvc-cache.yaml | _work/ssh-kvm kubectl create -f -"
-	@ echo "   cat deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-app-cache.yaml | _work/ssh-kvm kubectl create -f -"
+	@ echo "   cat deploy/kubernetes-$$(cat _work/kvm-kubernetes.version)/pmem-pvc-cache.yaml | _work/ssh-kvm kubectl create -f -"
+	@ echo "   cat deploy/kubernetes-$$(cat _work/kvm-kubernetes.version)/pmem-app-cache.yaml | _work/ssh-kvm kubectl create -f -"
 
 stop:
 	for i in $$(seq 0 $$(($(NUM_NODES) - 1))); do \
