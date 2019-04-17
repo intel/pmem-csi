@@ -349,8 +349,8 @@ _work/ssh-kvm.0 mkdir -p .kube
 _work/ssh-kvm.0 cp -i /etc/kubernetes/admin.conf .kube/config
 
 # Done.
-( echo "Use $(pwd)/clear-kvm-kube.config as KUBECONFIG to access the running cluster." ) 2>/dev/null
-_work/ssh-kvm.0 'cat /etc/kubernetes/admin.conf' | sed -e "s;https://.*:6443;https://${TEST_IP_ADDR}.2:6443;" >_work/clear-kvm-kube.config
+( echo "Use $(pwd)/kvm-kube.config as KUBECONFIG to access the running cluster." ) 2>/dev/null
+_work/ssh-kvm.0 'cat /etc/kubernetes/admin.conf' | sed -e "s;https://.*:6443;https://${TEST_IP_ADDR}.2:6443;" >_work/kvm-kube.config
 
 # Verify that Kubernetes works by starting it and then listing pods.
 # We also wait for the node to become ready, which can take a while because
@@ -368,7 +368,7 @@ _work/ssh-kvm.0 kubectl get pods --all-namespaces
 
 # Doing the same locally only works if we have kubectl.
 if command -v kubectl >/dev/null; then
-    kubectl --kubeconfig _work/clear-kvm-kube.config get pods --all-namespaces
+    kubectl --kubeconfig _work/kvm-kube.config get pods --all-namespaces
 fi
 
 # Run additional commands specified in config.

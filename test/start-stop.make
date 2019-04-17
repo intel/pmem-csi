@@ -55,7 +55,7 @@ start: _work/clear-kvm.img _work/kube-clear-kvm _work/start-clear-kvm _work/ssh-
 	fi
 	@ echo
 	@ echo "The test cluster is ready. Log in with _work/ssh-kvm, run kubectl once logged in."
-	@ echo "Alternatively, KUBECONFIG=$$(pwd)/_work/clear-kvm-kube.config can also be used directly."
+	@ echo "Alternatively, KUBECONFIG=$$(pwd)/_work/kvm-kube.config can also be used directly."
 	@ echo "To try out the pmem-csi driver persistent volumes:"
 	@ echo "   cat deploy/kubernetes-$$(cat _work/kvm-kubernetes.version)/pmem-pvc.yaml | _work/ssh-kvm kubectl create -f -"
 	@ echo "   cat deploy/kubernetes-$$(cat _work/kvm-kubernetes.version)/pmem-app.yaml | _work/ssh-kvm kubectl create -f -"

@@ -713,7 +713,7 @@ of the test run. For example, to run just the E2E provisioning test
 (create PVC, write data in one pod, read it in another) in verbose mode:
 
 ``` sh
-$ KUBECONFIG=$(pwd)/_work/clear-kvm-kube.config REPO_ROOT=$(pwd) ginkgo -v -focus=pmem-csi.*should.provision.storage.with.defaults ./test/e2e/
+$ KUBECONFIG=$(pwd)/_work/kvm-kube.config REPO_ROOT=$(pwd) ginkgo -v -focus=pmem-csi.*should.provision.storage.with.defaults ./test/e2e/
 Nov 26 11:21:28.805: INFO: The --provider flag is not set.  Treating as a conformance test.  Some tests may not be run.
 Running Suite: PMEM E2E suite
 =============================
@@ -721,7 +721,7 @@ Random Seed: 1543227683 - Will randomize all specs
 Will run 1 of 61 specs
 
 Nov 26 11:21:28.812: INFO: checking config
-Nov 26 11:21:28.812: INFO: >>> kubeConfig: /nvme/gopath/src/github.com/intel/pmem-csi/_work/clear-kvm-kube.config
+Nov 26 11:21:28.812: INFO: >>> kubeConfig: /nvme/gopath/src/github.com/intel/pmem-csi/_work/kvm-kube.config
 Nov 26 11:21:28.817: INFO: Waiting up to 30m0s for all (but 0) nodes to be schedulable
 ...
 Ran 1 of 61 Specs in 58.465 seconds
