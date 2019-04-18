@@ -5,7 +5,9 @@
 
 set -o pipefail
 
-NUM_NODES=$1
+BASE_IMG=$1
+TARGET=$2
+NUM_NODES=$3
 LAST_NODE=$(($NUM_NODES - 1))
 
 # We run with tracing enabled, but suppress the trace output for some
@@ -96,24 +98,24 @@ setup_clear_img () (
 
     # We use copy-on-write for per-host image files. We don't share as much as we could (for example,
     # each host adds its own bundles), but at least the base image is the same.
-    qemu-img create -f qcow2 -o backing_file=clear-kvm-original.img $image
+    qemu-img create -f qcow2 -o backing_file=$(realpath $BASE_IMG) $image
 
     # Same start script for all virtual machines. It gets called with
     # the image name.
-    ln -sf start-clear-kvm _work/start-clear-kvm.$imagenum
+    ln -sf run-qemu $TARGET/run-qemu.$imagenum
 
     # Determine which machine we build and the parameters for it.
-    seriallog=_work/serial.$imagenum.log
+    seriallog=$TARGET/serial.$imagenum.log
     hostname=host-$imagenum
     ipaddr=${TEST_IP_ADDR}.$(($imagenum * 2 + 2))
 
     # coproc runs the shell commands in a separate process, with
     # stdin/stdout available to the caller.
-    coproc sh -c "_work/start-clear-kvm $image | tee $seriallog"
+    coproc sh -c "$TARGET/run-qemu $image | tee $seriallog"
 
     kill_qemu () {
         (
-            touch _work/clear-kvm.$imagenum.terminated
+            touch $TARGET/qemu.$imagenum.terminated
             if [ "$COPROC_PID" ]; then
                 kill_process_tree QEMU $COPROC_PID
             fi
@@ -160,9 +162,9 @@ setup_clear_img () (
 
     # SSH invocations must use that secret key, shouldn't worry about known hosts (because those are going
     # to change), and log into the right machine.
-    echo "#!/bin/sh" >_work/ssh-clear-kvm.$imagenum
-    echo "exec ssh -oIdentitiesOnly=yes -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -oLogLevel=error -i $(pwd)/_work/id root@$ipaddr \"\$@\"" >>_work/ssh-clear-kvm.$imagenum
-    chmod u+x _work/ssh-clear-kvm.$imagenum
+    echo "#!/bin/sh" >$TARGET/ssh.$imagenum
+    echo "exec ssh -oIdentitiesOnly=yes -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -oLogLevel=error -i $(pwd)/_work/id root@$ipaddr \"\$@\"" >>$TARGET/ssh.$imagenum
+    chmod u+x $TARGET/ssh.$imagenum
 
     # Set up the static network configuration. The MAC address must match the one
     # in start_qemu.sh. DNS configuration is taken from /etc/resolv.conf.
@@ -174,37 +176,37 @@ setup_clear_img () (
     # Disable auto-update. An update of Kubernetes would require
     # manual intervention, and we don't want the updating to interfere
     # with testing.
-    _work/ssh-clear-kvm.$imagenum swupd autoupdate --disable
+    $TARGET/ssh.$imagenum swupd autoupdate --disable
 
     # Install Kubernetes and additional bundles.
     ( echo "Configuring Kubernetes..." ) 2>/dev/null
-    _work/ssh-clear-kvm.$imagenum "$PROXY_ENV swupd bundle-add $bundles"
-    _work/ssh-clear-kvm.$imagenum swupd clean
+    $TARGET/ssh.$imagenum "$PROXY_ENV swupd bundle-add $bundles"
+    $TARGET/ssh.$imagenum swupd clean
 
     # Enable IP Forwarding.
-    _work/ssh-clear-kvm.$imagenum 'mkdir /etc/sysctl.d && echo net.ipv4.ip_forward = 1 >/etc/sysctl.d/60-k8s.conf && systemctl restart systemd-sysctl'
+    $TARGET/ssh.$imagenum 'mkdir /etc/sysctl.d && echo net.ipv4.ip_forward = 1 >/etc/sysctl.d/60-k8s.conf && systemctl restart systemd-sysctl'
 
     # Due to stateless /etc is empty but /etc/hosts is needed by k8s pods.
     # It also expects that the local host name can be resolved. Let's use a nicer one
     # instead of the normal default (clear-<long hex string>).
-    _work/ssh-clear-kvm.$imagenum "hostnamectl set-hostname $hostname"
-    _work/ssh-clear-kvm.$imagenum "echo 127.0.0.1 localhost >>/etc/hosts"
-    _work/ssh-clear-kvm.$imagenum "echo $ipaddr $hostname >>/etc/hosts"
+    $TARGET/ssh.$imagenum "hostnamectl set-hostname $hostname"
+    $TARGET/ssh.$imagenum "echo 127.0.0.1 localhost >>/etc/hosts"
+    $TARGET/ssh.$imagenum "echo $ipaddr $hostname >>/etc/hosts"
 
     # br_netfilter must be loaded explicitly on the Clear Linux KVM kernel (and only there),
     # otherwise the required /proc/sys/net/bridge/bridge-nf-call-iptables isn't there.
-    _work/ssh-clear-kvm.$imagenum modprobe br_netfilter && _work/ssh-clear-kvm.$imagenum 'echo br_netfilter >>/etc/modules'
+    $TARGET/ssh.$imagenum modprobe br_netfilter && $TARGET/ssh.$imagenum 'echo br_netfilter >>/etc/modules'
 
     # Disable swap (permanently).
-    _work/ssh-clear-kvm.$imagenum systemctl mask $(_work/ssh-clear-kvm.$imagenum cat /proc/swaps | sed -n -e 's;^/dev/\([0-9a-z]*\).*;dev-\1.swap;p')
-    _work/ssh-clear-kvm.$imagenum swapoff -a
+    $TARGET/ssh.$imagenum systemctl mask $($TARGET/ssh.$imagenum cat /proc/swaps | sed -n -e 's;^/dev/\([0-9a-z]*\).*;dev-\1.swap;p')
+    $TARGET/ssh.$imagenum swapoff -a
 
     # We put config changes in place for both runtimes, even though only one of them will
     # be used by Kubernetes, just in case that someone wants to use them manually.
 
     # Proxy settings for CRI-O.
-    _work/ssh-clear-kvm.$imagenum mkdir /etc/systemd/system/crio.service.d
-    _work/ssh-clear-kvm.$imagenum "cat >/etc/systemd/system/crio.service.d/proxy.conf" <<EOF
+    $TARGET/ssh.$imagenum mkdir /etc/systemd/system/crio.service.d
+    $TARGET/ssh.$imagenum "cat >/etc/systemd/system/crio.service.d/proxy.conf" <<EOF
 [Service]
 Environment="HTTP_PROXY=${HTTP_PROXY}" "HTTPS_PROXY=${HTTPS_PROXY}" "NO_PROXY=${NO_PROXY}"
 EOF
@@ -212,20 +214,20 @@ EOF
     # Testing may involve a Docker registry running on the build host (see
     # REGISTRY_NAME). We need to trust that registry, otherwise CRI-O
     # will fail to pull images from it.
-    _work/ssh-clear-kvm.$imagenum "mkdir -p /etc/containers && cat >/etc/containers/registries.conf" <<EOF
+    $TARGET/ssh.$imagenum "mkdir -p /etc/containers && cat >/etc/containers/registries.conf" <<EOF
 [registries.insecure]
 registries = [ '${TEST_IP_ADDR}.1:5000' ]
 EOF
 
     # The same for Docker.
-    _work/ssh-clear-kvm.$imagenum mkdir -p /etc/docker
-    _work/ssh-clear-kvm.$imagenum "cat >/etc/docker/daemon.json" <<EOF
+    $TARGET/ssh.$imagenum mkdir -p /etc/docker
+    $TARGET/ssh.$imagenum "cat >/etc/docker/daemon.json" <<EOF
 { "insecure-registries": ["${TEST_IP_ADDR}.1:5000"] }
 EOF
 
     # Proxy settings for Docker.
-    _work/ssh-clear-kvm.$imagenum mkdir -p /etc/systemd/system/docker.service.d/
-    _work/ssh-clear-kvm.$imagenum "cat >/etc/systemd/system/docker.service.d/proxy.conf" <<EOF
+    $TARGET/ssh.$imagenum mkdir -p /etc/systemd/system/docker.service.d/
+    $TARGET/ssh.$imagenum "cat >/etc/systemd/system/docker.service.d/proxy.conf" <<EOF
 [Service]
 Environment="HTTP_PROXY=$HTTP_PROXY" "HTTPS_PROXY=$HTTPS_PROXY" "NO_PROXY=$NO_PROXY"
 EOF
@@ -233,7 +235,7 @@ EOF
     # Disable the use of Kata containers as default runtime in Docker.
     # The Kubernetes control plan (apiserver, etc.) fails to run otherwise
     # ("Host networking requested, not supported by runtime").
-    _work/ssh-clear-kvm.$imagenum "cat >/etc/systemd/system/docker.service.d/51-runtime.conf" <<EOF
+    $TARGET/ssh.$imagenum "cat >/etc/systemd/system/docker.service.d/51-runtime.conf" <<EOF
 [Service]
 Environment="DOCKER_DEFAULT_RUNTIME=--default-runtime runc"
 EOF
@@ -241,8 +243,8 @@ EOF
     case $TEST_CRI in
         docker)
              # Choose Docker by disabling the use of CRI-O in KUBELET_EXTRA_ARGS.
-            _work/ssh-clear-kvm.$imagenum 'mkdir -p /etc/systemd/system/kubelet.service.d/'
-            _work/ssh-clear-kvm.$imagenum "cat >/etc/systemd/system/kubelet.service.d/10-kubeadm.conf" <<EOF
+            $TARGET/ssh.$imagenum 'mkdir -p /etc/systemd/system/kubelet.service.d/'
+            $TARGET/ssh.$imagenum "cat >/etc/systemd/system/kubelet.service.d/10-kubeadm.conf" <<EOF
 [Service]
 Environment="KUBELET_EXTRA_ARGS="
 EOF
@@ -269,25 +271,25 @@ EOF
     # are inconsistent at this time (https://github.com/clearlinux/clear-linux-documentation/issues/388).
     #
     # We solve this by creating the directory and symlinking all existing CNI plugins into it.
-    _work/ssh-clear-kvm.$imagenum mkdir -p /opt/cni/bin
-    _work/ssh-clear-kvm.$imagenum 'for i in /usr/libexec/cni/*; do ln -s $i /opt/cni/bin/; done'
+    $TARGET/ssh.$imagenum mkdir -p /opt/cni/bin
+    $TARGET/ssh.$imagenum 'for i in /usr/libexec/cni/*; do ln -s $i /opt/cni/bin/; done'
 
     # Reconfiguration done, start daemons. Starting kubelet must wait until kubeadm has created
     # the necessary config files.
-    _work/ssh-clear-kvm.$imagenum "systemctl daemon-reload && systemctl restart $cri_daemon && systemctl enable $cri_daemon kubelet"
+    $TARGET/ssh.$imagenum "systemctl daemon-reload && systemctl restart $cri_daemon && systemctl enable $cri_daemon kubelet"
 
     # Run additional code specified by config.
     ${TEST_CLEAR_LINUX_POST_INSTALL:-true} $imagenum
 
     set +x
     echo "up and running"
-    touch _work/clear-kvm.$imagenum.running
+    touch $TARGET/qemu.$imagenum.running
     qemu_running
     wait $COPROC_PID
 )
 
 # Create an alias for logging into the master node.
-ln -sf ssh-clear-kvm.0 _work/ssh-clear-kvm
+ln -sf ssh.0 $TARGET/ssh
 
 # Create all virtual machines in parallel.
 declare -a machines
@@ -300,24 +302,24 @@ kill_machines () {
             machines[$i]=
         fi
     done
-    rm -f _work/clear-kvm.*.running _work/clear-kvm.*.terminated
+    rm -f $TARGET/qemu.*.running $TARGET/qemu.*.terminated
 }
 trap kill_machines EXIT SIGINT SIGTERM
-rm -f _work/clear-kvm.*.running _work/clear-kvm.*.terminated _work/clear-kvm.[0-9].img*
+rm -f $TARGET/qemu.*.running $TARGET/qemu.*.terminated $TARGET/qemu.[0-9].img*
 for i in $(seq 0 $LAST_NODE); do
-    setup_clear_img _work/clear-kvm.$i.img $i &> >(sed -e "s/^/$i:/") &
+    setup_clear_img $TARGET/qemu.$i.img $i &> >(sed -e "s/^/$i:/") &
     machines[$i]=$!
 done
 
 # setup_clear_img notifies us when VMs are ready by creating a
-# clear-kvm.*.running file.
+# qemu.*.running file.
 all_running () {
-    [ $(ls -1 _work/clear-kvm.*.running 2>/dev/null | wc -l) -eq $((LAST_NODE + 1)) ]
+    [ $(ls -1 $TARGET/qemu.*.running 2>/dev/null | wc -l) -eq $((LAST_NODE + 1)) ]
 }
 
 # Same for termination.
 some_failed () {
-    [ $(ls -1 _work/clear-kvm.*.terminated 2>/dev/null | wc -l) -gt 0 ]
+    [ $(ls -1 $TARGET/qemu.*.terminated 2>/dev/null | wc -l) -gt 0 ]
 }
 
 # Wait until all are up and running.
@@ -326,13 +328,13 @@ while ! all_running; do
     if some_failed; then
         echo
         echo "The following virtual machines failed unexpectedly, see errors above:"
-        ls -1 _work/clear-kvm.*.terminated | sed -e 's;_work/clear-kvm.\(.*\).terminated;    #\1;'
+        ls -1 $TARGET/qemu.*.terminated | sed -e 's;$TARGET/qemu.\(.*\).terminated;    #\1;'
         echo
         exit 1
     fi
 done 2>/dev/null
 
-_work/ssh-clear-kvm.0 "cat >/tmp/kubeadm-config.yaml" <<EOF
+$TARGET/ssh.0 "cat >/tmp/kubeadm-config.yaml" <<EOF
 $kubeadm_config_init
 ---
 $kubeadm_config_kubelet
@@ -344,31 +346,31 @@ EOF
 # https://kubernetes.io/docs/reference/setup-tools/kubeadm/kubeadm-init/#automating-kubeadm
 
 kubeadm_args_init="$kubeadm_args_init --config=/tmp/kubeadm-config.yaml"
-_work/ssh-clear-kvm.0 $PROXY_ENV kubeadm init $kubeadm_args $kubeadm_args_init | tee _work/clear-kvm-kubeadm.0.log
-_work/ssh-clear-kvm.0 mkdir -p .kube
-_work/ssh-clear-kvm.0 cp -i /etc/kubernetes/admin.conf .kube/config
+$TARGET/ssh.0 $PROXY_ENV kubeadm init $kubeadm_args $kubeadm_args_init | tee $TARGET/kubeadm.0.log
+$TARGET/ssh.0 mkdir -p .kube
+$TARGET/ssh.0 cp -i /etc/kubernetes/admin.conf .kube/config
 
 # Done.
-( echo "Use $(pwd)/clear-kvm-kube.config as KUBECONFIG to access the running cluster." ) 2>/dev/null
-_work/ssh-clear-kvm.0 'cat /etc/kubernetes/admin.conf' | sed -e "s;https://.*:6443;https://${TEST_IP_ADDR}.2:6443;" >_work/clear-kvm-kube.config
+( echo "Use $(pwd)/$TARGET/kube.config as KUBECONFIG to access the running cluster." ) 2>/dev/null
+$TARGET/ssh.0 'cat /etc/kubernetes/admin.conf' | sed -e "s;https://.*:6443;https://${TEST_IP_ADDR}.2:6443;" >$TARGET/kube.config
 
 # Verify that Kubernetes works by starting it and then listing pods.
 # We also wait for the node to become ready, which can take a while because
 # images might still need to be pulled. This can take minutes, therefore we sleep
 # for one minute between output.
 ( echo "Waiting for Kubernetes cluster to become ready..." ) 2>/dev/null
-_work/kube-clear-kvm
-while ! _work/ssh-clear-kvm.0 kubectl get nodes | grep -q 'Ready'; do
-    _work/ssh-clear-kvm.0 kubectl get nodes
-    _work/ssh-clear-kvm.0 kubectl get pods --all-namespaces
+$TARGET/start-kubernetes
+while ! $TARGET/ssh.0 kubectl get nodes | grep -q 'Ready'; do
+    $TARGET/ssh.0 kubectl get nodes
+    $TARGET/ssh.0 kubectl get pods --all-namespaces
     sleep 60
 done
-_work/ssh-clear-kvm.0 kubectl get nodes
-_work/ssh-clear-kvm.0 kubectl get pods --all-namespaces
+$TARGET/ssh.0 kubectl get nodes
+$TARGET/ssh.0 kubectl get pods --all-namespaces
 
 # Doing the same locally only works if we have kubectl.
 if command -v kubectl >/dev/null; then
-    kubectl --kubeconfig _work/clear-kvm-kube.config get pods --all-namespaces
+    kubectl --kubeconfig $TARGET/kube.config get pods --all-namespaces
 fi
 
 # Run additional commands specified in config.
@@ -377,21 +379,21 @@ ${TEST_CONFIGURE_POST_MASTER}
 # Let the other machines join the cluster.
 # Join multi-lines using 'sed' so that grep finds whole line
 for i in $(seq 1 $LAST_NODE); do
-    _work/ssh-clear-kvm.$i $(sed -z 's/\\\n//g' _work/clear-kvm-kubeadm.0.log |grep "kubeadm join.*token" ) $kubeadm_args
+    $TARGET/ssh.$i $(sed -z 's/\\\n//g' $TARGET/kubeadm.0.log |grep "kubeadm join.*token" ) $kubeadm_args
 done
 
 # From https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/#pod-network
-_work/ssh-clear-kvm $PROXY_ENV kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/bc79dd1505b0c8681ece4de4c0d86c5cd2643275/Documentation/kube-flannel.yml
+$TARGET/ssh $PROXY_ENV kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/bc79dd1505b0c8681ece4de4c0d86c5cd2643275/Documentation/kube-flannel.yml
 
 # Install addon storage CRDs, needed if certain feature gates are enabled.
 # Only applicable to Kubernetes 1.13 and older. 1.14 will have them as builtin APIs.
 # Temporarily install also on 1.14 until we migrate to sidecars which use the builtin beta API.
-if _work/ssh-clear-kvm $PROXY_ENV kubectl version | grep -q '^Server Version.*Major:"1", Minor:"1[01234]"'; then
+if $TARGET/ssh $PROXY_ENV kubectl version | grep -q '^Server Version.*Major:"1", Minor:"1[01234]"'; then
     if [[ "$TEST_FEATURE_GATES" == *"CSINodeInfo=true"* ]]; then
-        _work/ssh-clear-kvm $PROXY_ENV kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/release-1.13/cluster/addons/storage-crds/csinodeinfo.yaml
+        $TARGET/ssh $PROXY_ENV kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/release-1.13/cluster/addons/storage-crds/csinodeinfo.yaml
     fi
     if [[ "$TEST_FEATURE_GATES" == *"CSIDriverRegistry=true"* ]]; then
-        _work/ssh-clear-kvm $PROXY_ENV kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/release-1.13/cluster/addons/storage-crds/csidriver.yaml
+        $TARGET/ssh $PROXY_ENV kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/release-1.13/cluster/addons/storage-crds/csidriver.yaml
     fi
 fi
 
@@ -400,7 +402,7 @@ ${TEST_CONFIGURE_POST_ALL}
 
 # Clean shutdown.
 for i in $(seq 0 $LAST_NODE); do
-    _work/ssh-clear-kvm.$i shutdown now || true
+    $TARGET/ssh.$i shutdown now || true
 done
 for i in $(seq 0 $LAST_NODE); do
     wait ${machines[$i]}

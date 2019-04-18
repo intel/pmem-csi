@@ -71,6 +71,15 @@ clean:
 .PHONY: all test clean pmem-csi-driver pmem-ns-init pmem-vgm
 
 # Add support for creating and booting a cluster under QEMU.
+# All of the commands operate on a cluster stored in _work/$(CLUSTER),
+# which defaults to _work/clear-kvm. This can be changed with
+# make variables, for example:
+#   make CLUSTER=clear-kvm-28070 CLEAR_IMG_VERSION=28070 start
+#
+# All clusters called "clear-kvm[-something]" are created with
+# test/clear-kvm.make. They run inside QEMU and share the
+# same IP addresses, and thus cannot run in parallel.
+CLUSTER := clear-kvm
 include test/clear-kvm.make
 include test/start-stop.make
 include test/test.make

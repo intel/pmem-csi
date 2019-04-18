@@ -4,60 +4,62 @@
 # - starts a Kubernetes cluster
 # - generate pmem secrets if necessary
 # - installs pmem-csi driver
-start: _work/clear-kvm.img _work/kube-clear-kvm _work/start-clear-kvm _work/ssh-clear-kvm test/setup-ca-kubernetes.sh _work/.setupcfssl-stamp
+#
+# It operates on the cluster in _work/$(CLUSTER).
+start: _work/$(CLUSTER)/created _work/$(CLUSTER)/start-kubernetes _work/$(CLUSTER)/run-qemu _work/$(CLUSTER)/ssh test/setup-ca-kubernetes.sh _work/.setupcfssl-stamp
 	. test/test-config.sh && \
 	for i in $$(seq 0 $$(($(NUM_NODES) - 1))); do \
-		if ! [ -e _work/clear-kvm.$$i.pid ] || ! kill -0 $$(cat _work/clear-kvm.$$i.pid) 2>/dev/null; then \
+		if ! [ -e _work/$(CLUSTER)/qemu.$$i.pid ] || ! kill -0 $$(cat _work/$(CLUSTER)/qemu.$$i.pid) 2>/dev/null; then \
 			memargs="-m $${TEST_NORMAL_MEM_SIZE}M"; \
 			if [ $$i -ne 0 ]; then \
-				pmemfile=_work/clear-kvm.$$i.pmem.raw; \
+				pmemfile=_work/$(CLUSTER)/qemu.$$i.pmem.raw; \
 				truncate -s $${TEST_PMEM_MEM_SIZE}M $$pmemfile; \
 				memargs="$$memargs,slots=$${TEST_MEM_SLOTS},maxmem=$$(($${TEST_NORMAL_MEM_SIZE} + $${TEST_PMEM_MEM_SIZE}))M"; \
 				memargs="$$memargs -object memory-backend-file,id=mem1,share=$${TEST_PMEM_SHARE},mem-path=$$pmemfile,size=$${TEST_PMEM_MEM_SIZE}M"; \
 				memargs="$$memargs -device nvdimm,id=nvdimm1,memdev=mem1,label-size=$${TEST_PMEM_LABEL_SIZE}"; \
 				memargs="$$memargs -machine pc,nvdimm"; \
 			fi; \
-			_work/start-clear-kvm _work/clear-kvm.$$i.img $$memargs -monitor none -serial file:_work/clear-kvm.$$i.log $$opts & \
-			echo $$! >_work/clear-kvm.$$i.pid; \
+			_work/$(CLUSTER)/run-qemu _work/$(CLUSTER)/qemu.$$i.img $$memargs -monitor none -serial file:_work/$(CLUSTER)/qemu.$$i.log $$opts & \
+			echo $$! >_work/$(CLUSTER)/qemu.$$i.pid; \
 		fi; \
 	done
-	while ! _work/ssh-clear-kvm true 2>/dev/null; do \
+	while ! _work/$(CLUSTER)/ssh true 2>/dev/null; do \
 		sleep 1; \
 	done
-	_work/kube-clear-kvm
-	_work/ssh-clear-kvm kubectl label node host-0 storage-
+	_work/$(CLUSTER)/start-kubernetes
+	_work/$(CLUSTER)/ssh kubectl label node host-0 storage-
 	for i in $$(seq 1 $$(($(NUM_NODES) - 1))); do \
-		if ! [ -e _work/clear-kvm.$$i.labelsdone ]; then \
-			_work/ssh-clear-kvm.$$i "/usr/bin/ndctl disable-region region0"; \
-			_work/ssh-clear-kvm.$$i "/usr/bin/ndctl init-labels nmem0"; \
-			_work/ssh-clear-kvm.$$i "/usr/bin/ndctl enable-region region0"; \
-			touch _work/clear-kvm.$$i.labelsdone; \
+		if ! [ -e _work/$(CLUSTER)/qemu.$$i.labelsdone ]; then \
+			_work/$(CLUSTER)/ssh.$$i "/usr/bin/ndctl disable-region region0"; \
+			_work/$(CLUSTER)/ssh.$$i "/usr/bin/ndctl init-labels nmem0"; \
+			_work/$(CLUSTER)/ssh.$$i "/usr/bin/ndctl enable-region region0"; \
+			touch _work/$(CLUSTER)/qemu.$$i.labelsdone; \
 		fi; \
-		_work/ssh-clear-kvm kubectl label --overwrite node host-$$i storage=pmem; \
+		_work/$(CLUSTER)/ssh kubectl label --overwrite node host-$$i storage=pmem; \
 	done
-	if ! [ -e _work/clear-kvm.secretsdone ] || [ $$(_work/ssh-clear-kvm kubectl get secrets | grep -e pmem-csi-node-secrets -e pmem-csi-registry-secrets | wc -l) -ne 2 ]; then \
-		KUBECTL="$(PWD)/_work/ssh-clear-kvm kubectl" PATH='$(PWD)/_work/bin/:$(PATH)' ./test/setup-ca-kubernetes.sh && \
-		touch _work/clear-kvm.secretsdone; \
+	if ! [ -e _work/$(CLUSTER)/secretsdone ] || [ $$(_work/$(CLUSTER)/ssh kubectl get secrets | grep -e pmem-csi-node-secrets -e pmem-csi-registry-secrets | wc -l) -ne 2 ]; then \
+		KUBECTL="$(PWD)/_work/$(CLUSTER)/ssh kubectl" PATH='$(PWD)/_work/bin/:$(PATH)' ./test/setup-ca-kubernetes.sh && \
+		touch _work/$(CLUSTER)/secretsdone; \
 	fi
-	_work/ssh-clear-kvm kubectl version --short | grep 'Server Version' | sed -e 's/.*: v\([0-9]*\)\.\([0-9]*\)\..*/\1.\2/' >_work/clear-kvm-kubernetes.version
-	( . test/test-config.sh && _work/ssh-clear-kvm kubectl apply -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-csi-$${TEST_DEVICEMODE}-testing.yaml )
-	_work/ssh-clear-kvm kubectl apply -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-storageclass-ext4.yaml
-	_work/ssh-clear-kvm kubectl apply -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-storageclass-xfs.yaml
-	_work/ssh-clear-kvm kubectl apply -f - <deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-storageclass-cache.yaml
+	_work/$(CLUSTER)/ssh kubectl version --short | grep 'Server Version' | sed -e 's/.*: v\([0-9]*\)\.\([0-9]*\)\..*/\1.\2/' >_work/$(CLUSTER)/kubernetes.version
+	( . test/test-config.sh && _work/$(CLUSTER)/ssh kubectl apply -f - <deploy/kubernetes-$$(cat _work/$(CLUSTER)/kubernetes.version)/pmem-csi-$${TEST_DEVICEMODE}-testing.yaml )
+	_work/$(CLUSTER)/ssh kubectl apply -f - <deploy/kubernetes-$$(cat _work/$(CLUSTER)/kubernetes.version)/pmem-storageclass-ext4.yaml
+	_work/$(CLUSTER)/ssh kubectl apply -f - <deploy/kubernetes-$$(cat _work/$(CLUSTER)/kubernetes.version)/pmem-storageclass-xfs.yaml
+	_work/$(CLUSTER)/ssh kubectl apply -f - <deploy/kubernetes-$$(cat _work/$(CLUSTER)/kubernetes.version)/pmem-storageclass-cache.yaml
 	@ echo
-	@ echo "The test cluster is ready. Log in with _work/ssh-clear-kvm, run kubectl once logged in."
-	@ echo "Alternatively, KUBECONFIG=$$(pwd)/_work/clear-kvm-kube.config can also be used directly."
+	@ echo "The test cluster is ready. Log in with _work/$(CLUSTER)/ssh, run kubectl once logged in."
+	@ echo "Alternatively, KUBECONFIG=$$(pwd)/_work/$(CLUSTER)/kube.config can also be used directly."
 	@ echo "To try out the pmem-csi driver persistent volumes:"
-	@ echo "   cat deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-pvc.yaml | _work/ssh-clear-kvm kubectl create -f -"
-	@ echo "   cat deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-app.yaml | _work/ssh-clear-kvm kubectl create -f -"
+	@ echo "   cat deploy/kubernetes-$$(cat _work/$(CLUSTER)/kubernetes.version)/pmem-pvc.yaml | _work/$(CLUSTER)/ssh kubectl create -f -"
+	@ echo "   cat deploy/kubernetes-$$(cat _work/$(CLUSTER)/kubernetes.version)/pmem-app.yaml | _work/$(CLUSTER)/ssh kubectl create -f -"
 	@ echo "To try out the pmem-csi driver cache volumes:"
-	@ echo "   cat deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-pvc-cache.yaml | _work/ssh-clear-kvm kubectl create -f -"
-	@ echo "   cat deploy/kubernetes-$$(cat _work/clear-kvm-kubernetes.version)/pmem-app-cache.yaml | _work/ssh-clear-kvm kubectl create -f -"
+	@ echo "   cat deploy/kubernetes-$$(cat _work/$(CLUSTER)/kubernetes.version)/pmem-pvc-cache.yaml | _work/$(CLUSTER)/ssh kubectl create -f -"
+	@ echo "   cat deploy/kubernetes-$$(cat _work/$(CLUSTER)/kubernetes.version)/pmem-app-cache.yaml | _work/$(CLUSTER)/ssh kubectl create -f -"
 
 stop:
 	for i in $$(seq 0 $$(($(NUM_NODES) - 1))); do \
-		if [ -e _work/clear-kvm.$$i.pid ]; then \
-			kill -9 $$(cat _work/clear-kvm.$$i.pid) 2>/dev/null; \
-			rm -f _work/clear-kvm.$$i.pid; \
+		if [ -e _work/$(CLUSTER)/qemu.$$i.pid ]; then \
+			kill -9 $$(cat _work/$(CLUSTER)/qemu.$$i.pid) 2>/dev/null; \
+			rm -f _work/$(CLUSTER)/qemu.$$i.pid; \
 		fi; \
 	done

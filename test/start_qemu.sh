@@ -57,7 +57,7 @@ fi
 # Same MAC address as the one used in setup-clear-kvm.sh.
 mac=DE:AD:BE:EF:01:0$VMN
 
-. $(dirname $0)/../test/test-config.sh
+. $(dirname $0)/../../test/test-config.sh
 
 # We must exec here to ensure that our caller can kill qemu by killing its child process.
 # The source of entropy for the guest is intentionally the non-blocking /dev/urandom.
