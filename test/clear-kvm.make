@@ -61,6 +61,16 @@ DOWNLOAD_CLEAR_IMG += && unxz -c <clear-$$version-kvm.img.xz >clear-kvm-$$versio
 # Number of nodes to be created in the virtual cluster, including master node.
 NUM_NODES = 4
 
+# The following rules only apply when CLUSTER starts with clear-kvm.
+# This is necessary because a rule of this format is not applied
+# for CLUSTER=clear-kvm:
+# _work/clear-kvm%/start-kubernetes: test/start_kubernetes.sh
+#
+# Explicitly listing _work/$(CLUSTER)/start-kubernetes as
+# target works around that, but then we must avoid defining
+# that rule when the name is different.
+ifneq (,$(filter clear-kvm%,$(CLUSTER)))
+
 # Multiple different images can be created, starting with clear-kvm.0.img
 # and ending with clear-kvm.<NUM_NODES - 1>.img.
 #
@@ -82,6 +92,12 @@ _work/$(CLUSTER)/run-qemu: _work/clear-kvm%/run-qemu: test/start_qemu.sh _work/O
 	cp _work/OVMF.fd $(@D)
 	sed -e "s;\(OVMF.fd\);$$(pwd)/$(@D)/\1;g" $< >$@
 	chmod a+x $@
+_work/$(CLUSTER)/start-kubernetes: _work/clear-kvm%/start-kubernetes: test/start_kubernetes.sh
+	mkdir -p $(@D)
+	sed -e "s;SSH;$$(pwd)/$(@D)/ssh;g" $< >$@
+	chmod u+x $@
+
+endif
 
 # Generate a random password. Converting a random binary to hex still
 # had many repetitive or adjacent characters, which was flagged as
@@ -108,11 +124,6 @@ _work/passwd:
 			break; \
 		fi; \
 	done
-
-_work/$(CLUSTER)/start-kubernetes: _work/clear-kvm%/start-kubernetes: test/start_kubernetes.sh
-	mkdir -p $(@D)
-	sed -e "s;SSH;$$(pwd)/$(@D)/ssh;g" $< >$@
-	chmod u+x $@
 
 _work/OVMF.fd:
 	mkdir -p $(@D)
