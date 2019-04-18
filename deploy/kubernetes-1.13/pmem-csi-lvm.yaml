@@ -361,6 +361,9 @@ spec:
         name: pmem-ns-init
         securityContext:
           privileged: true
+        volumeMounts:
+        - mountPath: /sys
+          name: sys-dir
       - args:
         - -v=5
         image: 192.168.8.1:5000/pmem-vgm:canary
@@ -390,6 +393,10 @@ spec:
       - name: registry-cert
         secret:
           secretName: pmem-csi-node-secrets
+      - hostPath:
+          path: /sys
+          type: DirectoryOrCreate
+        name: sys-dir
 ---
 apiVersion: csi.storage.k8s.io/v1alpha1
 kind: CSIDriver
