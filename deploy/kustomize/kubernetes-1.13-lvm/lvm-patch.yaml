@@ -1,0 +1,21 @@
+# Select LVM mode. The PMEM-CSI driver must be in container #0.
+- op: add
+  path: /spec/template/spec/containers/0/args/0
+  value: "-deviceManager=lvm"
+
+# LVM mode needs init containers.
+- op: add
+  path: /spec/template/spec/initContainers
+  value:
+  - name: pmem-ns-init
+    imagePullPolicy: Always
+    image: 192.168.8.1:5000/pmem-ns-init:canary
+    args: [ "-v=5", "-namespacesize=9" ]
+    securityContext:
+      privileged: true
+  - name: pmem-vgm
+    imagePullPolicy: Always
+    image: 192.168.8.1:5000/pmem-vgm:canary
+    args: [ "-v=5" ]
+    securityContext:
+      privileged: true

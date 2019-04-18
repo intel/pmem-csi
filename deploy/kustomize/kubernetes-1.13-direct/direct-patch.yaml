@@ -1,0 +1,36 @@
+# Select LVM mode. The PMEM-CSI driver must be in container #0.
+- op: add
+  path: /spec/template/spec/containers/0/args/0
+  value: "-deviceManager=ndctl"
+
+# Direct mode needs /dev and /sys.
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: dev-dir
+    mountPath: /dev
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    name: sys-dir
+    mountPath: /sys
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: dev-dir
+    hostPath:
+      path: /dev
+      type: DirectoryOrCreate
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: sys-dir
+    hostPath:
+      path: /sys
+      type: DirectoryOrCreate
+
+# Passing /dev to container may cause container creation error because termination-log is located on /dev/ by default.
+# Adding this clause works around failure, although it's bogus as this file is not actually used.
+- op: add
+  path: /spec/template/spec/containers/0/terminationMessagePath
+  value: /tmp/termination-log

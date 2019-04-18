@@ -1,0 +1,7 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: pmem-csi-sc
+parameters:
+  persistencyModel: cache
+  cacheSize: "2"

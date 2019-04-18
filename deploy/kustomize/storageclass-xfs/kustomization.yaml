@@ -1,0 +1,7 @@
+nameSuffix: -xfs
+
+bases:
+- ../storageclass
+
+patchesStrategicMerge:
+- xfs.yaml

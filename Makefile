@@ -73,3 +73,50 @@ clean:
 include test/clear-kvm.make
 include test/start-stop.make
 include test/test.make
+
+
+
+# We generate deployment files with kustomize and include the output
+# in the git repo because not all users will have kustomize or it
+# might be an unsuitable version. When any file changes, update the
+# output.
+KUSTOMIZE_INPUT := $(shell find deploy/kustomize -type f)
+KUSTOMIZE_OUTPUT :=
+KUSTOMIZE_OUTPUT += deploy/kubernetes-1.13/pmem-csi-direct.yaml
+KUSTOMIZATION_deploy/kubernetes-1.13/pmem-csi-direct.yaml = deploy/kustomize/kubernetes-1.13-direct
+KUSTOMIZE_OUTPUT += deploy/kubernetes-1.13/pmem-csi-lvm.yaml
+KUSTOMIZATION_deploy/kubernetes-1.13/pmem-csi-lvm.yaml = deploy/kustomize/kubernetes-1.13-lvm
+KUSTOMIZE_OUTPUT += deploy/kubernetes-1.13/pmem-storageclass-ext4.yaml
+KUSTOMIZATION_deploy/kubernetes-1.13/pmem-storageclass-ext4.yaml = deploy/kustomize/storageclass-ext4
+KUSTOMIZE_OUTPUT += deploy/kubernetes-1.13/pmem-storageclass-xfs.yaml
+KUSTOMIZATION_deploy/kubernetes-1.13/pmem-storageclass-xfs.yaml = deploy/kustomize/storageclass-xfs
+KUSTOMIZE_OUTPUT += deploy/kubernetes-1.13/pmem-storageclass-cache.yaml
+KUSTOMIZATION_deploy/kubernetes-1.13/pmem-storageclass-cache.yaml = deploy/kustomize/storageclass-cache
+kustomize: $(KUSTOMIZE_OUTPUT)
+$(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
+	$< build $(KUSTOMIZATION_$@) >$@
+
+# Build kustomize at a certain revision. Depends on go >= 1.12
+# because we use module support.
+KUSTOMIZE_VERSION=177297c0efb92ec2d7eea8f20c65c1d11c6ae7ef
+_work/kustomize: _work/.kustomize-$(KUSTOMIZE_VERSION)-stamp
+_work/.kustomize-$(KUSTOMIZE_VERSION)-stamp:
+	tmpdir=`mktemp -d` && \
+	trap 'rm -r $$tmpdir' EXIT && \
+	cd $$tmpdir && \
+	echo "module foo" >go.mod && \
+	go get sigs.k8s.io/kustomize@$(KUSTOMIZE_VERSION) && \
+	go build -o $(abspath _work/kustomize) sigs.k8s.io/kustomize && \
+	touch --reference=$(abspath _work/kustomize) $(abspath $@)
+
+PHONY: clean-kustomize
+clean: clean-kustomize
+clean-kustomize:
+	rm -f _work/kustomize
+	rm -f _work/.kustomize-$(KUSTOMIZE_VERSION)-stamp
+
+PHONY: test-kustomize $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
+test: test-kustomize
+test-kustomize: $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
+$(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT)): test-kustomize-%: _work/kustomize
+	@ if ! diff <($< build $(KUSTOMIZATION_$*)) $*; then echo "$* was modified manually" && false; fi
