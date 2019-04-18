@@ -8,6 +8,7 @@ package pmemcsidriver
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"golang.org/x/net/context"
@@ -100,10 +101,30 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	stagingtargetPath := req.StagingTargetPath
 	// TODO: check is bind-mount already made
 	// (happens when publish is asked repeatedly for already published namespace)
-	notMnt, _ := mount.New("").IsLikelyNotMountPoint(targetPath)
+	notMnt, err := mount.New("").IsLikelyNotMountPoint(targetPath)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, status.Error(codes.Internal, "validate target path: "+err.Error())
+	}
 	if !notMnt {
+		// TODO(https://github.com/kubernetes-sigs/gcp-compute-persistent-disk-csi-driver/issues/95): check if mount is compatible. Return OK if it is, or appropriate error.
+		/*
+			1) Target Path MUST be the vol referenced by vol ID
+			2) VolumeCapability MUST match
+			3) Readonly MUST match
+		*/
 		return &csi.NodePublishVolumeResponse{}, nil
 	}
+
+	if err := os.Mkdir(targetPath, os.FileMode(0755)); err != nil {
+		// Kubernetes is violating the CSI spec and creates the
+		// directory for us
+		// (https://github.com/kubernetes/kubernetes/issues/75535). We
+		// allow that by ignoring the "already exists" error.
+		if !os.IsExist(err) {
+			return nil, status.Error(codes.Internal, "make target dir: "+err.Error())
+		}
+	}
+
 	readOnly := req.GetReadonly()
 	attrib := req.GetVolumeContext()
 	mountFlags := req.GetVolumeCapability().GetMount().GetMountFlags()
@@ -147,6 +168,8 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	pmemcommon.Infof(4, ctx, "volume %s/%s has been unmounted.", targetPath, volumeID)
+
+	os.Remove(targetPath) // nolint: gosec
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
@@ -354,4 +377,8 @@ func determineFilesystemType(devicePath string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no filesystem type detected for %s", devicePath)
+}
+
+func (ns *nodeServer) NodeExpandVolume(context.Context, *csi.NodeExpandVolumeRequest) (*csi.NodeExpandVolumeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
 }

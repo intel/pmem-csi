@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pmem-csi-controller-testing
+spec:
+  type: NodePort
+  selector:
+    app: pmem-csi-controller
+  ports:
+  - port: 10001 # port inside the pod where controller-socat-path.yaml forwards the csi.sock
+---
+apiVersion: apps/v1beta2
+kind: DaemonSet
+metadata:
+  name: pmem-csi-node-testing
+spec:
+  selector:
+    matchLabels:
+      app: pmem-csi-node-testing
+  template:
+    metadata:
+      labels:
+        app: pmem-csi-node-testing
+    spec:
+      hostNetwork: true
+      containers:
+      - name: socat
+        image: alpine/socat:1.0.3
+        args:
+        - tcp-listen:9735,fork,reuseaddr # port 9735 *on the host*
+        - unix-connect:/csi/csi.sock
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: plugin-socket-dir
+          mountPath: /csi
+        # mountpoint-dir and staging-dir are needed for creating directories during sanity testing.
+        - name: mountpoint-dir
+          mountPath: /var/lib/kubelet/pods
+          mountPropagation: Bidirectional
+        - name: staging-dir
+          mountPath: /var/lib/kubelet/plugins/kubernetes.io/csi/pv # preliminary (?), https://github.com/kubernetes-csi/docs/issues/130
+          mountPropagation: Bidirectional
+      volumes:
+      - hostPath:
+          path: /var/lib/kubelet/plugins/pmem-csi.intel.com/
+          type: DirectoryOrCreate
+        name: plugin-socket-dir
+      - hostPath:
+          path: /var/lib/kubelet/plugins_registry/
+          type: DirectoryOrCreate
+        name: registration-dir
+      - hostPath:
+          path: /var/lib/kubelet/plugins/kubernetes.io/csi/pv
+          type: DirectoryOrCreate
+        name: staging-dir
+      - hostPath:
+          path: /var/lib/kubelet/pods
+          type: DirectoryOrCreate
+        name: mountpoint-dir

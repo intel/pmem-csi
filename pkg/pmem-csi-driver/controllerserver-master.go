@@ -8,6 +8,7 @@ package pmemcsidriver
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 
 	"github.com/google/uuid"
@@ -292,7 +293,7 @@ func (cs *masterController) ControllerPublishVolume(ctx context.Context, req *cs
 	state, ok := vol.nodeIDs[req.NodeId]
 	if !ok {
 		// This should not happen as we locked the topology while volume creation
-		return nil, status.Error(codes.FailedPrecondition, "Volume cannot be published on requested node "+req.NodeId)
+		return nil, status.Error(codes.NotFound, "Volume cannot be published on requested node "+req.NodeId)
 	} else if state == Attached {
 		return nil, status.Error(codes.AlreadyExists, "Volume already published on requested node "+req.NodeId)
 	} else {
@@ -367,19 +368,75 @@ func (cs *masterController) ListVolumes(ctx context.Context, req *csi.ListVolume
 		pmemcommon.Infof(3, ctx, "invalid list volumes req: %v", req)
 		return nil, err
 	}
-	// List namespaces
-	var entries []*csi.ListVolumesResponse_Entry
+
+	// Copy from map into array for pagination.
+	vols := make([]*pmemVolume, 0, len(cs.pmemVolumes))
 	for _, vol := range cs.pmemVolumes {
-		entries = append(entries, &csi.ListVolumesResponse_Entry{
+		vols = append(vols, vol)
+	}
+
+	// Code originally copied from https://github.com/kubernetes-csi/csi-test/blob/f14e3d32125274e0c3a3a5df380e1f89ff7c132b/mock/service/controller.go#L309-L365
+
+	var (
+		ulenVols      = int32(len(vols))
+		maxEntries    = req.MaxEntries
+		startingToken int32
+	)
+
+	if v := req.StartingToken; v != "" {
+		i, err := strconv.ParseUint(v, 10, 32)
+		if err != nil {
+			return nil, status.Errorf(
+				codes.Aborted,
+				"startingToken=%d !< int32=%d",
+				startingToken, math.MaxUint32)
+		}
+		startingToken = int32(i)
+	}
+
+	if startingToken > ulenVols {
+		return nil, status.Errorf(
+			codes.Aborted,
+			"startingToken=%d > len(vols)=%d",
+			startingToken, ulenVols)
+	}
+
+	// Discern the number of remaining entries.
+	rem := ulenVols - startingToken
+
+	// If maxEntries is 0 or greater than the number of remaining entries then
+	// set maxEntries to the number of remaining entries.
+	if maxEntries == 0 || maxEntries > rem {
+		maxEntries = rem
+	}
+
+	var (
+		i       int
+		j       = startingToken
+		entries = make(
+			[]*csi.ListVolumesResponse_Entry,
+			maxEntries)
+	)
+
+	for i = 0; i < len(entries); i++ {
+		vol := vols[j]
+		entries[i] = &csi.ListVolumesResponse_Entry{
 			Volume: &csi.Volume{
 				VolumeId:      vol.id,
 				CapacityBytes: vol.size,
 			},
-		})
+		}
+		j++
+	}
+
+	var nextToken string
+	if n := startingToken + int32(i); n < ulenVols {
+		nextToken = fmt.Sprintf("%d", n)
 	}
 
 	return &csi.ListVolumesResponse{
-		Entries: entries,
+		Entries:   entries,
+		NextToken: nextToken,
 	}, nil
 }
 
@@ -434,4 +491,8 @@ func (cs *masterController) getVolumeByName(Name string) *pmemVolume {
 		}
 	}
 	return nil
+}
+
+func (cs *masterController) ControllerExpandVolume(context.Context, *csi.ControllerExpandVolumeRequest) (*csi.ControllerExpandVolumeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
 }

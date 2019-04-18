@@ -17,15 +17,12 @@ limitations under the License.
 package storage
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
-	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/test/e2e/framework"
-	"k8s.io/kubernetes/test/e2e/framework/podlogs"
 	"k8s.io/kubernetes/test/e2e/storage/testpatterns"
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
 	"k8s.io/kubernetes/test/e2e/storage/utils"
@@ -49,34 +46,6 @@ func csiTunePattern(patterns []testpatterns.TestPattern) []testpatterns.TestPatt
 }
 
 var _ = Describe("PMEM Volumes", func() {
-	f := framework.NewDefaultFramework("pmem")
-
-	var (
-		cs     clientset.Interface
-		cancel context.CancelFunc
-	)
-
-	BeforeEach(func() {
-		cs = f.ClientSet
-		// Must be done this way to keep "go vet" happy.
-		ctx, cncl := context.WithCancel(context.Background())
-		cancel = cncl
-
-		// This assumes that the pmem-csi driver got installed in the default namespace.
-		to := podlogs.LogOutput{
-			StatusWriter: GinkgoWriter,
-			LogWriter:    GinkgoWriter,
-		}
-		podlogs.CopyAllLogs(ctx, cs, "default", to)
-		podlogs.WatchPods(ctx, cs, "default", GinkgoWriter)
-	})
-
-	AfterEach(func() {
-		if cancel != nil {
-			cancel()
-		}
-	})
-
 	// List of testDrivers to be executed in below loop
 	var csiTestDrivers = []func() testsuites.TestDriver{
 		// pmem-csi
@@ -92,12 +61,6 @@ var _ = Describe("PMEM Volumes", func() {
 						testsuites.CapPersistence: true,
 						testsuites.CapFsGroup:     true,
 						testsuites.CapExec:        true,
-					},
-
-					Config: testsuites.TestConfig{
-						Framework:       f,
-						Prefix:          "pmem",
-						TopologyEnabled: true,
 					},
 				},
 				scManifest: "deploy/kubernetes-1.13/pmem-storageclass-ext4.yaml",
@@ -115,29 +78,19 @@ var _ = Describe("PMEM Volumes", func() {
 	// List of testSuites to be executed in below loop
 	var csiTestSuites = []func() testsuites.TestSuite{
 		// TODO: investigate how useful these tests are and enable them.
-		// testsuites.InitVolumesTestSuite,
+		// testsuites.InitMultiVolumeTestSuite,
+		testsuites.InitProvisioningTestSuite,
+		// testsuites.InitSnapshottableTestSuite,
+		// testsuites.InitSubPathTestSuite,
 		// testsuites.InitVolumeIOTestSuite,
 		// testsuites.InitVolumeModeTestSuite,
-		// testsuites.InitSubPathTestSuite,
-		testsuites.InitProvisioningTestSuite,
+		// testsuites.InitVolumesTestSuite,
 	}
 
 	for _, initDriver := range csiTestDrivers {
 		curDriver := initDriver()
 		Context(testsuites.GetDriverNameWithFeatureTags(curDriver), func() {
-			driver := curDriver
-
-			BeforeEach(func() {
-				// setupDriver
-				driver.CreateDriver()
-			})
-
-			AfterEach(func() {
-				// Cleanup driver
-				driver.CleanupDriver()
-			})
-
-			testsuites.RunTestSuite(f, driver, csiTestSuites, csiTunePattern)
+			testsuites.DefineTestSuite(curDriver, csiTestSuites)
 		})
 	}
 })
@@ -161,8 +114,8 @@ func (m *manifestDriver) GetDriverInfo() *testsuites.DriverInfo {
 func (m *manifestDriver) SkipUnsupportedTest(testpatterns.TestPattern) {
 }
 
-func (m *manifestDriver) GetDynamicProvisionStorageClass(fsType string) *storagev1.StorageClass {
-	f := m.driverInfo.Config.Framework
+func (m *manifestDriver) GetDynamicProvisionStorageClass(config *testsuites.PerTestConfig, fsType string) *storagev1.StorageClass {
+	f := config.Framework
 
 	items, err := f.LoadFromManifests(m.scManifest)
 	Expect(err).NotTo(HaveOccurred())
@@ -170,7 +123,7 @@ func (m *manifestDriver) GetDynamicProvisionStorageClass(fsType string) *storage
 
 	err = f.PatchItems(items...)
 	Expect(err).NotTo(HaveOccurred())
-	err = utils.PatchCSIDeployment(f, m.finalPatchOptions(), items[0])
+	err = utils.PatchCSIDeployment(f, m.finalPatchOptions(f), items[0])
 
 	sc, ok := items[0].(*storagev1.StorageClass)
 	Expect(ok).To(BeTrue(), "storage class from %s", m.scManifest)
@@ -181,35 +134,30 @@ func (m *manifestDriver) GetClaimSize() string {
 	return m.claimSize
 }
 
-func (m *manifestDriver) CreateDriver() {
+func (m *manifestDriver) PrepareTest(f *framework.Framework) (*testsuites.PerTestConfig, func()) {
 	By(fmt.Sprintf("deploying %s driver", m.driverInfo.Name))
-	f := m.driverInfo.Config.Framework
-
-	// TODO (?): the storage.csi.image.version and storage.csi.image.registry
-	// settings are ignored for this test. We could patch the image definitions.
+	config := &testsuites.PerTestConfig{
+		Driver:    m,
+		Prefix:    "pmem",
+		Framework: f,
+	}
 	cleanup, err := f.CreateFromManifests(func(item interface{}) error {
-		return utils.PatchCSIDeployment(f, m.finalPatchOptions(), item)
+		return utils.PatchCSIDeployment(f, m.finalPatchOptions(f), item)
 	},
 		m.manifests...,
 	)
-	m.cleanup = cleanup
-	if err != nil {
-		framework.Failf("deploying %s driver: %v", m.driverInfo.Name, err)
-	}
-}
-
-func (m *manifestDriver) CleanupDriver() {
-	if m.cleanup != nil {
+	framework.ExpectNoError(err, "deploying driver %s", m.driverInfo.Name)
+	return config, func() {
 		By(fmt.Sprintf("uninstalling %s driver", m.driverInfo.Name))
-		m.cleanup()
+		cleanup()
 	}
 }
 
-func (m *manifestDriver) finalPatchOptions() utils.PatchCSIOptions {
+func (m *manifestDriver) finalPatchOptions(f *framework.Framework) utils.PatchCSIOptions {
 	o := m.patchOptions
 	// Unique name not available yet when configuring the driver.
 	if strings.HasSuffix(o.NewDriverName, "-") {
-		o.NewDriverName += m.driverInfo.Config.Framework.UniqueName
+		o.NewDriverName += f.UniqueName
 	}
 	return o
 }

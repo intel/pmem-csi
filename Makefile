@@ -15,6 +15,7 @@
 
 IMPORT_PATH=github.com/intel/pmem-csi
 SHELL=bash
+.DELETE_ON_ERROR:
 
 ifeq ($(VERSION), )
 VERSION=$(shell git describe --long --dirty --tags --match='v*')
@@ -81,11 +82,25 @@ include test/test.make
 # might be an unsuitable version. When any file changes, update the
 # output.
 KUSTOMIZE_INPUT := $(shell find deploy/kustomize -type f)
+
+# Workaround for https://github.com/kubernetes-sigs/kustomize/issues/937:
+# we have to copy patch files into targets instead of referencing
+# with a relative path to the parent directory.
+KUSTOMIZE_INPUT += deploy/kustomize/kubernetes-1.13-lvm-testing/controller-socat-patch.yaml
+KUSTOMIZE_INPUT += deploy/kustomize/kubernetes-1.13-direct-testing/controller-socat-patch.yaml
+deploy/kustomize/kubernetes-%/controller-socat-patch.yaml: deploy/kustomize/testing/controller-socat-patch.yaml
+	cp $< $@
+
+# Output files and their corresponding kustomize target.
 KUSTOMIZE_OUTPUT :=
 KUSTOMIZE_OUTPUT += deploy/kubernetes-1.13/pmem-csi-direct.yaml
 KUSTOMIZATION_deploy/kubernetes-1.13/pmem-csi-direct.yaml = deploy/kustomize/kubernetes-1.13-direct
 KUSTOMIZE_OUTPUT += deploy/kubernetes-1.13/pmem-csi-lvm.yaml
 KUSTOMIZATION_deploy/kubernetes-1.13/pmem-csi-lvm.yaml = deploy/kustomize/kubernetes-1.13-lvm
+KUSTOMIZE_OUTPUT += deploy/kubernetes-1.13/pmem-csi-direct-testing.yaml
+KUSTOMIZATION_deploy/kubernetes-1.13/pmem-csi-direct-testing.yaml = deploy/kustomize/kubernetes-1.13-direct-testing
+KUSTOMIZE_OUTPUT += deploy/kubernetes-1.13/pmem-csi-lvm-testing.yaml
+KUSTOMIZATION_deploy/kubernetes-1.13/pmem-csi-lvm-testing.yaml = deploy/kustomize/kubernetes-1.13-lvm-testing
 KUSTOMIZE_OUTPUT += deploy/kubernetes-1.13/pmem-storageclass-ext4.yaml
 KUSTOMIZATION_deploy/kubernetes-1.13/pmem-storageclass-ext4.yaml = deploy/kustomize/storageclass-ext4
 KUSTOMIZE_OUTPUT += deploy/kubernetes-1.13/pmem-storageclass-xfs.yaml
@@ -95,6 +110,7 @@ KUSTOMIZATION_deploy/kubernetes-1.13/pmem-storageclass-cache.yaml = deploy/kusto
 kustomize: $(KUSTOMIZE_OUTPUT)
 $(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
 	$< build $(KUSTOMIZATION_$@) >$@
+
 
 # Build kustomize at a certain revision. Depends on go >= 1.12
 # because we use module support.
@@ -114,6 +130,7 @@ clean: clean-kustomize
 clean-kustomize:
 	rm -f _work/kustomize
 	rm -f _work/.kustomize-$(KUSTOMIZE_VERSION)-stamp
+	rm -f deploy/kustomize/kubernetes-*/controller-socat-patch.yaml
 
 PHONY: test-kustomize $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
 test: test-kustomize
