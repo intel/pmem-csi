@@ -185,8 +185,8 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 	}
 
 	if opts.Size != 0 {
-		ways := uint32(C.ndctl_region_get_interleave_ways(ndr))
-		align := uint64(opts.Align * ways)
+		ways := uint64(C.ndctl_region_get_interleave_ways(ndr))
+		align := uint64(opts.Align) * ways
 		if opts.Size%align != 0 {
 			// force-align down to block boundary. More sensible would be to align up, but then it may fail because we ask more then there is left
 			opts.Size /= align
