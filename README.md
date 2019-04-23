@@ -362,7 +362,7 @@ the same cache volume runs on the same node, will not get their own
 local volume, instead they endup sharing the same PMEM
 volume. Applications has to consider this and use available Kubernetes
 mechanisms like [node
-aniti-affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity)
+anti-affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity)
 while deploying. Check with provided [cache
 application](deploy/kubernetes-1.13/pmem-app-cache.yaml) example.
 
