@@ -85,7 +85,7 @@ func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) err
 	ns, err := pmem.ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
 		Name:  name,
 		Size:  size,
-		Align: uint32(align),
+		Align: align,
 		Mode:  ndctl.NamespaceMode(nsmode),
 	})
 	if err != nil {

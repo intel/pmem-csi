@@ -174,19 +174,19 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 			resource := uint64(C.ndctl_region_get_resource(ndr))
 			if resource < uint64(C.ULLONG_MAX) && resource&(mib2-1) != 0 {
 				glog.Infof("%s: falling back to a 4K alignment", regionName)
-				opts.Align = uint32(kib4)
+				opts.Align = kib4
 			}
-			if opts.Align != uint32(kib4) && opts.Align != uint32(mib2) && opts.Align != uint32(gib) {
+			if opts.Align != kib4 && opts.Align != mib2 && opts.Align != gib {
 				return nil, fmt.Errorf("unsupported alignment: %v", opts.Align)
 			}
 		}
 	} else {
-		opts.Align = uint32(defaultAlign)
+		opts.Align = defaultAlign
 	}
 
 	if opts.Size != 0 {
-		ways := uint32(C.ndctl_region_get_interleave_ways(ndr))
-		align := uint64(opts.Align * ways)
+		ways := uint64(C.ndctl_region_get_interleave_ways(ndr))
+		align := opts.Align * ways
 		if opts.Size%align != 0 {
 			// force-align down to block boundary. More sensible would be to align up, but then it may fail because we ask more then there is left
 			opts.Size /= align
@@ -230,10 +230,10 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 		switch opts.Mode {
 		case FsdaxMode:
 			glog.Infof("setting pfn")
-			err = ns.setPfnSeed(opts.Location, uint64(opts.Align))
+			err = ns.setPfnSeed(opts.Location, opts.Align)
 		case DaxMode:
 			glog.Infof("setting dax")
-			err = ns.setDaxSeed(opts.Location, uint64(opts.Align))
+			err = ns.setDaxSeed(opts.Location, opts.Align)
 		case SectorMode:
 			glog.Infof("setting btt")
 			err = ns.setBttSeed(opts.SectorSize)
