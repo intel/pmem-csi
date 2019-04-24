@@ -1,7 +1,7 @@
-This mixin for a regular production deployment of PMEM-CSI adds port
+This mixin for a regular production deployment of pmem-CSI adds port
 forwarding to the outside world:
 
-The pmem-csi-controller-testing Service exposes the PMEM-CSI controller's
+The pmem-csi-controller-testing Service exposes the pmem-CSI controller's
 csi.sock as a TCP service with a dynamically allocated port, on any
 node of the cluster. For this to work, the pmem-csi-controller has
 to be patched with the controller-socat-patch.yaml. Due to
