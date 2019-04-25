@@ -411,7 +411,7 @@ spec:
         - --v=5
         - --kubelet-registration-path=/var/lib/kubelet/plugins/pmem-csi.intel.com/csi.sock
         - --csi-address=/csi/csi.sock
-        image: quay.io/k8scsi/csi-node-driver-registrar:v1.0.2
+        image: quay.io/k8scsi/csi-node-driver-registrar:v1.1.0
         imagePullPolicy: Always
         name: driver-registrar
         volumeMounts:
