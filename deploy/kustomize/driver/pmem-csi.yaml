@@ -61,6 +61,9 @@ spec:
                  "-certFile=/certs/pmem-csi-registry.crt",
                  "-keyFile=/certs/pmem-csi-registry.key"
                ]
+        # Passing /dev to container may cause container creation error because
+        # termination-log is located on /dev/ by default, re-locate to /tmp
+        terminationMessagePath: /tmp/termination-log
         volumeMounts:
         - name: registry-cert
           mountPath: /certs/
@@ -72,6 +75,8 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: spec.nodeName
+        - name: TERMINATION_LOG_PATH
+          value: /tmp/termination-log
         securityContext:
           privileged: true
       volumes:
@@ -117,6 +122,9 @@ spec:
                   "-certFile=/certs/$(KUBE_NODE_NAME).crt",
                   "-keyFile=/certs/$(KUBE_NODE_NAME).key"
               ]
+        # Passing /dev to container may cause container creation error because
+        # termination-log is located on /dev/ by default, re-locate to /tmp
+        terminationMessagePath: /tmp/termination-log
         securityContext:
           privileged: true
         env:
@@ -132,6 +140,8 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: status.podIP
+        - name: TERMINATION_LOG_PATH
+          value: /tmp/termination-log
         volumeMounts:
         - name: plugin-socket-dir
           mountPath: /csi

@@ -10,6 +10,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 
 	"k8s.io/klog"
@@ -66,12 +67,24 @@ func main() {
 		Version:            version,
 	})
 	if err != nil {
-		fmt.Printf("Failed to Initialized driver: %s", err.Error())
-		os.Exit(1)
+		errorexit("Failed to initialize driver:", err)
 	}
 
 	if err = driver.Run(); err != nil {
-		fmt.Printf("Failed to run driver: %s", err.Error())
-		os.Exit(1)
+		errorexit("Failed to run driver:", err)
 	}
+}
+
+func errorexit(msg string, e error) {
+	str := msg + e.Error()
+	fmt.Println(str)
+	terminationMsgPath := os.Getenv("TERMINATION_LOG_PATH")
+	if terminationMsgPath != "" {
+		err := ioutil.WriteFile(terminationMsgPath, []byte(str), os.FileMode(0644))
+		if err != nil {
+			fmt.Println("Can not create termination log file:" + terminationMsgPath)
+		}
+	}
+
+	os.Exit(1)
 }

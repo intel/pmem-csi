@@ -28,9 +28,3 @@
     hostPath:
       path: /sys
       type: DirectoryOrCreate
-
-# Passing /dev to container may cause container creation error because termination-log is located on /dev/ by default.
-# Adding this clause works around failure, although it's bogus as this file is not actually used.
-- op: add
-  path: /spec/template/spec/containers/0/terminationMessagePath
-  value: /tmp/termination-log

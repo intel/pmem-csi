@@ -292,11 +292,14 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: spec.nodeName
+        - name: TERMINATION_LOG_PATH
+          value: /tmp/termination-log
         image: 192.168.8.1:5000/pmem-csi-driver:canary
         imagePullPolicy: Always
         name: pmem-driver
         securityContext:
           privileged: true
+        terminationMessagePath: /tmp/termination-log
         volumeMounts:
         - mountPath: /certs/
           name: registry-cert
@@ -354,6 +357,8 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: status.podIP
+        - name: TERMINATION_LOG_PATH
+          value: /tmp/termination-log
         image: 192.168.8.1:5000/pmem-csi-driver:canary
         imagePullPolicy: Always
         name: pmem-driver
