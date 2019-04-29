@@ -1,4 +1,4 @@
--   [pmem-CSI for Kubernetes](#pmem-csi-for-kubernetes)
+-   [PMEM-CSI for Kubernetes](#pmem-csi-for-kubernetes)
     -   [About](#about)
     -   [Design](#design)
         -   [Architecture and Operation](#architecture-and-operation)
@@ -15,8 +15,8 @@
     -   [Supported Kubernetes versions](#supported-kubernetes-versions)
     -   [Setup](#setup)
         -   [Get source code](#get-source-code)
-        -   [Build pmem-CSI](#build-pmem-csi)
-        -   [Run pmem-CSI on Kubernetes](#run-pmem-csi-on-kubernetes)
+        -   [Build PMEM-CSI](#build-pmem-csi)
+        -   [Run PMEM-CSI on Kubernetes](#run-pmem-csi-on-kubernetes)
     -   [Automated testing](#automated-testing)
         -   [Unit testing and code quality](#unit-testing-and-code-quality)
         -   [QEMU and Kubernetes](#qemu-and-kubernetes)
@@ -27,7 +27,7 @@
 
 <!-- based on template now, remaining parts marked as FILL TEMPLATE:  -->
 
-pmem-CSI for Kubernetes
+PMEM-CSI for Kubernetes
 =======================
 
 
@@ -37,7 +37,7 @@ pmem-CSI for Kubernetes
  *Note: This is Alpha code and not production ready.*
 ---
 
-Intel pmem-CSI is a storage driver for container orchestrators like
+Intel PMEM-CSI is a storage driver for container orchestrators like
 Kubernetes. It makes local persistent memory
 ([PMEM](https://pmem.io/)) available as a filesystem volume to
 container applications.
@@ -48,7 +48,7 @@ library](https://github.com/pmem/ndctl). In this readme, we use
 *persistent memory* to refer to a non-volatile dual in-line memory
 module (NVDIMM).
 
-The pmem-CSI driver follows the [CSI
+The PMEM-CSI driver follows the [CSI
 specification](https://github.com/container-storage-interface/spec) by
 listening for API requests and provisioning volumes accordingly.
 
@@ -57,14 +57,14 @@ listening for API requests and provisioning volumes accordingly.
 
 ### Architecture and Operation
 
-The pmem-CSI driver can operate in two different DeviceModes: LVM and Direct
+The PMEM-CSI driver can operate in two different DeviceModes: LVM and Direct
 
 ### DeviceMode:LVM
 
 The following diagram illustrates the operation in DeviceMode:LVM:
 ![devicemode-lvm diagram](/docs/images/devicemodes/pmem-csi-lvm.png)
 
-In DeviceMode:LVM pmem-CSI driver uses LVM for Logical Volumes
+In DeviceMode:LVM PMEM-CSI driver uses LVM for Logical Volumes
 Management to avoid the risk of fragmentation. The LVM logical volumes
 are served to satisfy API requests. There is one Volume Group created
 per Region, ensuring the region-affinity of served volumes.
@@ -88,7 +88,7 @@ starts serving CSI API requests.
 
 #### Namespace modes in DeviceMode:LVM
 
-The pmem-CSI driver can pre-create Namespaces in two modes, forming
+The PMEM-CSI driver can pre-create Namespaces in two modes, forming
 corresponding LVM Volume groups, to serve volumes based on `fsdax` or
 `sector` (alias `safe`) mode Namespaces. The amount of space to be
 used is determined using two options `-useforfsdax` and
@@ -102,7 +102,7 @@ mode will have the `dax` option added to mount options.
 
 #### Using limited amount of total space in DeviceMode:LVM
 
-The pmem-CSI driver can leave space on devices for others, and
+The PMEM-CSI driver can leave space on devices for others, and
 recognize "own" namespaces. Leaving space for others can be achieved
 by specifying lower-than-100 values to `-useforfsdax` and/or
 `-useforsector` options. The distinction "own" vs. "foreign" is
@@ -116,7 +116,7 @@ Namespaces with the name "pmem-csi" are considered.
 The following diagram illustrates the operation in DeviceMode:Direct:
 ![devicemode-direct diagram](/docs/images/devicemodes/pmem-csi-direct.png)
 
-In DeviceMode:Direct pmem-CSI driver allocates Namespaces directly
+In DeviceMode:Direct PMEM-CSI driver allocates Namespaces directly
 from the storage device. This creates device space fragmentation risk,
 but reduces complexity and run-time overhead by avoiding additional
 device mapping layer. Direct mode also ensures the region-affinity of
@@ -128,7 +128,7 @@ needed.
 
 #### Namespace modes in DeviceMode:Direct
 
-The pmem-CSI driver creates a Namespace directly in the mode which is
+The PMEM-CSI driver creates a Namespace directly in the mode which is
 asked by Volume creation request, thus bypassing the complexity of
 pre-allocated pools that are used in DeviceMode:LVM.
 
@@ -140,7 +140,7 @@ Namespace gets value of the VolumeID.
 
 ### Driver modes
 
-The pmem-CSI driver supports running in different modes, which can be
+The PMEM-CSI driver supports running in different modes, which can be
 controlled by passing one of the below options to the driver's
 '_-mode_' command line option. In each mode, it starts a different set
 of open source Remote Procedure Call (gRPC)
@@ -180,7 +180,7 @@ interface](https://github.com/container-storage-interface/spec/blob/master/spec.
 
 #### Node Registry Server
 
-When the pmem-CSI driver runs in _Controller_ mode, it starts a gRPC
+When the PMEM-CSI driver runs in _Controller_ mode, it starts a gRPC
 server on a given endpoint(_-registryEndpoint_) and serves the
 [RegistryServer](pkg/pmem-registry/pmem-registry.proto) interface. The
 driver(s) running in _Node_ mode can register themselves with node
@@ -190,7 +190,7 @@ available persistent memory capacity.
 
 #### Master Controller Server
 
-This gRPC server is started by the pmem-CSI driver running in
+This gRPC server is started by the PMEM-CSI driver running in
 _Controller_ mode and serves the
 [Controller](https://github.com/container-storage-interface/spec/blob/master/spec.md#controller-service-rpc)
 interface defined by the CSI specification. The server responds to
@@ -203,7 +203,7 @@ node that was registered with the driver.
 
 #### Node Controller Server
 
-This gRPC server is started by the pmem-CSI driver running in _Node_
+This gRPC server is started by the PMEM-CSI driver running in _Node_
 mode and implements the
 [ControllerPublishVolume](https://github.com/container-storage-interface/spec/blob/master/spec.md#controllerpublishvolume)
 and
@@ -232,7 +232,7 @@ The following diagram illustrates the communication channels between driver comp
 
 ### Security
 
-All pmem-CSI specific communication [shown in above
+All PMEM-CSI specific communication [shown in above
 section](#communication-channels) between Master
 Controller([RegistryServer](#node-registry-server),
 [MasterControllerServer](#master-controller-server)) and
@@ -278,7 +278,7 @@ move between nodes. This limitation needs to be considered when
 designing and deploying applications that are to use *local storage*.
 
 Below are the volume persistency models considered for implementation
-in pmem-CSI to serve different application use cases:
+in PMEM-CSI to serve different application use cases:
 
 * Persistent Volumes  
 A volume gets created independently of the application, on some node
@@ -300,7 +300,7 @@ restarts. This is useful when the data is only cached information that
 can be discarded and reconstructed at any time *and* the application
 can reuse existing local data when restarting.
 
-Volume | Kubernetes | pmem-CSI | Limitations
+Volume | Kubernetes | PMEM-CSI | Limitations
 --- | --- | --- | ---
 Persistent | supported | supported | topology aware scheduling<sup>1</sup>
 Ephemeral | [in design](https://github.com/kubernetes/enhancements/blob/master/keps/sig-storage/20190122-csi-inline-volumes.md#proposal) | in design | topology aware scheduling<sup>1</sup>, resource constraints<sup>2</sup>
@@ -309,7 +309,7 @@ Cache | supported | supported | topology aware scheduling<sup>1</sup>
 <sup>1 </sup>[Topology aware
 scheduling](https://github.com/kubernetes/enhancements/issues/490)
 ensures that an application runs on a node where the volume was
-created. For CSI-based drivers like pmem-CSI, Kubernetes >= 1.13 is
+created. For CSI-based drivers like PMEM-CSI, Kubernetes >= 1.13 is
 needed. On older Kubernetes releases, pods must be scheduled manually
 onto the right node(s).
 
@@ -331,22 +331,22 @@ provisioned volume can be used.
 
 * if no `persistencyModel` parameter specified in `StorageClass` then
   it is treated as normal Kubernetes persistent volume. In this case
-  pmem-CSI creates PMEM volume on a node and the application that
+  PMEM-CSI creates PMEM volume on a node and the application that
   claims to use this volume is supposed to be scheduled onto this node
   by Kubernetes. Choosing of node is depend on StorageClass
   `volumeBindingMode`. In case of `volumeBindingMode: Immediate`
-  pmem-CSI chooses a node randomly, and in case of `volumeBindingMode:
+  PMEM-CSI chooses a node randomly, and in case of `volumeBindingMode:
   WaitForFirstConsumer` Kubernetes first chooses a node for scheduling
-  the application, and pmem-CSI creates the volume on that
+  the application, and PMEM-CSI creates the volume on that
   node. Applications which claim a normal persistent volume has to use
   `ReadOnlyOnce` access mode in its `accessModes` list. This
   [diagram](/docs/images/sequence/pmem-csi-persistent-sequence-diagram.png)
   illustrates how a normal persistent volume gets provisioned in
-  Kubernetes using pmem-CSI driver.
+  Kubernetes using PMEM-CSI driver.
 
 * `persistencyModel: cache`  
 Volumes of this type shall be used in combination with
-`volumeBindingMode: Immediate`. In this case, pmem-CSI creates a set
+`volumeBindingMode: Immediate`. In this case, PMEM-CSI creates a set
 of PMEM volumes each volume on different node. The number of PMEM
 volumes to create can be specified by `cacheSize` StorageClass
 parameter. Applications which claim a `cache` volume can use
@@ -355,7 +355,7 @@ StorageClass](deploy/kubernetes-1.13/pmem-storageclass-cache.yaml)
 example. This
 [diagram](/docs/images/sequence/pmem-csi-cache-sequence-diagram.png)
 illustrates how a cache volume gets provisioned in Kubernetes using
-pmem-CSI driver.
+PMEM-CSI driver.
 
 **NOTE**: Cache volumes are local to node not Pod. If two Pods using
 the same cache volume runs on the same node, will not get their own
@@ -387,7 +387,7 @@ Regions.
 
 ## Supported Kubernetes versions
 
-pmem-CSI driver implements CSI specification version 1.0.0, which only
+PMEM-CSI driver implements CSI specification version 1.0.0, which only
 supported by Kubernetes versions >= v1.13. The driver deployment in
 Kubernetes cluster has been verified on:
 
@@ -406,7 +406,7 @@ mkdir -p $GOPATH/src/github.com/intel
 git clone https://github.com/intel/pmem-csi $GOPATH/src/github.com/intel/pmem-csi
 ```
 
-### Build pmem-CSI
+### Build PMEM-CSI
 
 1.  Use `make build-images` to produce Docker container images.
 
@@ -415,7 +415,7 @@ git clone https://github.com/intel/pmem-csi $GOPATH/src/github.com/intel/pmem-cs
 
 See the [Makefile](Makefile) for additional make targets and possible make variables.
 
-### Run pmem-CSI on Kubernetes
+### Run PMEM-CSI on Kubernetes
 
 This section assumes that a Kubernetes cluster is already available
 with at least one node that has persistent memory device(s). For development or
@@ -568,7 +568,7 @@ one with ext4-format and another with xfs-format file system.
 
   ### How to extend the plugin
 
-You can modify pmem-CSI to support more xxx by changing the `variable` from Y to Z.
+You can modify PMEM-CSI to support more xxx by changing the `variable` from Y to Z.
 
 
   ## Maintenance
@@ -654,7 +654,7 @@ attempt to bring up missing pieces each time it is invoked.
 The first node `host-0` is the Kubernetes master without persistent memory.
 The other three nodes are worker nodes with one emulated 32GB NVDIMM each.
 After the cluster has been formed, `make start` adds `storage=pmem` label
-to the worker nodes and deploys the pmem-CSI driver.
+to the worker nodes and deploys the PMEM-CSI driver.
 Once `make start` completes, the cluster is ready for interactive use via
 `kubectl` inside the virtual machine. Alternatively, you can also
 set `KUBECONFIG` as shown at the end of the `make start` output
@@ -682,7 +682,7 @@ node-0 which is cluster master.
 sanity](https://github.com/kubernetes-csi/csi-test/tree/master/pkg/sanity)
 tests and some [Kubernetes storage
 tests](https://github.com/kubernetes/kubernetes/tree/master/test/e2e/storage/testsuites)
-against the pmem-CSI driver.
+against the PMEM-CSI driver.
 
 When [ginkgo](https://onsi.github.io/ginkgo/) is installed, then it
 can be used to run individual tests and to control additional aspects
