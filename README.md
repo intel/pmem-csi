@@ -637,33 +637,10 @@ is done by adding the user to the `kvm` group. The
 section in the Clear Linux documentation contains further information
 about enabling KVM and installing QEMU.
 
-To ensure that QEMU and KVM are working, run this:
-
-    make _work/clear-kvm-original.img _work/start-clear-kvm _work/OVMF.fd
-    cp _work/clear-kvm-original.img _work/clear-kvm-test.img
-    _work/start-clear-kvm _work/clear-kvm-test.img
-
-The result should be a login prompt like this:
-
-    [    0.049839] kvm: no hardware support
-    
-    clr-c3f99095d2934d76a8e26d2f6d51cb91 login: 
-
-The message about missing KVM hardware support comes from inside the
-virtual machine and indicates that nested KVM is not enabled. This message can
-be ignored because it is not needed.
-
-Now the running QEMU can be killed and the test image removed again:
-
-    killall qemu-system-x86_64 # in a separate shell
-    rm _work/clear-kvm-test.img
-    reset # Clear Linux changes terminal colors, undo that.
-
 The `clear-kvm` images are prepared automatically by the Makefile. By
 default, four different images are prepared. Each image is pre-configured with
 its own hostname and with network settings for the corresponding `tap`
-device. `clear-kvm.img` is a symlink to the `clear-kvm.0.img` where
-the Kubernetes master node will run.
+device.
 
 The images will contain the latest
 [Clear Linux OS](https://clearlinux.org/) and have the Kubernetes
@@ -690,14 +667,14 @@ The DeviceMode (lvm or direct) used in testing is selected using variable TEST_D
 
 ### Running commands on test cluster nodes over ssh
 
-`make start` generates ssh-wrappers `_work/ssh-clear-kvm.N` for each
+`make start` generates ssh-wrappers `_work/clear-kvm/ssh.N` for each
 test cluster node which are handy for running a single command or to
 start interactive shell. Examples:
 
-`_work/ssh-clear-kvm.0 kubectl get pods` runs a kubectl command on
+`_work/clear-kvm/ssh.0 kubectl get pods` runs a kubectl command on
 node-0 which is cluster master.
 
-`_work/ssh-clear-kvm.1` starts a shell on node-1.
+`_work/clear-kvm/ssh.1` starts a shell on node-1.
 
 ### Running E2E tests
 
@@ -713,7 +690,7 @@ of the test run. For example, to run just the E2E provisioning test
 (create PVC, write data in one pod, read it in another) in verbose mode:
 
 ``` sh
-$ KUBECONFIG=$(pwd)/_work/clear-kvm-kube.config REPO_ROOT=$(pwd) ginkgo -v -focus=pmem-csi.*should.provision.storage.with.defaults ./test/e2e/
+$ KUBECONFIG=$(pwd)/_work/clear-kvm/kube.config REPO_ROOT=$(pwd) ginkgo -v -focus=pmem-csi.*should.provision.storage.with.defaults ./test/e2e/
 Nov 26 11:21:28.805: INFO: The --provider flag is not set.  Treating as a conformance test.  Some tests may not be run.
 Running Suite: PMEM E2E suite
 =============================
@@ -721,7 +698,7 @@ Random Seed: 1543227683 - Will randomize all specs
 Will run 1 of 61 specs
 
 Nov 26 11:21:28.812: INFO: checking config
-Nov 26 11:21:28.812: INFO: >>> kubeConfig: /nvme/gopath/src/github.com/intel/pmem-csi/_work/clear-kvm-kube.config
+Nov 26 11:21:28.812: INFO: >>> kubeConfig: /nvme/gopath/src/github.com/intel/pmem-csi/_work/clear-kvm/kube.config
 Nov 26 11:21:28.817: INFO: Waiting up to 30m0s for all (but 0) nodes to be schedulable
 ...
 Ran 1 of 61 Specs in 58.465 seconds

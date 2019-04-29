@@ -30,7 +30,7 @@
 #
 # Kubernetes does not get started by default because it might
 # not always be needed in the image, depending on the test.
-# _work/kube-clear-kvm can be used to start it.
+# _work/clear-kvm/start-kubernetes can be used to start it.
 
 # Sanitize proxy settings (accept upper and lower case, set and export upper
 # case) and add local machine to no_proxy because some tests may use a
@@ -42,11 +42,8 @@ NO_PROXY=$(shell echo "$${NO_PROXY:-$${no_proxy}},$$(ip addr | grep inet6 | grep
 export HTTP_PROXY HTTPS_PROXY NO_PROXY
 PROXY_ENV=env 'HTTP_PROXY=$(HTTP_PROXY)' 'HTTPS_PROXY=$(HTTPS_PROXY)' 'NO_PROXY=$(NO_PROXY)'
 
-_work/clear-kvm-original.img:
-	$(DOWNLOAD_CLEAR_IMG)
-
 # This picks the latest available version. Can be overriden via make CLEAR_IMG_VERSION=
-CLEAR_IMG_VERSION = $(shell curl https://download.clearlinux.org/latest)
+CLEAR_IMG_VERSION = $(shell curl --silent https://download.clearlinux.org/latest)
 
 DOWNLOAD_CLEAR_IMG = true
 DOWNLOAD_CLEAR_IMG += && mkdir -p _work
@@ -59,10 +56,20 @@ DOWNLOAD_CLEAR_IMG += && curl -O https://download.clearlinux.org/releases/$$vers
 # skipping image verification, does not work at the moment (https://github.com/clearlinux/distribution/issues/85)
 # DOWNLOAD_CLEAR_IMG += && openssl smime -verify -in clear-$$version-kvm.img.xz-SHA512SUMS.sig -inform der -content clear-$$version-kvm.img.xz-SHA512SUMS -CAfile ../test/ClearLinuxRoot.pem -out /dev/null
 DOWNLOAD_CLEAR_IMG += && sed -e 's;/.*/;;' clear-$$version-kvm.img.xz-SHA512SUMS | sha512sum -c
-DOWNLOAD_CLEAR_IMG += && unxz -c <clear-$$version-kvm.img.xz >clear-kvm-original.img
+DOWNLOAD_CLEAR_IMG += && unxz -c <clear-$$version-kvm.img.xz >clear-kvm-$$version.img
 
 # Number of nodes to be created in the virtual cluster, including master node.
 NUM_NODES = 4
+
+# The following rules only apply when CLUSTER starts with clear-kvm.
+# This is necessary because a rule of this format is not applied
+# for CLUSTER=clear-kvm:
+# _work/clear-kvm%/start-kubernetes: test/start_kubernetes.sh
+#
+# Explicitly listing _work/$(CLUSTER)/start-kubernetes as
+# target works around that, but then we must avoid defining
+# that rule when the name is different.
+ifneq (,$(filter clear-kvm%,$(CLUSTER)))
 
 # Multiple different images can be created, starting with clear-kvm.0.img
 # and ending with clear-kvm.<NUM_NODES - 1>.img.
@@ -71,15 +78,26 @@ NUM_NODES = 4
 # kubernetes-0/1/2/.... The first image is for the Kubernetes master node,
 # but configured so that also normal apps can run on it, i.e. no additional
 # worker nodes are needed.
-_work/clear-kvm.img: test/setup-clear-kvm.sh _work/clear-kvm-original.img _work/kube-clear-kvm _work/OVMF.fd _work/start-clear-kvm _work/id _work/passwd
-	$(PROXY_ENV) test/setup-clear-kvm.sh $(NUM_NODES)
-	ln -sf clear-kvm.0.img $@
+_work/$(CLUSTER)/created: _work/clear-kvm%/created: test/setup-clear-kvm.sh _work/clear-kvm%/start-kubernetes _work/clear-kvm%/run-qemu _work/id _work/passwd
+	if ! [ -f _work/clear-kvm-$(CLEAR_IMG_VERSION).img ]; then ( $(DOWNLOAD_CLEAR_IMG) ); fi
+	$(PROXY_ENV) test/setup-clear-kvm.sh _work/clear-kvm-$(CLEAR_IMG_VERSION).img $(@D) $(NUM_NODES)
+	touch $@
+.SECONDARY: _work/$(CLUSTER)/start-kubernetes _work/$(CLUSTER)/run-qemu
 
-_work/start-clear-kvm: test/start_qemu.sh
-	mkdir -p _work
-	cp $< $@
-	sed -i -e "s;\(OVMF.fd\);$$(pwd)/_work/\1;g" $@
+# Makes a copy of the OVMF.fd because it might be modified by the
+# running virtual machine. Strictly speaking, we want one copy per
+# virtual machine instance.
+_work/$(CLUSTER)/run-qemu: _work/clear-kvm%/run-qemu: test/start_qemu.sh _work/OVMF.fd
+	mkdir -p $(@D)
+	cp _work/OVMF.fd $(@D)
+	sed -e "s;\(OVMF.fd\);$$(pwd)/$(@D)/\1;g" $< >$@
 	chmod a+x $@
+_work/$(CLUSTER)/start-kubernetes: _work/clear-kvm%/start-kubernetes: test/start_kubernetes.sh
+	mkdir -p $(@D)
+	sed -e "s;SSH;$$(pwd)/$(@D)/ssh;g" $< >$@
+	chmod u+x $@
+
+endif
 
 # Generate a random password. Converting a random binary to hex still
 # had many repetitive or adjacent characters, which was flagged as
@@ -107,16 +125,10 @@ _work/passwd:
 		fi; \
 	done
 
-_work/kube-clear-kvm: test/start_kubernetes.sh
-	mkdir -p _work
-	cp $< $@
-	sed -i -e "s;SSH;$$(pwd)/_work/ssh-clear-kvm;g" $@
-	chmod u+x $@
-
 _work/OVMF.fd:
-	mkdir -p _work
+	mkdir -p $(@D)
 	curl -o $@ https://download.clearlinux.org/image/OVMF.fd
 
 _work/id:
-	mkdir -p _work
+	mkdir -p $(@D)
 	ssh-keygen -N '' -f $@
