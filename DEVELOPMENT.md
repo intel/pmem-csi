@@ -79,7 +79,7 @@ Network ports
 
 Network ports are opened as configured in manifest files:
 
-- registry endpoint: typical port value 10000, used for pmem-CSI internal communication
+- registry endpoint: typical port value 10000, used for PMEM-CSI internal communication
 - controller endpoint: typical port value 10001, used for serving CSI API
 
 
@@ -183,7 +183,7 @@ This produces the following binaries in the `_output` directory:
 
   * `pmem-ns-init`: Utility for namespace initialization in DeviceMode:LVM
   * `pmem-vgm`: Utility for creating logical volume groups over PMEM devices created, used in DeviceMode:LVM
-  * `pmem-csi-driver`: pmem-CSI driver, used in both DeviceModes
+  * `pmem-csi-driver`: PMEM-CSI driver, used in both DeviceModes
 
 
 Stand-alone mode build potential issues
@@ -264,7 +264,7 @@ Notes about switching DeviceMode
 ================================
 
 If DeviceMode is switched between LVM and Direct(ndctl), please keep
-in mind that pmem-CSI driver does not clean up or reclaim Namespaces,
+in mind that PMEM-CSI driver does not clean up or reclaim Namespaces,
 therefore Namespaces plus other related context (possibly LVM state)
 created in previous mode will remain stored on device and most likely
 will create trouble in another DeviceMode.
@@ -286,7 +286,7 @@ Going from DeviceMode:Direct to DeviceMode:LVM
 
 No special steps are needed to clean up Namespaces state.
 
-If pmem-CSI driver has been operating correctly, there should not be
+If PMEM-CSI driver has been operating correctly, there should not be
 existing Namespaces as CSI Volume lifecycle should have been deleted
 those after end of life of Volume. If there are, you can either keep
 those (DeviceMode:LVM does honor "foreign" Namespaces and leaves those
@@ -296,7 +296,7 @@ using `ndctl` on node.
 Notes about accessing system directories in a container
 =======================================================
 
-The pmem-CSI driver will run as container, but it needs access to
+The PMEM-CSI driver will run as container, but it needs access to
 system directories /sys and /dev. Two related potential problems have
 been diagnosed so far.
 
