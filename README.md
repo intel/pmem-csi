@@ -526,6 +526,15 @@ If **storage=pmem** is missing, label manually as described above. If **pmem-csi
     $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-pvc.yaml
 ```
 
+- **Verify two Persistent Volume Claims have 'Bound' status**
+
+```sh
+    $ kubectl get pvc
+    NAME                STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS       AGE
+    pmem-csi-pvc-ext4   Bound    pvc-f70f7b36-6b36-11e9-bf09-deadbeef0100   4Gi        RWO            pmem-csi-sc-ext4   16s
+    pmem-csi-pvc-xfs    Bound    pvc-f7101fd2-6b36-11e9-bf09-deadbeef0100   4Gi        RWO            pmem-csi-sc-xfs    16s
+```
+
 - **Start two applications requesting one provisioned volume each**
 
 ```sh
