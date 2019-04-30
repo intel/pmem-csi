@@ -35,6 +35,10 @@ func main() {
 
 	glog.Info("Version: ", version)
 
+	if err := CheckArgs(*namespacesize, *useforfsdax, *useforsector); err != nil {
+		fmt.Printf("Arguments check failed: %s", err.Error())
+		os.Exit(1)
+	}
 	ctx, err := ndctl.NewContext()
 	if err != nil {
 		fmt.Printf("Failed to initialize pmem context: %s", err.Error())
@@ -44,26 +48,24 @@ func main() {
 	initNVdimms(ctx, *namespacesize, *useforfsdax, *useforsector)
 }
 
-func initNVdimms(ctx *ndctl.Context, namespacesize int, useforfsdax int, useforsector int) {
-	glog.Infof("Configured namespacesize; %v GB", namespacesize)
-	// TODO: rethink is it good idea to reset to sane values or is it cleaner to fail
+func CheckArgs(namespacesize int, useforfsdax int, useforsector int) error {
 	if useforfsdax < 0 || useforfsdax > 100 {
-		glog.Infof("useforfsdax limit should be 0..100 (seeing %v), resetting to default=100", useforfsdax)
-		useforfsdax = 100
+		return fmt.Errorf("useforfsdax value must be 0..100")
 	}
 	if useforsector < 0 || useforsector > 100 {
-		glog.Infof("useforsector limit should be 0..100 (seeing %v), resetting to default=0", useforsector)
-		useforsector = 0
+		return fmt.Errorf("useforsector value must be 0..100")
 	}
 	if useforfsdax+useforsector > 100 {
-		glog.Infof("useforfsdax and useforsector combined can not exceed 100, resetting to defaults 100,0")
-		useforfsdax = 100
-		useforsector = 0
+		return fmt.Errorf("useforfsdax and useforsector combined must not exceed 100")
 	}
 	if namespacesize < 2 {
-		glog.Infof("namespacesize has to be at least 2 GB, forcing to 2")
-		namespacesize = 2
+		return fmt.Errorf("namespacesize has to be at least 2 GB")
 	}
+	return nil
+}
+
+func initNVdimms(ctx *ndctl.Context, namespacesize int, useforfsdax int, useforsector int) {
+	glog.Infof("Configured namespacesize; %v GB", namespacesize)
 	// we get 1GB smaller than we ask so lets ask for 1GB more
 	nsSize := uint64(namespacesize+1) * 1024 * 1024 * 1024
 	for _, bus := range ctx.GetBuses() {
