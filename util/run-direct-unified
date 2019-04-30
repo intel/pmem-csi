@@ -1,8 +1,0 @@
-#!/bin/bash -eu
-# Run this as root to start PMEM-CSI driver as singlehost
-# drivermode=Unified
-# devicemode=ndctl (alias "direct")
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
-_commonargs="-v 5 --endpoint tcp://127.0.0.1:10000"
-_specargs="-deviceManager ndctl"
-$DIR/../_output/pmem-csi-driver ${_commonargs} ${_specargs}
