@@ -84,21 +84,23 @@ include test/clear-kvm.make
 include test/start-stop.make
 include test/test.make
 
-
+# Build kustomize at a certain revision. Depends on go >= 1.11
+# because we use module support.
+KUSTOMIZE_VERSION=e42933ec54ce9a65f65e125a1ccf482927f0e515
+_work/kustomize-$(KUSTOMIZE_VERSION):
+	tmpdir=`mktemp -d` && \
+	trap 'rm -r $$tmpdir' EXIT && \
+	cd $$tmpdir && \
+	echo "module foo" >go.mod && \
+	go get sigs.k8s.io/kustomize@$(KUSTOMIZE_VERSION) && \
+	go build -o $(abspath $@) sigs.k8s.io/kustomize
+	ln -sf $(@F) _work/kustomize
 
 # We generate deployment files with kustomize and include the output
 # in the git repo because not all users will have kustomize or it
 # might be an unsuitable version. When any file changes, update the
 # output.
 KUSTOMIZE_INPUT := $(shell find deploy/kustomize -type f)
-
-# Workaround for https://github.com/kubernetes-sigs/kustomize/issues/937:
-# we have to copy patch files into targets instead of referencing
-# with a relative path to the parent directory.
-KUSTOMIZE_INPUT += deploy/kustomize/kubernetes-1.13-lvm-testing/controller-socat-patch.yaml
-KUSTOMIZE_INPUT += deploy/kustomize/kubernetes-1.13-direct-testing/controller-socat-patch.yaml
-deploy/kustomize/kubernetes-%/controller-socat-patch.yaml: deploy/kustomize/testing/controller-socat-patch.yaml
-	cp $< $@
 
 # Output files and their corresponding kustomize target.
 KUSTOMIZE_OUTPUT :=
@@ -117,32 +119,17 @@ KUSTOMIZATION_deploy/kubernetes-1.13/pmem-storageclass-xfs.yaml = deploy/kustomi
 KUSTOMIZE_OUTPUT += deploy/kubernetes-1.13/pmem-storageclass-cache.yaml
 KUSTOMIZATION_deploy/kubernetes-1.13/pmem-storageclass-cache.yaml = deploy/kustomize/storageclass-cache
 kustomize: $(KUSTOMIZE_OUTPUT)
-$(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
-	$< build $(KUSTOMIZATION_$@) >$@
-
-
-# Build kustomize at a certain revision. Depends on go >= 1.12
-# because we use module support.
-KUSTOMIZE_VERSION=177297c0efb92ec2d7eea8f20c65c1d11c6ae7ef
-_work/kustomize: _work/.kustomize-$(KUSTOMIZE_VERSION)-stamp
-_work/.kustomize-$(KUSTOMIZE_VERSION)-stamp:
-	tmpdir=`mktemp -d` && \
-	trap 'rm -r $$tmpdir' EXIT && \
-	cd $$tmpdir && \
-	echo "module foo" >go.mod && \
-	go get sigs.k8s.io/kustomize@$(KUSTOMIZE_VERSION) && \
-	go build -o $(abspath _work/kustomize) sigs.k8s.io/kustomize && \
-	touch --reference=$(abspath _work/kustomize) $(abspath $@)
+$(KUSTOMIZE_OUTPUT): _work/kustomize-$(KUSTOMIZE_VERSION) $(KUSTOMIZE_INPUT)
+	$< build --load_restrictor none $(KUSTOMIZATION_$@) >$@
 
 PHONY: clean-kustomize
 clean: clean-kustomize
 clean-kustomize:
+	rm -f _work/kustomize-*
 	rm -f _work/kustomize
-	rm -f _work/.kustomize-$(KUSTOMIZE_VERSION)-stamp
-	rm -f deploy/kustomize/kubernetes-*/controller-socat-patch.yaml
 
 PHONY: test-kustomize $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
 test: test-kustomize
 test-kustomize: $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
 $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT)): test-kustomize-%: _work/kustomize
-	@ if ! diff <($< build $(KUSTOMIZATION_$*)) $*; then echo "$* was modified manually" && false; fi
+	@ if ! diff <($< build --load_restrictor none $(KUSTOMIZATION_$*)) $*; then echo "$* was modified manually" && false; fi

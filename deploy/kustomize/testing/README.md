@@ -4,9 +4,7 @@ forwarding to the outside world:
 The pmem-csi-controller-testing Service exposes the PMEM-CSI controller's
 csi.sock as a TCP service with a dynamically allocated port, on any
 node of the cluster. For this to work, the pmem-csi-controller has
-to be patched with the controller-socat-patch.yaml. Due to
-https://github.com/kubernetes-sigs/kustomize/issues/937, that file has to
-be duplicated in the repo.
+to be patched with the controller-socat-patch.yaml.
 
 The pmem-csi-node-testing DaemonSet forwards
 /var/lib/kubelet/plugins/pmem-csi.intel.com/csi.sock on all nodes,
