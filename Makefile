@@ -112,12 +112,12 @@ KUSTOMIZE_OUTPUT += deploy/kubernetes-1.13/pmem-csi-direct-testing.yaml
 KUSTOMIZATION_deploy/kubernetes-1.13/pmem-csi-direct-testing.yaml = deploy/kustomize/kubernetes-1.13-direct-testing
 KUSTOMIZE_OUTPUT += deploy/kubernetes-1.13/pmem-csi-lvm-testing.yaml
 KUSTOMIZATION_deploy/kubernetes-1.13/pmem-csi-lvm-testing.yaml = deploy/kustomize/kubernetes-1.13-lvm-testing
-KUSTOMIZE_OUTPUT += deploy/kubernetes-1.13/pmem-storageclass-ext4.yaml
-KUSTOMIZATION_deploy/kubernetes-1.13/pmem-storageclass-ext4.yaml = deploy/kustomize/storageclass-ext4
-KUSTOMIZE_OUTPUT += deploy/kubernetes-1.13/pmem-storageclass-xfs.yaml
-KUSTOMIZATION_deploy/kubernetes-1.13/pmem-storageclass-xfs.yaml = deploy/kustomize/storageclass-xfs
-KUSTOMIZE_OUTPUT += deploy/kubernetes-1.13/pmem-storageclass-cache.yaml
-KUSTOMIZATION_deploy/kubernetes-1.13/pmem-storageclass-cache.yaml = deploy/kustomize/storageclass-cache
+KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-ext4.yaml
+KUSTOMIZATION_deploy/common/pmem-storageclass-ext4.yaml = deploy/kustomize/storageclass-ext4
+KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-xfs.yaml
+KUSTOMIZATION_deploy/common/pmem-storageclass-xfs.yaml = deploy/kustomize/storageclass-xfs
+KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-cache.yaml
+KUSTOMIZATION_deploy/common/pmem-storageclass-cache.yaml = deploy/kustomize/storageclass-cache
 kustomize: $(KUSTOMIZE_OUTPUT)
 $(KUSTOMIZE_OUTPUT): _work/kustomize-$(KUSTOMIZE_VERSION) $(KUSTOMIZE_INPUT)
 	$< build --load_restrictor none $(KUSTOMIZATION_$@) >$@
