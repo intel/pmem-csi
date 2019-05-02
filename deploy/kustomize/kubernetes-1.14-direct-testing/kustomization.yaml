@@ -1,0 +1,11 @@
+bases:
+- ../kubernetes-1.14-direct/
+- ../testing/
+
+patchesJson6902:
+- target:
+    group: apps
+    version: v1
+    kind: StatefulSet
+    name: pmem-csi-controller
+  path: ../testing/controller-socat-patch.yaml

@@ -1,0 +1,12 @@
+# Turns generic Kubernetes 1.14 deployment into deployment for direct mode.
+
+bases:
+- ../kubernetes-1.14/
+
+patchesJson6902:
+- target:
+    group: apps
+    version: v1beta2
+    kind: DaemonSet
+    name: pmem-csi-node
+  path: ../patches/direct-patch.yaml

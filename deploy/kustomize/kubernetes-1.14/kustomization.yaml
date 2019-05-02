@@ -1,0 +1,15 @@
+bases:
+- ../driver
+- rbac
+
+resources:
+- driverinfo-beta.yaml
+
+# The RBAC files must match the image versions.
+images:
+- name: quay.io/k8scsi/csi-provisioner
+  newTag: v1.1.0
+- name: quay.io/k8scsi/csi-attacher
+  newTag: v1.1.1
+- name: quay.io/k8scsi/csi-node-driver-registrar
+  newTag: v1.1.0
