@@ -22,6 +22,10 @@ TEST_IP_ADDR=192.168.8
 # from systemd-network).
 TEST_DNS_SERVERS=
 
+# Additional insecure registries (for example, my-registry:5000),
+# separated by spaces.
+TEST_INSECURE_REGISTRIES=
+
 # Additional Clear Linux bundles.
 TEST_CLEAR_LINUX_BUNDLES="storage-utils"
 

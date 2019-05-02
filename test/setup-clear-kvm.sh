@@ -88,6 +88,17 @@ kill_process_tree () {
     fi
 }
 
+# Prints the list of insecure registries for inclusion in a daemon.json
+# registry.conf file.
+insecure_registries () {
+    echo -n '['
+    echo -n "\"${TEST_IP_ADDR}.1:5000\""
+    for i in $TEST_INSECURE_REGISTRIES; do
+        echo -n ",\"$i\""
+    done
+    echo -n ']'
+}
+
 # Creates a virtual machine and enables SSH for it. Must be started
 # in a sub-shell. The virtual machine is kept running until this
 # sub-shell is killed.
@@ -216,13 +227,13 @@ EOF
     # will fail to pull images from it.
     $TARGET/ssh.$imagenum "mkdir -p /etc/containers && cat >/etc/containers/registries.conf" <<EOF
 [registries.insecure]
-registries = [ '${TEST_IP_ADDR}.1:5000' ]
+registries = $(insecure_registries)
 EOF
 
     # The same for Docker.
     $TARGET/ssh.$imagenum mkdir -p /etc/docker
     $TARGET/ssh.$imagenum "cat >/etc/docker/daemon.json" <<EOF
-{ "insecure-registries": ["${TEST_IP_ADDR}.1:5000"] }
+{ "insecure-registries": $(insecure_registries) }
 EOF
 
     # Proxy settings for Docker.
