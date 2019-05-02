@@ -14,22 +14,22 @@ patchesJson6902:
     version: v1
     kind: ClusterRoleBinding
     name: csi-provisioner-role
-  path: controller-role-patch.yaml
+  path: ../../patches/controller-role-patch.yaml
 - target:
     group: rbac.authorization.k8s.io
     version: v1
     kind: RoleBinding
     name: csi-provisioner-role-cfg
-  path: controller-role-patch.yaml
+  path: ../../patches/controller-role-patch.yaml
 - target:
     group: rbac.authorization.k8s.io
     version: v1
     kind: ClusterRoleBinding
     name: csi-attacher-role
-  path: controller-role-patch.yaml
+  path: ../../patches/controller-role-patch.yaml
 - target:
     group: rbac.authorization.k8s.io
     version: v1
     kind: RoleBinding
     name: csi-attacher-role-cfg
-  path: controller-role-patch.yaml
+  path: ../../patches/controller-role-patch.yaml

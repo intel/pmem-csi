@@ -9,4 +9,4 @@ patchesJson6902:
     version: v1beta2
     kind: DaemonSet
     name: pmem-csi-node
-  path: direct-patch.yaml
+  path: ../patches/direct-patch.yaml
