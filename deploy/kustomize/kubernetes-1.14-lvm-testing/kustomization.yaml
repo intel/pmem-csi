@@ -1,5 +1,5 @@
 bases:
-- ../kubernetes-1.13-lvm/
+- ../kubernetes-1.14-lvm/
 - ../testing/
 
 patchesJson6902:

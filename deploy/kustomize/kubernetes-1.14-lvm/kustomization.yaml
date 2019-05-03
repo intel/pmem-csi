@@ -1,7 +1,7 @@
-# Turns generic Kubernetes 1.13 deployment into deployment for LVM mode.
+# Turns generic Kubernetes 1.14 deployment into deployment for LVM mode.
 
 bases:
-- ../kubernetes-1.13/
+- ../kubernetes-1.14/
 
 patchesJson6902:
 - target:

@@ -41,6 +41,15 @@ kind: ClusterConfiguration"
 kubeadm_config_kubelet="apiVersion: kubelet.config.k8s.io/v1beta1
 kind: KubeletConfiguration"
 
+# TEST_FEATURE_GATES enables features without knowing the Kubernetes
+# version. This is okay, just redundant. But we document that certain
+# features do not need to be enabled depending on the Kubernetes
+# version, so it would be nice to also not enable them explicitly
+# during testing (example: CSINodeInfo and CSIDriverRegistry on
+# Kubernetes 1.14).
+#
+# TODO: determine in advance which Kubernetes version we install
+# and then filter out features that don't need to be enabled.
 if [ ! -z ${TEST_FEATURE_GATES} ]; then
     kubeadm_config_kubelet="$kubeadm_config_kubelet
 featureGates:
@@ -398,8 +407,7 @@ $TARGET/ssh $PROXY_ENV kubectl apply -f https://raw.githubusercontent.com/coreos
 
 # Install addon storage CRDs, needed if certain feature gates are enabled.
 # Only applicable to Kubernetes 1.13 and older. 1.14 will have them as builtin APIs.
-# Temporarily install also on 1.14 until we migrate to sidecars which use the builtin beta API.
-if $TARGET/ssh $PROXY_ENV kubectl version | grep -q '^Server Version.*Major:"1", Minor:"1[01234]"'; then
+if $TARGET/ssh $PROXY_ENV kubectl version | grep -q '^Server Version.*Major:"1", Minor:"1[0123]"'; then
     if [[ "$TEST_FEATURE_GATES" == *"CSINodeInfo=true"* ]]; then
         $TARGET/ssh $PROXY_ENV kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/release-1.13/cluster/addons/storage-crds/csinodeinfo.yaml
     fi

@@ -8,4 +8,4 @@ patchesJson6902:
     version: v1
     kind: StatefulSet
     name: pmem-csi-controller
-  path: controller-socat-patch.yaml
+  path: ../testing/controller-socat-patch.yaml

@@ -394,6 +394,7 @@ Kubernetes cluster has been verified on:
 | Branch            | Kubernetes branch/version      | Required alpha feature gates   |
 |-------------------|--------------------------------|------------------------------- |
 | devel             | Kubernetes 1.13                | CSINodeInfo, CSIDriverRegistry |
+| devel             | Kubernetes 1.14                |                                |
 
 ## Setup
 
@@ -432,12 +433,13 @@ The method to configure alpha feature gates may vary, depending on the Kubernete
     $ kubectl label node <your node> storage=pmem
 ```
 
-- **Install add-on storage CRDs if using Kubernetes 1.13 or 1.14**
+- **Install add-on storage CRDs if using Kubernetes 1.13**
 
 If you are not using the test cluster described in
 [Starting and stopping a test cluster](#starting-and-stopping-a-test-cluster)
 where CRDs are installed automatically, you must install those manually.
-Note: This is a temporary solution that will be removed once the Kubernetes CSI sidecars for Kubernetes 1.14 are released.
+Kubernetes 1.14 and higher have those APIs built in and thus don't need
+these CRDs.
 
 ```sh
    $ kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/release-1.13/cluster/addons/storage-crds/csidriver.yaml
