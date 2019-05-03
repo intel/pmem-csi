@@ -107,17 +107,19 @@ space:= $(empty) $(empty)
 # running to debug test failures, it doesn't stop it.
 # Use count=1 to avoid test results caching, does not make sense for e2e test.
 .PHONY: test_e2e
-test_e2e: start
-	KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
+RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 	REPO_ROOT=`pwd` \
 	go test -count=1 -timeout 0 -v ./test/e2e -ginkgo.skip='$(subst $(space),|,$(TEST_E22_SKIP))'
+test_e2e: start
+	$(RUN_E2E)
 
 # Execute simple unit tests.
 .PHONY: run_tests
 test: run_tests
-run_tests: _work/pmem-ca/.ca-stamp _work/evil-ca/.ca-stamp
-	TEST_WORK=$(abspath _work) \
+RUN_TESTS = TEST_WORK=$(abspath _work) \
 	$(TEST_CMD) $(shell go list $(TEST_ARGS) | sed -e 's;$(IMPORT_PATH);.;')
+run_tests: _work/pmem-ca/.ca-stamp _work/evil-ca/.ca-stamp
+	$(RUN_TESTS)
 
 _work/%/.ca-stamp: test/setup-ca.sh _work/.setupcfssl-stamp
 	rm -rf $(@D)
@@ -130,3 +132,50 @@ _work/.setupcfssl-stamp:
 	curl -L https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64 -o _work/bin/cfssljson --create-dirs
 	chmod a+x _work/bin/cfssl _work/bin/cfssljson
 	touch $@
+
+# Build gocovmerge at a certain revision. Depends on go >= 1.11
+# because we use module support.
+GOCOVMERGE_VERSION=b5bfa59ec0adc420475f97f89b58045c721d761c
+_work/gocovmerge-$(GOCOVMERGE_VERSION):
+	tmpdir=`mktemp -d` && \
+	trap 'rm -r $$tmpdir' EXIT && \
+	cd $$tmpdir && \
+	echo "module foo" >go.mod && \
+	go get github.com/wadey/gocovmerge@$(GOCOVMERGE_VERSION) && \
+	go build -o $(abspath $@) github.com/wadey/gocovmerge
+	ln -sf $(@F) _work/gocovmerge
+
+# This is a special target that runs unit and E2E testing and
+# combines the various cover profiles into one. To re-run testing,
+# remove the file or use "make coverage".
+#
+# We remove all pmem-csi-driver coverage files
+# before testing, restart the driver, and then collect all
+# files, including the ones written earlier by init containers.
+_work/coverage.out: _work/gocovmerge-$(GOCOVMERGE_VERSION)
+	$(MAKE) start
+	@ echo "removing old pmem-csi-driver coverage information from all nodes"
+	@ for ssh in _work/$(CLUSTER)/ssh.*; do for i in $$($$ssh ls /var/lib/pmem-csi-coverage/pmem-csi-driver* 2>/dev/null); do (set -x; $$ssh rm $$i); done; done
+	@ rm -rf _work/coverage
+	@ mkdir _work/coverage
+	@ go clean -testcache
+	$(subst go test,go test -coverprofile=$(abspath _work/coverage/unit.out) -covermode=atomic,$(RUN_TESTS))
+	$(RUN_E2E)
+	@ echo "killing pmem-csi-driver to flush coverage data"
+	@ for ssh in _work/$(CLUSTER)/ssh.*; do (set -x; $$ssh killall pmem-csi-driver); done
+	@ echo "waiting for all pods to restart"
+	@ while _work/$(CLUSTER)/ssh.0 kubectl get --no-headers pods | grep -q -v Running; do sleep 5; done
+	@ echo "collecting coverage data"
+	@ for ssh in _work/$(CLUSTER)/ssh.*; do for i in $$($$ssh ls /var/lib/pmem-csi-coverage/ 2>/dev/null); do (set -x; $$ssh cat /var/lib/pmem-csi-coverage/$$i) >_work/coverage/$$(echo $$ssh | sed -e 's;.*/ssh\.;;').$$i; done; done
+	$< _work/coverage/* >$@
+
+_work/coverage.html: _work/coverage.out
+	go tool cover -html $< -o $@
+
+_work/coverage.txt: _work/coverage.out
+	go tool cover -func $< -o $@
+
+.PHONY: coverage
+coverage:
+	@ rm -rf _work/coverage.out
+	$(MAKE) _work/coverage.txt _work/coverage.html
