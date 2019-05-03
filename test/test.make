@@ -1,5 +1,5 @@
 TEST_CMD=go test
-TEST_ARGS=$(IMPORT_PATH)/cmd/... $(IMPORT_PATH)/pkg/...
+TEST_ARGS=$(IMPORT_PATH)/pkg/...
 
 .PHONY: vet
 test: vet
@@ -112,9 +112,10 @@ test_e2e: start
 	REPO_ROOT=`pwd` \
 	go test -count=1 -timeout 0 -v ./test/e2e -ginkgo.skip='$(subst $(space),|,$(TEST_E22_SKIP))'
 
+# Execute simple unit tests.
 .PHONY: run_tests
 test: run_tests
-run_tests: all _work/pmem-ca/.ca-stamp _work/evil-ca/.ca-stamp
+run_tests: _work/pmem-ca/.ca-stamp _work/evil-ca/.ca-stamp
 	TEST_WORK=$(abspath _work) \
 	$(TEST_CMD) $(shell go list $(TEST_ARGS) | sed -e 's;$(IMPORT_PATH);.;')
 

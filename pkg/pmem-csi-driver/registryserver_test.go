@@ -2,7 +2,6 @@ package pmemcsidriver_test
 
 import (
 	"crypto/tls"
-	"flag"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -14,17 +13,10 @@ import (
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	"k8s.io/klog"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
-
-func init() {
-	klog.InitFlags(nil)
-	flag.Set("logtostderr", "true")
-	flag.Parse()
-}
 
 func TestPmemRegistry(t *testing.T) {
 	RegisterFailHandler(Fail)

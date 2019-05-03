@@ -344,11 +344,15 @@ spec:
         - -v=5
         command:
         - /go/bin/pmem-ns-init
+        env:
+        - name: TERMINATION_LOG_PATH
+          value: /tmp/pmem-ns-init-termination-log
         image: 192.168.8.1:5000/pmem-csi-driver:canary
         imagePullPolicy: Always
         name: pmem-ns-init
         securityContext:
           privileged: true
+        terminationMessagePath: /tmp/pmem-ns-init-termination-log
         volumeMounts:
         - mountPath: /sys
           name: sys-dir
@@ -357,11 +361,15 @@ spec:
         - -v=5
         command:
         - /go/bin/pmem-vgm
+        env:
+        - name: TERMINATION_LOG_PATH
+          value: /tmp/pmem-vgm-termination-log
         image: 192.168.8.1:5000/pmem-csi-driver:canary
         imagePullPolicy: Always
         name: pmem-vgm
         securityContext:
           privileged: true
+        terminationMessagePath: /tmp/pmem-vgm-termination-log
       nodeSelector:
         storage: pmem
       volumes:

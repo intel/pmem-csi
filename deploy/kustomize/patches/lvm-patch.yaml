@@ -12,6 +12,10 @@
     image: 192.168.8.1:5000/pmem-csi-driver:canary
     command: ["/go/bin/pmem-ns-init"]
     args: [ "-v=3", "-namespacesize=9" ]
+    env:
+      - name: TERMINATION_LOG_PATH
+        value: /tmp/pmem-ns-init-termination-log
+    terminationMessagePath: /tmp/pmem-ns-init-termination-log
     securityContext:
       privileged: true
     volumeMounts:
@@ -22,6 +26,10 @@
     image: 192.168.8.1:5000/pmem-csi-driver:canary
     command: ["/go/bin/pmem-vgm"]
     args: [ "-v=3" ]
+    env:
+      - name: TERMINATION_LOG_PATH
+        value: /tmp/pmem-vgm-termination-log
+    terminationMessagePath: /tmp/pmem-vgm-termination-log
     securityContext:
       privileged: true
 

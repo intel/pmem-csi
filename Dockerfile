@@ -22,7 +22,16 @@ ADD . /go/src/github.com/intel/pmem-csi
 ENV GOPATH=/go
 ENV PKG_CONFIG_PATH=/usr/lib/pkgconfig/
 WORKDIR /go/src/github.com/intel/pmem-csi
-RUN make VERSION=${VERSION} OUTPUT_DIR=/go/bin
+ARG BIN_SUFFIX
+# Here we choose explicitly which binaries we want in the image and in
+# which flavor (production or testing). The actual binary name in the
+# image is going to be the same, to avoid unnecessary deployment
+# differences.
+RUN make VERSION=${VERSION} pmem-csi-driver${BIN_SUFFIX} pmem-vgm${BIN_SUFFIX} pmem-ns-init${BIN_SUFFIX} && \
+    mkdir -p /go/bin/ && \
+    mv _output/pmem-csi-driver${BIN_SUFFIX} /go/bin/pmem-csi-driver && \
+    mv _output/pmem-vgm${BIN_SUFFIX} /go/bin/pmem-vgm && \
+    mv _output/pmem-ns-init${BIN_SUFFIX} /go/bin/pmem-ns-init
 
 # build clean container
 FROM clearlinux:base

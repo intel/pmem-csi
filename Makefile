@@ -14,7 +14,10 @@
 # limitations under the License.
 
 IMPORT_PATH=github.com/intel/pmem-csi
+CMDS=pmem-csi-driver pmem-vgm pmem-ns-init
+TEST_CMDS=$(addsuffix -test,$(CMDS))
 SHELL=bash
+OUTPUT_DIR=_output
 .DELETE_ON_ERROR:
 
 ifeq ($(VERSION), )
@@ -23,7 +26,7 @@ endif
 
 REGISTRY_NAME=localhost:5000
 IMAGE_VERSION=canary
-IMAGE_TAG=$(REGISTRY_NAME)/pmem-csi-driver:$(IMAGE_VERSION)
+IMAGE_TAG=$(REGISTRY_NAME)/pmem-csi-driver$*:$(IMAGE_VERSION)
 IMAGE_BUILD_ARGS=--build-arg NDCTL_VERSION=64.1 --build-arg NDCTL_CONFIGFLAGS='--libdir=/usr/lib --disable-docs --without-systemd --without-bash' \
 --build-arg NDCTL_BUILD_DEPS='os-core-dev devpkg-util-linux devpkg-kmod devpkg-json-c file'
 # Pass proxy config via --build-arg only if these are set,
@@ -41,17 +44,27 @@ endif
 
 BUILD_ARGS:=${BUILD_ARGS} --build-arg VERSION=${VERSION}
 
-# Build main set of components.
-all: pmem-csi-driver pmem-ns-init pmem-vgm
+# An alias for "make build" and the default target.
+all: build
 
 # Build all binaries, including tests.
 # Must use the workaround from https://github.com/golang/go/issues/15513
-build: all
+build: $(CMDS) $(TEST_CMDS)
 	go test -run none ./pkg/... ./test/e2e
 
-OUTPUT_DIR=_output
-pmem-csi-driver pmem-vgm pmem-ns-init:
+# "make test" runs a variety of fast tests, including building all source code.
+# More tests are added elsewhere in this Makefile and test/test.make.
+test: build
+
+# Build production binaries.
+$(CMDS):
 	GOOS=linux go build -ldflags '-X main.version=${VERSION}' -a -o ${OUTPUT_DIR}/$@ ./cmd/$@
+
+# Build a test binary that can be used instead of the normal one with
+# additional "-run" parameters. In contrast to the normal it then also
+# supports -test.coverprofile.
+$(TEST_CMDS): %-test:
+	GOOS=linux go test --cover -covermode=atomic -c -coverpkg=./pkg/... -ldflags '-X github.com/intel/pmem-csi/pkg/$*.version=${VERSION}' -o ${OUTPUT_DIR}/$@ ./cmd/$*
 
 # The default is to refresh the base image once a day when building repeatedly.
 # This is achieved by passing a fake variable that changes its value once per day.
@@ -62,17 +75,19 @@ pmem-csi-driver pmem-vgm pmem-ns-init:
 # The VERSION variable should be used for that, if desired.
 BUILD_IMAGE_ID=$(shell date +%Y-%m-%d)
 
-build-image:
-	docker build --pull --build-arg CACHEBUST=$(BUILD_IMAGE_ID) $(BUILD_ARGS) $(IMAGE_BUILD_ARGS) -t $(IMAGE_TAG) -f ./Dockerfile . --label revision=$(VERSION)
-
-push-image: build-image
+# Build and publish images for production or testing (i.e. with test binaries).
+build-images: build-image build-test-image
+push-images: push-image push-test-image
+build-image build-test-image: build%-image:
+	docker build --pull --build-arg CACHEBUST=$(BUILD_IMAGE_ID) --build-arg BIN_SUFFIX=$(findstring -test,$*) $(BUILD_ARGS) $(IMAGE_BUILD_ARGS) -t $(IMAGE_TAG) -f ./Dockerfile . --label revision=$(VERSION)
+push-image push-test-image: push%-image: build%-image
 	docker push $(IMAGE_TAG)
 
 clean:
 	go clean -r -x
 	-rm -rf $(OUTPUT_DIR)
 
-.PHONY: all test clean pmem-csi-driver pmem-ns-init pmem-vgm
+.PHONY: all build test clean $(CMDS) $(TEST_CMDS)
 
 # Add support for creating and booting a cluster under QEMU.
 # All of the commands operate on a cluster stored in _work/$(CLUSTER),
