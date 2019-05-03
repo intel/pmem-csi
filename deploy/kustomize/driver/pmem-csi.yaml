@@ -34,13 +34,6 @@ spec:
     spec:
       serviceAccount: pmem-csi-controller
       containers:
-      - name: external-provisioner
-        imagePullPolicy: Always
-        image: quay.io/k8scsi/csi-provisioner:v1.X.Y
-        args: [ "-v=3", "--csi-address=/csi/csi-controller.sock", "--feature-gates=Topology=true" ]
-        volumeMounts:
-        - name: plugin-socket-dir
-          mountPath: /csi
       - name: pmem-driver
         image: 192.168.8.1:5000/pmem-csi-driver:canary
         imagePullPolicy: Always
@@ -72,6 +65,13 @@ spec:
           value: /tmp/termination-log
         securityContext:
           privileged: true
+      - name: external-provisioner
+        imagePullPolicy: Always
+        image: quay.io/k8scsi/csi-provisioner:v1.X.Y
+        args: [ "--v=3", "--csi-address=/csi/csi-controller.sock", "--feature-gates=Topology=true" ]
+        volumeMounts:
+        - name: plugin-socket-dir
+          mountPath: /csi
       volumes:
       - name: plugin-socket-dir
         emptyDir:

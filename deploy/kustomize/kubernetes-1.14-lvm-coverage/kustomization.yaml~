@@ -1,0 +1,60 @@
+bases:
+- ../kubernetes-1.14-lvm/
+- ../testing/
+
+patchesJson6902:
+- target:
+    group: apps
+    version: v1
+    kind: StatefulSet
+    name: pmem-csi-controller
+  path: ../testing/controller-socat-patch.yaml
+
+- target:
+    group: apps
+    version: v1
+    kind: StatefulSet
+    name: pmem-csi-controller
+  path: ../testing/loglevel5-two-containers-patch.yaml
+
+- target:
+    group: apps
+    version: v1beta2
+    kind: DaemonSet
+    name: pmem-csi-node
+  path: ../testing/loglevel5-two-containers-patch.yaml
+
+- target:
+    group: apps
+    version: v1beta2
+    kind: DaemonSet
+    name: pmem-csi-node
+  path: ../testing/loglevel5-two-initcontainers-patch.yaml
+
+- target:
+    group: apps
+    version: v1
+    kind: StatefulSet
+    name: pmem-csi-controller
+  path: ../testing/controller-coverage-patch.yaml
+
+- target:
+    group: apps
+    version: v1beta2
+    kind: DaemonSet
+    name: pmem-csi-node
+  path: ../testing/node-coverage-patch.yaml
+- target:
+    group: apps
+    version: v1beta2
+    kind: DaemonSet
+    name: pmem-csi-node
+  path: ../testing/lvm-coverage-patch.yaml
+
+images:
+- name: 192.168.8.1:5000/pmem-csi-driver
+  newName: 192.168.8.1:5000/pmem-csi-driver-test
+- name: 192.168.8.1:5000/pmem-ns-init
+  newName: 192.168.8.1:5000/pmem-ns-init-test
+- name: 192.168.8.1:5000/pmem-vgm
+  newName: 192.168.8.1:5000/pmem-vgm-test
