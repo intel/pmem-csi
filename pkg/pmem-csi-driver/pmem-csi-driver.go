@@ -243,5 +243,5 @@ func newDeviceManager(dmType string) (pmdmanager.PmemDeviceManager, error) {
 	case "ndctl":
 		return pmdmanager.NewPmemDeviceManagerNdctl()
 	}
-	return nil, fmt.Errorf("Unsupported device manager type '%s", dmType)
+	return nil, fmt.Errorf("Unsupported device manager type '%s'", dmType)
 }
