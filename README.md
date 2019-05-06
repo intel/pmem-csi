@@ -146,8 +146,7 @@ controlled by passing one of the below options to the driver's
 of open source Remote Procedure Call (gRPC)
 [servers](#driver-components) on given driver endpoint(s).
 
-* **_Controller_** mode is intended to be used in a multi-node cluster
-  and should run as a single instance in cluster level. When the
+* **_Controller_** should run as a single instance in cluster level. When the
   driver is running in _Controller_ mode, it forwards the pmem volume
   create/delete requests to the registered node controller servers
   running on the worker node. In this mode, the driver starts the
@@ -157,18 +156,15 @@ of open source Remote Procedure Call (gRPC)
     * [NodeRegistryServer](#node-registry-server)
     * [MasterControllerServer](#master-controller-server)
 
-* **_Node_** mode is intended to be used in a multi-node cluster by
-  worker nodes that have persistent memory devices installed. When the
-  driver starts in this mode, it registers with the _Controller_
+* One **_Node_** instance should run on each
+  worker node that has persistent memory devices installed. When the
+  driver starts in such mode, it registers with the _Controller_
   driver running on a given _-registryEndpoint_. In this mode, the
   driver starts the following servers:
 
     * [IdentityServer](#identity-server)
     * [NodeControllerServer](#node-controller-server)
     * [NodeServer](#node-server)
-
-* **_Unified_** mode is intended to run the driver in a single host,
-  mostly for testing the driver in a non-clustered environment.
 
 ### Driver Components
 

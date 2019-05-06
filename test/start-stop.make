@@ -30,6 +30,9 @@ start: _work/$(CLUSTER)/created _work/$(CLUSTER)/start-kubernetes _work/$(CLUSTE
 	_work/$(CLUSTER)/ssh kubectl label node host-0 storage-
 	for i in $$(seq 1 $$(($(NUM_NODES) - 1))); do \
 		if ! [ -e _work/$(CLUSTER)/qemu.$$i.labelsdone ]; then \
+			: "The first OS startup triggers the creation of one device-size pmem region and `ndctl` shows zero remaining available space." ; \
+			: "To make emulated NVDIMMs usable by `ndctl`, we use labels initialization, which must be performed once after the first bootup" ; \
+			: "with new device(s)." ; \
 			_work/$(CLUSTER)/ssh.$$i "/usr/bin/ndctl disable-region region0"; \
 			_work/$(CLUSTER)/ssh.$$i "/usr/bin/ndctl init-labels nmem0"; \
 			_work/$(CLUSTER)/ssh.$$i "/usr/bin/ndctl enable-region region0"; \

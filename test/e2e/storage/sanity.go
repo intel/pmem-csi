@@ -31,8 +31,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-// Run the csi-test sanity tests against a pmem-csi driver deployed in
-// unified mode.
+// Run the csi-test sanity tests against a pmem-csi driver
 var _ = Describe("sanity", func() {
 	f := framework.NewDefaultFramework("pmem")
 	f.SkipNamespaceCreation = true // We don't need a per-test namespace and skipping it makes the tests run faster.

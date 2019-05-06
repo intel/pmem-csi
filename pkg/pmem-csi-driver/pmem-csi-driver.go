@@ -35,8 +35,6 @@ const (
 	Controller DriverMode = "controller"
 	//Node defintion for noder driver mode
 	Node DriverMode = "node"
-	//Unified defintion for unified driver mode
-	Unified DriverMode = "unified"
 )
 
 var (
@@ -84,7 +82,6 @@ func GetPMEMDriver(cfg Config) (*pmemDriver, error) {
 	validModes := map[DriverMode]struct{}{
 		Controller: struct{}{},
 		Node:       struct{}{},
-		Unified:    struct{}{},
 	}
 	var serverConfig *tls.Config
 	var clientConfig *tls.Config
@@ -164,7 +161,7 @@ func (pmemd *pmemDriver) Run() error {
 				return err
 			}
 		}
-	} else {
+	} else if pmemd.cfg.Mode == Node {
 		dm, err := newDeviceManager(pmemd.cfg.DeviceManager)
 		if err != nil {
 			return err
@@ -172,30 +169,26 @@ func (pmemd *pmemDriver) Run() error {
 		ns := NewNodeServer(pmemd.cfg.NodeID, dm)
 		cs := NewNodeControllerServer(pmemd.cfg.NodeID, dm)
 
-		if pmemd.cfg.Mode == Node {
-			if pmemd.cfg.Endpoint != pmemd.cfg.ControllerEndpoint {
-				if err := s.Start(pmemd.cfg.ControllerEndpoint, pmemd.serverTLSConfig, cs); err != nil {
-					return err
-				}
-				if err := pmemd.registerNodeController(); err != nil {
-					return err
-				}
-				if err := s.Start(pmemd.cfg.Endpoint, nil, ids, ns); err != nil {
-					return err
-				}
-			} else {
-				if err := s.Start(pmemd.cfg.Endpoint, nil, ids, cs, ns); err != nil {
-					return err
-				}
-				if err := pmemd.registerNodeController(); err != nil {
-					return err
-				}
+		if pmemd.cfg.Endpoint != pmemd.cfg.ControllerEndpoint {
+			if err := s.Start(pmemd.cfg.ControllerEndpoint, pmemd.serverTLSConfig, cs); err != nil {
+				return err
 			}
-		} else /* if pmemd.cfg.Mode == Unified */ {
-			if err := s.Start(pmemd.cfg.Endpoint, pmemd.serverTLSConfig, ids, cs, ns); err != nil {
+			if err := pmemd.registerNodeController(); err != nil {
+				return err
+			}
+			if err := s.Start(pmemd.cfg.Endpoint, nil, ids, ns); err != nil {
+				return err
+			}
+		} else {
+			if err := s.Start(pmemd.cfg.Endpoint, nil, ids, cs, ns); err != nil {
+				return err
+			}
+			if err := pmemd.registerNodeController(); err != nil {
 				return err
 			}
 		}
+	} else {
+		return fmt.Errorf("Unsupported device mode '%v", pmemd.cfg.Mode)
 	}
 
 	defer s.Stop()
