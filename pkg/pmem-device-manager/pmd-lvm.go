@@ -110,8 +110,10 @@ func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error 
 
 	for _, vg := range vgs {
 		if vg.free >= size {
+			// In some container environments clearing device fails with race condition.
+			// So, we ask lvm not to clear(-Zn) the newly created device, instead we do ourself in later stage.
 			// lvcreate takes size in MBytes if no unit
-			if _, err := pmemexec.RunCommand("lvcreate", "-L", strSz, "-n", name, vg.name); err != nil {
+			if _, err := pmemexec.RunCommand("lvcreate", "-Zn", "-L", strSz, "-n", name, vg.name); err != nil {
 				glog.V(3).Infof("lvcreate failed with error: %v, trying for next free region", err)
 			} else {
 				// clear start of device to avoid old data being recognized as file system
