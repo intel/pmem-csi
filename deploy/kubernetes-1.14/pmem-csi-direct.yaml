@@ -258,7 +258,6 @@ spec:
       containers:
       - args:
         - --v=5
-        - --provisioner=pmem-csi.intel.com
         - --csi-address=/csi/csi-controller.sock
         - --feature-gates=Topology=true
         image: quay.io/k8scsi/csi-provisioner:v1.1.0
