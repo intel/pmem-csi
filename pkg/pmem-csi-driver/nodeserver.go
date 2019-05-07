@@ -19,7 +19,6 @@ import (
 	"google.golang.org/grpc/status"
 	"k8s.io/kubernetes/pkg/util/mount"
 
-	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 	"k8s.io/klog/glog"
@@ -129,14 +128,14 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	attrib := req.GetVolumeContext()
 	mountFlags := req.GetVolumeCapability().GetMount().GetMountFlags()
 
-	glog.Infof("NodePublishVolume: targetpath %v\nStagingtargetpath %v\nreadonly %v\nattributes %v\n mountflags %v\n",
+	glog.V(3).Infof("NodePublishVolume: targetpath %v\nStagingtargetpath %v\nreadonly %v\nattributes %v\n mountflags %v\n",
 		targetPath, stagingtargetPath, readOnly, attrib, mountFlags)
 
 	options := []string{"bind"}
 	if readOnly {
 		options = append(options, "ro")
 	}
-	glog.Infof("NodePublishVolume: bind-mount %s %s", stagingtargetPath, targetPath)
+	glog.V(5).Infof("NodePublishVolume: bind-mount %s %s", stagingtargetPath, targetPath)
 	mounter := mount.New("")
 	if err := mounter.Mount(stagingtargetPath, targetPath, "", options); err != nil {
 		return nil, err
@@ -162,12 +161,12 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	defer volumeMutex.UnlockKey(volumeID)
 
 	// Unmounting the image
-	glog.Infof("NodeUnpublishVolume: unmount %s", targetPath)
+	glog.V(3).Infof("NodeUnpublishVolume: unmount %s", targetPath)
 	err := mount.New("").Unmount(targetPath)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	pmemcommon.Infof(4, ctx, "volume %s/%s has been unmounted.", targetPath, volumeID)
+	glog.V(5).Infof("volume %s/%s has been unmounted.", targetPath, volumeID)
 
 	os.Remove(targetPath) // nolint: gosec
 
@@ -194,32 +193,31 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	defer volumeMutex.UnlockKey(req.GetVolumeId())
 
 	// showing for debug:
-	glog.Infof("NodeStageVolume: VolumeID is %v", req.GetVolumeId())
-	glog.Infof("NodeStageVolume: Staging target path is %v", stagingtargetPath)
-	glog.Infof("NodeStageVolume: Requested fsType is %v", requestedFsType)
+	glog.V(4).Infof("NodeStageVolume: VolumeID:%v Staging target path:%v Requested fsType:%v",
+		req.GetVolumeId(), stagingtargetPath, requestedFsType)
 
 	device, err := ns.dm.GetDevice(req.VolumeId)
 	if err != nil {
-		pmemcommon.Infof(3, ctx, "NodeStageVolume: did not find volume %s", req.VolumeId)
+		glog.Errorf("NodeStageVolume: did not find volume %s", req.VolumeId)
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	// Check does devicepath already contain a filesystem?
 	existingFsType, err := determineFilesystemType(device.Path)
 	if err != nil {
-		glog.Infof("NodeStageVolume: determineFilesystemType failed: %v", err)
+		glog.Errorf("NodeStageVolume: determineFilesystemType failed: %v", err)
 		return nil, err
 	}
 
 	// what to do if existing file system is detected and is different from request;
 	// forced re-format would lead to loss of previous data, so we refuse.
 	if existingFsType != "" {
-		glog.Infof("NodeStageVolume: Found existing %v filesystem", existingFsType)
+		glog.V(4).Infof("NodeStageVolume: Found existing %v filesystem", existingFsType)
 		// Is existing filesystem type same as requested?
 		if existingFsType == requestedFsType {
-			glog.Infof("Skip mkfs as %v file system already exists on %v", existingFsType, device.Path)
+			glog.V(4).Infof("Skip mkfs as %v file system already exists on %v", existingFsType, device.Path)
 		} else {
-			pmemcommon.Infof(3, ctx, "NodeStageVolume: File system with different type %v exist on %v",
+			glog.Errorf("NodeStageVolume: File system with different type %v exist on %v",
 				existingFsType, device.Path)
 			return nil, status.Error(codes.InvalidArgument, "File system with different type exists")
 		}
@@ -236,7 +234,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 			cmd = "mkfs.xfs"
 			args = []string{"-b", "size=4096", "-f", device.Path}
 		} else {
-			glog.Infof("NodeStageVolume: Unsupported fstype: %v", requestedFsType)
+			glog.Errorf("NodeStageVolume: Unsupported fstype: %v", requestedFsType)
 			return nil, status.Error(codes.InvalidArgument, "xfs, ext4 are supported as file system types")
 		}
 		output, err := pmemexec.RunCommand(cmd, args...)
@@ -249,7 +247,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	// then the mount here will fail. I guess it's ok to not check explicitly for existing mount,
 	// as end result after mount attempt will be same: no new mount and existing mount remains.
 	// TODO: cleaner is to explicitly check (although CSI spec may tell that out-of-order call is illegal (check it))
-	glog.Infof("NodeStageVolume: mount %s %s", device.Path, stagingtargetPath)
+	glog.V(5).Infof("NodeStageVolume: mount %s %s", device.Path, stagingtargetPath)
 
 	/* THIS is how it could go with using "mount" package
 	        options := []string{""}
@@ -271,13 +269,13 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	}
 
 	if nsmode == pmemNamespaceModeFsdax {
-		glog.Infof("NodeStageVolume: namespacemode FSDAX, add dax mount option")
+		glog.V(4).Infof("NodeStageVolume: namespacemode FSDAX, add dax mount option")
 		// Add dax option if namespacemode == fsdax
 		args = append(args, "-o", "dax")
 	}
 
 	args = append(args, device.Path, stagingtargetPath)
-	glog.Infof("NodeStageVolume: mount args: [%v]", args)
+	glog.V(4).Infof("NodeStageVolume: mount args: [%v]", args)
 	if _, err := pmemexec.RunCommand("mount", args...); err != nil {
 		return nil, status.Error(codes.InvalidArgument, "mount filesystem failed"+err.Error())
 	}
@@ -303,7 +301,7 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	defer volumeMutex.UnlockKey(req.GetVolumeId())
 
 	// showing for debug:
-	glog.Infof("NodeUnStageVolume: VolumeID:%v VolumeName:%v Staging target path:%v",
+	glog.V(4).Infof("NodeUnStageVolume: VolumeID:%v VolumeName:%v Staging target path:%v",
 		req.GetVolumeId(), volName, stagingtargetPath)
 
 	// by spec, we have to return OK if asked volume is not mounted on asked path,
@@ -311,7 +309,7 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	// mounted on staging target path
 	_, err := ns.dm.GetDevice(req.VolumeId)
 	if err != nil {
-		pmemcommon.Infof(3, ctx, "NodeUnstageVolume: did not find volume %s", req.GetVolumeId())
+		glog.Errorf("NodeUnstageVolume: did not find volume %s", req.GetVolumeId())
 		return nil, err
 	}
 
@@ -319,17 +317,17 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	mounter := mount.New("")
 	mountedDev, _, err := mount.GetDeviceNameFromMount(mounter, stagingtargetPath)
 	if err != nil {
-		pmemcommon.Infof(3, ctx, "NodeUnstageVolume: Error getting device name for mount")
+		glog.Errorf("NodeUnstageVolume: Error getting device name for mount")
 		return nil, err
 	}
 	if mountedDev == "" {
-		pmemcommon.Infof(3, ctx, "NodeUnstageVolume: No device name for mount point")
+		glog.Errorf("NodeUnstageVolume: No device name for mount point")
 		return nil, status.Error(codes.InvalidArgument, "No device found for mount point")
 	}
-	glog.Infof("NodeUnstageVolume: detected mountedDev: %v", mountedDev)
-	glog.Infof("NodeUnStageVolume: umount %s", stagingtargetPath)
+	glog.V(4).Infof("NodeUnstageVolume: detected mountedDev: %v", mountedDev)
+	glog.V(3).Infof("NodeUnStageVolume: umount %s", stagingtargetPath)
 	if err := mounter.Unmount(stagingtargetPath); err != nil {
-		glog.Infof("NodeUnstageVolume: Umount failed: %v", err)
+		glog.Errorf("NodeUnstageVolume: Umount failed: %v", err)
 		return nil, err
 	}
 

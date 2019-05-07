@@ -66,7 +66,7 @@ func (rs *registryServer) RegisterController(ctx context.Context, req *registry.
 	if req.GetEndpoint() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Missing endpoint address")
 	}
-	glog.Infof("Registering node: %s, endpoint: %s", req.NodeId, req.Endpoint)
+	glog.V(3).Infof("Registering node: %s, endpoint: %s", req.NodeId, req.Endpoint)
 
 	rs.nodeClients[req.NodeId] = NodeInfo{
 		NodeID:   req.NodeId,
@@ -85,7 +85,7 @@ func (rs *registryServer) UnregisterController(ctx context.Context, req *registr
 		return nil, status.Errorf(codes.NotFound, "No entry with id '%s' found in registry", req.NodeId)
 	}
 
-	glog.Infof("Unregistering node: %s", req.NodeId)
+	glog.V(3).Infof("Unregistering node: %s", req.NodeId)
 	delete(rs.nodeClients, req.NodeId)
 
 	return &registry.UnregisterControllerReply{}, nil

@@ -19,7 +19,6 @@ import (
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 
-	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	"k8s.io/utils/keymutex"
 )
@@ -78,7 +77,7 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 	nsmode := pmemNamespaceModeFsdax
 
 	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
-		pmemcommon.Infof(3, ctx, "invalid create volume req: %v", req)
+		glog.Errorf("invalid create volume req: %v", req)
 		return nil, err
 	}
 
@@ -128,12 +127,12 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 
 	if vol = cs.getVolumeByName(req.Name); vol != nil {
 		// Check if the size of existing volume can cover the new request
-		glog.Infof("CreateVolume: Vol %s exists, Size: %v", req.Name, vol.Size)
+		glog.V(4).Infof("CreateVolume: Vol %s exists, Size: %v", req.Name, vol.Size)
 		if vol.Size < asked {
 			return nil, status.Error(codes.AlreadyExists, fmt.Sprintf("Volume with the same name: %s but with different size already exist", req.Name))
 		}
 	} else {
-		glog.Infof("CreateVolume: Name: %v req.Required: %v req.Limit: %v", req.Name, asked, req.GetCapacityRange().GetLimitBytes())
+		glog.V(4).Infof("CreateVolume: Name: %v req.Required: %v req.Limit: %v", req.Name, asked, req.GetCapacityRange().GetLimitBytes())
 
 		if err := cs.dm.CreateDevice(volumeID, uint64(asked), nsmode); err != nil {
 			return nil, status.Errorf(codes.Internal, "CreateVolume: failed to create volume: %s", err.Error())
@@ -146,7 +145,7 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 			NsMode: nsmode,
 		}
 		cs.pmemVolumes[volumeID] = vol
-		glog.Infof("CreateVolume: Record new volume as %v", *vol)
+		glog.V(3).Infof("CreateVolume: Record new volume as %v", *vol)
 	}
 
 	topology = append(topology, &csi.Topology{
@@ -172,7 +171,7 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 	}
 
 	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
-		pmemcommon.Infof(3, ctx, "invalid delete volume req: %v", req)
+		glog.Errorf("invalid delete volume req: %v", req)
 		return nil, err
 	}
 
@@ -180,15 +179,15 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 	nodeVolumeMutex.LockKey(req.VolumeId)
 	defer nodeVolumeMutex.UnlockKey(req.VolumeId) //nolint: errcheck
 
-	pmemcommon.Infof(4, ctx, "DeleteVolume: volumeID: %v", req.GetVolumeId())
+	glog.V(4).Infof("DeleteVolume: volumeID: %v", req.GetVolumeId())
 	if vol := cs.getVolumeByID(req.GetVolumeId()); vol != nil {
 		if err := cs.dm.DeleteDevice(req.VolumeId, vol.Erase); err != nil {
 			return nil, status.Errorf(codes.Internal, "Failed to delete volume: %s", err.Error())
 		}
 		delete(cs.pmemVolumes, vol.ID)
-		pmemcommon.Infof(4, ctx, "DeleteVolume: volume %s deleted", req.GetVolumeId())
+		glog.V(4).Infof("DeleteVolume: volume %s deleted", req.GetVolumeId())
 	} else {
-		pmemcommon.Infof(3, ctx, "Volume %s not created by this controller", req.GetVolumeId())
+		glog.V(3).Infof("Volume %s not created by this controller", req.GetVolumeId())
 	}
 	return &csi.DeleteVolumeResponse{}, nil
 }
@@ -224,9 +223,9 @@ func (cs *nodeControllerServer) ValidateVolumeCapabilities(ctx context.Context, 
 }
 
 func (cs *nodeControllerServer) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
-	pmemcommon.Infof(3, ctx, "ListVolumes")
+	glog.V(5).Infof("ListVolumes")
 	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_LIST_VOLUMES); err != nil {
-		pmemcommon.Infof(3, ctx, "invalid list volumes req: %v", req)
+		glog.Errorf("invalid list volumes req: %v", req)
 		return nil, err
 	}
 	// List namespaces

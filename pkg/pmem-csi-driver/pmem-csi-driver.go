@@ -207,12 +207,12 @@ func (pmemd *pmemDriver) registerNodeController() error {
 	}
 
 	for {
-		glog.Infof("Connecting to registry server at: %s\n", pmemd.cfg.RegistryEndpoint)
+		glog.V(3).Infof("Connecting to registry server at: %s\n", pmemd.cfg.RegistryEndpoint)
 		conn, err = pmemgrpc.Connect(pmemd.cfg.RegistryEndpoint, pmemd.clientTLSConfig, connectionTimeout)
 		if err == nil {
 			break
 		}
-		glog.Infof("Failed to connect registry server: %s, retrying after %v seconds...", err.Error(), retryTimeout.Seconds())
+		glog.V(4).Infof("Failed to connect registry server: %s, retrying after %v seconds...", err.Error(), retryTimeout.Seconds())
 		time.Sleep(retryTimeout)
 	}
 
@@ -220,18 +220,18 @@ func (pmemd *pmemDriver) registerNodeController() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	for {
-		glog.Info("Registering controller...")
+		glog.V(3).Info("Registering controller...")
 		if _, err = client.RegisterController(ctx, &req); err != nil {
 			if s, ok := status.FromError(err); ok && s.Code() == codes.InvalidArgument {
 				return fmt.Errorf("Registration failed: %s", s.Message())
 			}
-			glog.Infof("Failed to register: %s, retrying after %v seconds...", err.Error(), retryTimeout.Seconds())
+			glog.V(5).Infof("Failed to register: %s, retrying after %v seconds...", err.Error(), retryTimeout.Seconds())
 			time.Sleep(retryTimeout)
 		} else {
 			break
 		}
 	}
-	glog.Info("Registration success!!!")
+	glog.V(4).Info("Registration success")
 
 	return nil
 }

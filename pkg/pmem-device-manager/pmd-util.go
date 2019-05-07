@@ -26,7 +26,7 @@ import (
 var devicemutex = &sync.Mutex{}
 
 func ClearDevice(device PmemDeviceInfo, flush bool) error {
-	glog.Infof("ClearDevice: path: %v flush:%v", device.Path, flush)
+	glog.V(4).Infof("ClearDevice: path: %v flush:%v", device.Path, flush)
 	// by default, clear 4 kbytes to avoid recognizing file system by next volume seeing data area
 	var blocks uint64 = 4
 	if flush {
@@ -43,21 +43,21 @@ func FlushDevice(dev PmemDeviceInfo, blocks uint64) error {
 	// Before action, check that dev.Path exists and is device
 	fileinfo, err := os.Stat(dev.Path)
 	if err != nil {
-		glog.Infof("FlushDevice: %s does not exist", dev.Path)
+		glog.Errorf("FlushDevice: %s does not exist", dev.Path)
 		return err
 	}
 	if (fileinfo.Mode() & os.ModeDevice) == 0 {
-		glog.Infof("FlushDevice: %s is not device", dev.Path)
+		glog.Errorf("FlushDevice: %s is not device", dev.Path)
 		return fmt.Errorf("%s is not device", dev.Path)
 	}
 	if blocks == 0 {
-		glog.Infof("Wiping entire device: %s", dev.Path)
+		glog.V(5).Infof("Wiping entire device: %s", dev.Path)
 		// use one iteration instead of shred's default=3 for speed
 		if _, err := pmemexec.RunCommand("shred", "-n", "1", dev.Path); err != nil {
 			return fmt.Errorf("device shred failure: %v", err.Error())
 		}
 	} else {
-		glog.Infof("Zeroing %d 1k blocks at start of device: %s Size %v", blocks, dev.Path, dev.Size)
+		glog.V(5).Infof("Zeroing %d 1k blocks at start of device: %s Size %v", blocks, dev.Path, dev.Size)
 		of := "of=" + dev.Path
 		// guard against writing more than volume size
 		if blocks*1024 > dev.Size {

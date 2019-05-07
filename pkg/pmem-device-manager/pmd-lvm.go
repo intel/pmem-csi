@@ -87,7 +87,7 @@ func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error 
 	// Overall, no point having more than one namespace with same name.
 	_, err := lvm.GetDevice(name)
 	if err == nil {
-		glog.Infof("Device with name: %s already exists, refuse to create another", name)
+		glog.V(4).Infof("Device with name: %s already exists, refuse to create another", name)
 		return fmt.Errorf("CreateDevice: Failed: namespace with that name exists")
 	}
 	// pick a region, few possible strategies:

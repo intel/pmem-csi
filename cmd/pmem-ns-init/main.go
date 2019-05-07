@@ -33,7 +33,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	glog.Info("Version: ", version)
+	glog.V(3).Info("Version: ", version)
 
 	if err := CheckArgs(*namespacesize, *useforfsdax, *useforsector); err != nil {
 		fmt.Printf("Arguments check failed: %s", err.Error())
@@ -65,7 +65,7 @@ func CheckArgs(namespacesize int, useforfsdax int, useforsector int) error {
 }
 
 func initNVdimms(ctx *ndctl.Context, namespacesize int, useforfsdax int, useforsector int) {
-	glog.Infof("Configured namespacesize; %v GB", namespacesize)
+	glog.V(4).Infof("Configured namespacesize; %v GB", namespacesize)
 	// we get 1GB smaller than we ask so lets ask for 1GB more
 	nsSize := uint64(namespacesize+1) * 1024 * 1024 * 1024
 	for _, bus := range ctx.GetBuses() {
@@ -74,56 +74,46 @@ func initNVdimms(ctx *ndctl.Context, namespacesize int, useforfsdax int, usefors
 			createNS(r, nsSize, useforsector, ndctl.SectorMode)
 		}
 	}
-	/* for debug
-	nss := ctx.GetActiveNamespaces()
-	glog.Info("elems in Namespaces:", len(nss))
-	for _, ns := range nss {
-		glog.Info("Namespace Name:", ns.Name())
-		glog.Info("    Size:", ns.Size())
-		glog.Info("    Device:", ns.DeviceName())
-		glog.Info("    Mode:", ns.Mode())
-		glog.Info("    BlockDevice:", ns.BlockDeviceName())
-	}*/
 }
 
 func createNS(r *ndctl.Region, nsSize uint64, uselimit int, nsmode ndctl.NamespaceMode) {
 	// uselimit is the percentage we can use
 	canUse := uint64(uselimit) * r.Size() / 100
-	glog.Infof("Create %s-namespaces in %v, allowed %d %%:\ntotal       : %16d\navail       : %16d\ncan use     : %16d",
+	glog.V(3).Infof("Create %s-namespaces in %v, allowed %d %%:\ntotal       : %16d\navail       : %16d\ncan use     : %16d",
 		nsmode, r.DeviceName(), uselimit, r.Size(), r.AvailableSize(), canUse)
 	// Subtract sizes of existing active namespaces with currently handled mode and owned by pmem-csi
 	for _, ns := range r.ActiveNamespaces() {
-		glog.Infof("createNS: Exists: Size %16d Mode:%v Device:%v Name:%v", ns.Size(), ns.Mode(), ns.DeviceName(), ns.Name())
+		glog.V(5).Infof("createNS: Exists: Size %16d Mode:%v Device:%v Name:%v", ns.Size(), ns.Mode(), ns.DeviceName(), ns.Name())
 		if ns.Mode() == nsmode && ns.Name() == "pmem-csi" {
 			canUse -= ns.Size()
 		}
 	}
-	glog.Infof("%v bytes calculated available after scan for existing %s-mode namespaces", canUse, nsmode)
+	glog.V(4).Infof("%v bytes calculated available after scan for existing %s-mode namespaces", canUse, nsmode)
 	// cast to signed, otherwise can never be negative and risks forever-looping,
 	// broken only by break stmt below which happens after a failed creation attempt
 	for int64(canUse) > 0 {
 		if nsSize > canUse {
 			// this creates one last smaller namespace in leftover space
 			nsSize = canUse
-			glog.Infof("Less than configured namespacesize remaining, change desired size to %v", nsSize)
+			glog.V(4).Infof("Less than configured namespacesize remaining, change desired size to %v", nsSize)
 		}
-		glog.Infof("Calculated canUse:%v, available by Region info:%v", canUse, r.AvailableSize())
+		glog.V(4).Infof("Calculated canUse:%v, available by Region info:%v", canUse, r.AvailableSize())
 		// Because of overhead by alignement and extra space for page mapping, calculated available may show more than actual
 		if r.AvailableSize() < nsSize {
-			glog.Infof("Available in Region:%v is less than desired nsSize, limit nsSize to that", r.AvailableSize())
+			glog.V(4).Infof("Available in Region:%v is less than desired nsSize, limit nsSize to that", r.AvailableSize())
 			nsSize = r.AvailableSize()
 		}
 		// Should not happen easily, fragmented space could lead to r.MaxAvailableExtent() being less than r.AvailableSize()
 		if r.MaxAvailableExtent() < nsSize {
-			glog.Infof("MaxAvailableExtent in Region:%v is less than desired nsSize, limit nsSize to that", r.MaxAvailableExtent())
+			glog.V(4).Infof("MaxAvailableExtent in Region:%v is less than desired nsSize, limit nsSize to that", r.MaxAvailableExtent())
 			nsSize = r.MaxAvailableExtent()
 		}
 		// If NSize drops to less than 2GB, stop as creation would fail
 		if nsSize < 2*1024*1024*1024 {
-			glog.Infof("nsSize:%v is less then 2 GB, stop creating", nsSize)
+			glog.V(4).Infof("nsSize:%v is less then 2 GB, stop creating", nsSize)
 			break
 		}
-		glog.Infof("Create next %v-bytes %s-namespace", nsSize, nsmode)
+		glog.V(3).Infof("Create next %v-bytes %s-namespace", nsSize, nsmode)
 		_, err := r.CreateNamespace(ndctl.CreateNamespaceOpts{
 			Name:  "pmem-csi",
 			Mode:  nsmode,

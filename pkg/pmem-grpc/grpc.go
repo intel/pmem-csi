@@ -28,7 +28,7 @@ func Connect(endpoint string, tlsConfig *tls.Config, timeout time.Duration) (*gr
 	if err != nil {
 		return nil, err
 	}
-	glog.Infof("Connecting to %s", address)
+	glog.V(3).Infof("Connecting to %s", address)
 	dialOptions := []grpc.DialOption{grpc.WithBackoffMaxDelay(time.Second)}
 	if tlsConfig != nil {
 		dialOptions = append(dialOptions, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
@@ -109,7 +109,7 @@ func LoadClientTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, err
 	if err != nil {
 		return nil, err
 	}
-	glog.Infof("Using Servername: %s", peerName)
+	glog.V(3).Infof("Using Servername: %s", peerName)
 	return &tls.Config{
 		ServerName:   peerName,
 		Certificates: []tls.Certificate{*peerCert},

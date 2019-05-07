@@ -29,7 +29,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	glog.Info("Version: ", version)
+	glog.V(3).Info("Version: ", version)
 
 	ctx, err := ndctl.NewContext()
 	if err != nil {
@@ -46,12 +46,12 @@ func main() {
 // Edge cases are when no PVol or VG structures (or partially) dont exist yet
 func prepareVolumeGroups(ctx *ndctl.Context) {
 	for _, bus := range ctx.GetBuses() {
-		glog.Infof("CheckVG: Bus: %v", bus.DeviceName())
+		glog.V(5).Infof("CheckVG: Bus: %v", bus.DeviceName())
 		for _, r := range bus.ActiveRegions() {
-			glog.Infof("Region: %v", r.DeviceName())
+			glog.V(5).Infof("Region: %v", r.DeviceName())
 			nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
 			for _, nsmod := range nsmodes {
-				glog.Infof("NsMode: %v", nsmod)
+				glog.V(5).Infof("NsMode: %v", nsmod)
 				vgName := vgName(bus, r, nsmod)
 				if err := createVolumesForRegion(r, vgName, nsmod); err != nil {
 					glog.Errorf("Failed volumegroup creation: %s", err.Error())
@@ -70,7 +70,7 @@ func createVolumesForRegion(r *ndctl.Region, vgName string, nsmode ndctl.Namespa
 	cmdArgs := []string{"--force", vgName}
 	nsArray := r.ActiveNamespaces()
 	if len(nsArray) == 0 {
-		glog.Infof("No active namespaces in region %s", r.DeviceName())
+		glog.V(3).Infof("No active namespaces in region %s", r.DeviceName())
 		return nil
 	}
 	for _, ns := range nsArray {
@@ -78,7 +78,7 @@ func createVolumesForRegion(r *ndctl.Region, vgName string, nsmode ndctl.Namespa
 		// and having name given by this driver, to exclude foreign ones
 		if ns.Mode() == ndctl.NamespaceMode(nsmode) && ns.Name() == "pmem-csi" {
 			devName := "/dev/" + ns.BlockDeviceName()
-			glog.Infof("createVolumesForRegion: %s has nsmode %s", ns.BlockDeviceName(), nsmode)
+			glog.V(4).Infof("createVolumesForRegion: %s has nsmode %s", ns.BlockDeviceName(), nsmode)
 			/* check if this pv is already part of a group, if yes ignore this pv
 			if not add to arg list */
 			output, err := pmemexec.RunCommand("pvs", "--noheadings", "-o", "vg_name", devName)
@@ -88,14 +88,14 @@ func createVolumesForRegion(r *ndctl.Region, vgName string, nsmode ndctl.Namespa
 		}
 	}
 	if len(cmdArgs) == 2 {
-		glog.Infof("no new namespace found to add to this group: %s", vgName)
+		glog.V(3).Infof("no new namespace found to add to this group: %s", vgName)
 		return nil
 	}
 	if _, err := pmemexec.RunCommand("vgdisplay", vgName); err != nil {
-		glog.Infof("No Vgroup with name %v, mark for creation", vgName)
+		glog.V(3).Infof("No Vgroup with name %v, mark for creation", vgName)
 		cmd = "vgcreate"
 	} else {
-		glog.Infof("VolGroup '%v' exists", vgName)
+		glog.V(3).Infof("VolGroup '%v' exists", vgName)
 		cmd = "vgextend"
 	}
 
