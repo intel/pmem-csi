@@ -7,20 +7,8 @@
 - op: add
   path: /spec/template/spec/containers/0/volumeMounts/-
   value:
-    name: dev-dir
-    mountPath: /dev
-- op: add
-  path: /spec/template/spec/containers/0/volumeMounts/-
-  value:
     name: sys-dir
     mountPath: /sys
-- op: add
-  path: /spec/template/spec/volumes/-
-  value:
-    name: dev-dir
-    hostPath:
-      path: /dev
-      type: DirectoryOrCreate
 - op: add
   path: /spec/template/spec/volumes/-
   value:

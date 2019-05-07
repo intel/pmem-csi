@@ -375,6 +375,8 @@ spec:
           name: pods-dir
         - mountPath: /certs/
           name: registry-cert
+        - mountPath: /dev
+          name: dev-dir
       - args:
         - --v=5
         - --kubelet-registration-path=/var/lib/kubelet/plugins/pmem-csi.intel.com/csi.sock
@@ -429,6 +431,10 @@ spec:
       - name: registry-cert
         secret:
           secretName: pmem-csi-node-secrets
+      - hostPath:
+          path: /dev
+          type: DirectoryOrCreate
+        name: dev-dir
       - hostPath:
           path: /sys
           type: DirectoryOrCreate
