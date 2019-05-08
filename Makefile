@@ -130,13 +130,17 @@ kustomize: $(KUSTOMIZE_OUTPUT)
 $(KUSTOMIZE_OUTPUT): _work/kustomize-$(KUSTOMIZE_VERSION) $(KUSTOMIZE_INPUT)
 	$< build --load_restrictor none $(KUSTOMIZATION_$@) >$@
 
-PHONY: clean-kustomize
+# Always re-generate the output files because "git rebase" might have
+# left us with an inconsistent state.
+.PHONY: kustomize $(KUSTOMIZE_OUTPUT)
+
+.PHONY: clean-kustomize
 clean: clean-kustomize
 clean-kustomize:
 	rm -f _work/kustomize-*
 	rm -f _work/kustomize
 
-PHONY: test-kustomize $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
+.PHONY: test-kustomize $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
 test: test-kustomize
 test-kustomize: $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
 $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT)): test-kustomize-%: _work/kustomize
