@@ -6,6 +6,7 @@ ARG NDCTL_CONFIGFLAGS
 ARG NDCTL_BUILD_DEPS
 
 #pull dependencies required for downloading and building libndctl
+ARG CACHEBUST
 RUN swupd update && swupd bundle-add ${NDCTL_BUILD_DEPS} go-basic-dev && rm -rf /var/lib/swupd
 
 WORKDIR /
@@ -27,6 +28,7 @@ RUN mv ./_output/pmem-ns-init /go/bin/
 
 # build clean container
 FROM clearlinux:base
+ARG CACHEBUST
 RUN swupd update && rm -rf /var/lib/swupd
 
 LABEL maintainers="Intel"
