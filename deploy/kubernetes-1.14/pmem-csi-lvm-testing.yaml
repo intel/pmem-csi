@@ -172,7 +172,7 @@ spec:
     spec:
       containers:
       - args:
-        - --v=5
+        - -v=3
         - --csi-address=/csi/csi-controller.sock
         - --feature-gates=Topology=true
         image: quay.io/k8scsi/csi-provisioner:v1.1.0
@@ -182,7 +182,7 @@ spec:
         - mountPath: /csi
           name: plugin-socket-dir
       - args:
-        - -v=5
+        - -v=3
         - -drivername=pmem-csi.intel.com
         - -mode=controller
         - -endpoint=unix:///csi/csi-controller.sock
@@ -296,7 +296,7 @@ spec:
       containers:
       - args:
         - -deviceManager=lvm
-        - -v=5
+        - -v=3
         - -drivername=pmem-csi.intel.com
         - -mode=node
         - -endpoint=$(CSI_ENDPOINT)
@@ -341,7 +341,7 @@ spec:
         - mountPath: /dev
           name: dev-dir
       - args:
-        - --v=5
+        - -v=3
         - --kubelet-registration-path=/var/lib/kubelet/plugins/pmem-csi.intel.com/csi.sock
         - --csi-address=/csi/csi.sock
         image: quay.io/k8scsi/csi-node-driver-registrar:v1.1.0
@@ -355,7 +355,7 @@ spec:
       hostNetwork: true
       initContainers:
       - args:
-        - -v=5
+        - -v=3
         - -namespacesize=9
         command:
         - /go/bin/pmem-ns-init
@@ -368,7 +368,7 @@ spec:
         - mountPath: /sys
           name: sys-dir
       - args:
-        - -v=5
+        - -v=3
         command:
         - /go/bin/pmem-vgm
         image: 192.168.8.1:5000/pmem-csi-driver:canary
