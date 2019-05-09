@@ -29,7 +29,8 @@ RUN mv ./_output/pmem-csi-driver /go/bin/
 FROM clearlinux:base
 LABEL maintainers="Intel"
 LABEL description="PMEM CSI Driver"
-# update and install needed bunles:
+
+# update and install needed bundles:
 # file - driver uses file utility to determine filesystem type
 # xfsprogs - XFS filesystem utilities
 # storge-utils - for lvm2 and ext4(e2fsprogs) utilities
