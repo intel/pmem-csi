@@ -431,7 +431,9 @@ spec:
       - args:
         - -v=5
         - -namespacesize=9
-        image: 192.168.8.1:5000/pmem-ns-init:canary
+        command:
+        - /go/bin/pmem-ns-init
+        image: 192.168.8.1:5000/pmem-csi-driver:canary
         imagePullPolicy: Always
         name: pmem-ns-init
         securityContext:
@@ -441,7 +443,9 @@ spec:
           name: sys-dir
       - args:
         - -v=5
-        image: 192.168.8.1:5000/pmem-vgm:canary
+        command:
+        - /go/bin/pmem-vgm
+        image: 192.168.8.1:5000/pmem-csi-driver:canary
         imagePullPolicy: Always
         name: pmem-vgm
         securityContext:
