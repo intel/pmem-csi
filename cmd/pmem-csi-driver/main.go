@@ -8,11 +8,13 @@ SPDX-License-Identifier: Apache-2.0
 package main
 
 import (
+	"flag"
 	"os"
 
 	"github.com/intel/pmem-csi/pkg/pmem-csi-driver"
 )
 
 func main() {
+	flag.Parse()
 	os.Exit(pmemcsidriver.Main())
 }

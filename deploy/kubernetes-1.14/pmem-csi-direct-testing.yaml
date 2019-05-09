@@ -182,7 +182,7 @@ spec:
         - -certFile=/certs/pmem-csi-registry.crt
         - -keyFile=/certs/pmem-csi-registry.key
         - -v=5
-        - -test.coverprofile=/var/lib/pmem-csi-coverage/pmem-csi-driver-controller.out
+        - -coverprofile=/var/lib/pmem-csi-coverage/pmem-csi-driver-controller-*.out
         env:
         - name: KUBE_NODE_NAME
           valueFrom:
@@ -316,7 +316,7 @@ spec:
         - -certFile=/certs/$(KUBE_NODE_NAME).crt
         - -keyFile=/certs/$(KUBE_NODE_NAME).key
         - -v=5
-        - -test.coverprofile=/var/lib/pmem-csi-coverage/pmem-csi-driver-node.out
+        - -coverprofile=/var/lib/pmem-csi-coverage/pmem-csi-driver-node-*.out
         env:
         - name: CSI_ENDPOINT
           value: unix:///csi/csi.sock

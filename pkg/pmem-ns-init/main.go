@@ -26,7 +26,6 @@ var (
 func init() {
 	klog.InitFlags(nil)
 	flag.Set("logtostderr", "true")
-	flag.Parse()
 }
 
 func Main() int {
