@@ -22,10 +22,8 @@ VERSION=$(shell git describe --long --dirty --tags --match='v*')
 endif
 
 REGISTRY_NAME=localhost:5000
-IMAGE_VERSION_pmem-csi-driver=canary
-IMAGE_VERSION_pmem-ns-init=canary
-IMAGE_VERSION_pmem-vgm=canary
-IMAGE_TAG=$(REGISTRY_NAME)/$*:$(IMAGE_VERSION_$*)
+IMAGE_VERSION=canary
+IMAGE_TAG=$(REGISTRY_NAME)/pmem-csi-driver:$(IMAGE_VERSION)
 IMAGE_BUILD_ARGS=--build-arg NDCTL_VERSION=64.1 --build-arg NDCTL_CONFIGFLAGS='--libdir=/usr/lib --disable-docs --without-systemd --without-bash' \
 --build-arg NDCTL_BUILD_DEPS='os-core-dev devpkg-util-linux devpkg-kmod devpkg-json-c file'
 # Pass proxy config via --build-arg only if these are set,
@@ -51,13 +49,9 @@ all: pmem-csi-driver pmem-ns-init pmem-vgm
 build: all
 	go test -run none ./pkg/... ./test/e2e
 
-build-images: build-pmem-csi-driver-image build-pmem-ns-init-image build-pmem-vgm-image
-
-push-images: push-pmem-csi-driver-image push-pmem-ns-init-image push-pmem-vgm-image
-
-
+OUTPUT_DIR=_output
 pmem-csi-driver pmem-vgm pmem-ns-init:
-	GOOS=linux go build -ldflags '-X main.version=${VERSION}' -a -o _output/$@ ./cmd/$@
+	GOOS=linux go build -ldflags '-X main.version=${VERSION}' -a -o ${OUTPUT_DIR}/$@ ./cmd/$@
 
 # The default is to refresh the base image once a day when building repeatedly.
 # This is achieved by passing a fake variable that changes its value once per day.
@@ -68,15 +62,15 @@ pmem-csi-driver pmem-vgm pmem-ns-init:
 # The VERSION variable should be used for that, if desired.
 BUILD_IMAGE_ID=$(shell date +%Y-%m-%d)
 
-build-%-image:
-	docker build --pull --build-arg CACHEBUST=$(BUILD_IMAGE_ID) $(BUILD_ARGS) $(IMAGE_BUILD_ARGS) -t $(IMAGE_TAG) -f ./cmd/$*/Dockerfile . --label revision=$(VERSION)
+build-image:
+	docker build --pull --build-arg CACHEBUST=$(BUILD_IMAGE_ID) $(BUILD_ARGS) $(IMAGE_BUILD_ARGS) -t $(IMAGE_TAG) -f ./Dockerfile . --label revision=$(VERSION)
 
-push-%-image: build-%-image
+push-image: build-image
 	docker push $(IMAGE_TAG)
 
 clean:
 	go clean -r -x
-	-rm -rf _output
+	-rm -rf $(OUTPUT_DIR)
 
 .PHONY: all test clean pmem-csi-driver pmem-ns-init pmem-vgm
 

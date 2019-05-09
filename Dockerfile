@@ -22,9 +22,7 @@ ADD . /go/src/github.com/intel/pmem-csi
 ENV GOPATH=/go
 ENV PKG_CONFIG_PATH=/usr/lib/pkgconfig/
 WORKDIR /go/src/github.com/intel/pmem-csi
-RUN make pmem-csi-driver VERSION=${VERSION}
-RUN mkdir -p /go/bin
-RUN mv ./_output/pmem-csi-driver /go/bin/
+RUN make VERSION=${VERSION} OUTPUT_DIR=/go/bin
 
 # build clean container
 FROM clearlinux:base
@@ -42,7 +40,7 @@ RUN swupd update && swupd bundle-add file xfsprogs storage-utils && rm -rf /var/
 COPY --from=build /usr/lib/libndctl* /usr/lib/
 COPY --from=build /usr/lib/libdaxctl* /usr/lib/
 RUN mkdir -p /go/bin
-COPY --from=build /go/bin/pmem-csi-driver /go/bin/
+COPY --from=build /go/bin/ /go/bin/
 # default lvm config uses lvmetad and throwing below warning for all lvm tools
 # WARNING: Failed to connect to lvmetad. Falling back to device scanning.
 # So, ask lvm not to use lvmetad
