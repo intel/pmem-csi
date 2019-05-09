@@ -59,8 +59,17 @@ push-images: push-pmem-csi-driver-image push-pmem-ns-init-image push-pmem-vgm-im
 pmem-csi-driver pmem-vgm pmem-ns-init:
 	GOOS=linux go build -ldflags '-X main.version=${VERSION}' -a -o _output/$@ ./cmd/$@
 
+# The default is to refresh the base image once a day when building repeatedly.
+# This is achieved by passing a fake variable that changes its value once per day.
+# A CI system that produces production images should instead use
+# `make  BUILD_IMAGE_ID=<some unique number>`.
+#
+# At the moment this build ID is not recorded in the resulting images.
+# The VERSION variable should be used for that, if desired.
+BUILD_IMAGE_ID=$(shell date +%Y-%m-%d)
+
 build-%-image:
-	docker build --pull $(BUILD_ARGS) $(IMAGE_BUILD_ARGS) -t $(IMAGE_TAG) -f ./cmd/$*/Dockerfile . --label revision=$(VERSION)
+	docker build --pull --build-arg CACHEBUST=$(BUILD_IMAGE_ID) $(BUILD_ARGS) $(IMAGE_BUILD_ARGS) -t $(IMAGE_TAG) -f ./cmd/$*/Dockerfile . --label revision=$(VERSION)
 
 push-%-image: build-%-image
 	docker push $(IMAGE_TAG)

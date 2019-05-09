@@ -6,6 +6,7 @@ ARG NDCTL_CONFIGFLAGS
 ARG NDCTL_BUILD_DEPS
 
 #pull dependencies required for downloading and building libndctl
+ARG CACHEBUST
 RUN swupd update && swupd bundle-add ${NDCTL_BUILD_DEPS} go-basic-dev && rm -rf /var/lib/swupd
 
 WORKDIR /
@@ -34,6 +35,7 @@ LABEL description="PMEM CSI Driver"
 # file - driver uses file utility to determine filesystem type
 # xfsprogs - XFS filesystem utilities
 # storge-utils - for lvm2 and ext4(e2fsprogs) utilities
+ARG CACHEBUST
 RUN swupd update && swupd bundle-add file xfsprogs storage-utils && rm -rf /var/lib/swupd
 
 # move required binaries and libraries to clean container
