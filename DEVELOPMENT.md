@@ -228,7 +228,7 @@ which are not hand-edited
 
 Top-level README diagrams describing LVM and Direct device modes
 ----------------------------------------------------------------
-Two diagrams are created using the [_dia_ drawing program](https://en.wikipedia.org/wiki/Dia_(software)).
+Two diagrams are created with [_dia_ drawing program](https://en.wikipedia.org/wiki/Dia_(software)).
 The [single source file](/docs/diagrams/pmem-csi.dia) has
 layers: {common, lvm, direct} so that two diagram variants can be produced from single source.
 Image files are produced by saving in PNG format with correct set of layers visible.
@@ -236,9 +236,10 @@ The PNG files are committed as repository elements in docs/images/devicemodes/.
 
 Top-level README diagram describing communication channels
 ----------------------------------------------------------
-This diagram was created using the [_dia_ drawing program](https://en.wikipedia.org/wiki/Dia_(software)).
+This diagram was created with the [_dia_ drawing program](https://en.wikipedia.org/wiki/Dia_(software)) using [source file](/docs/diagrams/pmem-csi-communication-diagram.dia).
+
 Image file is produced by saving in PNG format.
-The PNG file is committed as repository elements in docs/images/communication/.
+The PNG file is committed as a [repository element](/docs/images/communication/pmem-csi-communication-diagram.png).
 
 Diagrams describing provisioning sequence
 -----------------------------------------
