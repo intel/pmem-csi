@@ -153,6 +153,8 @@ spec:
           mountPropagation: Bidirectional
         - name: registry-cert
           mountPath: /certs/
+        - name : dev-dir
+          mountPath: /dev
       - name: driver-registrar
         imagePullPolicy: Always
         image: quay.io/k8scsi/csi-node-driver-registrar:v1.X.Y
@@ -184,3 +186,7 @@ spec:
         - name: registry-cert
           secret:
             secretName: pmem-csi-node-secrets
+        - name: dev-dir
+          hostPath:
+            path: /dev
+            type: DirectoryOrCreate

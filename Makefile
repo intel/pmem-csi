@@ -26,7 +26,8 @@ IMAGE_VERSION_pmem-csi-driver=canary
 IMAGE_VERSION_pmem-ns-init=canary
 IMAGE_VERSION_pmem-vgm=canary
 IMAGE_TAG=$(REGISTRY_NAME)/$*:$(IMAGE_VERSION_$*)
-IMAGE_BUILD_ARGS=--build-arg NDCTL_VERSION=64.1 --build-arg NDCTL_CONFIGFLAGS='--libdir=/usr/lib --disable-docs --without-systemd' --build-arg NDCTL_BUILD_DEPS='build-base autoconf automake bash-completion libtool libuuid json-c kmod asciidoc xmlto kmod-dev eudev-dev util-linux-dev json-c-dev linux-headers wget tar file keyutils-dev'
+IMAGE_BUILD_ARGS=--build-arg NDCTL_VERSION=64.1 --build-arg NDCTL_CONFIGFLAGS='--libdir=/usr/lib --disable-docs --without-systemd --without-bash' \
+--build-arg NDCTL_BUILD_DEPS='os-core-dev devpkg-util-linux devpkg-kmod devpkg-json-c file'
 # Pass proxy config via --build-arg only if these are set,
 # enabling proxy config other way, like ~/.docker/config.json
 BUILD_ARGS=
@@ -59,7 +60,7 @@ pmem-csi-driver pmem-vgm pmem-ns-init:
 	GOOS=linux go build -ldflags '-X main.version=${VERSION}' -a -o _output/$@ ./cmd/$@
 
 build-%-image:
-	docker build ${BUILD_ARGS} ${IMAGE_BUILD_ARGS} -t $(IMAGE_TAG) -f ./cmd/$*/Dockerfile . --label revision=${VERSION}
+	docker build --pull $(BUILD_ARGS) $(IMAGE_BUILD_ARGS) -t $(IMAGE_TAG) -f ./cmd/$*/Dockerfile . --label revision=$(VERSION)
 
 push-%-image: build-%-image
 	docker push $(IMAGE_TAG)
