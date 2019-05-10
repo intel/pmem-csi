@@ -405,9 +405,9 @@ git clone https://github.com/intel/pmem-csi $GOPATH/src/github.com/intel/pmem-cs
 
 ### Build PMEM-CSI
 
-1.  Use `make build-images` to produce Docker container images.
+1.  Use `make build-image` to produce Docker container image.
 
-2.  Use `make push-images` to push Docker container images to a Docker images registry. The
+2.  Use `make push-image` to build and push Docker container image to a Docker images registry. The
     default is to push to a local [Docker registry](https://docs.docker.com/registry/deploying/).
 
 See the [Makefile](Makefile) for additional make targets and possible make variables.
