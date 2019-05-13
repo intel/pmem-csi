@@ -3,5 +3,5 @@ kind: CSIDriver
 metadata:
   name: pmem-csi.intel.com
 spec:
-  attachRequired: true
+  attachRequired: false
   podInfoOnMountVersion: v1

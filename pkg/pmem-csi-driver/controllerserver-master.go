@@ -30,10 +30,6 @@ type VolumeStatus int
 const (
 	//Created volume created
 	Created VolumeStatus = iota + 1
-	//Attached volume attached on a node
-	Attached
-	//Unattached volume dettached on a node
-	Unattached
 	//Deleted volume deleted
 	Deleted
 
@@ -75,7 +71,6 @@ var volumeMutex = keymutex.NewHashed(-1)
 func NewMasterControllerServer(rs *registryServer) *masterController {
 	serverCaps := []csi.ControllerServiceCapability_RPC_Type{
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
-		csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME,
 		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
 		csi.ControllerServiceCapability_RPC_GET_CAPACITY,
 	}
@@ -260,70 +255,6 @@ func (cs *masterController) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 	}
 
 	return &csi.DeleteVolumeResponse{}, nil
-}
-
-func (cs *masterController) ControllerPublishVolume(ctx context.Context, req *csi.ControllerPublishVolumeRequest) (*csi.ControllerPublishVolumeResponse, error) {
-	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME); err != nil {
-		return nil, err
-	}
-	if req.GetVolumeId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Volume ID must be provided")
-	}
-
-	if req.GetNodeId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Node ID must be provided")
-	}
-
-	if req.GetVolumeCapability() == nil {
-		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Volume capability must be provided")
-	}
-
-	// Serialize by VolumeId
-	volumeMutex.LockKey(req.VolumeId)
-	defer volumeMutex.UnlockKey(req.VolumeId) //nolint: errcheck
-
-	glog.Infof("ControllerPublishVolume: req.volume_id: %s, req.node_id: %s ", req.VolumeId, req.NodeId)
-
-	vol := cs.getVolumeByID(req.VolumeId)
-	if vol == nil {
-		return nil, status.Error(codes.NotFound, fmt.Sprintf("No volume with id '%s' found", req.VolumeId))
-	}
-
-	glog.Infof("Current volume Info: %+v", vol)
-	state, ok := vol.nodeIDs[req.NodeId]
-	if !ok {
-		// This should not happen as we locked the topology while volume creation
-		return nil, status.Error(codes.NotFound, "Volume cannot be published on requested node "+req.NodeId)
-	} else if state == Attached {
-		return nil, status.Error(codes.AlreadyExists, "Volume already published on requested node "+req.NodeId)
-	} else {
-		vol.nodeIDs[req.NodeId] = Attached
-	}
-
-	return &csi.ControllerPublishVolumeResponse{}, nil
-}
-
-func (cs *masterController) ControllerUnpublishVolume(ctx context.Context, req *csi.ControllerUnpublishVolumeRequest) (*csi.ControllerUnpublishVolumeResponse, error) {
-	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_PUBLISH_UNPUBLISH_VOLUME); err != nil {
-		return nil, err
-	}
-	if req.GetVolumeId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "ControllerPublishVolume Volume ID must be provided")
-	}
-
-	// Serialize by VolumeId
-	volumeMutex.LockKey(req.VolumeId)
-	defer volumeMutex.UnlockKey(req.VolumeId)
-
-	glog.Infof("ControllerUnpublishVolume : volume_id: %s, node_id: %s ", req.VolumeId, req.NodeId)
-
-	if vol := cs.getVolumeByID(req.VolumeId); vol != nil {
-		vol.nodeIDs[req.NodeId] = Unattached
-	} else {
-		return nil, status.Error(codes.NotFound, fmt.Sprintf("No volume with id '%s' found", req.VolumeId))
-	}
-
-	return &csi.ControllerUnpublishVolumeResponse{}, nil
 }
 
 func (cs *masterController) ValidateVolumeCapabilities(ctx context.Context, req *csi.ValidateVolumeCapabilitiesRequest) (*csi.ValidateVolumeCapabilitiesResponse, error) {
