@@ -7,24 +7,6 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: pmem-csi-external-attacher-cfg
-  namespace: default
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  verbs:
-  - get
-  - watch
-  - list
-  - delete
-  - update
-  - create
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
   name: pmem-csi-external-provisioner-cfg
   namespace: default
 rules:
@@ -39,46 +21,6 @@ rules:
   - delete
   - update
   - create
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: pmem-csi-external-attacher-runner
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - persistentvolumes
-  verbs:
-  - get
-  - list
-  - watch
-  - update
-- apiGroups:
-  - ""
-  resources:
-  - nodes
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - csi.storage.k8s.io
-  resources:
-  - csinodeinfos
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - storage.k8s.io
-  resources:
-  - volumeattachments
-  verbs:
-  - get
-  - list
-  - watch
-  - update
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -147,39 +89,12 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: pmem-csi-csi-attacher-role-cfg
-  namespace: default
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: pmem-csi-external-attacher-cfg
-subjects:
-- kind: ServiceAccount
-  name: pmem-csi-controller
-  namespace: default
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
   name: pmem-csi-csi-provisioner-role-cfg
   namespace: default
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: pmem-csi-external-provisioner-cfg
-subjects:
-- kind: ServiceAccount
-  name: pmem-csi-controller
-  namespace: default
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: pmem-csi-csi-attacher-role
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: pmem-csi-external-attacher-runner
 subjects:
 - kind: ServiceAccount
   name: pmem-csi-controller
@@ -243,15 +158,6 @@ spec:
         image: quay.io/k8scsi/csi-provisioner:v1.0.1
         imagePullPolicy: Always
         name: external-provisioner
-        volumeMounts:
-        - mountPath: /csi
-          name: plugin-socket-dir
-      - args:
-        - --v=5
-        - --csi-address=/csi/csi-controller.sock
-        image: quay.io/k8scsi/csi-attacher:v1.0.1
-        imagePullPolicy: Always
-        name: external-attacher
         volumeMounts:
         - mountPath: /csi
           name: plugin-socket-dir
@@ -465,5 +371,5 @@ kind: CSIDriver
 metadata:
   name: pmem-csi.intel.com
 spec:
-  attachRequired: true
+  attachRequired: false
   podInfoOnMountVersion: v1

@@ -9,7 +9,5 @@ resources:
 images:
 - name: quay.io/k8scsi/csi-provisioner
   newTag: v1.0.1
-- name: quay.io/k8scsi/csi-attacher
-  newTag: v1.0.1
 - name: quay.io/k8scsi/csi-node-driver-registrar
   newTag: v1.1.0
