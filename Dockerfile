@@ -1,7 +1,7 @@
 FROM clearlinux:base AS build
 
 ARG VERSION="unknown"
-ARG NDCTL_VERSION="64.1"
+ARG NDCTL_VERSION="65"
 ARG NDCTL_CONFIGFLAGS="--libdir=/usr/lib --disable-docs --without-systemd --without-bash"
 ARG NDCTL_BUILD_DEPS="os-core-dev devpkg-util-linux devpkg-kmod devpkg-json-c"
 
