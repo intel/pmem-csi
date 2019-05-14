@@ -48,11 +48,11 @@ func (s *NonBlockingGRPCServer) Start(endpoint string, tlsConfig *tls.Config, se
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		glog.Infof("Listening for connections on address: %v", l.Addr())
+		glog.V(3).Infof("Listening for connections on address: %v", l.Addr())
 		if err := rpcServer.Serve(l); err != nil {
 			glog.Errorf("Server Listen failure: %s", err.Error())
 		}
-		glog.Infof("Server on '%s' stopped !!!", endpoint)
+		glog.V(3).Infof("Server on '%s' stopped", endpoint)
 	}()
 
 	return nil

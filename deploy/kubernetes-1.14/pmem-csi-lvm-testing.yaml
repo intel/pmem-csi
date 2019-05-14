@@ -172,9 +172,10 @@ spec:
     spec:
       containers:
       - args:
-        - --v=5
+        - -v=3
         - --csi-address=/csi/csi-controller.sock
         - --feature-gates=Topology=true
+        - -v=5
         image: quay.io/k8scsi/csi-provisioner:v1.1.0
         imagePullPolicy: Always
         name: external-provisioner
@@ -182,7 +183,7 @@ spec:
         - mountPath: /csi
           name: plugin-socket-dir
       - args:
-        - -v=5
+        - -v=3
         - -drivername=pmem-csi.intel.com
         - -mode=controller
         - -endpoint=unix:///csi/csi-controller.sock
@@ -191,6 +192,7 @@ spec:
         - -caFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
         - -certFile=/certs/pmem-csi-registry.crt
         - -keyFile=/certs/pmem-csi-registry.key
+        - -v=5
         env:
         - name: KUBE_NODE_NAME
           valueFrom:
@@ -296,7 +298,7 @@ spec:
       containers:
       - args:
         - -deviceManager=lvm
-        - -v=5
+        - -v=3
         - -drivername=pmem-csi.intel.com
         - -mode=node
         - -endpoint=$(CSI_ENDPOINT)
@@ -306,6 +308,7 @@ spec:
         - -caFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
         - -certFile=/certs/$(KUBE_NODE_NAME).crt
         - -keyFile=/certs/$(KUBE_NODE_NAME).key
+        - -v=5
         env:
         - name: CSI_ENDPOINT
           value: unix:///csi/csi.sock
@@ -341,9 +344,10 @@ spec:
         - mountPath: /dev
           name: dev-dir
       - args:
-        - --v=5
+        - -v=3
         - --kubelet-registration-path=/var/lib/kubelet/plugins/pmem-csi.intel.com/csi.sock
         - --csi-address=/csi/csi.sock
+        - -v=5
         image: quay.io/k8scsi/csi-node-driver-registrar:v1.1.0
         imagePullPolicy: Always
         name: driver-registrar
@@ -355,8 +359,9 @@ spec:
       hostNetwork: true
       initContainers:
       - args:
-        - -v=5
+        - -v=3
         - -namespacesize=9
+        - -v=5
         command:
         - /go/bin/pmem-ns-init
         image: 192.168.8.1:5000/pmem-csi-driver:canary
@@ -368,6 +373,7 @@ spec:
         - mountPath: /sys
           name: sys-dir
       - args:
+        - -v=3
         - -v=5
         command:
         - /go/bin/pmem-vgm

@@ -169,11 +169,11 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 
 	if opts.Align != 0 {
 		if opts.Mode == SectorMode || opts.Mode == RawMode {
-			glog.Infof("%s mode does not support setting an alignment, hence ignoring alignment", opts.Mode)
+			glog.V(4).Infof("%s mode does not support setting an alignment, hence ignoring alignment", opts.Mode)
 		} else {
 			resource := uint64(C.ndctl_region_get_resource(ndr))
 			if resource < uint64(C.ULLONG_MAX) && resource&(mib2-1) != 0 {
-				glog.Infof("%s: falling back to a 4K alignment", regionName)
+				glog.V(4).Infof("%s: falling back to a 4K alignment", regionName)
 				opts.Align = kib4
 			}
 			if opts.Align != kib4 && opts.Align != mib2 && opts.Align != gib {
@@ -219,7 +219,7 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 	}
 
 	if err == nil {
-		glog.Infof("setting namespace sector size: %v", opts.SectorSize)
+		glog.V(5).Infof("setting namespace sector size: %v", opts.SectorSize)
 		err = ns.SetSectorSize(opts.SectorSize)
 	}
 	if err == nil {
@@ -229,18 +229,18 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 	if err == nil {
 		switch opts.Mode {
 		case FsdaxMode:
-			glog.Infof("setting pfn")
+			glog.V(5).Infof("setting pfn")
 			err = ns.setPfnSeed(opts.Location, opts.Align)
 		case DaxMode:
-			glog.Infof("setting dax")
+			glog.V(5).Infof("setting dax")
 			err = ns.setDaxSeed(opts.Location, opts.Align)
 		case SectorMode:
-			glog.Infof("setting btt")
+			glog.V(5).Infof("setting btt")
 			err = ns.setBttSeed(opts.SectorSize)
 		}
 	}
 	if err == nil {
-		glog.Infof("enabling namespace")
+		glog.V(5).Infof("enabling namespace")
 		err = ns.Enable()
 	}
 

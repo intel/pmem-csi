@@ -72,7 +72,7 @@ func (ctx *Context) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error
 	for _, bus := range ctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
 			if ns, err = r.CreateNamespace(opts); err == nil {
-				glog.Infof("Namespace %s created in %s", ns.Name(), r.DeviceName())
+				glog.V(3).Infof("Namespace %s created in %s", ns.Name(), r.DeviceName())
 				return ns, nil
 			} else {
 				glog.Errorf("Namespace creation failure in %s: %s", r.DeviceName(), err.Error())

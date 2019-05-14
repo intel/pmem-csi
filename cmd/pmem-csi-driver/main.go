@@ -49,7 +49,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	glog.Info("Version: ", version)
+	glog.V(3).Info("Version: ", version)
 
 	driver, err := pmemcsidriver.GetPMEMDriver(pmemcsidriver.Config{
 		DriverName:         *driverName,

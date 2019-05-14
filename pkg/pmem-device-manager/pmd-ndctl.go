@@ -24,12 +24,12 @@ func NewPmemDeviceManagerNdctl() (PmemDeviceManager, error) {
 	mounter := mount.New("")
 	mounts, err := mounter.List()
 	for i := range mounts {
-		glog.Infof("NewPmemDeviceManagerNdctl: Check mounts: device=%s path=%s opts=%s",
+		glog.V(5).Infof("NewPmemDeviceManagerNdctl: Check mounts: device=%s path=%s opts=%s",
 			mounts[i].Device, mounts[i].Path, mounts[i].Opts)
 		if mounts[i].Device == "sysfs" && mounts[i].Path == "/sys" {
 			for _, opt := range mounts[i].Opts {
 				if opt == "rw" {
-					glog.Infof("NewPmemDeviceManagerNdctl: /sys mounted read-write, good")
+					glog.V(4).Infof("NewPmemDeviceManagerNdctl: /sys mounted read-write, good")
 				} else if opt == "ro" {
 					return nil, fmt.Errorf("FATAL: /sys mounted read-only, can not operate\n")
 				}
@@ -74,7 +74,7 @@ func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) err
 	// Overall, no point having more than one namespace with same name.
 	_, err := pmem.GetDevice(name)
 	if err == nil {
-		glog.Infof("Device with name: %s already exists, refuse to create another", name)
+		glog.V(4).Infof("Device with name: %s already exists, refuse to create another", name)
 		return fmt.Errorf("CreateDevice: Failed: namespace with that name exists")
 	}
 	// align up by 1 GB, also compensate for libndctl giving us 1 GB less than we ask
@@ -92,7 +92,7 @@ func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) err
 		return err
 	}
 	data, _ := ns.MarshalJSON() //nolint: gosec
-	glog.Infof("Namespace created: %s", data)
+	glog.V(3).Infof("Namespace created: %s", data)
 	// clear start of device to avoid old data being recognized as file system
 	device, err := pmem.GetDevice(name)
 	if err != nil {

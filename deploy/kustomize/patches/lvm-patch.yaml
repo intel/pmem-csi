@@ -11,7 +11,7 @@
     imagePullPolicy: Always
     image: 192.168.8.1:5000/pmem-csi-driver:canary
     command: ["/go/bin/pmem-ns-init"]
-    args: [ "-v=5", "-namespacesize=9" ]
+    args: [ "-v=3", "-namespacesize=9" ]
     securityContext:
       privileged: true
     volumeMounts:
@@ -21,7 +21,7 @@
     imagePullPolicy: Always
     image: 192.168.8.1:5000/pmem-csi-driver:canary
     command: ["/go/bin/pmem-vgm"]
-    args: [ "-v=5" ]
+    args: [ "-v=3" ]
     securityContext:
       privileged: true
 

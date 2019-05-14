@@ -1,0 +1,8 @@
+# Raise log verbosity level to 5 in initContainers
+- op: add
+  path: /spec/template/spec/initContainers/0/args/-
+  value: "-v=5"
+
+- op: add
+  path: /spec/template/spec/initContainers/1/args/-
+  value: "-v=5"
