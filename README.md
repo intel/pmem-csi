@@ -372,8 +372,7 @@ Building of Docker images has been verified using Docker-ce: version 18.06.1
 
 Persistent memory device(s) are required for operation. However, some
 development and testing can be done using QEMU-emulated persistent
-memory devices, see [README-qemu-notes](README-qemu-notes.md) for
-technical details and the ["QEMU and Kubernetes"](#qemu-and-kubernetes)
+memory devices, see the ["QEMU and Kubernetes"](#qemu-and-kubernetes)
 section for the commands that create such a virtual test cluster.
 
 The driver does not create persistent memory Regions, but expects
