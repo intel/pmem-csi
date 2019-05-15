@@ -24,20 +24,29 @@ ifeq ($(VERSION), )
 VERSION=$(shell git describe --long --dirty --tags --match='v*')
 endif
 
-REGISTRY_NAME=localhost:5000
+# Sanitize proxy settings (accept upper and lower case, set and export upper
+# case) and add local machine to no_proxy because some tests may use a
+# local Docker registry. Also exclude 0.0.0.0 because otherwise Go
+# tests using that address try to go through the proxy.
+HTTP_PROXY=$(shell echo "$${HTTP_PROXY:-$${http_proxy}}")
+HTTPS_PROXY=$(shell echo "$${HTTPS_PROXY:-$${https_proxy}}")
+NO_PROXY=$(shell echo "$${NO_PROXY:-$${no_proxy}},$$(ip addr | grep inet6 | grep /64 | sed -e 's;.*inet6 \(.*\)/64 .*;\1;' | tr '\n' ','; ip addr | grep -w inet | grep /24 | sed -e 's;.*inet \(.*\)/24 .*;\1;' | tr '\n' ',')",0.0.0.0,10.0.2.15)
+export HTTP_PROXY HTTPS_PROXY NO_PROXY
+
+REGISTRY_NAME=$(shell set -x; . test/test-config.sh && echo $${TEST_BUILD_PMEM_REGISTRY})
 IMAGE_VERSION=canary
 IMAGE_TAG=$(REGISTRY_NAME)/pmem-csi-driver$*:$(IMAGE_VERSION)
 # Pass proxy config via --build-arg only if these are set,
 # enabling proxy config other way, like ~/.docker/config.json
 BUILD_ARGS=
-ifneq ($(http_proxy),)
-	BUILD_ARGS:=${BUILD_ARGS} --build-arg http_proxy=${http_proxy}
+ifneq ($(HTTP_PROXY),)
+	BUILD_ARGS:=${BUILD_ARGS} --build-arg http_proxy=${HTTP_PROXY}
 endif
-ifneq ($(https_proxy),)
-	BUILD_ARGS:=${BUILD_ARGS} --build-arg https_proxy=${https_proxy}
+ifneq ($(HTTPS_PROXY),)
+	BUILD_ARGS:=${BUILD_ARGS} --build-arg https_proxy=${HTTPS_PROXY}
 endif
-ifneq ($(no_proxy),)
-	BUILD_ARGS:=${BUILD_ARGS} --build-arg no_proxy=${no_proxy}
+ifneq ($(NO_PROXY),)
+	BUILD_ARGS:=${BUILD_ARGS} --build-arg no_proxy=${NO_PROXY}
 endif
 
 BUILD_ARGS:=${BUILD_ARGS} --build-arg VERSION=${VERSION}
@@ -89,15 +98,10 @@ clean:
 
 # Add support for creating and booting a cluster under QEMU.
 # All of the commands operate on a cluster stored in _work/$(CLUSTER),
-# which defaults to _work/clear-kvm. This can be changed with
+# which defaults to _work/clear-govm. This can be changed with
 # make variables, for example:
-#   make CLUSTER=clear-kvm-28070 CLEAR_IMG_VERSION=28070 start
-#
-# All clusters called "clear-kvm[-something]" are created with
-# test/clear-kvm.make. They run inside QEMU and share the
-# same IP addresses, and thus cannot run in parallel.
-CLUSTER := clear-kvm
-include test/clear-kvm.make
+#   CLUSTER=clear-govm-crio TEST_CRI=crio make start
+export CLUSTER ?= clear-govm
 include test/start-stop.make
 include test/test.make
 
