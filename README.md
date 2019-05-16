@@ -12,6 +12,7 @@
     -   [Prerequisites](#prerequisites)
         -   [Software required](#software-required)
         -   [Hardware required](#hardware-required)
+        -   [Persistent memory pre-provisioning](#persistent-memory-pre-provisioning)
     -   [Supported Kubernetes versions](#supported-kubernetes-versions)
     -   [Setup](#setup)
         -   [Get source code](#get-source-code)
@@ -375,10 +376,30 @@ development and testing can be done using QEMU-emulated persistent
 memory devices, see the ["QEMU and Kubernetes"](#qemu-and-kubernetes)
 section for the commands that create such a virtual test cluster.
 
-The driver does not create persistent memory Regions, but expects
-Regions to exist when the driver starts. The utility
-[ipmctl](https://github.com/intel/ipmctl) can be used to create
-Regions.
+### Persistent memory pre-provisioning
+
+The PMEM-CSI driver needs pre-provisioned regions on the NVDIMM device(s).
+The PMEM-CSI driver itself cannot create such regions.
+The [ipmctl](https://github.com/intel/ipmctl) utility can be used to create regions.
+App Direct Mode has two configuration options - interleaved or non-interleaved.
+One region per each NVDIMM is created in non-interleaved configuration.
+In such a configuration, a PMEM-CSI volume cannot be larger than one NVDIMM.
+
+Example of creating regions without interleaving, using all NVDIMMs:
+```sh
+# ipmctl create -goal PersistentMemoryType=AppDirectNotInterleaved
+```
+
+Alternatively, multiple NVDIMMs can be combined to form an interleaved set.
+This causes the data to be striped over multiple NVDIMM devices
+for improved read/write performance and allowing one region (also, PMEM-CSI volume)
+to be larger than single NVDIMM.
+
+Example of creating regions in interleaved mode, using all NVDIMMs:
+```sh
+# ipmctl create -goal PersistentMemoryType=AppDirect
+```
+
 
 ## Supported Kubernetes versions
 
