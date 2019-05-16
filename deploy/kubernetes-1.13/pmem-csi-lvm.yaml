@@ -142,16 +142,6 @@ spec:
       containers:
       - args:
         - -v=3
-        - --csi-address=/csi/csi-controller.sock
-        - --feature-gates=Topology=true
-        image: quay.io/k8scsi/csi-provisioner:v1.0.1
-        imagePullPolicy: Always
-        name: external-provisioner
-        volumeMounts:
-        - mountPath: /csi
-          name: plugin-socket-dir
-      - args:
-        - -v=3
         - -drivername=pmem-csi.intel.com
         - -mode=controller
         - -endpoint=unix:///csi/csi-controller.sock
@@ -177,6 +167,16 @@ spec:
         volumeMounts:
         - mountPath: /certs/
           name: registry-cert
+        - mountPath: /csi
+          name: plugin-socket-dir
+      - args:
+        - --v=3
+        - --csi-address=/csi/csi-controller.sock
+        - --feature-gates=Topology=true
+        image: quay.io/k8scsi/csi-provisioner:v1.0.1
+        imagePullPolicy: Always
+        name: external-provisioner
+        volumeMounts:
         - mountPath: /csi
           name: plugin-socket-dir
       serviceAccount: pmem-csi-controller
@@ -271,11 +271,15 @@ spec:
         - -namespacesize=9
         command:
         - /go/bin/pmem-ns-init
+        env:
+        - name: TERMINATION_LOG_PATH
+          value: /tmp/pmem-ns-init-termination-log
         image: 192.168.8.1:5000/pmem-csi-driver:canary
         imagePullPolicy: Always
         name: pmem-ns-init
         securityContext:
           privileged: true
+        terminationMessagePath: /tmp/pmem-ns-init-termination-log
         volumeMounts:
         - mountPath: /sys
           name: sys-dir
@@ -283,11 +287,15 @@ spec:
         - -v=3
         command:
         - /go/bin/pmem-vgm
+        env:
+        - name: TERMINATION_LOG_PATH
+          value: /tmp/pmem-vgm-termination-log
         image: 192.168.8.1:5000/pmem-csi-driver:canary
         imagePullPolicy: Always
         name: pmem-vgm
         securityContext:
           privileged: true
+        terminationMessagePath: /tmp/pmem-vgm-termination-log
       nodeSelector:
         storage: pmem
       volumes:

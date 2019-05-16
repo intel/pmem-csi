@@ -11,6 +11,9 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
@@ -144,6 +147,11 @@ func (pmemd *pmemDriver) Run() error {
 	}
 
 	s := NewNonBlockingGRPCServer()
+	// Ensure that the server is stopped before we return.
+	defer func() {
+		s.ForceStop()
+		s.Wait()
+	}()
 
 	if pmemd.cfg.Mode == Controller {
 		rs := NewRegistryServer(pmemd.clientTLSConfig)
@@ -191,7 +199,13 @@ func (pmemd *pmemDriver) Run() error {
 		return fmt.Errorf("Unsupported device mode '%v", pmemd.cfg.Mode)
 	}
 
-	defer s.Stop()
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	sig := <-c
+	// Here we want to shut down cleanly, i.e. let running
+	// gRPC calls complete.
+	glog.Infof("Caught signal %s, terminating.", sig)
+	s.Stop()
 	s.Wait()
 
 	return nil

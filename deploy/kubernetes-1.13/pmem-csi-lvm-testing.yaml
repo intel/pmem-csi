@@ -153,17 +153,6 @@ spec:
       containers:
       - args:
         - -v=3
-        - --csi-address=/csi/csi-controller.sock
-        - --feature-gates=Topology=true
-        - -v=5
-        image: quay.io/k8scsi/csi-provisioner:v1.0.1
-        imagePullPolicy: Always
-        name: external-provisioner
-        volumeMounts:
-        - mountPath: /csi
-          name: plugin-socket-dir
-      - args:
-        - -v=3
         - -drivername=pmem-csi.intel.com
         - -mode=controller
         - -endpoint=unix:///csi/csi-controller.sock
@@ -173,6 +162,7 @@ spec:
         - -certFile=/certs/pmem-csi-registry.crt
         - -keyFile=/certs/pmem-csi-registry.key
         - -v=5
+        - -coverprofile=/var/lib/pmem-csi-coverage/pmem-csi-driver-controller-*.out
         env:
         - name: KUBE_NODE_NAME
           valueFrom:
@@ -181,7 +171,7 @@ spec:
               fieldPath: spec.nodeName
         - name: TERMINATION_LOG_PATH
           value: /tmp/termination-log
-        image: 192.168.8.1:5000/pmem-csi-driver:canary
+        image: 192.168.8.1:5000/pmem-csi-driver-test:canary
         imagePullPolicy: Always
         name: pmem-driver
         securityContext:
@@ -190,6 +180,19 @@ spec:
         volumeMounts:
         - mountPath: /certs/
           name: registry-cert
+        - mountPath: /csi
+          name: plugin-socket-dir
+        - mountPath: /var/lib/pmem-csi-coverage
+          name: coverage-dir
+      - args:
+        - --v=3
+        - --csi-address=/csi/csi-controller.sock
+        - --feature-gates=Topology=true
+        - -v=5
+        image: quay.io/k8scsi/csi-provisioner:v1.0.1
+        imagePullPolicy: Always
+        name: external-provisioner
+        volumeMounts:
         - mountPath: /csi
           name: plugin-socket-dir
       - args:
@@ -212,6 +215,10 @@ spec:
           - key: tls.key
             path: pmem-csi-registry.key
           secretName: pmem-csi-registry-secrets
+      - hostPath:
+          path: /var/lib/pmem-csi-coverage
+          type: DirectoryOrCreate
+        name: coverage-dir
 ---
 apiVersion: apps/v1beta2
 kind: DaemonSet
@@ -289,6 +296,7 @@ spec:
         - -certFile=/certs/$(KUBE_NODE_NAME).crt
         - -keyFile=/certs/$(KUBE_NODE_NAME).key
         - -v=5
+        - -coverprofile=/var/lib/pmem-csi-coverage/pmem-csi-driver-node-*.out
         env:
         - name: CSI_ENDPOINT
           value: unix:///csi/csi.sock
@@ -304,7 +312,7 @@ spec:
               fieldPath: status.podIP
         - name: TERMINATION_LOG_PATH
           value: /tmp/termination-log
-        image: 192.168.8.1:5000/pmem-csi-driver:canary
+        image: 192.168.8.1:5000/pmem-csi-driver-test:canary
         imagePullPolicy: Always
         name: pmem-driver
         securityContext:
@@ -323,6 +331,8 @@ spec:
           name: registry-cert
         - mountPath: /dev
           name: dev-dir
+        - mountPath: /var/lib/pmem-csi-coverage
+          name: coverage-dir
       - args:
         - -v=3
         - --kubelet-registration-path=/var/lib/kubelet/plugins/pmem-csi.intel.com/csi.sock
@@ -342,26 +352,41 @@ spec:
         - -v=3
         - -namespacesize=9
         - -v=5
+        - -coverprofile=/var/lib/pmem-csi-coverage/pmem-ns-init-*.out
         command:
         - /go/bin/pmem-ns-init
-        image: 192.168.8.1:5000/pmem-csi-driver:canary
+        env:
+        - name: TERMINATION_LOG_PATH
+          value: /tmp/pmem-ns-init-termination-log
+        image: 192.168.8.1:5000/pmem-csi-driver-test:canary
         imagePullPolicy: Always
         name: pmem-ns-init
         securityContext:
           privileged: true
+        terminationMessagePath: /tmp/pmem-ns-init-termination-log
         volumeMounts:
         - mountPath: /sys
           name: sys-dir
+        - mountPath: /var/lib/pmem-csi-coverage
+          name: coverage-dir
       - args:
         - -v=3
         - -v=5
+        - -coverprofile=/var/lib/pmem-csi-coverage/pmem-vgm-*.out
         command:
         - /go/bin/pmem-vgm
-        image: 192.168.8.1:5000/pmem-csi-driver:canary
+        env:
+        - name: TERMINATION_LOG_PATH
+          value: /tmp/pmem-vgm-termination-log
+        image: 192.168.8.1:5000/pmem-csi-driver-test:canary
         imagePullPolicy: Always
         name: pmem-vgm
         securityContext:
           privileged: true
+        terminationMessagePath: /tmp/pmem-vgm-termination-log
+        volumeMounts:
+        - mountPath: /var/lib/pmem-csi-coverage
+          name: coverage-dir
       nodeSelector:
         storage: pmem
       volumes:
@@ -392,6 +417,10 @@ spec:
           path: /sys
           type: DirectoryOrCreate
         name: sys-dir
+      - hostPath:
+          path: /var/lib/pmem-csi-coverage
+          type: DirectoryOrCreate
+        name: coverage-dir
 ---
 apiVersion: csi.storage.k8s.io/v1alpha1
 kind: CSIDriver

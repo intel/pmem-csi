@@ -1,0 +1,16 @@
+# Container #0 is expected to be pmem-driver.
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: -coverprofile=/var/lib/pmem-csi-coverage/pmem-csi-driver-controller-*.out
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/-
+  value:
+    mountPath: /var/lib/pmem-csi-coverage
+    name: coverage-dir
+- op: add
+  path: /spec/template/spec/volumes/-
+  value:
+    name: coverage-dir
+    hostPath:
+      path: /var/lib/pmem-csi-coverage
+      type: DirectoryOrCreate
