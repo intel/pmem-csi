@@ -27,8 +27,6 @@ endif
 REGISTRY_NAME=localhost:5000
 IMAGE_VERSION=canary
 IMAGE_TAG=$(REGISTRY_NAME)/pmem-csi-driver$*:$(IMAGE_VERSION)
-IMAGE_BUILD_ARGS=--build-arg NDCTL_VERSION=64.1 --build-arg NDCTL_CONFIGFLAGS='--libdir=/usr/lib --disable-docs --without-systemd --without-bash' \
---build-arg NDCTL_BUILD_DEPS='os-core-dev devpkg-util-linux devpkg-kmod devpkg-json-c file'
 # Pass proxy config via --build-arg only if these are set,
 # enabling proxy config other way, like ~/.docker/config.json
 BUILD_ARGS=
@@ -79,7 +77,7 @@ BUILD_IMAGE_ID=$(shell date +%Y-%m-%d)
 build-images: build-image build-test-image
 push-images: push-image push-test-image
 build-image build-test-image: build%-image:
-	docker build --pull --build-arg CACHEBUST=$(BUILD_IMAGE_ID) --build-arg BIN_SUFFIX=$(findstring -test,$*) $(BUILD_ARGS) $(IMAGE_BUILD_ARGS) -t $(IMAGE_TAG) -f ./Dockerfile . --label revision=$(VERSION)
+	docker build --pull --build-arg CACHEBUST=$(BUILD_IMAGE_ID) --build-arg BIN_SUFFIX=$(findstring -test,$*) $(BUILD_ARGS) -t $(IMAGE_TAG) -f ./Dockerfile . --label revision=$(VERSION)
 push-image push-test-image: push%-image: build%-image
 	docker push $(IMAGE_TAG)
 

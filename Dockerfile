@@ -1,16 +1,16 @@
 FROM clearlinux:base AS build
 
-ARG VERSION
-ARG NDCTL_VERSION
-ARG NDCTL_CONFIGFLAGS
-ARG NDCTL_BUILD_DEPS
+ARG VERSION="unknown"
+ARG NDCTL_VERSION="64.1"
+ARG NDCTL_CONFIGFLAGS="--libdir=/usr/lib --disable-docs --without-systemd --without-bash"
+ARG NDCTL_BUILD_DEPS="os-core-dev devpkg-util-linux devpkg-kmod devpkg-json-c"
 
 #pull dependencies required for downloading and building libndctl
 ARG CACHEBUST
 RUN swupd update && swupd bundle-add ${NDCTL_BUILD_DEPS} go-basic-dev && rm -rf /var/lib/swupd
 
 WORKDIR /
-RUN curl --location --remote-name https://github.com/pmem/ndctl/archive/v${NDCTL_VERSION}.tar.gz
+RUN curl --fail --location --remote-name https://github.com/pmem/ndctl/archive/v${NDCTL_VERSION}.tar.gz
 RUN tar zxvf v${NDCTL_VERSION}.tar.gz && mv ndctl-${NDCTL_VERSION} ndctl
 WORKDIR /ndctl
 RUN ./autogen.sh
