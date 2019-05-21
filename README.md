@@ -462,7 +462,7 @@ These are the steps for manual set-up of certificates:
 - Run certificates set-up script
 
 ```sh
-   $ KUBCONFIG="<<your cluster kubeconfig path>> PATH="$PATH:_work/bin" ./test/setup-ca-kubernetes.sh
+   $ KUBCONFIG="<<your cluster kubeconfig path>> PATH="$PATH:$PWD/_work/bin" ./test/setup-ca-kubernetes.sh
 ```
 
 - **Deploy the driver to Kubernetes using DeviceMode:LVM**
