@@ -8,6 +8,11 @@ import (
 	"k8s.io/klog/glog"
 	"os"
 	"strconv"
+	"time"
+)
+
+const (
+	retryStatTimeout time.Duration = 100 * time.Millisecond
 )
 
 // Mutex protecting shared device access by threads running in parallel.
@@ -69,4 +74,18 @@ func FlushDevice(dev PmemDeviceInfo, blocks uint64) error {
 		}
 	}
 	return nil
+}
+
+func WaitDeviceAppears(dev PmemDeviceInfo) error {
+	for i := 0; i < 10; i++ {
+		_, err := os.Stat(dev.Path)
+		if err == nil {
+			return nil
+		} else {
+			glog.Warningf("WaitDeviceAppears[%d]: %s does not exist, sleep %v and retry",
+				i, dev.Path, retryStatTimeout)
+			time.Sleep(retryStatTimeout)
+		}
+	}
+	return fmt.Errorf("device %s did not appear after multiple retries", dev.Path)
 }

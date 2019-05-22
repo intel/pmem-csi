@@ -121,6 +121,10 @@ func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error 
 				if err != nil {
 					return err
 				}
+				err = WaitDeviceAppears(device)
+				if err != nil {
+					return err
+				}
 				err = ClearDevice(device, false)
 				if err != nil {
 					return err
