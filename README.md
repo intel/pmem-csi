@@ -462,7 +462,7 @@ These are the steps for manual set-up of certificates:
 - Run certificates set-up script
 
 ```sh
-   $ KUBCONFIG="<<your cluster kubeconfig path>> PATH="$PATH:_work/bin" ./test/setup-ca-kubernetes.sh
+   $ KUBCONFIG="<<your cluster kubeconfig path>> PATH="$PATH:$PWD/_work/bin" ./test/setup-ca-kubernetes.sh
 ```
 
 - **Deploy the driver to Kubernetes using DeviceMode:LVM**
@@ -491,10 +491,10 @@ future, currently untested releases.
 ```sh
     $ kubectl get pods
     NAME                    READY   STATUS    RESTARTS   AGE
-    pmem-csi-8kmxf          2/2     Running   0          3m15s
-    pmem-csi-bvx7m          2/2     Running   2          3m15s
-    pmem-csi-controller-0   4/4     Running   1          3m15s
-    pmem-csi-fbmpg          2/2     Running   2          3m15s
+    pmem-csi-node-8kmxf     2/2     Running   0          3m15s
+    pmem-csi-node-bvx7m     2/2     Running   0          3m15s
+    pmem-csi-controller-0   2/2     Running   0          3m15s
+    pmem-csi-node-fbmpg     2/2     Running   0          3m15s
 ```
 
 - **Verify that the node labels have been configured correctly**
