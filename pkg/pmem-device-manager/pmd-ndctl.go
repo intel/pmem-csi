@@ -107,8 +107,8 @@ func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) err
 }
 
 func (pmem *pmemNdctl) DeleteDevice(name string, flush bool) error {
-	devicemutex.Lock()
-	defer devicemutex.Unlock()
+	volumeMutex.LockKey(name)
+	defer volumeMutex.UnlockKey(name)
 	device, err := pmem.GetDevice(name)
 	if err != nil {
 		return err
@@ -121,8 +121,8 @@ func (pmem *pmemNdctl) DeleteDevice(name string, flush bool) error {
 }
 
 func (pmem *pmemNdctl) FlushDeviceData(name string) error {
-	devicemutex.Lock()
-	defer devicemutex.Unlock()
+	volumeMutex.LockKey(name)
+	defer volumeMutex.UnlockKey(name)
 	device, err := pmem.GetDevice(name)
 	if err != nil {
 		return err

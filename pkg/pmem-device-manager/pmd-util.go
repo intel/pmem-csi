@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"time"
+	"k8s.io/utils/keymutex"
 )
 
 const (
@@ -17,18 +18,23 @@ const (
 
 // Mutex protecting shared device access by threads running in parallel.
 // Create, Delete, Flush may operate on same phys.device from parallel threads.
-// The mutex is defined here and used in different device managers code.
-// Ndctl manager definitely will crash without this mutex protection
+// The mutexes defined here are used by different device managers.
+// Ndctl manager would crash without Creation mutex protection
 // in 2-volume creation scenario on same Node.
 // For LVM manager, situation is likely not that risky,
 // but we use similar protection in LVM Manager for clarity and unified style,
 // as LVM state is also single instance for a Node.
 //
 // Note that while main idea is to protect against two parallel threads
-// accessing shared entity with different requests (like 2 creations), this
-// mutex also protects against repeated similar requests in different threads
+// accessing shared entity with different requests (like 2 creations), these
+// mutexes also protect against repeated similar requests in different threads
 // which also have been seen when Kubernetes repeats operations rapidly.
+
+// All-device mutex i.e. global in driver context:
 var devicemutex = &sync.Mutex{}
+
+// Finer-grain mutexes used by name:
+var volumeMutex = keymutex.NewHashed(-1)
 
 func ClearDevice(device PmemDeviceInfo, flush bool) error {
 	glog.V(4).Infof("ClearDevice: path: %v flush:%v", device.Path, flush)

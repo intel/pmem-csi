@@ -137,8 +137,8 @@ func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error 
 }
 
 func (lvm *pmemLvm) DeleteDevice(name string, flush bool) error {
-	devicemutex.Lock()
-	defer devicemutex.Unlock()
+	volumeMutex.LockKey(name)
+	defer volumeMutex.UnlockKey(name)
 	device, err := lvm.GetDevice(name)
 	if err != nil {
 		return err
@@ -152,8 +152,8 @@ func (lvm *pmemLvm) DeleteDevice(name string, flush bool) error {
 }
 
 func (lvm *pmemLvm) FlushDeviceData(name string) error {
-	devicemutex.Lock()
-	defer devicemutex.Unlock()
+	volumeMutex.LockKey(name)
+	defer volumeMutex.UnlockKey(name)
 	device, err := lvm.GetDevice(name)
 	if err != nil {
 		return err
