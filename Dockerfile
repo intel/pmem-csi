@@ -38,23 +38,38 @@ FROM clearlinux:base
 LABEL maintainers="Intel"
 LABEL description="PMEM CSI Driver"
 
-# update and install needed bundles:
+# update and install needed bundles/packages:
 # file - driver uses file utility to determine filesystem type
 # xfsprogs - XFS filesystem utilities
-# storge-utils - for lvm2 and ext4(e2fsprogs) utilities
+# e2fsprogs- Ext filesystem utilities
+# LVM2-bin - for lvm2 and ext4(e2fsprogs) utilities
 ARG CACHEBUST
-RUN swupd update && swupd bundle-add file xfsprogs storage-utils && rm -rf /var/lib/swupd
+ENV PATH="/bin:/usr/bin"
+#NOTE: This below RUN command is intentionally combined all commands, to flatten the docker layers
+RUN swupd update && swupd bundle-add mixer && \
+# Create custom 'pmem-csi' bundle that holds all the needed packages
+    mixin package add file --bundle pmem-csi && \
+    mixin package add xfsprogs --bundle pmem-csi && \
+    mixin package add e2fsprogs-extras --bundle pmem-csi && \
+    mixin package add LVM2-bin --bundle pmem-csi && \
+    mixin build && \
+# Remove unneeded bundes. swupd is fail to remove child bundles, so we had to list all the bundles mixer pulled.
+# NOTE: Do not change the order of below remove bundle list, Otherwise swupd fails to remove them saying failed dependency.
+    swupd bundle-remove mixer sysadmin-basic os-installer linux-firmware-extras acpica-unix2 containers-basic git curl diffutils dnf glibc-locale gzip htop iperf iproute2 kbd kernel-install less man-pages minicom openssl parallel patch perl-basic powertop procps-ng pygobject  python3-basic strace sudo tmux tzdata unzip wpa_supplicant linux-firmware-wifi xz zstd libX11client lib-opengl lib-openssl which && \
+    swupd update --migrate && \
+    swupd bundle-add pmem-csi && \
+    swupd clean && \
+    rm -rf /var/lib/swupd && \
+# default lvm config uses lvmetad and throwing below warning for all lvm tools
+# WARNING: Failed to connect to lvmetad. Falling back to device scanning.
+# So, ask lvm not to use lvmetad
+    mkdir -p /etc/lvm && echo "global { use_lvmetad = 0 }" >> /etc/lvm/lvm.conf
 
 # move required binaries and libraries to clean container
 COPY --from=build /usr/lib/libndctl* /usr/lib/
 COPY --from=build /usr/lib/libdaxctl* /usr/lib/
 RUN mkdir -p /go/bin
 COPY --from=build /go/bin/ /go/bin/
-# default lvm config uses lvmetad and throwing below warning for all lvm tools
-# WARNING: Failed to connect to lvmetad. Falling back to device scanning.
-# So, ask lvm not to use lvmetad
-RUN mkdir -p /etc/lvm
-RUN echo "global { use_lvmetad = 0 }" >> /etc/lvm/lvm.conf
 
 ENV LD_LIBRARY_PATH=/usr/lib
 ENTRYPOINT ["/go/bin/pmem-csi-driver"]
