@@ -17,6 +17,6 @@ patchesJson6902:
   path: ../testing/node-coverage-patch.yaml
 
 images:
-- name: 192.168.8.1:5000/pmem-csi-driver
-  newName: 192.168.8.1:5000/pmem-csi-driver-test
+- name: PMEM_REGISTRY/pmem-csi-driver
+  newName: PMEM_REGISTRY/pmem-csi-driver-test
 

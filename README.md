@@ -23,6 +23,7 @@
         -   [QEMU and Kubernetes](#qemu-and-kubernetes)
         -   [Starting and stopping a test cluster](#starting-and-stopping-a-test-cluster)
         -   [Running commands on test cluster nodes over ssh](#running-commands-on-test-cluster-nodes-over-ssh)
+        -   [Configuring multiple clusters](#configuring-multiple-clusters)
         -   [Running E2E tests](#running-e2e-tests)
     -   [Communication and contribution](#communication-and-contribution)
 
@@ -373,7 +374,8 @@ Building of Docker images has been verified using Docker-ce: version 18.06.1
 
 Persistent memory device(s) are required for operation. However, some
 development and testing can be done using QEMU-emulated persistent
-memory devices, see the ["QEMU and Kubernetes"](#qemu-and-kubernetes)
+memory devices, see [README-qemu-notes](README-qemu-notes.md) for
+technical details and the ["QEMU and Kubernetes"](#qemu-and-kubernetes)
 section for the commands that create such a virtual test cluster.
 
 ### Persistent memory pre-provisioning
@@ -427,7 +429,7 @@ git clone https://github.com/intel/pmem-csi $GOPATH/src/github.com/intel/pmem-cs
 
 1.  Use `make build-image` to produce Docker container image.
 
-2.  Use `make push-image` to build and push Docker container image to a Docker images registry. The
+2.  Use `make push-image` to push Docker container image to a Docker images registry. The
     default is to push to a local [Docker registry](https://docs.docker.com/registry/deploying/).
 
 See the [Makefile](Makefile) for additional make targets and possible make variables.
@@ -489,13 +491,13 @@ These are the steps for manual set-up of certificates:
 - **Deploy the driver to Kubernetes using DeviceMode:LVM**
 
 ```sh
-    $ sed -e 's/192.168.8.1:5000/<your registry>/' deploy/kubernetes-<kubernetes version>/pmem-csi-lvm.yaml | kubectl create -f -
+    $ sed -e 's/PMEM_REGISTRY/<your registry>/' deploy/kubernetes-<kubernetes version>/pmem-csi-lvm.yaml | kubectl create -f -
 ```
 
 - **Alternatively, deploy the driver to Kubernetes using DeviceMode:Direct**
 
 ```sh
-    $ sed -e 's/192.168.8.1:5000/<your registry>/' deploy/kubernetes-<kubernetes version>/pmem-csi-direct.yaml | kubectl create -f -
+    $ sed -e 's/PMEM_REGISTRY/<your registry>/' deploy/kubernetes-<kubernetes version>/pmem-csi-direct.yaml | kubectl create -f -
 ```
 
 The deployment yaml file uses the registry address for the QEMU test cluster
@@ -625,49 +627,22 @@ Use the `make test` command.
 ### QEMU and Kubernetes
 
 E2E testing relies on a cluster running inside multiple QEMU virtual
-machines. The same cluster can also be used interactively when
-real hardware is not available.
+machines deployed by [GoVM](https://github.com/govm-project/govm). The
+same cluster can also be used interactively when real hardware is not
+available.
 
-This is known to work on a Linux development host system.
-The `qemu-system-x86_64` binary must be installed, either from
-[upstream QEMU](https://www.qemu.org/) or the Linux distribution.
-The user must be able to run commands as root via `sudo`.
-For networking, the `ip` tool from the `iproute2` package must be
-installed. The following command must be run once after booting the
-host machine and before starting the virtual machine:
-
-    test/runqemu-ifup 4
-
-This configures four tap devices for use by the current user. At the
-moment, the test setup uses:
-
-- `pmemtap0/1/2/3`
-- `pmembr0`
-- 192.168.8.1 for the build host side of the bridge interfaces
-- 192.168.8.2/4/6/8 for the virtual machines
-- the same DNS server for the virtual machines as on the development
-  host
-
-It is possible to configure this by creating one or more files ending
-in `.sh` (for shell) in the directory `test/test-config.d` and setting
-shell variables in those files. For all supported options, see
-[test-config.sh](test/test-config.sh).
-
-To undo the configuration changes made by `test/runqemu-ifup` when
-the tap device is no longer needed, run:
-
-    test/runqemu-ifdown
+This is known to work on a Linux development host system. The user
+must be allowed to use Docker.
 
 KVM must be enabled and the user must be allowed to use it. Usually this
 is done by adding the user to the `kvm` group. The
 ["Install QEMU-KVM"](https://clearlinux.org/documentation/clear-linux/get-started/virtual-machine-install/kvm)
 section in the Clear Linux documentation contains further information
-about enabling KVM and installing QEMU.
+about enabling KVM.
 
-The `clear-kvm` images are prepared automatically by the Makefile. By
-default, four different images are prepared. Each image is pre-configured with
-its own hostname and with network settings for the corresponding `tap`
-device.
+The `clear-cloud` image is downloaded automatically. By default,
+four different virtual machines are prepared. Each image is pre-configured
+with its own hostname and with network.
 
 The images will contain the latest
 [Clear Linux OS](https://clearlinux.org/) and have the Kubernetes
@@ -676,9 +651,9 @@ version supported by Clear Linux installed.
 ### Starting and stopping a test cluster
 
 `make start` will bring up a Kubernetes test cluster inside four QEMU
-virtual machines. It can be called multiple times in a row and will
-attempt to bring up missing pieces each time it is invoked.
-The first node `host-0` is the Kubernetes master without persistent memory.
+virtual machines.
+The first node `k8s-test-pmem-master` is the Kubernetes master without
+persistent memory.
 The other three nodes are worker nodes with one emulated 32GB NVDIMM each.
 After the cluster has been formed, `make start` adds `storage=pmem` label
 to the worker nodes and deploys the PMEM-CSI driver.
@@ -687,21 +662,36 @@ Once `make start` completes, the cluster is ready for interactive use via
 set `KUBECONFIG` as shown at the end of the `make start` output
 and use `kubectl` binary on the host running VMs.
 
-Use `make stop` to stop the virtual machines. The cluster state
-remains preserved and will be restored after next `make start`.
-
-The DeviceMode (lvm or direct) used in testing is selected using variable TEST_DEVICEMODE in [test-config.sh](test/test-config.sh).
+Use `make stop` to stop and remove the virtual machines.
 
 ### Running commands on test cluster nodes over ssh
 
-`make start` generates ssh-wrappers `_work/clear-kvm/ssh.N` for each
+`make start` generates ssh-wrappers `_work/clear-govm/ssh.N` for each
 test cluster node which are handy for running a single command or to
 start interactive shell. Examples:
 
-`_work/clear-kvm/ssh.0 kubectl get pods` runs a kubectl command on
-node-0 which is cluster master.
+`_work/clear-govm/ssh.0 kubectl get pods` runs a kubectl command on
+k8s-test-pmem-master which is cluster master.
 
-`_work/clear-kvm/ssh.1` starts a shell on node-1.
+`_work/clear-govm/ssh.1` starts a shell on k8s-test-pmem-worker-1.
+
+### Configuring multiple clusters
+
+Several aspects of the cluster setup can be configured by overriding
+the settings in the [test-config.sh](test/test-config.sh) file. See
+that file for a description of all options. Options can be set as
+environment variables of `make start` on a case-by-case basis or
+permanently by creating a file like `test/test-config.d/my-config.sh`.
+
+Multiple different clusters can be brought up in parallel by changing
+the default `clear-govm` cluster name via the `CLUSTER` env variable.
+
+For example, this invocation sets up a cluster using the non-default
+direct DeviceMode:
+
+``` sh
+TEST_DEVICEMODE=direct CLUSTER=clear-govm-direct make start
+```
 
 ### Running E2E tests
 
@@ -717,7 +707,7 @@ of the test run. For example, to run just the E2E provisioning test
 (create PVC, write data in one pod, read it in another) in verbose mode:
 
 ``` sh
-$ KUBECONFIG=$(pwd)/_work/clear-kvm/kube.config REPO_ROOT=$(pwd) ginkgo -v -focus=pmem-csi.*should.provision.storage.with.defaults ./test/e2e/
+$ KUBECONFIG=$(pwd)/_work/clear-govm/kube.config REPO_ROOT=$(pwd) ginkgo -v -focus=pmem-csi.*should.provision.storage.with.defaults ./test/e2e/
 Nov 26 11:21:28.805: INFO: The --provider flag is not set.  Treating as a conformance test.  Some tests may not be run.
 Running Suite: PMEM E2E suite
 =============================
@@ -725,7 +715,7 @@ Random Seed: 1543227683 - Will randomize all specs
 Will run 1 of 61 specs
 
 Nov 26 11:21:28.812: INFO: checking config
-Nov 26 11:21:28.812: INFO: >>> kubeConfig: /nvme/gopath/src/github.com/intel/pmem-csi/_work/clear-kvm/kube.config
+Nov 26 11:21:28.812: INFO: >>> kubeConfig: /nvme/gopath/src/github.com/intel/pmem-csi/_work/clear-govm/kube.config
 Nov 26 11:21:28.817: INFO: Waiting up to 30m0s for all (but 0) nodes to be schedulable
 ...
 Ran 1 of 61 Specs in 58.465 seconds

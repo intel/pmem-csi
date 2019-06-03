@@ -158,7 +158,7 @@ spec:
               fieldPath: spec.nodeName
         - name: TERMINATION_LOG_PATH
           value: /tmp/termination-log
-        image: 192.168.8.1:5000/pmem-csi-driver:canary
+        image: PMEM_REGISTRY/pmem-csi-driver:canary
         imagePullPolicy: Always
         name: pmem-driver
         securityContext:
@@ -233,7 +233,7 @@ spec:
               fieldPath: status.podIP
         - name: TERMINATION_LOG_PATH
           value: /tmp/termination-log
-        image: 192.168.8.1:5000/pmem-csi-driver:canary
+        image: PMEM_REGISTRY/pmem-csi-driver:canary
         imagePullPolicy: Always
         name: pmem-driver
         securityContext:
@@ -274,7 +274,7 @@ spec:
         env:
         - name: TERMINATION_LOG_PATH
           value: /tmp/pmem-ns-init-termination-log
-        image: 192.168.8.1:5000/pmem-csi-driver:canary
+        image: PMEM_REGISTRY/pmem-csi-driver:canary
         imagePullPolicy: Always
         name: pmem-ns-init
         securityContext:
@@ -290,7 +290,7 @@ spec:
         env:
         - name: TERMINATION_LOG_PATH
           value: /tmp/pmem-vgm-termination-log
-        image: 192.168.8.1:5000/pmem-csi-driver:canary
+        image: PMEM_REGISTRY/pmem-csi-driver:canary
         imagePullPolicy: Always
         name: pmem-vgm
         securityContext:
