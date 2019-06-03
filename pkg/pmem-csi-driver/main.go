@@ -22,6 +22,7 @@ var (
 	driverName       = flag.String("drivername", "pmem-csi.intel.com", "name of the driver")
 	nodeID           = flag.String("nodeid", "nodeid", "node id")
 	endpoint         = flag.String("endpoint", "unix:///tmp/pmem-csi.sock", "PMEM CSI endpoint")
+	testEndpoint     = flag.Bool("testEndpoint", false, "also expose controller interface via endpoint (for testing only)")
 	mode             = flag.String("mode", "unified", "driver run mode : controller, node or unified")
 	registryEndpoint = flag.String("registryEndpoint", "", "endpoint to connect/listen registry server")
 	caFile           = flag.String("caFile", "", "Root CA certificate file to use for verifying connections")
@@ -55,6 +56,7 @@ func Main() int {
 		DriverName:         *driverName,
 		NodeID:             *nodeID,
 		Endpoint:           *endpoint,
+		TestEndpoint:       *testEndpoint,
 		Mode:               DriverMode(*mode),
 		RegistryEndpoint:   *registryEndpoint,
 		CAFile:             *caFile,

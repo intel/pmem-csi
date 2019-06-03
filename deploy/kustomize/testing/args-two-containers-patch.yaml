@@ -1,7 +1,13 @@
 # Raise log verbosity level to 5 in containers
+# and set -testEndpoint to pmem-csi-driver container (expected to
+# come first).
 - op: add
   path: /spec/template/spec/containers/0/args/-
   value: "-v=5"
+
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: "-testEndpoint"
 
 - op: add
   path: /spec/template/spec/containers/1/args/-

@@ -182,6 +182,7 @@ spec:
         - -certFile=/certs/pmem-csi-registry.crt
         - -keyFile=/certs/pmem-csi-registry.key
         - -v=5
+        - -testEndpoint
         - -coverprofile=/var/lib/pmem-csi-coverage/pmem-csi-driver-controller-*.out
         env:
         - name: KUBE_NODE_NAME
@@ -320,6 +321,7 @@ spec:
         - -keyFile=/certs/$(KUBE_NODE_NAME).key
         - -statePath=/var/lib/pmem-csi.intel.com
         - -v=5
+        - -testEndpoint
         - -coverprofile=/var/lib/pmem-csi-coverage/pmem-csi-driver-node-*.out
         env:
         - name: CSI_ENDPOINT
