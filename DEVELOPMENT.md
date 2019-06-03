@@ -148,7 +148,7 @@ argument name        | meaning                                           | type 
 -mode string               | driver run mode                                | string | controller, node |
 -nodeid string             | node id                                        | string |              | nodeid
 -registryEndpoint string   | endpoint to connect/listen registry server     | string |              |
-
+-statePath                 | Directory path where to persist the state of the driver running on a node | string | absolute directory path on node | /var/lib/<drivername>
 
 Environment variables
 ---------------------

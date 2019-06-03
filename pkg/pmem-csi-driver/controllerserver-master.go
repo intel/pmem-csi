@@ -53,8 +53,6 @@ type pmemVolume struct {
 	// ID of nodes where the volume provisioned/attached
 	// It would be one if simple volume, else would be more than one for "cached" volume
 	nodeIDs map[string]VolumeStatus
-	// VolumeType
-	volumeType PmemPersistencyModel
 }
 
 type masterController struct {
@@ -65,6 +63,7 @@ type masterController struct {
 
 var _ csi.ControllerServer = &masterController{}
 var _ PmemService = &masterController{}
+var _ RegistryListener = &masterController{}
 var volumeMutex = keymutex.NewHashed(-1)
 
 func NewMasterControllerServer(rs *registryServer) *masterController {
@@ -73,15 +72,60 @@ func NewMasterControllerServer(rs *registryServer) *masterController {
 		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
 		csi.ControllerServiceCapability_RPC_GET_CAPACITY,
 	}
-	return &masterController{
+	cs := &masterController{
 		DefaultControllerServer: NewDefaultControllerServer(serverCaps),
 		rs:                      rs,
 		pmemVolumes:             map[string]*pmemVolume{},
 	}
+
+	rs.AddListener(cs)
+
+	return cs
 }
 
 func (cs *masterController) RegisterService(rpcServer *grpc.Server) {
 	csi.RegisterControllerServer(rpcServer, cs)
+}
+
+// OnNodeAdded retrieves the existing volumes at recently added Node.
+// It uses ControllerServer.ListVolume() CSI call to retrieve volumes.
+func (cs *masterController) OnNodeAdded(ctx context.Context, node NodeInfo) {
+	conn, err := cs.rs.ConnectToNodeController(node.NodeID)
+	if err != nil {
+		glog.Warningf("Failed to connect to node controller at : %s on node %s: %s", node.Endpoint, node.NodeID, err.Error())
+		return
+	}
+
+	csiClient := csi.NewControllerClient(conn)
+	resp, err := csiClient.ListVolumes(ctx, &csi.ListVolumesRequest{})
+	if err != nil {
+		glog.Warningf("Failed to get volumes on node %s: %s", node.NodeID, err.Error())
+	}
+
+	glog.V(5).Infof("Found Volumes at %s: %v", node.NodeID, resp.Entries)
+
+	for _, entry := range resp.Entries {
+		v := entry.GetVolume()
+		if v == nil { /* this shouldn't happen */
+			continue
+		}
+		if vol, ok := cs.pmemVolumes[v.VolumeId]; ok && vol != nil {
+			// This is possibly Cache volume, so just add this node id.
+			vol.nodeIDs[node.NodeID] = Created
+		} else {
+			cs.pmemVolumes[v.VolumeId] = &pmemVolume{
+				id:   v.VolumeId,
+				size: v.CapacityBytes,
+				name: v.VolumeContext["Name"],
+				nodeIDs: map[string]VolumeStatus{
+					node.NodeID: Created,
+				},
+			}
+		}
+	}
+}
+
+func (cs *masterController) OnNodeDeleted(ctx context.Context, node NodeInfo) {
 }
 
 func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
@@ -117,14 +161,13 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 		id, _ := uuid.NewUUID() //nolint: gosec
 		volumeID := id.String()
 		inTopology := []*csi.Topology{}
-		volumeType := pmemPersistencyModelNone
 		cacheCount := uint64(1)
 
 		if req.Parameters == nil {
 			req.Parameters = map[string]string{}
 		} else {
 			if val, ok := req.Parameters[pmemParameterKeyPersistencyModel]; ok {
-				volumeType = PmemPersistencyModel(val)
+				volumeType := PmemPersistencyModel(val)
 				if volumeType == pmemPersistencyModelCache {
 					if val, ok := req.Parameters[pmemParameterKeyCacheSize]; ok {
 						c, err := strconv.ParseUint(val, 10, 64)
@@ -164,7 +207,7 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 				break
 			}
 			node := top.Segments[PmemDriverTopologyKey]
-			conn, err := cs.rs.ConnectToNodeController(node, connectionTimeout)
+			conn, err := cs.rs.ConnectToNodeController(node)
 			if err != nil {
 				glog.Warningf("failed to connect to %s: %s", node, err.Error())
 				continue
@@ -191,11 +234,10 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 		glog.V(3).Infof("Chosen nodes: %v", chosenNodes)
 
 		vol = &pmemVolume{
-			id:         volumeID,
-			name:       req.Name,
-			size:       asked,
-			nodeIDs:    chosenNodes,
-			volumeType: volumeType,
+			id:      volumeID,
+			name:    req.Name,
+			size:    asked,
+			nodeIDs: chosenNodes,
 		}
 		cs.pmemVolumes[volumeID] = vol
 		glog.V(3).Infof("CreateVolume: Record new volume as %v", *vol)
@@ -237,7 +279,7 @@ func (cs *masterController) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 	glog.V(4).Infof("DeleteVolume: volumeID: %v", req.GetVolumeId())
 	if vol := cs.getVolumeByID(req.GetVolumeId()); vol != nil {
 		for node := range vol.nodeIDs {
-			conn, err := cs.rs.ConnectToNodeController(node, connectionTimeout)
+			conn, err := cs.rs.ConnectToNodeController(node)
 			if err != nil {
 				glog.Warningf("Failed to connect to node controller:%s, stale volume(%s) on %s should be cleaned manually", err.Error(), vol.id, node)
 			}
@@ -391,7 +433,7 @@ func (cs *masterController) GetCapacity(ctx context.Context, req *csi.GetCapacit
 }
 
 func (cs *masterController) getNodeCapacity(ctx context.Context, node NodeInfo, req *csi.GetCapacityRequest) (int64, error) {
-	conn, err := cs.rs.ConnectToNodeController(node.NodeID, connectionTimeout)
+	conn, err := cs.rs.ConnectToNodeController(node.NodeID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to connect to node %s: %s", node.NodeID, err.Error())
 	}

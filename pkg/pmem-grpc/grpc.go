@@ -23,7 +23,7 @@ func unixDialer(addr string, timeout time.Duration) (net.Conn, error) {
 }
 
 //Connect is a helper function to initiate a grpc client connection to server running at endpoint using tlsConfig
-func Connect(endpoint string, tlsConfig *tls.Config, timeout time.Duration) (*grpc.ClientConn, error) {
+func Connect(endpoint string, tlsConfig *tls.Config) (*grpc.ClientConn, error) {
 	proto, address, err := parseEndpoint(endpoint)
 	if err != nil {
 		return nil, err

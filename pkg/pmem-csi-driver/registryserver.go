@@ -3,7 +3,6 @@ package pmemcsidriver
 import (
 	"crypto/tls"
 	"fmt"
-	"time"
 
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
@@ -14,9 +13,17 @@ import (
 	"k8s.io/klog/glog"
 )
 
+type RegistryListener interface {
+	// OnNodeAdded is called by RegistryServer whenever a node controller registered.
+	OnNodeAdded(ctx context.Context, node NodeInfo)
+	// OnNodeDeleted is called by RegistryServer whenever a node controller unregistered.
+	OnNodeDeleted(ctx context.Context, node NodeInfo)
+}
+
 type registryServer struct {
 	clientTLSConfig *tls.Config
 	nodeClients     map[string]NodeInfo
+	listeners       map[RegistryListener]struct{}
 }
 
 var _ PmemService = &registryServer{}
@@ -32,6 +39,7 @@ func NewRegistryServer(tlsConfig *tls.Config) *registryServer {
 	return &registryServer{
 		clientTLSConfig: tlsConfig,
 		nodeClients:     map[string]NodeInfo{},
+		listeners:       map[RegistryListener]struct{}{},
 	}
 }
 
@@ -49,13 +57,17 @@ func (rs *registryServer) GetNodeController(nodeID string) (NodeInfo, error) {
 }
 
 // ConnectToNodeController initiates a connection to controller running at nodeId
-func (rs *registryServer) ConnectToNodeController(nodeId string, timeout time.Duration) (*grpc.ClientConn, error) {
+func (rs *registryServer) ConnectToNodeController(nodeId string) (*grpc.ClientConn, error) {
 	nodeInfo, err := rs.GetNodeController(nodeId)
 	if err != nil {
 		return nil, err
 	}
 
-	return pmemgrpc.Connect(nodeInfo.Endpoint, rs.clientTLSConfig, timeout)
+	return pmemgrpc.Connect(nodeInfo.Endpoint, rs.clientTLSConfig)
+}
+
+func (rs *registryServer) AddListener(l RegistryListener) {
+	rs.listeners[l] = struct{}{}
 }
 
 func (rs *registryServer) RegisterController(ctx context.Context, req *registry.RegisterControllerRequest) (*registry.RegisterControllerReply, error) {
@@ -68,9 +80,15 @@ func (rs *registryServer) RegisterController(ctx context.Context, req *registry.
 	}
 	glog.V(3).Infof("Registering node: %s, endpoint: %s", req.NodeId, req.Endpoint)
 
-	rs.nodeClients[req.NodeId] = NodeInfo{
+	node := NodeInfo{
 		NodeID:   req.NodeId,
 		Endpoint: req.Endpoint,
+	}
+
+	rs.nodeClients[req.NodeId] = node
+
+	for l := range rs.listeners {
+		l.OnNodeAdded(ctx, node)
 	}
 
 	return &registry.RegisterControllerReply{}, nil
@@ -81,8 +99,13 @@ func (rs *registryServer) UnregisterController(ctx context.Context, req *registr
 		return nil, status.Error(codes.InvalidArgument, "Missing NodeId parameter")
 	}
 
-	if _, ok := rs.nodeClients[req.NodeId]; !ok {
+	node, ok := rs.nodeClients[req.NodeId]
+	if !ok {
 		return nil, status.Errorf(codes.NotFound, "No entry with id '%s' found in registry", req.NodeId)
+	}
+
+	for l := range rs.listeners {
+		l.OnNodeDeleted(ctx, node)
 	}
 
 	glog.V(3).Infof("Unregistering node: %s", req.NodeId)

@@ -20,6 +20,7 @@ import (
 	"github.com/container-storage-interface/spec/lib/go/csi"
 
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
+	pmemstate "github.com/intel/pmem-csi/pkg/pmem-state"
 	"k8s.io/utils/keymutex"
 )
 
@@ -32,17 +33,30 @@ const (
 )
 
 type nodeVolume struct {
-	ID     string
-	Name   string
-	Size   int64
-	Erase  bool
-	NsMode string
+	ID     string            `json:"id"`
+	Size   int64             `json:"size"`
+	Params map[string]string `json:"parameters"`
+}
+
+func (nv *nodeVolume) Copy() *nodeVolume {
+	nvCopy := &nodeVolume{
+		ID:     nv.ID,
+		Size:   nv.Size,
+		Params: map[string]string{},
+	}
+
+	for k, v := range nv.Params {
+		nvCopy.Params[k] = v
+	}
+
+	return nvCopy
 }
 
 type nodeControllerServer struct {
 	*DefaultControllerServer
 	nodeID      string
 	dm          pmdmanager.PmemDeviceManager
+	sm          pmemstate.StateManager
 	pmemVolumes map[string]*nodeVolume // map of reqID:nodeVolume
 }
 
@@ -51,18 +65,55 @@ var _ PmemService = &nodeControllerServer{}
 
 var nodeVolumeMutex = keymutex.NewHashed(-1)
 
-func NewNodeControllerServer(nodeID string, dm pmdmanager.PmemDeviceManager) *nodeControllerServer {
+func NewNodeControllerServer(nodeID string, dm pmdmanager.PmemDeviceManager, sm pmemstate.StateManager) *nodeControllerServer {
 	serverCaps := []csi.ControllerServiceCapability_RPC_Type{
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
 		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
 		csi.ControllerServiceCapability_RPC_GET_CAPACITY,
 	}
-	return &nodeControllerServer{
+
+	ncs := &nodeControllerServer{
 		DefaultControllerServer: NewDefaultControllerServer(serverCaps),
 		nodeID:                  nodeID,
 		dm:                      dm,
+		sm:                      sm,
 		pmemVolumes:             map[string]*nodeVolume{},
 	}
+
+	// Restore provisioned volumes from state.
+	if sm != nil {
+		// Get actual devices at DeviceManager
+		devices, err := dm.ListDevices()
+		if err != nil {
+			glog.Warningf("Failed to get volumes: %s", err.Error())
+		}
+		cleanupList := []string{}
+		v := &nodeVolume{}
+		err = sm.GetAll(v, func(id string) bool {
+			// See if the device data stored at StateManager is still valid
+			for _, devInfo := range devices {
+				if devInfo.Name == id {
+					ncs.pmemVolumes[id] = v.Copy()
+					return true
+				}
+			}
+			// if not found in DeviceManager's list, add to cleanupList
+			cleanupList = append(cleanupList, id)
+
+			return true
+		})
+		if err != nil {
+			glog.Warningf("Failed to load state on node %s: %s", nodeID, err.Error())
+		}
+
+		for _, id := range cleanupList {
+			if err := sm.Delete(id); err != nil {
+				glog.Warningf("Failed to delete stale volume %s from state : %s", id, err.Error())
+			}
+		}
+	}
+
+	return ncs
 }
 
 func (cs *nodeControllerServer) RegisterService(rpcServer *grpc.Server) {
@@ -73,8 +124,9 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 	var vol *nodeVolume
 	topology := []*csi.Topology{}
 	volumeID := ""
-	eraseafter := true
 	nsmode := pmemNamespaceModeFsdax
+
+	var resp *csi.CreateVolumeResponse
 
 	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
 		glog.Errorf("invalid create volume req: %v", req)
@@ -89,27 +141,26 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 		return nil, status.Error(codes.InvalidArgument, "Name missing in request")
 	}
 
-	// We recognize eraseafter=false/true, defaulting to true
-	if params := req.GetParameters(); params != nil {
-		if val, ok := params[pmemParameterKeyEraseAfter]; ok {
-			if bVal, err := strconv.ParseBool(val); err == nil {
-				eraseafter = bVal
-			} else {
-				glog.Warningf("Ignoring parameter %s:%s, reason: %s", pmemParameterKeyEraseAfter, val, err.Error())
-			}
-		}
+	params := req.GetParameters()
+	if params != nil {
 		if val, ok := params[pmemParameterKeyNamespaceMode]; ok {
 			if val == pmemNamespaceModeFsdax || val == pmemNamespaceModeSector {
 				nsmode = val
-			} else {
-				glog.Warningf("Ignoring parameter %s:%s, reason: unknown namespace mode", pmemParameterKeyNamespaceMode, val)
 			}
 		}
 		if val, ok := params["_id"]; ok {
 			/* use master controller provided volume uid */
 			volumeID = val
+
+			delete(params, "_id")
 		}
+	} else {
+		params = map[string]string{}
 	}
+
+	// Keeping volume name as part of volume parameters, this helps to
+	// persist volume name and to pass to Master via ListVolumes.
+	params["Name"] = req.Name
 
 	/* choose volume uid if not provided by master controller */
 	if volumeID == "" {
@@ -133,17 +184,30 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 		}
 	} else {
 		glog.V(4).Infof("CreateVolume: Name: %v req.Required: %v req.Limit: %v", req.Name, asked, req.GetCapacityRange().GetLimitBytes())
+		vol = &nodeVolume{
+			ID:     volumeID,
+			Size:   asked,
+			Params: params,
+		}
+		if cs.sm != nil {
+			// Persist new volume state
+			if err := cs.sm.Create(volumeID, vol); err != nil {
+				return nil, status.Error(codes.Internal, err.Error())
+			}
+			defer func(id string) {
+				// Incase of failure, remove volume from state
+				if resp == nil {
+					if err := cs.sm.Delete(id); err != nil {
+						glog.Warningf("Delete volume state for id '%s' failed with error: %s", id, err.Error())
+					}
+				}
+			}(volumeID)
+		}
 
 		if err := cs.dm.CreateDevice(volumeID, uint64(asked), nsmode); err != nil {
 			return nil, status.Errorf(codes.Internal, "CreateVolume: failed to create volume: %s", err.Error())
 		}
-		vol = &nodeVolume{
-			ID:     volumeID,
-			Name:   req.GetName(),
-			Size:   asked,
-			Erase:  eraseafter,
-			NsMode: nsmode,
-		}
+
 		cs.pmemVolumes[volumeID] = vol
 		glog.V(3).Infof("CreateVolume: Record new volume as %v", *vol)
 	}
@@ -154,13 +218,15 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 		},
 	})
 
-	return &csi.CreateVolumeResponse{
+	resp = &csi.CreateVolumeResponse{
 		Volume: &csi.Volume{
 			VolumeId:           vol.ID,
 			CapacityBytes:      vol.Size,
 			AccessibleTopology: topology,
 		},
-	}, nil
+	}
+
+	return resp, nil
 }
 
 func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
@@ -180,15 +246,35 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 	defer nodeVolumeMutex.UnlockKey(req.VolumeId) //nolint: errcheck
 
 	glog.V(4).Infof("DeleteVolume: volumeID: %v", req.GetVolumeId())
-	if vol := cs.getVolumeByID(req.GetVolumeId()); vol != nil {
-		if err := cs.dm.DeleteDevice(req.VolumeId, vol.Erase); err != nil {
-			return nil, status.Errorf(codes.Internal, "Failed to delete volume: %s", err.Error())
+	eraseafter := true
+	if vol := cs.getVolumeByID(req.VolumeId); vol != nil {
+		// We recognize eraseafter=false/true, defaulting to true
+		if val, ok := vol.Params[pmemParameterKeyEraseAfter]; ok {
+			bVal, err := strconv.ParseBool(val)
+			if err != nil {
+				glog.Warningf("Ignoring invalid parameter %s:%s, reason: %s, falling back to default: %v",
+					pmemParameterKeyEraseAfter, val, err.Error(), eraseafter)
+			} else {
+				eraseafter = bVal
+			}
 		}
-		delete(cs.pmemVolumes, vol.ID)
-		glog.V(4).Infof("DeleteVolume: volume %s deleted", req.GetVolumeId())
 	} else {
-		glog.V(3).Infof("Volume %s not created by this controller", req.GetVolumeId())
+		glog.V(3).Infof("Volume %s not found in driver cache.", req.VolumeId)
 	}
+
+	if err := cs.dm.DeleteDevice(req.VolumeId, eraseafter); err != nil {
+		return nil, status.Errorf(codes.Internal, "Failed to delete volume: %s", err.Error())
+	}
+	if cs.sm != nil {
+		if err := cs.sm.Delete(req.VolumeId); err != nil {
+			glog.Warning("Failed to remove volume from state: ", err)
+		}
+	}
+
+	delete(cs.pmemVolumes, req.VolumeId)
+
+	glog.V(4).Infof("DeleteVolume: volume %s deleted", req.GetVolumeId())
+
 	return &csi.DeleteVolumeResponse{}, nil
 }
 
@@ -235,6 +321,7 @@ func (cs *nodeControllerServer) ListVolumes(ctx context.Context, req *csi.ListVo
 			Volume: &csi.Volume{
 				VolumeId:      vol.ID,
 				CapacityBytes: vol.Size,
+				VolumeContext: vol.Params,
 			},
 		})
 	}
@@ -280,7 +367,7 @@ func (cs *nodeControllerServer) getVolumeByID(volumeID string) *nodeVolume {
 
 func (cs *nodeControllerServer) getVolumeByName(volumeName string) *nodeVolume {
 	for _, pmemVol := range cs.pmemVolumes {
-		if pmemVol.Name == volumeName {
+		if pmemVol.Params["Name"] == volumeName {
 			return pmemVol
 		}
 	}

@@ -14,7 +14,7 @@ import (
 	"k8s.io/klog"
 	"k8s.io/klog/glog"
 
-	"github.com/intel/pmem-csi/pkg/pmem-common"
+	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 )
 
 var (
@@ -34,6 +34,7 @@ var (
 	controllerEndpoint = flag.String("controllerEndpoint", "", "internal node controller endpoint")
 	deviceManager      = flag.String("deviceManager", "lvm", "device manager to use to manage pmem devices. supported types: 'lvm' or 'ndctl'")
 	showVersion        = flag.Bool("version", false, "Show release version and exit")
+	driverStatePath    = flag.String("statePath", "", "Directory path where to persist the state of the driver running on a node, defaults to /var/lib/<drivername>")
 
 	version = "unknown" // Set version during build time
 )
@@ -65,6 +66,7 @@ func Main() int {
 		ClientKeyFile:      *clientKeyFile,
 		ControllerEndpoint: *controllerEndpoint,
 		DeviceManager:      *deviceManager,
+		StateBasePath:      *driverStatePath,
 		Version:            version,
 	})
 	if err != nil {

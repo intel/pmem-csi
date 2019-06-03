@@ -316,6 +316,7 @@ spec:
         - -caFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
         - -certFile=/certs/$(KUBE_NODE_NAME).crt
         - -keyFile=/certs/$(KUBE_NODE_NAME).key
+        - -statePath=/var/lib/pmem-csi.intel.com
         - -v=5
         - -testEndpoint
         - -coverprofile=/var/lib/pmem-csi-coverage/pmem-csi-driver-node-*.out
@@ -353,6 +354,8 @@ spec:
           name: registry-cert
         - mountPath: /dev
           name: dev-dir
+        - mountPath: /var/lib/pmem-csi.intel.com
+          name: pmem-state-dir
         - mountPath: /var/lib/pmem-csi-coverage
           name: coverage-dir
       - args:
@@ -431,6 +434,10 @@ spec:
       - name: registry-cert
         secret:
           secretName: pmem-csi-node-secrets
+      - hostPath:
+          path: /var/lib/pmem-csi.intel.com
+          type: DirectoryOrCreate
+        name: pmem-state-dir
       - hostPath:
           path: /dev
           type: DirectoryOrCreate
