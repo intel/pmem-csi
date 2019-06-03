@@ -53,6 +53,9 @@ type Config struct {
 	NodeID string
 	//Endpoint exported csi driver endpoint
 	Endpoint string
+	//TestEndpoint adds the controller service to the server listening on Endpoint.
+	//Only needed for testing.
+	TestEndpoint bool
 	//Mode mode fo the driver
 	Mode DriverMode
 	//RegistryEndpoint exported registry server endpoint
@@ -184,7 +187,11 @@ func (pmemd *pmemDriver) Run() error {
 			if err := pmemd.registerNodeController(); err != nil {
 				return err
 			}
-			if err := s.Start(pmemd.cfg.Endpoint, nil, ids, ns, cs /* cs only needed for testing */); err != nil {
+			services := []PmemService{ids, ns}
+			if pmemd.cfg.TestEndpoint {
+				services = append(services, cs)
+			}
+			if err := s.Start(pmemd.cfg.Endpoint, nil, services...); err != nil {
 				return err
 			}
 		} else {
