@@ -23,10 +23,13 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/kubernetes-csi/csi-test/pkg/sanity"
+	sanityutils "github.com/kubernetes-csi/csi-test/utils"
+	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -228,6 +231,87 @@ var _ = Describe("sanity", func() {
 
 			unpublishVolume(s, c, sc, vol, nodeID)
 			deleteVolume(s, vol)
+		})
+
+		Context("cluster", func() {
+			type nodeClient struct {
+				conn    *grpc.ClientConn
+				nc      csi.NodeClient
+				cc      csi.ControllerClient
+				volumes []*csi.ListVolumesResponse_Entry
+			}
+			var (
+				nodes []nodeClient
+			)
+
+			BeforeEach(func() {
+				nodes = nil
+				for i, addr := range workerSocatAddresses {
+					conn, err := sanityutils.Connect(addr)
+					framework.ExpectNoError(err, "connect to socat instance on node #%d via %s", i+1, addr)
+					nodes = append(nodes, nodeClient{
+						conn: conn,
+						nc:   csi.NewNodeClient(conn),
+						cc:   csi.NewControllerClient(conn),
+					})
+					initialVolumes, err := nodes[len(nodes)-1].cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+					framework.ExpectNoError(err, "list volumes on node #%d", i+1)
+					nodes[len(nodes)-1].volumes = initialVolumes.Entries
+				}
+			})
+
+			AfterEach(func() {
+				for _, node := range nodes {
+					node.conn.Close()
+				}
+			})
+
+			It("supports cache volumes", func() {
+				// Create a cache volume with as many instances as nodes.
+				sc.Config.TestVolumeParameters = map[string]string{
+					"persistencyModel": "cache",
+					"cacheSize":        fmt.Sprintf("%d", len(nodes)),
+				}
+				sizeInBytes := int64(33 * 1024 * 1024)
+				_, vol := createVolume(s, sc, cl, "cache", sizeInBytes)
+				var expectedTopology []*csi.Topology
+				// These node names are sorted.
+				for _, node := range framework.GetReadySchedulableNodesOrDie(cs).Items {
+					expectedTopology = append(expectedTopology, &csi.Topology{
+						Segments: map[string]string{
+							"pmem-csi.intel.com/node": node.Name,
+						},
+					})
+				}
+				// vol.AccessibleTopology isn't, so we have to sort before comparing.
+				sort.Slice(vol.AccessibleTopology, func(i, j int) bool {
+					return strings.Compare(
+						vol.AccessibleTopology[i].Segments["pmem-csi.intel.com/node"],
+						vol.AccessibleTopology[j].Segments["pmem-csi.intel.com/node"],
+					) < 0
+				})
+				Expect(vol.AccessibleTopology).To(Equal(expectedTopology), "cache volume topology")
+
+				// Each node now should have one additional volume,
+				// and its size should match the requested one.
+				for i, node := range nodes {
+					currentVolumes, err := node.cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+					framework.ExpectNoError(err, "list volumes on node #%d via %s", i+1)
+					Expect(len(currentVolumes.Entries)).To(Equal(len(node.volumes)+1), "one additional volume on node #%d", i+1)
+					// The assumption here is that the additional volume is the one at the end.
+					// If that assumption does not hold, we need to write more complex code to compare the lists.
+					Expect(currentVolumes.Entries[len(currentVolumes.Entries)-1].Volume.CapacityBytes).To(Equal(sizeInBytes), "additional volume size on node #%d", i+1)
+				}
+
+				deleteVolume(s, vol)
+
+				// Now those volumes are gone again.
+				for i, node := range nodes {
+					currentVolumes, err := node.cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+					framework.ExpectNoError(err, "list volumes on node #%d via %s", i+1)
+					Expect(currentVolumes.Entries).To(Equal(node.volumes), "same volumes as before on node #%d", i+1)
+				}
+			})
 		})
 	})
 })
