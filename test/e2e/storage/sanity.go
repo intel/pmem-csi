@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/kubernetes-csi/csi-test/pkg/sanity"
@@ -33,8 +34,11 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/test/e2e/framework"
+	testutils "k8s.io/kubernetes/test/utils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -231,6 +235,23 @@ var _ = Describe("sanity", func() {
 
 			unpublishVolume(s, c, sc, vol, nodeID)
 			deleteVolume(s, vol)
+		})
+
+		It("capacity is restored after controller restart", func() {
+			capacity, err := s.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
+			framework.ExpectNoError(err, "get capacity before restart")
+
+			restartControllerNode(f, cs)
+
+			By("waiting for full capacity")
+			Eventually(func() int64 {
+				currentCapacity, err := s.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
+				if err != nil {
+					// Probably not running again yet.
+					return 0
+				}
+				return currentCapacity.AvailableCapacity
+			}, "2m", "1s").Should(Equal(capacity.AvailableCapacity), "total capacity after controller restart")
 		})
 
 		Context("cluster", func() {
@@ -536,4 +557,47 @@ sudo sh -c 'echo b > /proc/sysrq-trigger'`)
 		framework.Logf("test for /tmp/delete-me with %s:\n%s\n%s", ssh, err, out)
 		return false
 	}, "5m", "1s").Should(Equal(true), "node up again")
+}
+
+// restartControllerNode determines where the PMEM-CSI controller runs, then restarts
+// that node.
+func restartControllerNode(f *framework.Framework, cs clientset.Interface) {
+	pods, err := WaitForPodsWithLabelRunningReady(cs, f.Namespace.Name,
+		labels.Set{"app": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, time.Minute)
+	framework.ExpectNoError(err, "PMEM-CSI controller running with one replica")
+	node := pods.Items[0].Spec.NodeName
+	By(fmt.Sprintf("restarting controller node %s", node))
+	restartNode(cs, node)
+	_, err = WaitForPodsWithLabelRunningReady(cs, f.Namespace.Name,
+		labels.Set{"app": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, 5*time.Minute)
+	framework.ExpectNoError(err, "PMEM-CSI controller running again with one replica")
+}
+
+// This is a copy from framework/utils.go with the fix from https://github.com/kubernetes/kubernetes/pull/78687
+// TODO: update to Kubernetes 1.15 (assuming that PR gets merged in time for that) and remove this function.
+func WaitForPodsWithLabelRunningReady(c clientset.Interface, ns string, label labels.Selector, num int, timeout time.Duration) (pods *v1.PodList, err error) {
+	var current int
+	err = wait.Poll(2*time.Second, timeout,
+		func() (bool, error) {
+			pods, err = framework.WaitForPodsWithLabel(c, ns, label)
+			if err != nil {
+				framework.Logf("Failed to list pods: %v", err)
+				if testutils.IsRetryableAPIError(err) {
+					return false, nil
+				}
+				return false, err
+			}
+			current = 0
+			for _, pod := range pods.Items {
+				if flag, err := testutils.PodRunningReady(&pod); err == nil && flag == true {
+					current++
+				}
+			}
+			if current != num {
+				framework.Logf("Got %v pods running and ready, expect: %v", current, num)
+				return false, nil
+			}
+			return true, nil
+		})
+	return pods, err
 }
