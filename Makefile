@@ -33,7 +33,7 @@ HTTPS_PROXY=$(shell echo "$${HTTPS_PROXY:-$${https_proxy}}")
 NO_PROXY=$(shell echo "$${NO_PROXY:-$${no_proxy}},$$(ip addr | grep inet6 | grep /64 | sed -e 's;.*inet6 \(.*\)/64 .*;\1;' | tr '\n' ','; ip addr | grep -w inet | grep /24 | sed -e 's;.*inet \(.*\)/24 .*;\1;' | tr '\n' ',')",0.0.0.0,10.0.2.15)
 export HTTP_PROXY HTTPS_PROXY NO_PROXY
 
-REGISTRY_NAME=$(shell set -x; . test/test-config.sh && echo $${TEST_BUILD_PMEM_REGISTRY})
+REGISTRY_NAME=$(shell . test/test-config.sh && echo $${TEST_BUILD_PMEM_REGISTRY})
 IMAGE_VERSION=canary
 IMAGE_TAG=$(REGISTRY_NAME)/pmem-csi-driver$*:$(IMAGE_VERSION)
 # Pass proxy config via --build-arg only if these are set,
