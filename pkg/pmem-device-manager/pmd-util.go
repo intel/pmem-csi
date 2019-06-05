@@ -6,17 +6,17 @@ import (
 
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 	"k8s.io/klog/glog"
+	"k8s.io/utils/keymutex"
 	"os"
 	"strconv"
 	"time"
-	"k8s.io/utils/keymutex"
 )
 
 const (
 	retryStatTimeout time.Duration = 100 * time.Millisecond
 )
 
-// Mutex protecting shared device access by threads running in parallel.
+// Two mutexes protecting device and volumes concurrent access.
 // Create, Delete, Flush may operate on same phys.device from parallel threads.
 // The mutexes defined here are used by different device managers.
 // Ndctl manager would crash without Creation mutex protection
@@ -24,11 +24,6 @@ const (
 // For LVM manager, situation is likely not that risky,
 // but we use similar protection in LVM Manager for clarity and unified style,
 // as LVM state is also single instance for a Node.
-//
-// Note that while main idea is to protect against two parallel threads
-// accessing shared entity with different requests (like 2 creations), these
-// mutexes also protect against repeated similar requests in different threads
-// which also have been seen when Kubernetes repeats operations rapidly.
 
 // All-device mutex i.e. global in driver context:
 var devicemutex = &sync.Mutex{}
