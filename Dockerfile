@@ -8,6 +8,9 @@ ARG NDCTL_BUILD_DEPS="os-core-dev devpkg-util-linux devpkg-kmod devpkg-json-c"
 #pull dependencies required for downloading and building libndctl
 ARG CACHEBUST
 RUN swupd update && swupd bundle-add ${NDCTL_BUILD_DEPS} go-basic-dev && rm -rf /var/lib/swupd
+# Workaround for "pkg-config: error while loading shared libraries" when using older Docker
+# (see https://github.com/clearlinux/distribution/issues/831)
+RUN ldconfig
 
 WORKDIR /
 RUN curl --fail --location --remote-name https://github.com/pmem/ndctl/archive/v${NDCTL_VERSION}.tar.gz
@@ -44,6 +47,9 @@ LABEL description="PMEM CSI Driver"
 # storge-utils - for lvm2 and ext4(e2fsprogs) utilities
 ARG CACHEBUST
 RUN swupd update && swupd bundle-add file xfsprogs storage-utils && rm -rf /var/lib/swupd
+# Workaround for "pkg-config: error while loading shared libraries" when using older Docker
+# (see https://github.com/clearlinux/distribution/issues/831)
+RUN ldconfig
 
 # move required binaries and libraries to clean container
 COPY --from=build /usr/lib/libndctl* /usr/lib/
