@@ -372,15 +372,23 @@ Building of Docker images has been verified using Docker-ce: version 18.06.1
 
 Persistent memory device(s) are required for operation. However, some
 development and testing can be done using QEMU-emulated persistent
-memory devices, see [README-qemu-notes](README-qemu-notes.md) for
-technical details and the ["QEMU and Kubernetes"](#qemu-and-kubernetes)
+memory devices. See the ["QEMU and Kubernetes"](#qemu-and-kubernetes)
 section for the commands that create such a virtual test cluster.
 
 ### Persistent memory pre-provisioning
 
-The PMEM-CSI driver needs pre-provisioned regions on the NVDIMM device(s).
-The PMEM-CSI driver itself cannot create such regions.
-The [ipmctl](https://github.com/intel/ipmctl) utility can be used to create regions.
+The PMEM-CSI driver needs pre-provisioned regions on the NVDIMM
+device(s). The PMEM-CSI driver itself intentionally leaves that to the
+administrator who then can decide how much and how PMEM is to be used
+for PMEM-CSI.
+
+Beware that the PMEM-CSI driver will run without errors on a node
+where PMEM was not prepared for it. It will then report zero local
+storage for that node, something that currently is only visible in the
+log files.
+
+When running the Kubernetes cluster and PMEM-CSI on bare metal,
+the [ipmctl](https://github.com/intel/ipmctl) utility can be used to create regions.
 App Direct Mode has two configuration options - interleaved or non-interleaved.
 One region per each NVDIMM is created in non-interleaved configuration.
 In such a configuration, a PMEM-CSI volume cannot be larger than one NVDIMM.
@@ -400,6 +408,63 @@ Example of creating regions in interleaved mode, using all NVDIMMs:
 # ipmctl create -goal PersistentMemoryType=AppDirect
 ```
 
+When running inside virtual machines, each virtual machine typically
+already gets access to one region and `ipmctl` is not needed inside
+the virtual machine. Instead, that region must be made available for
+use with PMEM-CSI because when the virtual machine comes up for the
+first time, the entire region is already allocated for use as a single
+block device:
+``` sh
+# ndctl list -RN
+{
+  "regions":[
+    {
+      "dev":"region0",
+      "size":34357641216,
+      "available_size":0,
+      "max_available_extent":0,
+      "type":"pmem",
+      "persistence_domain":"unknown",
+      "namespaces":[
+        {
+          "dev":"namespace0.0",
+          "mode":"raw",
+          "size":34357641216,
+          "sector_size":512,
+          "blockdev":"pmem0"
+        }
+      ]
+    }
+  ]
+}
+# ls -l /dev/pmem*
+brw-rw---- 1 root disk 259, 0 Jun  4 16:41 /dev/pmem0
+```
+
+Labels must be initialized in such a region, which must be performed
+once after the first boot:
+``` sh
+# ndctl disable-region region0
+disabled 1 region
+# ndctl init-labels nmem0
+initialized 1 nmem
+# ndctl enable-region region0
+enabled 1 region
+# ndctl list -RN
+[
+  {
+    "dev":"region0",
+    "size":34357641216,
+    "available_size":34357641216,
+    "max_available_extent":34357641216,
+    "type":"pmem",
+    "iset_id":10248187106440278,
+    "persistence_domain":"unknown"
+  }
+]
+# ls -l /dev/pmem*
+ls: cannot access '/dev/pmem*': No such file or directory
+```
 
 ## Supported Kubernetes versions
 
