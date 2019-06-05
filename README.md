@@ -759,6 +759,18 @@ Contribute by [opening a pull request](https://github.com/intel/pmem-csi/pulls).
 
 Learn [about pull requests](https://help.github.com/articles/using-pull-requests/).
 
+**Reporting a Potential Security Vulnerability:** If you have discovered potential security vulnerability in PMEM-CSI, please send an e-mail to secure@intel.com. For issues related to Intel Products, please visit [Intel Security Center](https://security-center.intel.com).
+
+It is important to include the following details:
+
+- The projects and versions affected
+- Detailed description of the vulnerability
+- Information on known exploits
+
+Vulnerability information is extremely sensitive. Please encrypt all security vulnerability reports using our [PGP key](https://www.intel.com/content/www/us/en/security-center/pgp-public-key.html).
+
+A member of the Intel Product Security Team will review your e-mail and contact you to collaborate on resolving the issue. For more information on how Intel works to resolve security issues, see: [vulnerability handling guidelines](https://www.intel.com/content/www/us/en/security-center/vulnerability-handling-guidelines.html).
+
 <!-- FILL TEMPLATE:
 Contact the development team (*TBD: slack or email?*)
 
