@@ -166,5 +166,5 @@ clean-kustomize:
 .PHONY: test-kustomize $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
 test: test-kustomize
 test-kustomize: $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
-$(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT)): test-kustomize-%: _work/kustomize
+$(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT)): test-kustomize-%: _work/kustomize-$(KUSTOMIZE_VERSION)
 	@ if ! diff <($< build --load_restrictor none $(KUSTOMIZATION_$*)) $*; then echo "$* was modified manually" && false; fi
