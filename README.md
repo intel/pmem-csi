@@ -377,8 +377,15 @@ section for the commands that create such a virtual test cluster.
 
 ### Persistent memory pre-provisioning
 
-The PMEM-CSI driver needs pre-provisioned regions on the NVDIMM device(s).
-The PMEM-CSI driver itself cannot create such regions.
+The PMEM-CSI driver needs pre-provisioned regions on the NVDIMM
+device(s). The PMEM-CSI driver itself intentionally leaves that to the
+administrator who then can decide how much and how PMEM is to be used
+for PMEM-CSI.
+
+Beware that the PMEM-CSI driver will run without errors on a node
+where PMEM was not prepared for it. It will then report zero local
+storage for that node, something that currently is only visible in the
+log files.
 
 When running the Kubernetes cluster and PMEM-CSI on bare metal,
 the [ipmctl](https://github.com/intel/ipmctl) utility can be used to create regions.
@@ -458,11 +465,6 @@ enabled 1 region
 # ls -l /dev/pmem*
 ls: cannot access '/dev/pmem*': No such file or directory
 ```
-
-Beware that the PMEM-CSI driver will run without errors on a node
-where PMEM was not prepared as described above. It will then
-report zero local storage for that node, something that currently is
-only visible in the log files.
 
 ## Supported Kubernetes versions
 
