@@ -8,22 +8,33 @@ import (
 	"k8s.io/klog/glog"
 	"os"
 	"strconv"
+	"time"
+	"k8s.io/utils/keymutex"
+)
+
+const (
+	retryStatTimeout time.Duration = 100 * time.Millisecond
 )
 
 // Mutex protecting shared device access by threads running in parallel.
 // Create, Delete, Flush may operate on same phys.device from parallel threads.
-// The mutex is defined here and used in different device managers code.
-// Ndctl manager definitely will crash without this mutex protection
+// The mutexes defined here are used by different device managers.
+// Ndctl manager would crash without Creation mutex protection
 // in 2-volume creation scenario on same Node.
 // For LVM manager, situation is likely not that risky,
 // but we use similar protection in LVM Manager for clarity and unified style,
 // as LVM state is also single instance for a Node.
 //
 // Note that while main idea is to protect against two parallel threads
-// accessing shared entity with different requests (like 2 creations), this
-// mutex also protects against repeated similar requests in different threads
+// accessing shared entity with different requests (like 2 creations), these
+// mutexes also protect against repeated similar requests in different threads
 // which also have been seen when Kubernetes repeats operations rapidly.
+
+// All-device mutex i.e. global in driver context:
 var devicemutex = &sync.Mutex{}
+
+// Finer-grain mutexes used by name:
+var volumeMutex = keymutex.NewHashed(-1)
 
 func ClearDevice(device PmemDeviceInfo, flush bool) error {
 	glog.V(4).Infof("ClearDevice: path: %v flush:%v", device.Path, flush)
@@ -69,4 +80,18 @@ func FlushDevice(dev PmemDeviceInfo, blocks uint64) error {
 		}
 	}
 	return nil
+}
+
+func WaitDeviceAppears(dev PmemDeviceInfo) error {
+	for i := 0; i < 10; i++ {
+		_, err := os.Stat(dev.Path)
+		if err == nil {
+			return nil
+		} else {
+			glog.Warningf("WaitDeviceAppears[%d]: %s does not exist, sleep %v and retry",
+				i, dev.Path, retryStatTimeout)
+			time.Sleep(retryStatTimeout)
+		}
+	}
+	return fmt.Errorf("device %s did not appear after multiple retries", dev.Path)
 }

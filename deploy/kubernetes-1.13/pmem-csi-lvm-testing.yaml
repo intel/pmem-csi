@@ -350,7 +350,6 @@ spec:
       initContainers:
       - args:
         - -v=3
-        - -namespacesize=9
         - -v=5
         - -coverprofile=/var/lib/pmem-csi-coverage/pmem-ns-init-*.out
         command:

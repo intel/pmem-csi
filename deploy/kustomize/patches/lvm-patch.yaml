@@ -11,7 +11,7 @@
     imagePullPolicy: Always
     image: PMEM_REGISTRY/pmem-csi-driver:canary
     command: ["/go/bin/pmem-ns-init"]
-    args: [ "-v=3", "-namespacesize=9" ]
+    args: [ "-v=3" ]
     env:
       - name: TERMINATION_LOG_PATH
         value: /tmp/pmem-ns-init-termination-log

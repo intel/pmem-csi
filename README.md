@@ -76,10 +76,8 @@ initialization stages and a third API-serving stage.
 
 During startup, the driver scans persistent memory for regions and
 namespaces, and tries to create more namespaces using all or part
-(selectable via option) of the remaining available space. The
-namespace size can be specified as a driver parameter and defaults to
-32 GB. This first stage is performed by a separate entity
-_pmem-ns-init_.
+(selectable via option) of the remaining available space. This first
+stage is performed by a separate entity _pmem-ns-init_.
 
 The second stage of initialization arranges physical volumes provided
 by namespaces into LVM volume groups. This is performed by a separate
