@@ -162,6 +162,11 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 
 	// Unmounting the image
 	glog.V(3).Infof("NodeUnpublishVolume: unmount %s", targetPath)
+	// Check if the target path is really a mount point. If its not a mount point do nothing
+	if notMnt, err := mount.New("").IsLikelyNotMountPoint(targetPath); notMnt || err != nil && !os.IsNotExist(err) {
+		return &csi.NodeUnpublishVolumeResponse{}, nil
+	}
+
 	err := mount.New("").Unmount(targetPath)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -325,8 +330,8 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 		return nil, err
 	}
 	if mountedDev == "" {
-		glog.Errorf("NodeUnstageVolume: No device name for mount point")
-		return nil, status.Error(codes.InvalidArgument, "No device found for mount point")
+		glog.Warningf("NodeUnstageVolume: No device name for mount point '%v'", stagingtargetPath)
+		return &csi.NodeUnstageVolumeResponse{}, nil
 	}
 	glog.V(4).Infof("NodeUnstageVolume: detected mountedDev: %v", mountedDev)
 	glog.V(3).Infof("NodeUnStageVolume: umount %s", stagingtargetPath)
