@@ -32,7 +32,7 @@ import (
 	sanityutils "github.com/kubernetes-csi/csi-test/utils"
 	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -44,29 +44,219 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+var (
+	cleanup              func()
+	workerSocatAddresses []string
+)
+
+var _ = sanity.DescribeSanity("pmem csi", func(sc *sanity.SanityContext) {
+	var (
+		cl      *sanity.Cleanup
+		nc      csi.NodeClient
+		cc, ncc csi.ControllerClient
+		nodeID  string
+	)
+	f := framework.NewDefaultFramework("pmem")
+	f.SkipNamespaceCreation = true // We don't need a per-test namespace and skipping it makes the tests run faster.
+	f.Namespace = &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "default",
+		},
+	}
+
+	BeforeEach(func() {
+		nc = csi.NewNodeClient(sc.Conn)
+		cc = csi.NewControllerClient(sc.ControllerConn)
+		ncc = csi.NewControllerClient(sc.Conn) // This works because PMEM-CSI exposes the node, controller, and ID server via its csi.sock.
+		cl = &sanity.Cleanup{
+			Context:                    sc,
+			NodeClient:                 nc,
+			ControllerClient:           cc,
+			ControllerPublishSupported: true,
+			NodeStageSupported:         true,
+		}
+		nid, err := nc.NodeGetInfo(
+			context.Background(),
+			&csi.NodeGetInfoRequest{})
+		framework.ExpectNoError(err, "get node ID")
+		nodeID = nid.GetNodeId()
+	})
+
+	AfterEach(func() {
+		cl.DeleteVolumes()
+	})
+
+	It("stores state across reboots for single volume", func() {
+		namePrefix := "state-volume"
+
+		// We intentionally check the state of the controller on the node here.
+		// The master caches volumes and does not get rebooted.
+		initialVolumes, err := ncc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+		framework.ExpectNoError(err, "list volumes")
+
+		volName, vol := createVolume(cc, sc, cl, namePrefix, 11*1024*1024, nodeID)
+		createdVolumes, err := ncc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+		framework.ExpectNoError(err, "Failed to list volumes after reboot")
+		Expect(createdVolumes.Entries).To(HaveLen(len(initialVolumes.Entries)+1), "one more volume on : %s", nodeID)
+		// Restart.
+		restartNode(f.ClientSet, nodeID, sc)
+
+		// Once we get an answer, it is expected to be the same as before.
+		By("checking volumes")
+		restartedVolumes, err := ncc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+		framework.ExpectNoError(err, "Failed to list volumes after reboot")
+		Expect(restartedVolumes.Entries).To(ConsistOf(createdVolumes.Entries), "same volumes as before node reboot")
+
+		deleteVolume(cc, vol, volName, cl)
+	})
+
+	It("can mount again after reboot", func() {
+		namePrefix := "mount-volume"
+
+		name, vol := createVolume(cc, sc, cl, namePrefix, 22*1024*1024, nodeID)
+		// Publish for the second time.
+		nodeID := publishVolume(cc, nc, sc, cl, name, vol)
+
+		// Restart.
+		restartNode(f.ClientSet, nodeID, sc)
+
+		_, err := ncc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+		framework.ExpectNoError(err, "Failed to list volumes after reboot")
+
+		// No failure, is already unpublished.
+		// TODO: In practice this fails with "no mount point specified".
+
+		unpublishVolume(cc, nc, sc, vol, nodeID)
+
+		// Publish for the second time.
+		publishVolume(cc, nc, sc, cl, name, vol)
+
+		unpublishVolume(cc, nc, sc, vol, nodeID)
+		deleteVolume(cc, vol, name, cl)
+	})
+
+	It("capacity is restored after controller restart", func() {
+		capacity, err := cc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
+		framework.ExpectNoError(err, "get capacity before restart")
+
+		restartControllerNode(f, sc)
+
+		By("waiting for full capacity")
+		Eventually(func() int64 {
+			currentCapacity, err := cc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
+			if err != nil {
+				// Probably not running again yet.
+				return 0
+			}
+			return currentCapacity.AvailableCapacity
+		}, "2m", "1s").Should(Equal(capacity.AvailableCapacity), "total capacity after controller restart")
+	})
+
+	Context("cluster", func() {
+		type nodeClient struct {
+			host    string
+			conn    *grpc.ClientConn
+			nc      csi.NodeClient
+			cc      csi.ControllerClient
+			volumes []*csi.ListVolumesResponse_Entry
+		}
+		var (
+			nodes []nodeClient
+		)
+
+		BeforeEach(func() {
+			nodes = nil
+			for i, addr := range workerSocatAddresses {
+				conn, err := sanityutils.Connect(addr)
+				framework.ExpectNoError(err, "connect to socat instance on node #%d via %s", i+1, addr)
+				nodes = append(nodes, nodeClient{
+					host: addr,
+					conn: conn,
+					nc:   csi.NewNodeClient(conn),
+					cc:   csi.NewControllerClient(conn),
+				})
+				initialVolumes, err := nodes[len(nodes)-1].cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+				framework.ExpectNoError(err, "list volumes on node #%d", i+1)
+				nodes[len(nodes)-1].volumes = initialVolumes.Entries
+			}
+		})
+
+		AfterEach(func() {
+			for _, node := range nodes {
+				node.conn.Close()
+			}
+		})
+
+		It("supports cache volumes", func() {
+			// Create a cache volume with as many instances as nodes.
+			sc.Config.TestVolumeParameters = map[string]string{
+				"persistencyModel": "cache",
+				"cacheSize":        fmt.Sprintf("%d", len(nodes)),
+			}
+			sizeInBytes := int64(33 * 1024 * 1024)
+			volName, vol := createVolume(cc, sc, cl, "cache", sizeInBytes, "")
+			var expectedTopology []*csi.Topology
+			// These node names are sorted.
+			for _, node := range framework.GetReadySchedulableNodesOrDie(f.ClientSet).Items {
+				expectedTopology = append(expectedTopology, &csi.Topology{
+					Segments: map[string]string{
+						"pmem-csi.intel.com/node": node.Name,
+					},
+				})
+			}
+			// vol.AccessibleTopology isn't, so we have to sort before comparing.
+			sort.Slice(vol.AccessibleTopology, func(i, j int) bool {
+				return strings.Compare(
+					vol.AccessibleTopology[i].Segments["pmem-csi.intel.com/node"],
+					vol.AccessibleTopology[j].Segments["pmem-csi.intel.com/node"],
+				) < 0
+			})
+			Expect(vol.AccessibleTopology).To(Equal(expectedTopology), "cache volume topology")
+
+			// Each node now should have one additional volume,
+			// and its size should match the requested one.
+			for i, node := range nodes {
+				currentVolumes, err := node.cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+				framework.ExpectNoError(err, "list volumes on node #%d via %s", i+1)
+				Expect(len(currentVolumes.Entries)).To(Equal(len(node.volumes)+1), "one additional volume on node #%d", i+1)
+				for i, e := range currentVolumes.Entries {
+					if e.Volume.VolumeId == vol.VolumeId {
+						Expect(e.Volume.CapacityBytes).To(Equal(sizeInBytes), "additional volume size on node #%d(%s)", i+1, node.host)
+						break
+					}
+				}
+			}
+
+			deleteVolume(cc, vol, volName, cl)
+
+			// Now those volumes are gone again.
+			for i, node := range nodes {
+				currentVolumes, err := node.cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+				framework.ExpectNoError(err, "list volumes on node #%d via %s", i+1)
+				Expect(len(currentVolumes.Entries)).To(Equal(len(node.volumes)), "same volumes as before on node #%d", i+1)
+			}
+		})
+	})
+})
+
 // Run the csi-test sanity tests against a pmem-csi driver
 var _ = Describe("sanity", func() {
+	config := sanity.Config{
+		TestVolumeSize: 1 * 1024 * 1024,
+		// The actual directories will be created as unique
+		// temp directories inside these directories.
+		// We intentionally do not use the real /var/lib/kubelet/pods as
+		// root for the target path, because kubelet is monitoring it
+		// and deletes all extra entries that it does not know about.
+		TargetPath:  "/var/lib/kubelet/plugins/kubernetes.io/csi/pv/pmem-sanity-target.XXXXXX",
+		StagingPath: "/var/lib/kubelet/plugins/kubernetes.io/csi/pv/pmem-sanity-staging.XXXXXX",
+	}
+
 	f := framework.NewDefaultFramework("pmem")
 	f.SkipNamespaceCreation = true // We don't need a per-test namespace and skipping it makes the tests run faster.
 
-	var (
-		cleanup              func()
-		config               sanity.Config
-		workerSocatAddresses []string
-	)
-
 	BeforeEach(func() {
 		cs := f.ClientSet
-		config = sanity.Config{
-			TestVolumeSize: 1 * 1024 * 1024,
-			// The actual directories will be created as unique
-			// temp directories inside these directories.
-			// We intentionally do not use the real /var/lib/kubelet/pods as
-			// root for the target path, because kubelet is monitoring it
-			// and deletes all extra entries that it does not know about.
-			TargetPath:  "/var/lib/kubelet/plugins/kubernetes.io/csi/pv/pmem-sanity-target.XXXXXX",
-			StagingPath: "/var/lib/kubelet/plugins/kubernetes.io/csi/pv/pmem-sanity-staging.XXXXXX",
-		}
 
 		// This test expects that PMEM-CSI was deployed with
 		// socat port forwarding enabled (see deploy/kustomize/testing/README.md).
@@ -89,13 +279,6 @@ var _ = Describe("sanity", func() {
 		// any node, what matters is the service port.
 		config.ControllerAddress = fmt.Sprintf("dns:///%s:%d", host, getServicePort(cs, "pmem-csi-controller-testing"))
 
-		// Wait for socat pod on that node. We need it for
-		// creating directories.  We could use the PMEM-CSI
-		// node container, but that then forces us to have
-		// mkdir and rmdir in that container, which we might
-		// not want long-term.
-		socat := getAppInstance(cs, "pmem-csi-node-testing", host)
-
 		// Determine how many nodes have the CSI-PMEM running.
 		set := getDaemonSet(cs, "pmem-csi-node")
 
@@ -108,6 +291,13 @@ var _ = Describe("sanity", func() {
 		}
 
 		exec := func(args ...string) string {
+			// Wait for socat pod on that node. We need it for
+			// creating directories.  We could use the PMEM-CSI
+			// node container, but that then forces us to have
+			// mkdir and rmdir in that container, which we might
+			// not want long-term.
+			socat := getAppInstance(cs, "pmem-csi-node-testing", host)
+
 			// f.ExecCommandInContainerWithFullOutput assumes that we want a pod in the test's namespace,
 			// so we have to set one.
 			f.Namespace = &v1.Namespace{
@@ -115,9 +305,11 @@ var _ = Describe("sanity", func() {
 					Name: "default",
 				},
 			}
+
 			stdout, stderr, err := f.ExecCommandInContainerWithFullOutput(socat.Name, "socat", args...)
 			framework.ExpectNoError(err, "%s in socat container, stderr:\n%s", args, stderr)
 			Expect(stderr).To(BeEmpty(), "unexpected stderr from %s in socat container", args)
+			By("Exec Output: " + stdout)
 			return stdout
 		}
 		mkdir := func(path string) (string, error) {
@@ -142,199 +334,6 @@ var _ = Describe("sanity", func() {
 	// This adds several tests that just get skipped.
 	// TODO: static definition of driver capabilities (https://github.com/kubernetes-csi/csi-test/issues/143)
 	sanity.GinkgoTest(&config)
-
-	Context("pmem-csi", func() {
-		sc := &sanity.SanityContext{
-			Config: &config,
-		}
-		var (
-			cs     clientset.Interface
-			cl     *sanity.Cleanup
-			c      csi.NodeClient
-			s, sn  csi.ControllerClient
-			nodeID string
-		)
-
-		BeforeEach(func() {
-			sc.Setup()
-			cs = f.ClientSet
-			c = csi.NewNodeClient(sc.Conn)
-			s = csi.NewControllerClient(sc.ControllerConn)
-			sn = csi.NewControllerClient(sc.Conn) // This works because PMEM-CSI exposes the node, controller, and ID server via its csi.sock.
-			cl = &sanity.Cleanup{
-				Context:                    sc,
-				NodeClient:                 c,
-				ControllerClient:           s,
-				ControllerPublishSupported: true,
-				NodeStageSupported:         true,
-			}
-			nid, err := c.NodeGetInfo(
-				context.Background(),
-				&csi.NodeGetInfoRequest{})
-			framework.ExpectNoError(err, "get node ID")
-			nodeID = nid.GetNodeId()
-		})
-
-		AfterEach(func() {
-			cl.DeleteVolumes()
-			sc.Teardown()
-		})
-
-		It("stores state across reboots for single volume", func() {
-			namePrefix := "state-volume"
-
-			// We intentionally check the state of the controller on the node here.
-			// The master caches volumes and does not get rebooted.
-			initialVolumes, err := sn.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
-			framework.ExpectNoError(err, "list volumes")
-
-			_, vol := createVolume(s, sc, cl, namePrefix, 11*1024*1024)
-			createdVolumes, err := sn.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
-			Expect(createdVolumes.Entries).To(HaveLen(len(initialVolumes.Entries)+1), "one more volume")
-
-			// Restart.
-			restartNode(cs, nodeID)
-
-			// Once we get an answer, it is expected to be the same as before.
-			By("checking volumes")
-			Eventually(func() bool {
-				restartedVolumes, err := sn.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
-				if err != nil {
-					return false
-				}
-				Expect(restartedVolumes.Entries).To(ConsistOf(createdVolumes.Entries), "same volumes as before node reboot")
-				return true
-			}, "5m", "1s").Should(BeTrue(), "list volumes")
-
-			deleteVolume(s, vol)
-		})
-
-		It("can mount again after reboot", func() {
-			namePrefix := "mount-volume"
-
-			name, vol := createVolume(s, sc, cl, namePrefix, 22*1024*1024)
-			// Publish for the second time.
-			nodeID := publishVolume(s, c, sc, cl, name, vol)
-
-			// Restart.
-			restartNode(cs, nodeID)
-			Eventually(func() bool {
-				_, err := sn.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
-				if err != nil {
-					return false
-				}
-				return true
-			}, "5m", "1s").Should(BeTrue(), "node controller running again")
-
-			// No failure, is already unpublished.
-			// TODO: In practice this fails with "no mount point specified".
-			unpublishVolume(s, c, sc, vol, nodeID)
-
-			// Publish for the second time.
-			publishVolume(s, c, sc, cl, name, vol)
-
-			unpublishVolume(s, c, sc, vol, nodeID)
-			deleteVolume(s, vol)
-		})
-
-		It("capacity is restored after controller restart", func() {
-			capacity, err := s.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
-			framework.ExpectNoError(err, "get capacity before restart")
-
-			restartControllerNode(f, cs)
-
-			By("waiting for full capacity")
-			Eventually(func() int64 {
-				currentCapacity, err := s.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
-				if err != nil {
-					// Probably not running again yet.
-					return 0
-				}
-				return currentCapacity.AvailableCapacity
-			}, "2m", "1s").Should(Equal(capacity.AvailableCapacity), "total capacity after controller restart")
-		})
-
-		Context("cluster", func() {
-			type nodeClient struct {
-				conn    *grpc.ClientConn
-				nc      csi.NodeClient
-				cc      csi.ControllerClient
-				volumes []*csi.ListVolumesResponse_Entry
-			}
-			var (
-				nodes []nodeClient
-			)
-
-			BeforeEach(func() {
-				nodes = nil
-				for i, addr := range workerSocatAddresses {
-					conn, err := sanityutils.Connect(addr)
-					framework.ExpectNoError(err, "connect to socat instance on node #%d via %s", i+1, addr)
-					nodes = append(nodes, nodeClient{
-						conn: conn,
-						nc:   csi.NewNodeClient(conn),
-						cc:   csi.NewControllerClient(conn),
-					})
-					initialVolumes, err := nodes[len(nodes)-1].cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
-					framework.ExpectNoError(err, "list volumes on node #%d", i+1)
-					nodes[len(nodes)-1].volumes = initialVolumes.Entries
-				}
-			})
-
-			AfterEach(func() {
-				for _, node := range nodes {
-					node.conn.Close()
-				}
-			})
-
-			It("supports cache volumes", func() {
-				// Create a cache volume with as many instances as nodes.
-				sc.Config.TestVolumeParameters = map[string]string{
-					"persistencyModel": "cache",
-					"cacheSize":        fmt.Sprintf("%d", len(nodes)),
-				}
-				sizeInBytes := int64(33 * 1024 * 1024)
-				_, vol := createVolume(s, sc, cl, "cache", sizeInBytes)
-				var expectedTopology []*csi.Topology
-				// These node names are sorted.
-				for _, node := range framework.GetReadySchedulableNodesOrDie(cs).Items {
-					expectedTopology = append(expectedTopology, &csi.Topology{
-						Segments: map[string]string{
-							"pmem-csi.intel.com/node": node.Name,
-						},
-					})
-				}
-				// vol.AccessibleTopology isn't, so we have to sort before comparing.
-				sort.Slice(vol.AccessibleTopology, func(i, j int) bool {
-					return strings.Compare(
-						vol.AccessibleTopology[i].Segments["pmem-csi.intel.com/node"],
-						vol.AccessibleTopology[j].Segments["pmem-csi.intel.com/node"],
-					) < 0
-				})
-				Expect(vol.AccessibleTopology).To(Equal(expectedTopology), "cache volume topology")
-
-				// Each node now should have one additional volume,
-				// and its size should match the requested one.
-				for i, node := range nodes {
-					currentVolumes, err := node.cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
-					framework.ExpectNoError(err, "list volumes on node #%d via %s", i+1)
-					Expect(len(currentVolumes.Entries)).To(Equal(len(node.volumes)+1), "one additional volume on node #%d", i+1)
-					// The assumption here is that the additional volume is the one at the end.
-					// If that assumption does not hold, we need to write more complex code to compare the lists.
-					Expect(currentVolumes.Entries[len(currentVolumes.Entries)-1].Volume.CapacityBytes).To(Equal(sizeInBytes), "additional volume size on node #%d", i+1)
-				}
-
-				deleteVolume(s, vol)
-
-				// Now those volumes are gone again.
-				for i, node := range nodes {
-					currentVolumes, err := node.cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
-					framework.ExpectNoError(err, "list volumes on node #%d via %s", i+1)
-					Expect(currentVolumes.Entries).To(Equal(node.volumes), "same volumes as before on node #%d", i+1)
-				}
-			})
-		})
-	})
 })
 
 func getServicePort(cs clientset.Interface, serviceName string) int32 {
@@ -382,31 +381,49 @@ func getDaemonSet(cs clientset.Interface, setName string) *appsv1.DaemonSet {
 	return set
 }
 
-func createVolume(s csi.ControllerClient, sc *sanity.SanityContext, cl *sanity.Cleanup, namePrefix string, sizeInBytes int64) (string, *csi.Volume) {
+func createVolume(s csi.ControllerClient, sc *sanity.SanityContext, cl *sanity.Cleanup, namePrefix string, sizeInBytes int64, nodeID string) (string, *csi.Volume) {
 	var err error
 	name := sanity.UniqueString(namePrefix)
 
 	// Create Volume First
 	By("creating a single node writer volume")
-	vol, err := s.CreateVolume(
-		context.Background(),
-		&csi.CreateVolumeRequest{
-			Name: name,
-			VolumeCapabilities: []*csi.VolumeCapability{
+	req := &csi.CreateVolumeRequest{
+		Name: name,
+		VolumeCapabilities: []*csi.VolumeCapability{
+			{
+				AccessType: &csi.VolumeCapability_Mount{
+					Mount: &csi.VolumeCapability_MountVolume{},
+				},
+				AccessMode: &csi.VolumeCapability_AccessMode{
+					Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+				},
+			},
+		},
+		CapacityRange: &csi.CapacityRange{
+			RequiredBytes: sizeInBytes,
+		},
+		Parameters: sc.Config.TestVolumeParameters,
+	}
+	if nodeID != "" {
+		req.AccessibilityRequirements = &csi.TopologyRequirement{
+			Requisite: []*csi.Topology{
 				{
-					AccessType: &csi.VolumeCapability_Mount{
-						Mount: &csi.VolumeCapability_MountVolume{},
-					},
-					AccessMode: &csi.VolumeCapability_AccessMode{
-						Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+					Segments: map[string]string{
+						"pmem-csi.intel.com/node": nodeID,
 					},
 				},
 			},
-			CapacityRange: &csi.CapacityRange{
-				RequiredBytes: sizeInBytes,
+			Preferred: []*csi.Topology{
+				{
+					Segments: map[string]string{
+						"pmem-csi.intel.com/node": nodeID,
+					},
+				},
 			},
-			Parameters: sc.Config.TestVolumeParameters,
-		},
+		}
+	}
+	vol, err := s.CreateVolume(
+		context.Background(), req,
 	)
 	framework.ExpectNoError(err, "create volume")
 	Expect(vol).NotTo(BeNil())
@@ -504,25 +521,30 @@ func unpublishVolume(s csi.ControllerClient, c csi.NodeClient, sc *sanity.Sanity
 	Expect(nodeunstagevol).NotTo(BeNil())
 }
 
-func deleteVolume(s csi.ControllerClient, vol *csi.Volume) {
+func deleteVolume(s csi.ControllerClient, vol *csi.Volume, volName string, cl *sanity.Cleanup) {
 	var err error
 
-	By("cleaning up deleting the volume")
+	By("Deleting the volume: " + vol.GetVolumeId())
 	_, err = s.DeleteVolume(
 		context.Background(),
 		&csi.DeleteVolumeRequest{
 			VolumeId: vol.GetVolumeId(),
 		},
 	)
+	if err != nil {
+		By("Deleting volume  " + vol.GetVolumeId() + " reply: " + err.Error())
+	}
+
+	cl.UnregisterVolume(volName)
 	framework.ExpectNoError(err, "delete volume %s", vol.GetVolumeId())
 }
 
-var unreachable = v1.Taint{Key: "node.kubernetes.io/unreachable", Effect: "NoSchedule"}
+//var unreachable = v1.Taint{Key: "node.kubernetes.io/unreachable", Effect: "NoSchedule"}
 
 // restartNode works only for one of the nodes in the QEMU virtual cluster.
 // It does a hard poweroff via SysRq and relies on Docker to restart the
 // "failed" node.
-func restartNode(cs clientset.Interface, nodeID string) {
+func restartNode(cs clientset.Interface, nodeID string, sc *sanity.SanityContext) {
 	if !regexp.MustCompile(`worker\d+$`).MatchString(nodeID) {
 		framework.Skipf("node %q not one of the expected QEMU nodes (worker<number>))", nodeID)
 	}
@@ -557,18 +579,39 @@ sudo sh -c 'echo b > /proc/sysrq-trigger'`)
 		framework.Logf("test for /tmp/delete-me with %s:\n%s\n%s", ssh, err, out)
 		return false
 	}, "5m", "1s").Should(Equal(true), "node up again")
+
+	By("node reboot success!")
+	Eventually(func() bool {
+		By("Node driver: Probing...")
+		if _, err := csi.NewIdentityClient(sc.Conn).Probe(context.Background(), &csi.ProbeRequest{}); err != nil {
+			return false
+		}
+		By("Node driver: Probe success")
+		return true
+	}, "5m", "1s").Should(Equal(true), "node driver not ready")
+
+	Eventually(func() bool {
+		By("Controller driver: Probing...")
+		_, err := csi.NewIdentityClient(sc.ControllerConn).Probe(context.Background(), &csi.ProbeRequest{})
+		if err != nil {
+			return false
+		}
+		By("Controller driver: Probe success")
+		return true
+	}, "5m", "1s").Should(Equal(true), "controller driver not ready")
 }
 
 // restartControllerNode determines where the PMEM-CSI controller runs, then restarts
 // that node.
-func restartControllerNode(f *framework.Framework, cs clientset.Interface) {
-	pods, err := WaitForPodsWithLabelRunningReady(cs, f.Namespace.Name,
+func restartControllerNode(f *framework.Framework, sc *sanity.SanityContext) {
+	By("Fetching pmem-csi-controller pod name")
+	pods, err := WaitForPodsWithLabelRunningReady(f.ClientSet, "default",
 		labels.Set{"app": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, time.Minute)
 	framework.ExpectNoError(err, "PMEM-CSI controller running with one replica")
 	node := pods.Items[0].Spec.NodeName
 	By(fmt.Sprintf("restarting controller node %s", node))
-	restartNode(cs, node)
-	_, err = WaitForPodsWithLabelRunningReady(cs, f.Namespace.Name,
+	restartNode(f.ClientSet, node, sc)
+	_, err = WaitForPodsWithLabelRunningReady(f.ClientSet, "default",
 		labels.Set{"app": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, 5*time.Minute)
 	framework.ExpectNoError(err, "PMEM-CSI controller running again with one replica")
 }
