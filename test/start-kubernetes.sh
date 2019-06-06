@@ -156,11 +156,11 @@ function create_vms(){
     RESTART_VMS_SCRIPT="${WORKING_DIRECTORY}/restart.sh"
     create_govm_yaml
     govm compose -f ${GOVM_YAML}
-    IPS=$(govm list -f '{{select (filterRegexp . "Name" "'${DEPLOYMENT_ID}'") "IP"}}' | tac)
+    IPS=$(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-(master|worker[[:digit:]]+)$") "IP"}}' | tac)
 
     #Create scripts to delete virtual machines
     echo "#!/bin/bash -e" > $STOP_VMS_SCRIPT
-    govm list -f '{{select (filterRegexp . "Name" "'${DEPLOYMENT_ID}'") "Name"}}' \
+    govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-(master|worker[[:digit:]]+)$") "Name"}}' \
         | xargs -L1 echo govm remove >> $STOP_VMS_SCRIPT
     echo "rm -rf ${WORKING_DIRECTORY}" >> $STOP_VMS_SCRIPT
     chmod +x $STOP_VMS_SCRIPT
@@ -236,7 +236,7 @@ function log_lines(){
 function init_kubernetes_cluster(){
     trap 'error_handler ${LINENO}' ERR
     workers_ip=""
-    master_ip="$(govm list -f '{{select (filterRegexp . "Name" "'${DEPLOYMENT_ID}-master'") "IP"}}')"
+    master_ip="$(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-master$") "IP"}}')"
     join_token=""
     setup_script="setup-${CLOUD_USER}-govm.sh"
     install_k8s_script="setup-kubernetes.sh"
@@ -313,7 +313,7 @@ EOF
 function delete_vms(){
     trap 'error_handler ${LINENO}' ERR
     echo "Cleanning up environment"
-    govm list -f '{{select (filterRegexp . "Name" "'${DEPLOYMENT_ID}'") "Name"}}' \
+    govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-(master|worker[[:digit:]]+)^") "Name"}}' \
         | xargs -L1 govm remove
 }
 
@@ -331,7 +331,7 @@ function init_workdir(){
 }
 
 function check_status(){
-    deployments=$(govm list -f '{{select (filterRegexp . "Name" "'${DEPLOYMENT_ID}'") "Name"}}')
+    deployments=$(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-master$") "Name"}}')
     if [ ! -z "$deployments" ]; then
         echo "Kubernetes cluster ${CLUSTER} is already running, using it unchanged."
         exit 0
