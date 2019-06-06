@@ -68,7 +68,7 @@ spec:
       - name: external-provisioner
         imagePullPolicy: Always
         image: quay.io/k8scsi/csi-provisioner:v1.X.Y
-        args: [ "--v=3", "--csi-address=/csi/csi-controller.sock", "--feature-gates=Topology=true" ]
+        args: [ "--v=3", "--csi-address=/csi/csi-controller.sock", "--feature-gates=Topology=true", "--strict-topology=true" ]
         volumeMounts:
         - name: plugin-socket-dir
           mountPath: /csi
