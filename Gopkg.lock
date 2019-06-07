@@ -273,15 +273,15 @@
   version = "v0.6.1"
 
 [[projects]]
-  branch = "master"
-  digest = "1:b9478f88c7897df2b4666aeaba4968c20bb0d434590afd7175776a64a7304746"
+  digest = "1:9e63a566db7ba47559fdedad77b7567a24bce4e1b16b4bd0bb565b7bfe87ad1a"
   name = "github.com/kubernetes-csi/csi-test"
   packages = [
     "pkg/sanity",
     "utils",
   ]
   pruneopts = "UT"
-  revision = "e1f2421c7f0a0cc7f9942fea1192392f253891db"
+  revision = "6738ab2206eac88874f0a3ede59b40f680f59f43"
+  version = "v2.0.1"
 
 [[projects]]
   branch = "master"
@@ -1397,21 +1397,25 @@
     "github.com/google/uuid",
     "github.com/kubernetes-csi/csi-lib-utils/protosanitizer",
     "github.com/kubernetes-csi/csi-test/pkg/sanity",
+    "github.com/kubernetes-csi/csi-test/utils",
     "github.com/onsi/ginkgo",
     "github.com/onsi/gomega",
     "github.com/pkg/errors",
     "golang.org/x/net/context",
     "google.golang.org/grpc",
     "google.golang.org/grpc/codes",
+    "google.golang.org/grpc/connectivity",
     "google.golang.org/grpc/credentials",
     "google.golang.org/grpc/resolver",
     "google.golang.org/grpc/status",
     "k8s.io/api/apps/v1",
     "k8s.io/api/core/v1",
     "k8s.io/api/storage/v1",
+    "k8s.io/api/storage/v1beta1",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
     "k8s.io/apimachinery/pkg/runtime/schema",
     "k8s.io/apimachinery/pkg/util/sets",
+    "k8s.io/client-go/discovery",
     "k8s.io/client-go/kubernetes",
     "k8s.io/klog",
     "k8s.io/klog/glog",
