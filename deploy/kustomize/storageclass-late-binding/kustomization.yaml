@@ -1,0 +1,13 @@
+nameSuffix: -late-binding
+
+bases:
+- ../storageclass
+
+patchesJson6902:
+- target:
+    group: storage.k8s.io
+    version: v1
+    kind: StorageClass
+    name: pmem-csi-sc
+  path: ../patches/storageclass-late-binding-patch.yaml
+  
