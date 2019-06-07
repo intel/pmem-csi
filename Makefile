@@ -33,8 +33,8 @@ HTTPS_PROXY=$(shell echo "$${HTTPS_PROXY:-$${https_proxy}}")
 NO_PROXY=$(shell echo "$${NO_PROXY:-$${no_proxy}},$$(ip addr | grep inet6 | grep /64 | sed -e 's;.*inet6 \(.*\)/64 .*;\1;' | tr '\n' ','; ip addr | grep -w inet | grep /24 | sed -e 's;.*inet \(.*\)/24 .*;\1;' | tr '\n' ',')",0.0.0.0,10.0.2.15)
 export HTTP_PROXY HTTPS_PROXY NO_PROXY
 
-REGISTRY_NAME=$(shell . test/test-config.sh && echo $${TEST_BUILD_PMEM_REGISTRY})
-IMAGE_VERSION=canary
+REGISTRY_NAME?=$(shell . test/test-config.sh && echo $${TEST_BUILD_PMEM_REGISTRY})
+IMAGE_VERSION?=canary
 IMAGE_TAG=$(REGISTRY_NAME)/pmem-csi-driver$*:$(IMAGE_VERSION)
 # Pass proxy config via --build-arg only if these are set,
 # enabling proxy config other way, like ~/.docker/config.json
@@ -80,7 +80,7 @@ $(TEST_CMDS): %-test:
 #
 # At the moment this build ID is not recorded in the resulting images.
 # The VERSION variable should be used for that, if desired.
-BUILD_IMAGE_ID=$(shell date +%Y-%m-%d)
+BUILD_IMAGE_ID?=$(shell date +%Y-%m-%d)
 
 # Build and publish images for production or testing (i.e. with test binaries).
 build-images: build-image build-test-image
