@@ -149,6 +149,8 @@ KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-xfs.yaml
 KUSTOMIZATION_deploy/common/pmem-storageclass-xfs.yaml = deploy/kustomize/storageclass-xfs
 KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-cache.yaml
 KUSTOMIZATION_deploy/common/pmem-storageclass-cache.yaml = deploy/kustomize/storageclass-cache
+KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-late-binding.yaml
+KUSTOMIZATION_deploy/common/pmem-storageclass-late-binding.yaml = deploy/kustomize/storageclass-late-binding
 kustomize: $(KUSTOMIZE_OUTPUT)
 $(KUSTOMIZE_OUTPUT): _work/kustomize-$(KUSTOMIZE_VERSION) $(KUSTOMIZE_INPUT)
 	$< build --load_restrictor none $(KUSTOMIZATION_$@) >$@

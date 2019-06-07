@@ -333,7 +333,7 @@ provisioned volume can be used.
   by Kubernetes. Choosing of node is depend on StorageClass
   `volumeBindingMode`. In case of `volumeBindingMode: Immediate`
   PMEM-CSI chooses a node randomly, and in case of `volumeBindingMode:
-  WaitForFirstConsumer` Kubernetes first chooses a node for scheduling
+  WaitForFirstConsumer`<sup>3</sup> Kubernetes first chooses a node for scheduling
   the application, and PMEM-CSI creates the volume on that
   node. Applications which claim a normal persistent volume has to use
   `ReadOnlyOnce` access mode in its `accessModes` list. This
@@ -362,6 +362,12 @@ mechanisms like [node
 anti-affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity)
 while deploying. Check with provided [cache
 application](deploy/kubernetes-1.13/pmem-app-cache.yaml) example.
+
+<sup>3 </sup> When using late binding(`volumeBindingMode:WaitForFirstConsume`),
+limitations of local storage applies. Kubernetes does not consider available
+PMEM capacity on a node while scheduling the application. That mean Kubernetes
+might select a node that does not have enough free PMEM space. In this case
+driver fails to create volume that results in failed Pod scheduling.
 
 ## Prerequisites
 
