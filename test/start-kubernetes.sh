@@ -212,6 +212,17 @@ function env_vars() (
     done
 )
 
+function log_lines(){
+    local prefix="$1"
+    local logfile="$2"
+    local line
+    while read -r line; do
+        # swupd output contains carriage returns. We need to filter
+        # those out, otherwise the line overwrites the prefix.
+        echo "$(date +%H:%M:%S) $prefix: $line" | sed -e 's/\r//' | tee -a $logfile
+    done
+}
+
 function init_kubernetes_cluster(){
     trap 'error_handler ${LINENO}' ERR
     workers_ip=""
@@ -241,7 +252,7 @@ EOF
         # The local registry and the master node might be used as insecure registries, enabled that just in case.
         ENV_VARS+=" INSECURE_REGISTRIES='$TEST_INSECURE_REGISTRIES $TEST_LOCAL_REGISTRY pmem-csi-$CLUSTER-master:5000'"
         scp $SSH_ARGS ${TEST_DIRECTORY}/{$setup_script,$install_k8s_script} ${CLOUD_USER}@${ip}:. >/dev/null
-        ssh $SSH_ARGS ${CLOUD_USER}@${ip} "$ENV_VARS ./$setup_script && $ENV_VARS ./$install_k8s_script" &> >(sed -e "s/^/$vm_name: /" | tee -a $log_name ) &
+        ssh $SSH_ARGS ${CLOUD_USER}@${ip} "$ENV_VARS ./$setup_script && $ENV_VARS ./$install_k8s_script" &> >(log_lines "$vm_name" "$log_name") &
         cat <<EOF >$ssh_script
 #!/bin/sh
 
@@ -282,8 +293,8 @@ EOF
         vm_name=$(govm list -f '{{select (filterRegexp . "IP" "'${ip}'") "Name"}}')
         log_name=${WORKING_DIRECTORY}/${vm_name}.log
         (
-            ssh $SSH_ARGS ${CLOUD_USER}@${ip} "$ENV_VARS sudo $join_token" &> >(sed -e "s/^/$vm_name:/" | tee -a $log_name )
-            ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} "kubectl label --overwrite node $vm_name storage=pmem" &> >(sed -e "s/^/$vm_name:/" | tee -a $log_name )
+            ssh $SSH_ARGS ${CLOUD_USER}@${ip} "$ENV_VARS sudo $join_token" &> >(log_lines "$vm_name" "$log_name")
+            ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} "kubectl label --overwrite node $vm_name storage=pmem" &> >(log_lines "$vm_name" "$log_name")
         ) &
     done
     wait
