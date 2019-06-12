@@ -35,6 +35,7 @@ pipeline {
 
             steps {
 
+                sh 'docker build --target build -t $BUILD_IMAGE .'
                 sh 'docker run --rm \
                 -v `pwd`:$PMEM_PATH $BUILD_IMAGE \
                 bash -c "ldconfig; make test"'
