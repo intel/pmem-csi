@@ -36,6 +36,11 @@ RUN make VERSION=${VERSION} pmem-csi-driver${BIN_SUFFIX} pmem-vgm${BIN_SUFFIX} p
     mv _output/pmem-vgm${BIN_SUFFIX} /go/bin/pmem-vgm && \
     mv _output/pmem-ns-init${BIN_SUFFIX} /go/bin/pmem-ns-init
 
+# Workaround for "error while loading shared libraries: libndctl.so.6" when using older Docker (?)
+# and running "make test" inside this container.
+# - same as https://github.com/clearlinux/distribution/issues/831?
+RUN ldconfig
+
 # build clean container
 FROM clearlinux:base
 LABEL maintainers="Intel"
