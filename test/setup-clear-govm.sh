@@ -137,7 +137,11 @@ EOF"
     # Reconfiguration done, start daemons. Starting kubelet must wait until kubeadm has created
     # the necessary config files.
     sudo systemctl daemon-reload
-    sudo systemctl restart $cri_daemon
+    sudo systemctl restart $cri_daemon || (
+        systemctl status $cri_daemon || true
+        journalctl -xe || true
+        false
+    )
     sudo systemctl enable $cri_daemon kubelet
 }
 
