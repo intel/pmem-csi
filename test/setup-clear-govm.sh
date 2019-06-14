@@ -28,7 +28,7 @@ function install_kubernetes(){
     # Install Kubernetes and additional bundles
     sudo -E swupd bundle-add $BUNDLES
     sudo swupd clean
-    sudo mkdir /etc/sysctl.d
+    sudo mkdir -p /etc/sysctl.d
 
     # Enable IP Forwarding
     sudo bash -c "echo net.ipv4.ip_forward = 1 >/etc/sysctl.d/60-k8s.conf"
