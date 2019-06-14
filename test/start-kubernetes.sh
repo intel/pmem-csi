@@ -33,11 +33,21 @@ mem-path=/data/nvdimm0,size=${TEST_PMEM_MEM_SIZE:-32768}M \
  -machine pc,nvdimm}"
 CLOUD_USER=${CLOUD_USER:-clear}
 if [ "$TEST_CLEAR_LINUX_VERSION" ]; then
-    CLOUD_IMAGE="clear-$TEST_CLEAR_LINUX_VERSION-cloud.img.xz"
+    # We used to use cloud.img in the past and switched to cloudguest.img
+    # with Clear Linux 29920 because that version only listed cloudguest
+    # in "latest-images". Same content, just a different name.
+    # Using cloudguest.img seems more likely to work in the future.
+    if [ "$TEST_CLEAR_LINUX_VERSION" -ge 29920 ]; then
+        CLOUD_IMAGE="clear-$TEST_CLEAR_LINUX_VERSION-cloudguest.img.xz"
+    else
+        CLOUD_IMAGE="clear-$TEST_CLEAR_LINUX_VERSION-cloud.img.xz"
+    fi
 else
+    # Either cloud.img or cloudguest.img is fine, should have the same content.
     : ${CLOUD_IMAGE:=$(\
                curl -s https://download.clearlinux.org/image/latest-images |
-                   awk '/cloud.img/ {print $0}')}
+                   awk '/cloud.img|cloudguest.img/ {print $0}' |
+                   head -n1)}
 fi
 IMAGE_URL=${IMAGE_URL:-https://download.clearlinux.org/releases/${CLOUD_IMAGE//[!0-9]/}/clear}
 SSH_TIMEOUT=60
