@@ -168,7 +168,8 @@ function create_vms(){
     #Create script to restart virtual machines
     cat <<EOF >$RESTART_VMS_SCRIPT
 #!/bin/bash
-echo "Rebooting virtual machines"
+num_nodes=$(echo ${IPS} | wc -w)
+echo "Rebooting \$num_nodes virtual machines"
 for ip in $(echo ${IPS}); do
     ssh $SSH_ARGS ${CLOUD_USER}@\${ip} "sudo systemctl reboot"
 done
@@ -181,21 +182,14 @@ for ip in $(echo ${IPS}); do
         fi
     done
 done
-while ! ${WORKING_DIRECTORY}/ssh-${CLUSTER} "kubectl get pods" 2>/dev/null; do
-    sleep 1
-    if [ \$SECONDS -gt $SSH_TIMEOUT ]; then
-        break
+echo "Waiting for Kubernetes nodes to be ready"
+while [ \$(${WORKING_DIRECTORY}/ssh-${CLUSTER} "kubectl get nodes  -o go-template --template='{{range .items}}{{range .status.conditions }}{{if eq .type \"Ready\"}} {{if eq .status \"True\"}}{{printf \"%s\n\" .reason}}{{end}}{{end}}{{end}}{{end}}'" 2>/dev/null | wc -l) -ne \$num_nodes ]; do
+    if [ "\$SECONDS" -gt "$SSH_TIMEOUT" ]; then
+        echo "Timeout for nodes: ${WORKING_DIRECTORY}/ssh-${CLUSTER} kubectl get nodes:"
+        ${WORKING_DIRECTORY}/ssh-${CLUSTER} kubectl get nodes
+        exit 1
     fi
-done
-echo "Waiting for kubernetes nodes to be ready"
-while [ \$SECONDS -lt $SSH_TIMEOUT ];do
     sleep 3
-    pending_nodes=\$(${WORKING_DIRECTORY}/ssh-${CLUSTER} "kubectl get nodes  -o go-template \
-    --template='{{range .items}}{{range .status.conditions }}{{if eq .type \"Ready\"}} \
-    {{if ne .status \"True\"}}{{printf \"%s\n\" .reason}}{{end}}{{end}}{{end}}{{end}}'"2>/dev/null)
-    if [ -z "\$pending_nodes" ]; then
-        break
-    fi
 done
 EOF
     chmod +x $RESTART_VMS_SCRIPT
