@@ -21,7 +21,6 @@ CLOUD="${CLOUD:-true}"
 FLAVOR="${FLAVOR:-medium}"
 SSH_KEY="${SSH_KEY:-${RESOURCES_DIRECTORY}/id_rsa}"
 SSH_PUBLIC_KEY="${SSH_KEY}.pub"
-IMAGE_TAG="${IMAGE_TAG:-canary}"
 EFI="${EFI:-true}"
 KVM_CPU_OPTS="${KVM_CPU_OPTS:-\
  -m 2G,slots=${TEST_MEM_SLOTS:-2},maxmem=34G -smp 4\
