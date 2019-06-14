@@ -26,7 +26,7 @@ fi
 # In order to reach it from inside the virtual cluster, we need
 # to use a public IP address that the registry is likely to listen
 # on. Here we default to the IP address of the docker0 interface.
-: ${TEST_LOCAL_REGISTRY:=$(ip addr show dev docker0 2>/dev/null | grep " inet " | sed -e 's/.* inet //' -e 's;/.*;;'):5000}
+: ${TEST_LOCAL_REGISTRY:=$(ip addr show dev docker0 2>/dev/null | (grep " inet " || echo localhost) | sed -e 's/.* inet //' -e 's;/.*;;'):5000}
 
 # Set up a Docker registry on the master node.
 : ${TEST_CREATE_REGISTRY:=false}
