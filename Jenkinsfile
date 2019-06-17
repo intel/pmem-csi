@@ -13,6 +13,11 @@ pipeline {
 
     environment {
 
+        /* 29890 broke networking
+        (https://github.com/clearlinux/distribution/issues/904). We
+        need to stay on the latest known-good version. */
+        TEST_CLEAR_LINUX_VERSION = "29880"
+
         PMEM_PATH = "/go/src/github.com/intel/pmem-csi"
         IMAGE_VERSION = "ci-${env.BUILD_ID}"
         BUILD_IMAGE = "clearlinux-builder"
@@ -113,6 +118,7 @@ pipeline {
                         -e CLUSTER="$CLUSTER" \
                         -e TEST_CREATE_REGISTRY=true \
                         -e TEST_CHECK_SIGNED_FILES=false \
+                        -e TEST_CLEAR_LINUX_VERSION=$TEST_CLEAR_LINUX_VERSION \
                         -v /var/run/docker.sock:/var/run/docker.sock \
                         -v `pwd`:$PMEM_PATH \
                         -v /usr/bin/docker:/usr/bin/docker \
