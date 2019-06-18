@@ -28,7 +28,7 @@ function install_kubernetes(){
     # Install Kubernetes and additional bundles
     sudo -E swupd bundle-add $BUNDLES
     sudo swupd clean
-    sudo mkdir /etc/sysctl.d
+    sudo mkdir -p /etc/sysctl.d
 
     # Enable IP Forwarding
     sudo bash -c "echo net.ipv4.ip_forward = 1 >/etc/sysctl.d/60-k8s.conf"
@@ -137,7 +137,11 @@ EOF"
     # Reconfiguration done, start daemons. Starting kubelet must wait until kubeadm has created
     # the necessary config files.
     sudo systemctl daemon-reload
-    sudo systemctl restart $cri_daemon
+    sudo systemctl restart $cri_daemon || (
+        systemctl status $cri_daemon || true
+        journalctl -xe || true
+        false
+    )
     sudo systemctl enable $cri_daemon kubelet
 }
 

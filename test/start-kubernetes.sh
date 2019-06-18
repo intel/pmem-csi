@@ -21,7 +21,6 @@ CLOUD="${CLOUD:-true}"
 FLAVOR="${FLAVOR:-medium}"
 SSH_KEY="${SSH_KEY:-${RESOURCES_DIRECTORY}/id_rsa}"
 SSH_PUBLIC_KEY="${SSH_KEY}.pub"
-IMAGE_TAG="${IMAGE_TAG:-canary}"
 EFI="${EFI:-true}"
 KVM_CPU_OPTS="${KVM_CPU_OPTS:-\
  -m 2G,slots=${TEST_MEM_SLOTS:-2},maxmem=34G -smp 4\
@@ -33,11 +32,21 @@ mem-path=/data/nvdimm0,size=${TEST_PMEM_MEM_SIZE:-32768}M \
  -machine pc,nvdimm}"
 CLOUD_USER=${CLOUD_USER:-clear}
 if [ "$TEST_CLEAR_LINUX_VERSION" ]; then
-    CLOUD_IMAGE="clear-$TEST_CLEAR_LINUX_VERSION-cloud.img.xz"
+    # We used to use cloud.img in the past and switched to cloudguest.img
+    # with Clear Linux 29920 because that version only listed cloudguest
+    # in "latest-images". Same content, just a different name.
+    # Using cloudguest.img seems more likely to work in the future.
+    if [ "$TEST_CLEAR_LINUX_VERSION" -ge 29920 ]; then
+        CLOUD_IMAGE="clear-$TEST_CLEAR_LINUX_VERSION-cloudguest.img.xz"
+    else
+        CLOUD_IMAGE="clear-$TEST_CLEAR_LINUX_VERSION-cloud.img.xz"
+    fi
 else
+    # Either cloud.img or cloudguest.img is fine, should have the same content.
     : ${CLOUD_IMAGE:=$(\
                curl -s https://download.clearlinux.org/image/latest-images |
-                   awk '/cloud.img/ {print $0}')}
+                   awk '/cloud.img|cloudguest.img/ {print $0}' |
+                   head -n1)}
 fi
 IMAGE_URL=${IMAGE_URL:-https://download.clearlinux.org/releases/${CLOUD_IMAGE//[!0-9]/}/clear}
 SSH_TIMEOUT=60
@@ -146,11 +155,11 @@ function create_vms(){
     RESTART_VMS_SCRIPT="${WORKING_DIRECTORY}/restart.sh"
     create_govm_yaml
     govm compose -f ${GOVM_YAML}
-    IPS=$(govm list -f '{{select (filterRegexp . "Name" "'${DEPLOYMENT_ID}'") "IP"}}' | tac)
+    IPS=$(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-(master|worker[[:digit:]]+)$") "IP"}}' | tac)
 
     #Create scripts to delete virtual machines
     echo "#!/bin/bash -e" > $STOP_VMS_SCRIPT
-    govm list -f '{{select (filterRegexp . "Name" "'${DEPLOYMENT_ID}'") "Name"}}' \
+    govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-(master|worker[[:digit:]]+)$") "Name"}}' \
         | xargs -L1 echo govm remove >> $STOP_VMS_SCRIPT
     echo "rm -rf ${WORKING_DIRECTORY}" >> $STOP_VMS_SCRIPT
     chmod +x $STOP_VMS_SCRIPT
@@ -158,7 +167,8 @@ function create_vms(){
     #Create script to restart virtual machines
     cat <<EOF >$RESTART_VMS_SCRIPT
 #!/bin/bash
-echo "Rebooting virtual machines"
+num_nodes=$(echo ${IPS} | wc -w)
+echo "Rebooting \$num_nodes virtual machines"
 for ip in $(echo ${IPS}); do
     ssh $SSH_ARGS ${CLOUD_USER}@\${ip} "sudo systemctl reboot"
 done
@@ -171,21 +181,14 @@ for ip in $(echo ${IPS}); do
         fi
     done
 done
-while ! ${WORKING_DIRECTORY}/ssh-${CLUSTER} "kubectl get pods" 2>/dev/null; do
-    sleep 1
-    if [ \$SECONDS -gt $SSH_TIMEOUT ]; then
-        break
+echo "Waiting for Kubernetes nodes to be ready"
+while [ \$(${WORKING_DIRECTORY}/ssh-${CLUSTER} "kubectl get nodes  -o go-template --template='{{range .items}}{{range .status.conditions }}{{if eq .type \"Ready\"}} {{if eq .status \"True\"}}{{printf \"%s\n\" .reason}}{{end}}{{end}}{{end}}{{end}}'" 2>/dev/null | wc -l) -ne \$num_nodes ]; do
+    if [ "\$SECONDS" -gt "$SSH_TIMEOUT" ]; then
+        echo "Timeout for nodes: ${WORKING_DIRECTORY}/ssh-${CLUSTER} kubectl get nodes:"
+        ${WORKING_DIRECTORY}/ssh-${CLUSTER} kubectl get nodes
+        exit 1
     fi
-done
-echo "Waiting for kubernetes nodes to be ready"
-while [ \$SECONDS -lt $SSH_TIMEOUT ];do
     sleep 3
-    pending_nodes=\$(${WORKING_DIRECTORY}/ssh-${CLUSTER} "kubectl get nodes  -o go-template \
-    --template='{{range .items}}{{range .status.conditions }}{{if eq .type \"Ready\"}} \
-    {{if ne .status \"True\"}}{{printf \"%s\n\" .reason}}{{end}}{{end}}{{end}}{{end}}'"2>/dev/null)
-    if [ -z "\$pending_nodes" ]; then
-        break
-    fi
 done
 EOF
     chmod +x $RESTART_VMS_SCRIPT
@@ -226,7 +229,7 @@ function log_lines(){
 function init_kubernetes_cluster(){
     trap 'error_handler ${LINENO}' ERR
     workers_ip=""
-    master_ip="$(govm list -f '{{select (filterRegexp . "Name" "'${DEPLOYMENT_ID}-master'") "IP"}}')"
+    master_ip="$(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-master$") "IP"}}')"
     join_token=""
     setup_script="setup-${CLOUD_USER}-govm.sh"
     install_k8s_script="setup-kubernetes.sh"
@@ -303,7 +306,7 @@ EOF
 function delete_vms(){
     trap 'error_handler ${LINENO}' ERR
     echo "Cleanning up environment"
-    govm list -f '{{select (filterRegexp . "Name" "'${DEPLOYMENT_ID}'") "Name"}}' \
+    govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-(master|worker[[:digit:]]+)^") "Name"}}' \
         | xargs -L1 govm remove
 }
 
@@ -321,7 +324,7 @@ function init_workdir(){
 }
 
 function check_status(){
-    deployments=$(govm list -f '{{select (filterRegexp . "Name" "'${DEPLOYMENT_ID}'") "Name"}}')
+    deployments=$(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-master$") "Name"}}')
     if [ ! -z "$deployments" ]; then
         echo "Kubernetes cluster ${CLUSTER} is already running, using it unchanged."
         exit 0
