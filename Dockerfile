@@ -1,4 +1,14 @@
-FROM clearlinux:base AS build
+# CLEARLINUX_BASE and SWUPD_UPDATE_ARG can be used to make the build reproducible
+# by choosing an image by its hash and updating to a certain version with -m:
+# CLEAR_LINUX_BASE=clearlinux@sha256:b8e5d3b2576eb6d868f8d52e401f678c873264d349e469637f98ee2adf7b33d4
+# SWUPD_UPDATE_ARG=-m 29970
+#
+# This is used on release branches before tagging a stable version. The master and devel
+# branches default to using the latest Clear Linux.
+ARG CLEAR_LINUX_BASE=clearlinux:latest
+ARG SWUPD_UPDATE_ARG=
+
+FROM ${CLEAR_LINUX_BASE} AS build
 
 ARG VERSION="unknown"
 ARG NDCTL_VERSION="65"
@@ -7,7 +17,7 @@ ARG NDCTL_BUILD_DEPS="os-core-dev devpkg-util-linux devpkg-kmod devpkg-json-c"
 
 #pull dependencies required for downloading and building libndctl
 ARG CACHEBUST
-RUN swupd update && swupd bundle-add ${NDCTL_BUILD_DEPS} go-basic-dev && rm -rf /var/lib/swupd
+RUN swupd update ${SWUPD_UPDATE_ARG} && swupd bundle-add ${NDCTL_BUILD_DEPS} go-basic-dev && rm -rf /var/lib/swupd
 # Workaround for "pkg-config: error while loading shared libraries" when using older Docker
 # (see https://github.com/clearlinux/distribution/issues/831)
 RUN ldconfig
@@ -42,7 +52,7 @@ RUN make VERSION=${VERSION} pmem-csi-driver${BIN_SUFFIX} pmem-vgm${BIN_SUFFIX} p
 RUN ldconfig
 
 # build clean container
-FROM clearlinux:base
+FROM ${CLEAR_LINUX_BASE}
 LABEL maintainers="Intel"
 LABEL description="PMEM CSI Driver"
 
@@ -51,7 +61,7 @@ LABEL description="PMEM CSI Driver"
 # xfsprogs - XFS filesystem utilities
 # storge-utils - for lvm2 and ext4(e2fsprogs) utilities
 ARG CACHEBUST
-RUN swupd update && swupd bundle-add file xfsprogs storage-utils && rm -rf /var/lib/swupd
+RUN swupd update ${SWUPD_UPDATE_ARG} && swupd bundle-add file xfsprogs storage-utils && rm -rf /var/lib/swupd
 # Workaround for "pkg-config: error while loading shared libraries" when using older Docker
 # (see https://github.com/clearlinux/distribution/issues/831)
 RUN ldconfig
