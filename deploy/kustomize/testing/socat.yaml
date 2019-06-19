@@ -27,6 +27,7 @@ spec:
       - name: socat
         image: alpine/socat:1.0.3
         args:
+        - -s
         - tcp-listen:9735,fork,reuseaddr # port 9735 *on the host*
         - unix-connect:/csi/csi.sock
         securityContext:

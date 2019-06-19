@@ -196,6 +196,7 @@ spec:
         - mountPath: /csi
           name: plugin-socket-dir
       - args:
+        - -s
         - tcp-listen:10001,fork,reuseaddr
         - unix-connect:/csi/csi-controller.sock
         image: alpine/socat:1.0.3
@@ -235,6 +236,7 @@ spec:
     spec:
       containers:
       - args:
+        - -s
         - tcp-listen:9735,fork,reuseaddr
         - unix-connect:/csi/csi.sock
         image: alpine/socat:1.0.3
