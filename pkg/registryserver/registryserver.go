@@ -1,8 +1,9 @@
-package pmemcsidriver
+package registryserver
 
 import (
 	"crypto/tls"
 	"fmt"
+	"sync"
 	"time"
 
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
@@ -14,12 +15,11 @@ import (
 	"k8s.io/klog/glog"
 )
 
-type registryServer struct {
+type RegistryServer struct {
+	mutex           sync.Mutex
 	clientTLSConfig *tls.Config
-	nodeClients     map[string]NodeInfo
+	nodeClients     map[string]*NodeInfo
 }
-
-var _ PmemService = &registryServer{}
 
 type NodeInfo struct {
 	//NodeID controller node id
@@ -28,28 +28,31 @@ type NodeInfo struct {
 	Endpoint string
 }
 
-func NewRegistryServer(tlsConfig *tls.Config) *registryServer {
-	return &registryServer{
+func New(tlsConfig *tls.Config) *RegistryServer {
+	return &RegistryServer{
 		clientTLSConfig: tlsConfig,
-		nodeClients:     map[string]NodeInfo{},
+		nodeClients:     map[string]*NodeInfo{},
 	}
 }
 
-func (rs *registryServer) RegisterService(rpcServer *grpc.Server) {
+func (rs *RegistryServer) RegisterService(rpcServer *grpc.Server) {
 	registry.RegisterRegistryServer(rpcServer, rs)
 }
 
 //GetNodeController returns the node controller info for given nodeID, error if not found
-func (rs *registryServer) GetNodeController(nodeID string) (NodeInfo, error) {
+func (rs *RegistryServer) GetNodeController(nodeID string) (NodeInfo, error) {
+	rs.mutex.Lock()
+	defer rs.mutex.Unlock()
+
 	if node, ok := rs.nodeClients[nodeID]; ok {
-		return node, nil
+		return *node, nil
 	}
 
 	return NodeInfo{}, fmt.Errorf("No node registered with id: %v", nodeID)
 }
 
 // ConnectToNodeController initiates a connection to controller running at nodeId
-func (rs *registryServer) ConnectToNodeController(nodeId string, timeout time.Duration) (*grpc.ClientConn, error) {
+func (rs *RegistryServer) ConnectToNodeController(nodeId string, timeout time.Duration) (*grpc.ClientConn, error) {
 	nodeInfo, err := rs.GetNodeController(nodeId)
 	if err != nil {
 		return nil, err
@@ -58,7 +61,10 @@ func (rs *registryServer) ConnectToNodeController(nodeId string, timeout time.Du
 	return pmemgrpc.Connect(nodeInfo.Endpoint, rs.clientTLSConfig, timeout)
 }
 
-func (rs *registryServer) RegisterController(ctx context.Context, req *registry.RegisterControllerRequest) (*registry.RegisterControllerReply, error) {
+func (rs *RegistryServer) RegisterController(ctx context.Context, req *registry.RegisterControllerRequest) (*registry.RegisterControllerReply, error) {
+	rs.mutex.Lock()
+	defer rs.mutex.Unlock()
+
 	if req.GetNodeId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Missing NodeId parameter")
 	}
@@ -68,7 +74,7 @@ func (rs *registryServer) RegisterController(ctx context.Context, req *registry.
 	}
 	glog.V(3).Infof("Registering node: %s, endpoint: %s", req.NodeId, req.Endpoint)
 
-	rs.nodeClients[req.NodeId] = NodeInfo{
+	rs.nodeClients[req.NodeId] = &NodeInfo{
 		NodeID:   req.NodeId,
 		Endpoint: req.Endpoint,
 	}
@@ -76,7 +82,10 @@ func (rs *registryServer) RegisterController(ctx context.Context, req *registry.
 	return &registry.RegisterControllerReply{}, nil
 }
 
-func (rs *registryServer) UnregisterController(ctx context.Context, req *registry.UnregisterControllerRequest) (*registry.UnregisterControllerReply, error) {
+func (rs *RegistryServer) UnregisterController(ctx context.Context, req *registry.UnregisterControllerRequest) (*registry.UnregisterControllerReply, error) {
+	rs.mutex.Lock()
+	defer rs.mutex.Unlock()
+
 	if req.GetNodeId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Missing NodeId parameter")
 	}
@@ -89,4 +98,17 @@ func (rs *registryServer) UnregisterController(ctx context.Context, req *registr
 	delete(rs.nodeClients, req.NodeId)
 
 	return &registry.UnregisterControllerReply{}, nil
+}
+
+// NodeClients returns a new map which contains a copy of all currently known node clients.
+// It is safe to use concurrently with the other methods.
+func (rs *RegistryServer) NodeClients() map[string]*NodeInfo {
+	rs.mutex.Lock()
+	defer rs.mutex.Unlock()
+
+	copy := map[string]*NodeInfo{}
+	for key, value := range rs.nodeClients {
+		copy[key] = value
+	}
+	return copy
 }

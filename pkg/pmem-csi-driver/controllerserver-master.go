@@ -11,16 +11,16 @@ import (
 	"math"
 	"strconv"
 
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/google/uuid"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/klog/glog"
-
-	"github.com/container-storage-interface/spec/lib/go/csi"
-
 	"k8s.io/utils/keymutex"
+
+	"github.com/intel/pmem-csi/pkg/registryserver"
 )
 
 //VolumeStatus type representation for volume status
@@ -59,7 +59,7 @@ type pmemVolume struct {
 
 type masterController struct {
 	*DefaultControllerServer
-	rs          *registryServer
+	rs          *registryserver.RegistryServer
 	pmemVolumes map[string]*pmemVolume //map of reqID:pmemVolume
 }
 
@@ -67,7 +67,7 @@ var _ csi.ControllerServer = &masterController{}
 var _ PmemService = &masterController{}
 var volumeMutex = keymutex.NewHashed(-1)
 
-func NewMasterControllerServer(rs *registryServer) *masterController {
+func NewMasterControllerServer(rs *registryserver.RegistryServer) *masterController {
 	serverCaps := []csi.ControllerServiceCapability_RPC_Type{
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
 		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
@@ -148,7 +148,7 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 		if len(inTopology) == 0 {
 			// No topology provided, so we are free to choose from all available
 			// nodes
-			for node := range cs.rs.nodeClients {
+			for node := range cs.rs.NodeClients() {
 				inTopology = append(inTopology, &csi.Topology{
 					Segments: map[string]string{
 						PmemDriverTopologyKey: node,
@@ -376,8 +376,8 @@ func (cs *masterController) GetCapacity(ctx context.Context, req *csi.GetCapacit
 		return nil, err
 	}
 
-	for _, node := range cs.rs.nodeClients {
-		cap, err := cs.getNodeCapacity(ctx, node, req)
+	for _, node := range cs.rs.NodeClients() {
+		cap, err := cs.getNodeCapacity(ctx, *node, req)
 		if err != nil {
 			glog.Warningf("Error while fetching '%s' node capacity: %s", node.NodeID, err.Error())
 			continue
@@ -390,7 +390,7 @@ func (cs *masterController) GetCapacity(ctx context.Context, req *csi.GetCapacit
 	}, nil
 }
 
-func (cs *masterController) getNodeCapacity(ctx context.Context, node NodeInfo, req *csi.GetCapacityRequest) (int64, error) {
+func (cs *masterController) getNodeCapacity(ctx context.Context, node registryserver.NodeInfo, req *csi.GetCapacityRequest) (int64, error) {
 	conn, err := cs.rs.ConnectToNodeController(node.NodeID, connectionTimeout)
 	if err != nil {
 		return 0, fmt.Errorf("failed to connect to node %s: %s", node.NodeID, err.Error())

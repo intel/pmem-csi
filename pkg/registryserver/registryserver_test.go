@@ -1,4 +1,4 @@
-package pmemcsidriver_test
+package registryserver_test
 
 import (
 	"crypto/tls"
@@ -8,9 +8,10 @@ import (
 	"testing"
 	"time"
 
-	pmemcsidriver "github.com/intel/pmem-csi/pkg/pmem-csi-driver"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-driver"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
+	"github.com/intel/pmem-csi/pkg/registryserver"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
@@ -45,7 +46,7 @@ var _ = Describe("pmem registry", func() {
 		nbServer           *pmemcsidriver.NonBlockingGRPCServer
 		registryClientConn *grpc.ClientConn
 		registryClient     registry.RegistryClient
-		registryServer     = pmemcsidriver.NewRegistryServer(nil)
+		registryServer     = registryserver.New(nil)
 	)
 
 	BeforeEach(func() {

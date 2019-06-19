@@ -19,6 +19,7 @@ import (
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
+	"github.com/intel/pmem-csi/pkg/registryserver"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -154,7 +155,7 @@ func (pmemd *pmemDriver) Run() error {
 	}()
 
 	if pmemd.cfg.Mode == Controller {
-		rs := NewRegistryServer(pmemd.clientTLSConfig)
+		rs := registryserver.New(pmemd.clientTLSConfig)
 		cs := NewMasterControllerServer(rs)
 
 		if pmemd.cfg.Endpoint != pmemd.cfg.RegistryEndpoint {
