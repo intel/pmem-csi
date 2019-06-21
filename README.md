@@ -25,6 +25,7 @@
         -   [Running commands on test cluster nodes over ssh](#running-commands-on-test-cluster-nodes-over-ssh)
         -   [Configuration options](#configuration-options)
         -   [Running E2E tests](#running-e2e-tests)
+    -   [Application examples](#application-examples)
     -   [Communication and contribution](#communication-and-contribution)
 
 <!-- based on template now, remaining parts marked as FILL TEMPLATE:  -->
@@ -813,6 +814,11 @@ It is also possible to run just the sanity tests until one of them fails:
 $ REPO_ROOT=`pwd` ginkgo '-focus=sanity' -failFast ./test/e2e/
 ...
 ```
+
+## Application examples
+This section covers a set of reproducible application examples for PMEM-CSI:
+
+* Deploying a Redis cluster through the redis-operator using QEMU-emulated persistent memory devices [Link-to-example](examples/redis-operator.md).
 
 ## Communication and contribution
 
