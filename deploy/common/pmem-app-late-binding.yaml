@@ -14,4 +14,3 @@ spec:
   - name: my-csi-volume
     persistentVolumeClaim:
       claimName: pmem-csi-pvc-late-binding
-

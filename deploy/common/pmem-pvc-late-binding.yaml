@@ -8,5 +8,4 @@ spec:
   resources:
     requests:
       storage: 4Gi
-  storageClassName: pmem-csi-sc-late-binding
-
+  storageClassName: pmem-csi-sc-late-binding # defined in pmem-storageclass-late-binding.yaml
