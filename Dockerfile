@@ -12,7 +12,7 @@ FROM ${CLEAR_LINUX_BASE} AS build
 
 ARG VERSION="unknown"
 ARG NDCTL_VERSION="65"
-ARG NDCTL_CONFIGFLAGS="--libdir=/usr/lib --disable-docs --without-systemd --without-bash"
+ARG NDCTL_CONFIGFLAGS="--libdir=/usr/lib64 --disable-docs --without-systemd --without-bash"
 ARG NDCTL_BUILD_DEPS="os-core-dev devpkg-util-linux devpkg-kmod devpkg-json-c"
 
 #pull dependencies required for downloading and building libndctl
@@ -67,8 +67,8 @@ RUN swupd update ${SWUPD_UPDATE_ARG} && swupd bundle-add file xfsprogs storage-u
 RUN ldconfig
 
 # move required binaries and libraries to clean container
-COPY --from=build /usr/lib/libndctl* /usr/lib/
-COPY --from=build /usr/lib/libdaxctl* /usr/lib/
+COPY --from=build /usr/lib64/libndctl.so.* /usr/lib/
+COPY --from=build /usr/lib64/libdaxctl.so.* /usr/lib/
 RUN mkdir -p /go/bin
 COPY --from=build /go/bin/ /go/bin/
 # default lvm config uses lvmetad and throwing below warning for all lvm tools
