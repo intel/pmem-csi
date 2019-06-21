@@ -13,6 +13,8 @@ REPO_DIRECTORY=${REPO_DIRECTORY:-$(dirname $TEST_DIRECTORY)}
 TEST_DIRECTORY=${TEST_DIRECTORY:-$(dirname $(readlink -f $0))}
 RESOURCES_DIRECTORY=${RESOURCES_DIRECTORY:-${REPO_DIRECTORY}/_work/resources}
 WORKING_DIRECTORY="${WORKING_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
+LOCKFILE="${LOCKFILE:-${REPO_DIRECTORY}/_work/start-kubernetes.exclusivelock}"
+LOCKDELAY="${LOCKDELAY:-300}" # seconds
 NODES=( $DEPLOYMENT_ID-master
         $DEPLOYMENT_ID-worker1
         $DEPLOYMENT_ID-worker2
@@ -63,15 +65,19 @@ function error_handler(){
     delete_vms
 }
 
-function download_image(){
+function download_image() (
+    # If we start multiple clusters in parallel, we must ensure that only one
+    # process downloads the shared image
+    flock -x -w $LOCKDELAY 200
+
     pushd $RESOURCES_DIRECTORY &>/dev/null
     if [ -e "${CLOUD_IMAGE/.xz}" ]; then
-        echo "$CLOUD_IMAGE found, skipping download"
+        echo >&2 "$CLOUD_IMAGE found, skipping download"
         CLOUD_IMAGE=${CLOUD_IMAGE/.xz}
     else
         case $CLOUD_USER in
             clear)
-                echo "Downloading ${CLOUD_IMAGE} image"
+                echo >&2 "Downloading ${CLOUD_IMAGE} image"
                 curl -O ${IMAGE_URL}/${CLOUD_IMAGE}
                 if $TEST_CHECK_SIGNED_FILES; then
                     curl -s -O ${IMAGE_URL}/${CLOUD_IMAGE}-SHA512SUMS
@@ -121,7 +127,9 @@ EOF
         esac
     fi
     popd &>/dev/null
-}
+
+    echo "$CLOUD_IMAGE"
+) 200>$LOCKFILE
 
 function create_govm_yaml(){
     trap 'error_handler ${LINENO}' ERR
@@ -318,9 +326,12 @@ function init_workdir(){
     if [ ! -d "$RESOURCES_DIRECTORY" ]; then
         mkdir -p $RESOURCES_DIRECTORY
     fi
-    if [ ! -e  "$SSH_KEY" ]; then
-        ssh-keygen -N '' -f ${SSH_KEY} &>/dev/null
-    fi
+    (
+        flock -x -w $LOCKDELAY 200
+        if [ ! -e  "$SSH_KEY" ]; then
+            ssh-keygen -N '' -f ${SSH_KEY} &>/dev/null
+        fi
+    ) 200>$LOCKFILE
     pushd $WORKING_DIRECTORY >/dev/null
 }
 
@@ -334,6 +345,6 @@ function check_status(){
 
 check_status
 init_workdir
-download_image
+CLOUD_IMAGE=$(download_image)
 create_vms
 init_kubernetes_cluster
