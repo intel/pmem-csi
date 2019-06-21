@@ -23,7 +23,6 @@ pipeline {
 
         PMEM_PATH = "/go/src/github.com/intel/pmem-csi"
         BUILD_IMAGE = "clearlinux-builder"
-        CLUSTER = "ci-clear-govm"
     }
 
     stages {
@@ -98,34 +97,66 @@ pipeline {
 
             }
 
-            steps {
-                    /*
-                     We have to run "make start" in the current directory
-                     because the QEMU instances that it starts under Docker
-                     run outside of the container. For "make test_e2e" we
-                     then have to switch into the GOPATH. Once we can
-                     build outside of the GOPATH, we can simplify that to
-                     build inside one directory.
-                    */
-                    sh "docker run --rm \
-                        -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
-                        -e CLUSTER=${env.CLUSTER} \
-                        -e TEST_CREATE_REGISTRY=true \
-                        -e TEST_CHECK_SIGNED_FILES=false \
-                        -e TEST_CLEAR_LINUX_VERSION=${env.TEST_CLEAR_LINUX_VERSION} \
-                        -v /var/run/docker.sock:/var/run/docker.sock \
-                        -v `pwd`:$PMEM_PATH \
-                        -v /usr/bin/docker:/usr/bin/docker \
-                        -v `pwd`:`pwd` \
-                        -w `pwd` \
-                        ${env.BUILD_IMAGE} \
-                        bash -c 'swupd bundle-add openssh-server &&  \
-                            make start && cd ${env.PMEM_PATH} && \
-                            make test_e2e'"
+            /*
+             We have to run "make start" in the current directory
+             because the QEMU instances that it starts under Docker
+             run outside of the container. For "make test_e2e" we
+             then have to switch into the GOPATH. Once we can
+             build outside of the GOPATH, we can simplify that to
+             build inside one directory.
+            */
+            parallel {
+                stage('1.14 LVM') {
+                    environment {
+                        CLUSTER = "clear-1-14-lvm"
+                        TEST_DEVICE_MODE = "lvm"
+                    }
+                    steps {
+                        sh "docker run --rm \
+                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
+                            -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_CREATE_REGISTRY=true \
+                            -e TEST_CHECK_SIGNED_FILES=false \
+                            -e TEST_CLEAR_LINUX_VERSION=${env.TEST_CLEAR_LINUX_VERSION} \
+                            -v /var/run/docker.sock:/var/run/docker.sock \
+                            -v `pwd`:$PMEM_PATH \
+                            -v /usr/bin/docker:/usr/bin/docker \
+                            -v `pwd`:`pwd` \
+                            -w `pwd` \
+                            ${env.BUILD_IMAGE} \
+                            bash -c 'swupd bundle-add openssh-server &&  \
+                                make start && cd ${env.PMEM_PATH} && \
+                                make test_e2e'"
+                    }
+                }
 
+                stage('1.14 direct') {
+                    environment {
+                        CLUSTER = "clear-1-14-direct"
+                        TEST_DEVICE_MODE = "direct"
+                    }
+                    steps {
+                        sh "docker run --rm \
+                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
+                            -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_CREATE_REGISTRY=true \
+                            -e TEST_CHECK_SIGNED_FILES=false \
+                            -e TEST_CLEAR_LINUX_VERSION=${env.TEST_CLEAR_LINUX_VERSION} \
+                            -v /var/run/docker.sock:/var/run/docker.sock \
+                            -v `pwd`:$PMEM_PATH \
+                            -v /usr/bin/docker:/usr/bin/docker \
+                            -v `pwd`:`pwd` \
+                            -w `pwd` \
+                            ${env.BUILD_IMAGE} \
+                            bash -c 'swupd bundle-add openssh-server &&  \
+                                make start && cd ${env.PMEM_PATH} && \
+                                make test_e2e'"
+
+                    }
+                }
             }
-
         }
-
     }
 }
