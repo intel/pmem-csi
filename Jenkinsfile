@@ -63,8 +63,7 @@ pipeline {
                 -v `pwd`:$PMEM_PATH \
                 -w $PMEM_PATH \
                 $BUILD_IMAGE \
-                bash -c "make test"'
-
+                make test'
             }
 
         }
@@ -88,7 +87,7 @@ pipeline {
                     -v `pwd`:$PMEM_PATH \
                     -w $PMEM_PATH \
                     $BUILD_IMAGE \
-                    bash -c "make build-images"'
+                    make build-images'
 
             }
 
