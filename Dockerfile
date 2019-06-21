@@ -8,6 +8,9 @@
 ARG CLEAR_LINUX_BASE=clearlinux:latest
 ARG SWUPD_UPDATE_ARG=
 
+# Common base image for building PMEM-CSI:
+# - up-to-date Clear Linux
+# - ndctl installed
 FROM ${CLEAR_LINUX_BASE} AS build
 
 ARG VERSION="unknown"
@@ -30,6 +33,14 @@ RUN ./autogen.sh
 RUN ./configure ${NDCTL_CONFIGFLAGS}
 RUN make install
 
+# Workaround for "error while loading shared libraries: libndctl.so.6" when using older Docker (?)
+# and running "make test" inside this container.
+# - same as https://github.com/clearlinux/distribution/issues/831?
+RUN ldconfig
+
+# Image in which PMEM-CSI binaries get built.
+FROM build as binaries
+
 # build pmem-csi-driver
 ADD . /go/src/github.com/intel/pmem-csi
 ENV GOPATH=/go
@@ -46,12 +57,7 @@ RUN make VERSION=${VERSION} pmem-csi-driver${BIN_SUFFIX} pmem-vgm${BIN_SUFFIX} p
     mv _output/pmem-vgm${BIN_SUFFIX} /go/bin/pmem-vgm && \
     mv _output/pmem-ns-init${BIN_SUFFIX} /go/bin/pmem-ns-init
 
-# Workaround for "error while loading shared libraries: libndctl.so.6" when using older Docker (?)
-# and running "make test" inside this container.
-# - same as https://github.com/clearlinux/distribution/issues/831?
-RUN ldconfig
-
-# build clean container
+# Clean image for deploying PMEM-CSI.
 FROM ${CLEAR_LINUX_BASE}
 LABEL maintainers="Intel"
 LABEL description="PMEM CSI Driver"
@@ -67,10 +73,10 @@ RUN swupd update ${SWUPD_UPDATE_ARG} && swupd bundle-add file xfsprogs storage-u
 RUN ldconfig
 
 # move required binaries and libraries to clean container
-COPY --from=build /usr/lib64/libndctl.so.* /usr/lib/
-COPY --from=build /usr/lib64/libdaxctl.so.* /usr/lib/
+COPY --from=binaries /usr/lib64/libndctl.so.* /usr/lib/
+COPY --from=binaries /usr/lib64/libdaxctl.so.* /usr/lib/
 RUN mkdir -p /go/bin
-COPY --from=build /go/bin/ /go/bin/
+COPY --from=binaries /go/bin/ /go/bin/
 # default lvm config uses lvmetad and throwing below warning for all lvm tools
 # WARNING: Failed to connect to lvmetad. Falling back to device scanning.
 # So, ask lvm not to use lvmetad
