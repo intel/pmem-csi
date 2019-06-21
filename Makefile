@@ -17,6 +17,7 @@ IMPORT_PATH=github.com/intel/pmem-csi
 CMDS=pmem-csi-driver pmem-vgm pmem-ns-init
 TEST_CMDS=$(addsuffix -test,$(CMDS))
 SHELL=bash
+export PWD=$(shell pwd)
 OUTPUT_DIR=_output
 .DELETE_ON_ERROR:
 
