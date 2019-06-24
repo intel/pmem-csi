@@ -557,26 +557,46 @@ These are the steps for manual set-up of certificates:
    $ KUBCONFIG="<<your cluster kubeconfig path>> PATH="$PATH:$PWD/_work/bin" ./test/setup-ca-kubernetes.sh
 ```
 
-- **Deploy the driver to Kubernetes using DeviceMode:LVM**
+- **Deploy the driver to Kubernetes**
+
+The `deploy/kubernetes-<kubernetes version>` directory contains
+`pmem-csi*.yaml` files which can be used to deploy the driver on that
+Kubernetes version. The files in the directory with the highest
+Kubernetes version might also work for more recent Kubernetes
+releases.
+
+For each Kubernetes version, four different deployment variants are provided:
+
+   - `direct` or `lvm`: one uses DeviceMode:Direct, the other DeviceMode:LVM.
+   - `testing`: the variants with `testing` in the name enable debugging
+     features and shouldn't be used in production.
+
+All of these files use `PMEM_REGISTRY` as placeholder for the actual Docker registry
+that contains the PMEM-CSI image. This needs to be replaced as part of the command which
+deploys to Kubernetes.
+
+For example, to deploy for production with DeviceMode:LVM onto Kubernetes 1.14, use:
 
 ```sh
-    $ sed -e 's/PMEM_REGISTRY/<your registry>/' deploy/kubernetes-<kubernetes version>/pmem-csi-lvm.yaml | kubectl create -f -
+    $ sed -e 's/PMEM_REGISTRY/<your registry>/' deploy/kubernetes-1.14/pmem-csi-lvm.yaml | kubectl create -f -
 ```
 
-- **Alternatively, deploy the driver to Kubernetes using DeviceMode:Direct**
+These variants were generated with
+`[kustomize](https://github.com/kubernetes-sigs/kustomize)`. It is
+possible to customize these variants further with `kustomize`, but one
+has to use a version which supports the `--load_restrictor none` parameter.
+The `Makefile` can be used to build a suitable `kustomize`:
 
-```sh
-    $ sed -e 's/PMEM_REGISTRY/<your registry>/' deploy/kubernetes-<kubernetes version>/pmem-csi-direct.yaml | kubectl create -f -
+``` sh
+    $ make kustomize # builds the binary and re-generates .yaml files
+    ...
+    go get sigs.k8s.io/kustomize@e42933ec54ce9a65f65e125a1ccf482927f0e515 && \
+    go build -o /work/gopath/src/github.com/intel/pmem-csi/_work/kustomize-e42933ec54ce9a65f65e125a1ccf482927f0e515 sigs.k8s.io/kustomize
+    ...
+    $ _work/kustomize build --load_restrictor none deploy/kustomize/kubernetes-1.14-lvm |
+      sed -e 's/PMEM_REGISTRY/<your registry>/' |
+      kubectl create -f -
 ```
-
-The deployment yaml file uses the registry address for the QEMU test cluster
-setup (see below). When deploying on a real cluster, some registry
-that can be accessed by that cluster has to be used.
-If the Docker registry runs on the local development
-host, then the `sed` command which replaces the Docker registry is not needed.
-The `deploy` directory contains one directory or symlink for each
-tested Kubernetes release. The most recent one might also work on
-future, currently untested releases.
 
 - **Wait until all pods reach 'Running' status**
 
