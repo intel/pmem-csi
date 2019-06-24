@@ -511,6 +511,8 @@ machines, see the ["QEMU and Kubernetes"](#qemu-and-kubernetes) section below.
 - **Make sure that the alpha feature gates CSINodeInfo and CSIDriverRegistry are enabled**
 
 The method to configure alpha feature gates may vary, depending on the Kubernetes deployment.
+It may not be necessary anymore when the feature has reached beta state, which depends
+on the Kubernetes version.
 
 - **Label the cluster nodes that provide persistent memory device(s)**
 
