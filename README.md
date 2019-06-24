@@ -620,7 +620,10 @@ The command output must indicate that every node with PMEM has these two labels:
 pmem-csi.intel.com/node=<NODE-NAME>,storage=pmem
 ```
 
-If **storage=pmem** is missing, label manually as described above. If **pmem-csi.intel.com/node** is missing, then double-check that the alpha feature gates are enabled and the CSI driver is running.
+If **storage=pmem** is missing, label manually as described above. If
+**pmem-csi.intel.com/node** is missing, then double-check that the
+alpha feature gates are enabled, that the CSI driver is running on the node,
+and that the driver's log output doesn't contain errors.
 
 - **Define two storage classes using the driver**
 
