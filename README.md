@@ -354,14 +354,14 @@ example. This
 illustrates how a cache volume gets provisioned in Kubernetes using
 PMEM-CSI driver.
 
-**NOTE**: Cache volumes are local to node not pod. If two pods using
-the same cache volume runs on the same node, will not get their own
-local volume, instead they endup sharing the same PMEM
-volume. Applications has to consider this and use available Kubernetes
+**NOTE**: Cache volumes are associated with a node, not a pod. Multiple
+pods using the same cache volume on the same node will not get their
+own instance but will end up sharing the same PMEM volume instead.
+Application deployment has to consider this and use available Kubernetes
 mechanisms like [node
-anti-affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity)
-while deploying. Check with provided [cache
-application](deploy/kubernetes-1.13/pmem-app-cache.yaml) example.
+anti-affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity).
+Check with the provided [cache
+application](deploy/common/pmem-app-cache.yaml) example.
 
 **WARNING**: late binding (`volumeBindingMode:WaitForFirstConsume`) has some caveats:
 * Kubernetes does not consider available PMEM capacity on a node while scheduling the application.
