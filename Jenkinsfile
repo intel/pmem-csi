@@ -60,7 +60,6 @@ pipeline {
             options {
 
                 timeout(time: 20, unit: "MINUTES")
-                retry(3)
 
             }
 
@@ -115,6 +114,7 @@ pipeline {
                 stage('1.14 LVM') {
                     options {
                         timeout(time: 90, unit: "MINUTES")
+                        retry(2)
                     }
                     environment {
                         CLUSTER = "clear-1-14-lvm"
@@ -144,6 +144,7 @@ pipeline {
                 stage('1.14 direct') {
                     options {
                         timeout(time: 90, unit: "MINUTES")
+                        retry(2)
                     }
                     environment {
                         CLUSTER = "clear-1-14-direct"
@@ -174,6 +175,7 @@ pipeline {
                 stage('1.13 LVM') {
                     options {
                         timeout(time: 90, unit: "MINUTES")
+                        retry(2)
                     }
                     environment {
                         CLUSTER = "clear-1-13-lvm"
@@ -203,6 +205,7 @@ pipeline {
                 stage('1.13 direct') {
                     options {
                         timeout(time: 90, unit: "MINUTES")
+                        retry(2)
                     }
                     environment {
                         CLUSTER = "clear-1-13-direct"
