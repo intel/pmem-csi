@@ -139,6 +139,24 @@ pipeline {
                                 make start && cd ${env.PMEM_PATH} && \
                                 make test_e2e'"
                     }
+                    post {
+                        always {
+                            sh "docker run --rm \
+                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
+                            -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_CREATE_REGISTRY=true \
+                            -e TEST_CHECK_SIGNED_FILES=false \
+                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
+                            -v /var/run/docker.sock:/var/run/docker.sock \
+                            -v `pwd`:$PMEM_PATH \
+                            -v /usr/bin/docker:/usr/bin/docker \
+                            -v `pwd`:`pwd` \
+                            -w `pwd` \
+                            ${env.BUILD_IMAGE} \
+                            bash -c 'make stop'"
+                        }
+                    }
                 }
 
                 stage('1.14 direct') {
@@ -170,6 +188,24 @@ pipeline {
                                 make test_e2e'"
 
                     }
+                    post {
+                        always {
+                            sh "docker run --rm \
+                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
+                            -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_CREATE_REGISTRY=true \
+                            -e TEST_CHECK_SIGNED_FILES=false \
+                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
+                            -v /var/run/docker.sock:/var/run/docker.sock \
+                            -v `pwd`:$PMEM_PATH \
+                            -v /usr/bin/docker:/usr/bin/docker \
+                            -v `pwd`:`pwd` \
+                            -w `pwd` \
+                            ${env.BUILD_IMAGE} \
+                            bash -c 'make stop'"
+                        }
+                    }
                 }
 
                 stage('1.13 LVM') {
@@ -199,6 +235,24 @@ pipeline {
                             bash -c 'swupd bundle-add openssh-server &&  \
                                 make start && cd ${env.PMEM_PATH} && \
                                 make test_e2e'"
+                    }
+                    post {
+                        always {
+                            sh "docker run --rm \
+                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
+                            -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_CREATE_REGISTRY=true \
+                            -e TEST_CHECK_SIGNED_FILES=false \
+                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
+                            -v /var/run/docker.sock:/var/run/docker.sock \
+                            -v `pwd`:$PMEM_PATH \
+                            -v /usr/bin/docker:/usr/bin/docker \
+                            -v `pwd`:`pwd` \
+                            -w `pwd` \
+                            ${env.BUILD_IMAGE} \
+                            bash -c 'make stop'"
+                        }
                     }
                 }
 
@@ -230,6 +284,24 @@ pipeline {
                                 make start && cd ${env.PMEM_PATH} && \
                                 make test_e2e'"
 
+                    }
+                    post {
+                        always {
+                            sh "docker run --rm \
+                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
+                            -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_CREATE_REGISTRY=true \
+                            -e TEST_CHECK_SIGNED_FILES=false \
+                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
+                            -v /var/run/docker.sock:/var/run/docker.sock \
+                            -v `pwd`:$PMEM_PATH \
+                            -v /usr/bin/docker:/usr/bin/docker \
+                            -v `pwd`:`pwd` \
+                            -w `pwd` \
+                            ${env.BUILD_IMAGE} \
+                            bash -c 'make stop'"
+                        }
                     }
                 }
     }
