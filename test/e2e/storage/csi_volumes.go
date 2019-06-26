@@ -17,10 +17,17 @@ limitations under the License.
 package storage
 
 import (
+	"flag"
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 
+	"k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/storage/testpatterns"
@@ -93,6 +100,84 @@ var _ = Describe("PMEM Volumes", func() {
 			testsuites.DefineTestSuite(curDriver, csiTestSuites)
 		})
 	}
+
+	Context("late binding", func() {
+		var (
+			storageClassLateBindingName = "pmem-csi-sc-late-binding" // from deploy/common/pmem-storageclass-late-binding.yaml
+			claim                       v1.PersistentVolumeClaim
+		)
+		f := framework.NewDefaultFramework("latebinding")
+		BeforeEach(func() {
+			// Check whether storage class exists before trying to use it.
+			_, err := f.ClientSet.StorageV1().StorageClasses().Get(storageClassLateBindingName, metav1.GetOptions{})
+			if errors.IsNotFound(err) {
+				framework.Skipf("storage class %s not found, late binding not supported", storageClassLateBindingName)
+			}
+			framework.ExpectNoError(err, "get storage class %s", storageClassLateBindingName)
+
+			claim = v1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "pvc-",
+					Namespace:    f.Namespace.Name,
+				},
+				Spec: v1.PersistentVolumeClaimSpec{
+					AccessModes: []v1.PersistentVolumeAccessMode{
+						v1.ReadWriteOnce,
+					},
+					Resources: v1.ResourceRequirements{
+						Requests: v1.ResourceList{
+							v1.ResourceName(v1.ResourceStorage): resource.MustParse("1Mi"),
+						},
+					},
+					StorageClassName: &storageClassLateBindingName,
+				},
+			}
+		})
+
+		It("works", func() {
+			TestDynamicLateBindingProvisioning(f.ClientSet, &claim, "latebinding")
+		})
+
+		var (
+			// TODO: bump up these numbers to something higher
+			numWorkers = flag.Int("pmem.latebinding.workers", 3, "number of worker creating volumes in parallel and thus also the maximum number of volumes at any time")
+			numVolumes = flag.Int("pmem.latebinding.volumes", 30, "number of total volumes to create")
+		)
+
+		It("stress test", func() {
+			// We cannot test directly whether pod and
+			// volume were created on the same node by
+			// chance or because the code enforces it.
+			// But if it works reliably under load, then
+			// we can be reasonably sure that it works not
+			// by chance.
+			//
+			// The load here consists of n workers which
+			// create and test volumes in parallel until
+			// we've tested m volumes.
+
+			wg := sync.WaitGroup{}
+			volumes := int64(0)
+			wg.Add(*numWorkers)
+			for i := 0; i < *numWorkers; i++ {
+				i := i
+				go func() {
+					defer wg.Done()
+					defer GinkgoRecover()
+
+					for {
+						volume := atomic.AddInt64(&volumes, 1)
+						if volume > int64(*numVolumes) {
+							return
+						}
+						id := fmt.Sprintf("worker-%d-volume-%d", i, volume)
+						TestDynamicLateBindingProvisioning(f.ClientSet, &claim, id)
+					}
+				}()
+			}
+			wg.Wait()
+		})
+	})
 })
 
 type manifestDriver struct {

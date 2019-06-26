@@ -333,7 +333,7 @@ provisioned volume can be used.
   by Kubernetes. Choosing of node is depend on StorageClass
   `volumeBindingMode`. In case of `volumeBindingMode: Immediate`
   PMEM-CSI chooses a node randomly, and in case of `volumeBindingMode:
-  WaitForFirstConsumer` Kubernetes first chooses a node for scheduling
+  WaitForFirstConsumer` (also known as late binding) Kubernetes first chooses a node for scheduling
   the application, and PMEM-CSI creates the volume on that
   node. Applications which claim a normal persistent volume has to use
   `ReadOnlyOnce` access mode in its `accessModes` list. This
@@ -354,14 +354,26 @@ example. This
 illustrates how a cache volume gets provisioned in Kubernetes using
 PMEM-CSI driver.
 
-**NOTE**: Cache volumes are local to node not Pod. If two Pods using
-the same cache volume runs on the same node, will not get their own
-local volume, instead they endup sharing the same PMEM
-volume. Applications has to consider this and use available Kubernetes
+**NOTE**: Cache volumes are associated with a node, not a pod. Multiple
+pods using the same cache volume on the same node will not get their
+own instance but will end up sharing the same PMEM volume instead.
+Application deployment has to consider this and use available Kubernetes
 mechanisms like [node
-anti-affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity)
-while deploying. Check with provided [cache
-application](deploy/kubernetes-1.13/pmem-app-cache.yaml) example.
+anti-affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity).
+Check with the provided [cache
+application](deploy/common/pmem-app-cache.yaml) example.
+
+**WARNING**: late binding (`volumeBindingMode:WaitForFirstConsume`) has some caveats:
+* Kubernetes does not consider available PMEM capacity on a node while scheduling the application.
+  As a result, Kubernetes might select a node that does not have enough free PMEM space. In this case,
+  volume creation fails and the pod is stuck until enough free space becomes
+  available.
+* Late binding only works reliably on Kubernetes >=1.14. The external-provisioner v1.0.1
+  for Kubernetes 1.13 lacks the `--strict-topology` flag and might allow the PMEM-CSI
+  driver to allocate the volume on a node that is not the one where the pod is about
+  to start. When that happens, the pod is permanently stuck.
+* A node is only chosen the first time a pod starts. After that it will always restart
+  on that node, because that is where the persistent volume was created.
 
 ## Prerequisites
 

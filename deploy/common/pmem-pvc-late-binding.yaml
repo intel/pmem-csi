@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pmem-csi-pvc-late-binding
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 4Gi
+  storageClassName: pmem-csi-sc-late-binding # defined in pmem-storageclass-late-binding.yaml
