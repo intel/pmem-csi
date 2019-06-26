@@ -5,12 +5,6 @@ pipeline {
         label "pmem-csi"
     }
 
-    options {
-
-        timeout(time: 2, unit: "HOURS")
-
-    }
-
     environment {
 
         /*
