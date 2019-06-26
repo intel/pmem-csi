@@ -9,6 +9,7 @@ package pmemcsidriver
 import (
 	"fmt"
 	"strconv"
+	"sync"
 
 	"github.com/google/uuid"
 	"golang.org/x/net/context"
@@ -44,6 +45,7 @@ type nodeControllerServer struct {
 	nodeID      string
 	dm          pmdmanager.PmemDeviceManager
 	pmemVolumes map[string]*nodeVolume // map of reqID:nodeVolume
+	mutex       sync.Mutex             // lock for pmemVolumes
 }
 
 var _ csi.ControllerServer = &nodeControllerServer{}
@@ -88,6 +90,9 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 	if len(req.GetName()) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Name missing in request")
 	}
+
+	nodeVolumeMutex.LockKey(req.Name)
+	defer nodeVolumeMutex.UnlockKey(req.Name)
 
 	// We recognize eraseafter=false/true, defaulting to true
 	if params := req.GetParameters(); params != nil {
@@ -144,6 +149,8 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 			Erase:  eraseafter,
 			NsMode: nsmode,
 		}
+		cs.mutex.Lock()
+		defer cs.mutex.Unlock()
 		cs.pmemVolumes[volumeID] = vol
 		glog.V(3).Infof("CreateVolume: Record new volume as %v", *vol)
 	}
@@ -184,6 +191,8 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 		if err := cs.dm.DeleteDevice(req.VolumeId, vol.Erase); err != nil {
 			return nil, status.Errorf(codes.Internal, "Failed to delete volume: %s", err.Error())
 		}
+		cs.mutex.Lock()
+		defer cs.mutex.Unlock()
 		delete(cs.pmemVolumes, vol.ID)
 		glog.V(4).Infof("DeleteVolume: volume %s deleted", req.GetVolumeId())
 	} else {
@@ -228,6 +237,8 @@ func (cs *nodeControllerServer) ListVolumes(ctx context.Context, req *csi.ListVo
 		glog.Errorf("invalid list volumes req: %v", req)
 		return nil, err
 	}
+	cs.mutex.Lock()
+	defer cs.mutex.Unlock()
 	// List namespaces
 	var entries []*csi.ListVolumesResponse_Entry
 	for _, vol := range cs.pmemVolumes {
@@ -272,6 +283,8 @@ func (cs *nodeControllerServer) GetCapacity(ctx context.Context, req *csi.GetCap
 }
 
 func (cs *nodeControllerServer) getVolumeByID(volumeID string) *nodeVolume {
+	cs.mutex.Lock()
+	defer cs.mutex.Unlock()
 	if pmemVol, ok := cs.pmemVolumes[volumeID]; ok {
 		return pmemVol
 	}
@@ -279,6 +292,8 @@ func (cs *nodeControllerServer) getVolumeByID(volumeID string) *nodeVolume {
 }
 
 func (cs *nodeControllerServer) getVolumeByName(volumeName string) *nodeVolume {
+	cs.mutex.Lock()
+	defer cs.mutex.Unlock()
 	for _, pmemVol := range cs.pmemVolumes {
 		if pmemVol.Name == volumeName {
 			return pmemVol

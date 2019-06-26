@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"sync"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/google/uuid"
@@ -61,6 +62,7 @@ type masterController struct {
 	*DefaultControllerServer
 	rs          *registryserver.RegistryServer
 	pmemVolumes map[string]*pmemVolume //map of reqID:pmemVolume
+	mutex       sync.Mutex             // mutex for pmemVolumes
 }
 
 var _ csi.ControllerServer = &masterController{}
@@ -197,6 +199,8 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 			nodeIDs:    chosenNodes,
 			volumeType: volumeType,
 		}
+		cs.mutex.Lock()
+		defer cs.mutex.Unlock()
 		cs.pmemVolumes[volumeID] = vol
 		glog.V(3).Infof("CreateVolume: Record new volume as %v", *vol)
 	}
@@ -247,6 +251,8 @@ func (cs *masterController) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 			}
 			conn.Close() // nolint:gosec
 		}
+		cs.mutex.Lock()
+		defer cs.mutex.Unlock()
 		delete(cs.pmemVolumes, vol.id)
 		glog.V(4).Infof("DeleteVolume: volume %s deleted", req.GetVolumeId())
 	} else {
@@ -262,6 +268,8 @@ func (cs *masterController) ValidateVolumeCapabilities(ctx context.Context, req 
 	if len(req.GetVolumeId()) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Volume ID missing in request")
 	}
+	cs.mutex.Lock()
+	defer cs.mutex.Unlock()
 
 	_, found := cs.pmemVolumes[req.VolumeId]
 	if !found {
@@ -298,6 +306,9 @@ func (cs *masterController) ListVolumes(ctx context.Context, req *csi.ListVolume
 		glog.Errorf("invalid list volumes req: %v", req)
 		return nil, err
 	}
+
+	cs.mutex.Lock()
+	defer cs.mutex.Unlock()
 
 	// Copy from map into array for pagination.
 	vols := make([]*pmemVolume, 0, len(cs.pmemVolumes))
@@ -408,6 +419,8 @@ func (cs *masterController) getNodeCapacity(ctx context.Context, node registryse
 }
 
 func (cs *masterController) getVolumeByID(volumeID string) *pmemVolume {
+	cs.mutex.Lock()
+	defer cs.mutex.Unlock()
 	if pmemVol, ok := cs.pmemVolumes[volumeID]; ok {
 		return pmemVol
 	}
@@ -415,6 +428,8 @@ func (cs *masterController) getVolumeByID(volumeID string) *pmemVolume {
 }
 
 func (cs *masterController) getVolumeByName(Name string) *pmemVolume {
+	cs.mutex.Lock()
+	defer cs.mutex.Unlock()
 	for _, pmemVol := range cs.pmemVolumes {
 		if pmemVol.name == Name {
 			return pmemVol
