@@ -69,13 +69,23 @@ func (rs *RegistryServer) ConnectToNodeController(nodeId string) (*grpc.ClientCo
 	return pmemgrpc.Connect(nodeInfo.Endpoint, rs.clientTLSConfig)
 }
 
+// AddListener adds a callback for add/remove events. The list of callbacks
+// is not protected against concurrent access, therefore AddListener must be
+// called before starting to use the RegistryServer instance. Also, the callbacks
+// are called without protection against concurrent calls and thus must
+// handle any needed serialization themselves.
 func (rs *RegistryServer) AddListener(l RegistryListener) {
 	rs.listeners[l] = struct{}{}
 }
 
 func (rs *RegistryServer) RegisterController(ctx context.Context, req *registry.RegisterControllerRequest) (*registry.RegisterControllerReply, error) {
 	rs.mutex.Lock()
-	defer rs.mutex.Unlock()
+	defer func() {
+		rs.mutex.Unlock()
+		for l := range rs.listeners {
+			l.OnNodeAdded(ctx, node)
+		}
+	}()
 
 	if req.GetNodeId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Missing NodeId parameter")
@@ -93,16 +103,17 @@ func (rs *RegistryServer) RegisterController(ctx context.Context, req *registry.
 
 	rs.nodeClients[req.NodeId] = node
 
-	for l := range rs.listeners {
-		l.OnNodeAdded(ctx, node)
-	}
-
 	return &registry.RegisterControllerReply{}, nil
 }
 
 func (rs *RegistryServer) UnregisterController(ctx context.Context, req *registry.UnregisterControllerRequest) (*registry.UnregisterControllerReply, error) {
 	rs.mutex.Lock()
-	defer rs.mutex.Unlock()
+	defer func() {
+		rs.mutex.Unlock()
+		for l := range rs.listeners {
+			l.OnNodeDeleted(ctx, node)
+		}
+	}()
 
 	if req.GetNodeId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Missing NodeId parameter")
@@ -111,10 +122,6 @@ func (rs *RegistryServer) UnregisterController(ctx context.Context, req *registr
 	node, ok := rs.nodeClients[req.NodeId]
 	if !ok {
 		return nil, status.Errorf(codes.NotFound, "No entry with id '%s' found in registry", req.NodeId)
-	}
-
-	for l := range rs.listeners {
-		l.OnNodeDeleted(ctx, node)
 	}
 
 	glog.V(3).Infof("Unregistering node: %s", req.NodeId)
