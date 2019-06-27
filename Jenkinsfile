@@ -155,7 +155,7 @@ pipeline {
 
                 stage('1.14 direct') {
                     options {
-                        timeout(time: 90, unit: "MINUTES")
+                        timeout(time: 180, unit: "MINUTES")
                         retry(2)
                     }
                     environment {
@@ -254,7 +254,7 @@ pipeline {
                 stage('1.13 direct') {
                     when { not { changeRequest() } }
                     options {
-                        timeout(time: 90, unit: "MINUTES")
+                        timeout(time: 180, unit: "MINUTES")
                         retry(2)
                     }
                     environment {
