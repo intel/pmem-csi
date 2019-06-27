@@ -14,9 +14,12 @@ pipeline {
     environment {
 
         /* 29890 broke networking
-        (https://github.com/clearlinux/distribution/issues/904). We
-        need to stay on the latest known-good version. */
-        TEST_CLEAR_LINUX_VERSION = "29880"
+        (https://github.com/clearlinux/distribution/issues/904). In
+        29880, Docker forgets containers after a system restart
+        (https://github.com/clearlinux/distribution/issues/891). We
+        need to stay on the latest known-good version. The version
+        between *20 and *80 have not been tested. */
+        TEST_CLEAR_LINUX_VERSION = "29820"
 
         PMEM_PATH = "/go/src/github.com/intel/pmem-csi"
         IMAGE_VERSION = "ci-${env.BUILD_ID}"
