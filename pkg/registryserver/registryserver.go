@@ -12,17 +12,25 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/klog/glog"
+	"k8s.io/utils/keymutex"
 )
 
+// RegistryListener is an interface for registry server change listeners
+// All the callbacks are called once after updating the in-memory
+// registry data.
 type RegistryListener interface {
-	// OnNodeAdded is called by RegistryServer whenever a node controller registered.
+	// OnNodeAdded is called by RegistryServer whenever a new node controller is registered
+	// or node controller updated its endpoint.
 	OnNodeAdded(ctx context.Context, node *NodeInfo)
 	// OnNodeDeleted is called by RegistryServer whenever a node controller unregistered.
+	// Callback implementations has to note that by the time this method is called,
+	// the NodeInfo for that node have already removed from in-memory registry.
 	OnNodeDeleted(ctx context.Context, node *NodeInfo)
 }
 
 type RegistryServer struct {
 	mutex           sync.Mutex
+	rpcMutex        keymutex.KeyMutex
 	clientTLSConfig *tls.Config
 	nodeClients     map[string]*NodeInfo
 	listeners       map[RegistryListener]struct{}
@@ -37,6 +45,7 @@ type NodeInfo struct {
 
 func New(tlsConfig *tls.Config) *RegistryServer {
 	return &RegistryServer{
+		rpcMutex:        keymutex.NewHashed(-1),
 		clientTLSConfig: tlsConfig,
 		nodeClients:     map[string]*NodeInfo{},
 		listeners:       map[RegistryListener]struct{}{},
@@ -83,6 +92,10 @@ func (rs *RegistryServer) RegisterController(ctx context.Context, req *registry.
 	if req.GetEndpoint() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Missing endpoint address")
 	}
+
+	rs.rpcMutex.LockKey(req.NodeId)
+	defer rs.rpcMutex.UnlockKey(req.NodeId)
+
 	glog.V(3).Infof("Registering node: %s, endpoint: %s", req.NodeId, req.Endpoint)
 
 	node := &NodeInfo{
@@ -113,6 +126,9 @@ func (rs *RegistryServer) UnregisterController(ctx context.Context, req *registr
 	if req.GetNodeId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Missing NodeId parameter")
 	}
+
+	rs.rpcMutex.LockKey(req.NodeId)
+	defer rs.rpcMutex.UnlockKey(req.NodeId)
 
 	rs.mutex.Lock()
 	node, ok := rs.nodeClients[req.NodeId]
