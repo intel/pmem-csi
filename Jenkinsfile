@@ -154,6 +154,7 @@ pipeline {
                 }
 
                 stage('1.14 direct') {
+                    when { not { changeRequest() } }
                     options {
                         timeout(time: 180, unit: "MINUTES")
                         retry(2)
@@ -203,7 +204,6 @@ pipeline {
                 }
 
                 stage('1.13 LVM') {
-                    when { not { changeRequest() } }
                     options {
                         timeout(time: 90, unit: "MINUTES")
                         retry(2)
