@@ -105,7 +105,7 @@ pipeline {
 
              TODO: avoid cut-and-paste - all steps are identical except for the environment
             */
-                stage('1.14 LVM') {
+                stage('testing 1.14 LVM') {
                     options {
                         timeout(time: 90, unit: "MINUTES")
                         retry(2)
@@ -113,6 +113,7 @@ pipeline {
                     environment {
                         CLUSTER = "clear-1-14-lvm"
                         TEST_DEVICE_MODE = "lvm"
+                        TEST_DEPLOYMENT_MODE = "testing"
                         CLEAR_LINUX_VERSION = "${env.CLEAR_LINUX_VERSION_1_14}"
                     }
                     steps {
@@ -120,6 +121,7 @@ pipeline {
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
                             -e TEST_CHECK_SIGNED_FILES=false \
                             -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
@@ -139,6 +141,7 @@ pipeline {
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
                             -e TEST_CHECK_SIGNED_FILES=false \
                             -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
@@ -153,7 +156,7 @@ pipeline {
                     }
                 }
 
-                stage('1.14 direct') {
+                stage('testing 1.14 direct') {
                     when { not { changeRequest() } }
                     options {
                         timeout(time: 180, unit: "MINUTES")
@@ -162,6 +165,7 @@ pipeline {
                     environment {
                         CLUSTER = "clear-1-14-direct"
                         TEST_DEVICE_MODE = "direct"
+                        TEST_DEPLOYMENT_MODE = "testing"
                         CLEAR_LINUX_VERSION = "${env.CLEAR_LINUX_VERSION_1_14}"
                     }
                     steps {
@@ -169,6 +173,7 @@ pipeline {
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
                             -e TEST_CHECK_SIGNED_FILES=false \
                             -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
@@ -189,6 +194,7 @@ pipeline {
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
                             -e TEST_CHECK_SIGNED_FILES=false \
                             -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
@@ -203,7 +209,7 @@ pipeline {
                     }
                 }
 
-                stage('1.13 LVM') {
+                stage('testing 1.13 LVM') {
                     options {
                         timeout(time: 90, unit: "MINUTES")
                         retry(2)
@@ -211,6 +217,7 @@ pipeline {
                     environment {
                         CLUSTER = "clear-1-13-lvm"
                         TEST_DEVICE_MODE = "lvm"
+                        TEST_DEPLOYMENT_MODE = "testing"
                         CLEAR_LINUX_VERSION = "${env.CLEAR_LINUX_VERSION_1_13}"
                     }
                     steps {
@@ -218,6 +225,7 @@ pipeline {
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
                             -e TEST_CHECK_SIGNED_FILES=false \
                             -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
@@ -237,6 +245,7 @@ pipeline {
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
                             -e TEST_CHECK_SIGNED_FILES=false \
                             -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
@@ -251,7 +260,7 @@ pipeline {
                     }
                 }
 
-                stage('1.13 direct') {
+                stage('testing 1.13 direct') {
                     when { not { changeRequest() } }
                     options {
                         timeout(time: 180, unit: "MINUTES")
@@ -260,6 +269,7 @@ pipeline {
                     environment {
                         CLUSTER = "clear-1-13-direct"
                         TEST_DEVICE_MODE = "direct"
+                        TEST_DEPLOYMENT_MODE = "testing"
                         CLEAR_LINUX_VERSION = "${env.CLEAR_LINUX_VERSION_1_13}"
                     }
                     steps {
@@ -267,6 +277,7 @@ pipeline {
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
                             -e TEST_CHECK_SIGNED_FILES=false \
                             -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
@@ -287,6 +298,222 @@ pipeline {
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
+                            -e TEST_CREATE_REGISTRY=true \
+                            -e TEST_CHECK_SIGNED_FILES=false \
+                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
+                            -v /var/run/docker.sock:/var/run/docker.sock \
+                            -v `pwd`:$PMEM_PATH \
+                            -v /usr/bin/docker:/usr/bin/docker \
+                            -v `pwd`:`pwd` \
+                            -w `pwd` \
+                            ${env.BUILD_IMAGE} \
+                            bash -c 'make stop'"
+                        }
+                    }
+                }
+
+                /*
+                  In production we can only run E2E testing, no sanity testing.
+                  Therefore it is faster.
+                */
+
+                stage('production 1.14 LVM') {
+                    when { not { changeRequest() } }
+                    options {
+                        timeout(time: 30, unit: "MINUTES")
+                        retry(2)
+                    }
+                    environment {
+                        CLUSTER = "clear-1-14-lvm"
+                        TEST_DEVICE_MODE = "lvm"
+                        TEST_DEPLOYMENT_MODE = "production"
+                        CLEAR_LINUX_VERSION = "${env.CLEAR_LINUX_VERSION_1_14}"
+                    }
+                    steps {
+                        sh "docker run --rm \
+                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
+                            -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
+                            -e TEST_CREATE_REGISTRY=true \
+                            -e TEST_CHECK_SIGNED_FILES=false \
+                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
+                            -v /var/run/docker.sock:/var/run/docker.sock \
+                            -v `pwd`:$PMEM_PATH \
+                            -v /usr/bin/docker:/usr/bin/docker \
+                            -v `pwd`:`pwd` \
+                            -w `pwd` \
+                            ${env.BUILD_IMAGE} \
+                            bash -c 'swupd bundle-add openssh-server &&  \
+                                make start && cd ${env.PMEM_PATH} && \
+                                make test_e2e'"
+                    }
+                    post {
+                        always {
+                            sh "docker run --rm \
+                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
+                            -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
+                            -e TEST_CREATE_REGISTRY=true \
+                            -e TEST_CHECK_SIGNED_FILES=false \
+                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
+                            -v /var/run/docker.sock:/var/run/docker.sock \
+                            -v `pwd`:$PMEM_PATH \
+                            -v /usr/bin/docker:/usr/bin/docker \
+                            -v `pwd`:`pwd` \
+                            -w `pwd` \
+                            ${env.BUILD_IMAGE} \
+                            bash -c 'make stop'"
+                        }
+                    }
+                }
+
+                stage('production 1.14 direct') {
+                    when { not { changeRequest() } }
+                    options {
+                        timeout(time: 30, unit: "MINUTES")
+                        retry(2)
+                    }
+                    environment {
+                        CLUSTER = "clear-1-14-direct"
+                        TEST_DEVICE_MODE = "direct"
+                        TEST_DEPLOYMENT_MODE = "production"
+                        CLEAR_LINUX_VERSION = "${env.CLEAR_LINUX_VERSION_1_14}"
+                    }
+                    steps {
+                        sh "docker run --rm \
+                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
+                            -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
+                            -e TEST_CREATE_REGISTRY=true \
+                            -e TEST_CHECK_SIGNED_FILES=false \
+                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
+                            -v /var/run/docker.sock:/var/run/docker.sock \
+                            -v `pwd`:$PMEM_PATH \
+                            -v /usr/bin/docker:/usr/bin/docker \
+                            -v `pwd`:`pwd` \
+                            -w `pwd` \
+                            ${env.BUILD_IMAGE} \
+                            bash -c 'swupd bundle-add openssh-server &&  \
+                                make start && cd ${env.PMEM_PATH} && \
+                                make test_e2e'"
+
+                    }
+                    post {
+                        always {
+                            sh "docker run --rm \
+                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
+                            -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
+                            -e TEST_CREATE_REGISTRY=true \
+                            -e TEST_CHECK_SIGNED_FILES=false \
+                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
+                            -v /var/run/docker.sock:/var/run/docker.sock \
+                            -v `pwd`:$PMEM_PATH \
+                            -v /usr/bin/docker:/usr/bin/docker \
+                            -v `pwd`:`pwd` \
+                            -w `pwd` \
+                            ${env.BUILD_IMAGE} \
+                            bash -c 'make stop'"
+                        }
+                    }
+                }
+
+                stage('production 1.13 LVM') {
+                    when { not { changeRequest() } }
+                    options {
+                        timeout(time: 30, unit: "MINUTES")
+                        retry(2)
+                    }
+                    environment {
+                        CLUSTER = "clear-1-13-lvm"
+                        TEST_DEVICE_MODE = "lvm"
+                        TEST_DEPLOYMENT_MODE = "production"
+                        CLEAR_LINUX_VERSION = "${env.CLEAR_LINUX_VERSION_1_13}"
+                    }
+                    steps {
+                        sh "docker run --rm \
+                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
+                            -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
+                            -e TEST_CREATE_REGISTRY=true \
+                            -e TEST_CHECK_SIGNED_FILES=false \
+                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
+                            -v /var/run/docker.sock:/var/run/docker.sock \
+                            -v `pwd`:$PMEM_PATH \
+                            -v /usr/bin/docker:/usr/bin/docker \
+                            -v `pwd`:`pwd` \
+                            -w `pwd` \
+                            ${env.BUILD_IMAGE} \
+                            bash -c 'swupd bundle-add openssh-server &&  \
+                                make start && cd ${env.PMEM_PATH} && \
+                                make test_e2e'"
+                    }
+                    post {
+                        always {
+                            sh "docker run --rm \
+                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
+                            -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
+                            -e TEST_CREATE_REGISTRY=true \
+                            -e TEST_CHECK_SIGNED_FILES=false \
+                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
+                            -v /var/run/docker.sock:/var/run/docker.sock \
+                            -v `pwd`:$PMEM_PATH \
+                            -v /usr/bin/docker:/usr/bin/docker \
+                            -v `pwd`:`pwd` \
+                            -w `pwd` \
+                            ${env.BUILD_IMAGE} \
+                            bash -c 'make stop'"
+                        }
+                    }
+                }
+
+                stage('production 1.13 direct') {
+                    when { not { changeRequest() } }
+                    options {
+                        timeout(time: 30, unit: "MINUTES")
+                        retry(2)
+                    }
+                    environment {
+                        CLUSTER = "clear-1-13-direct"
+                        TEST_DEVICE_MODE = "direct"
+                        TEST_DEPLOYMENT_MODE = "production"
+                        CLEAR_LINUX_VERSION = "${env.CLEAR_LINUX_VERSION_1_13}"
+                    }
+                    steps {
+                        sh "docker run --rm \
+                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
+                            -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
+                            -e TEST_CREATE_REGISTRY=true \
+                            -e TEST_CHECK_SIGNED_FILES=false \
+                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
+                            -v /var/run/docker.sock:/var/run/docker.sock \
+                            -v `pwd`:$PMEM_PATH \
+                            -v /usr/bin/docker:/usr/bin/docker \
+                            -v `pwd`:`pwd` \
+                            -w `pwd` \
+                            ${env.BUILD_IMAGE} \
+                            bash -c 'swupd bundle-add openssh-server &&  \
+                                make start && cd ${env.PMEM_PATH} && \
+                                make test_e2e'"
+
+                    }
+                    post {
+                        always {
+                            sh "docker run --rm \
+                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
+                            -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
+                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
                             -e TEST_CHECK_SIGNED_FILES=false \
                             -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
