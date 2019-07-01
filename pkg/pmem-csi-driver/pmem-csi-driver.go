@@ -19,9 +19,11 @@ import (
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
+	pmemstate "github.com/intel/pmem-csi/pkg/pmem-state"
 	"github.com/intel/pmem-csi/pkg/registryserver"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/status"
 	"k8s.io/klog/glog"
 )
@@ -54,6 +56,9 @@ type Config struct {
 	NodeID string
 	//Endpoint exported csi driver endpoint
 	Endpoint string
+	//TestEndpoint adds the controller service to the server listening on Endpoint.
+	//Only needed for testing.
+	TestEndpoint bool
 	//Mode mode fo the driver
 	Mode DriverMode
 	//RegistryEndpoint exported registry server endpoint
@@ -72,6 +77,8 @@ type Config struct {
 	ControllerEndpoint string
 	//DeviceManager device manager to use
 	DeviceManager string
+	//Directory where to persist the node driver state
+	StateBasePath string
 	//Version driver release version
 	Version string
 }
@@ -102,6 +109,10 @@ func GetPMEMDriver(cfg Config) (*pmemDriver, error) {
 	}
 	if cfg.ControllerEndpoint == "" {
 		cfg.ControllerEndpoint = cfg.Endpoint
+	}
+
+	if cfg.Mode == Node && cfg.StateBasePath == "" {
+		cfg.StateBasePath = "/var/lib/" + cfg.DriverName
 	}
 
 	peerName := "pmem-registry"
@@ -175,8 +186,12 @@ func (pmemd *pmemDriver) Run() error {
 		if err != nil {
 			return err
 		}
+		sm, err := pmemstate.NewFileState(pmemd.cfg.StateBasePath)
+		if err != nil {
+			return err
+		}
+		cs := NewNodeControllerServer(pmemd.cfg.NodeID, dm, sm)
 		ns := NewNodeServer(pmemd.cfg.NodeID, dm)
-		cs := NewNodeControllerServer(pmemd.cfg.NodeID, dm)
 
 		if pmemd.cfg.Endpoint != pmemd.cfg.ControllerEndpoint {
 			if err := s.Start(pmemd.cfg.ControllerEndpoint, pmemd.serverTLSConfig, cs); err != nil {
@@ -185,7 +200,11 @@ func (pmemd *pmemDriver) Run() error {
 			if err := pmemd.registerNodeController(); err != nil {
 				return err
 			}
-			if err := s.Start(pmemd.cfg.Endpoint, nil, ids, ns); err != nil {
+			services := []PmemService{ids, ns}
+			if pmemd.cfg.TestEndpoint {
+				services = append(services, cs)
+			}
+			if err := s.Start(pmemd.cfg.Endpoint, nil, services...); err != nil {
 				return err
 			}
 		} else {
@@ -216,14 +235,9 @@ func (pmemd *pmemDriver) registerNodeController() error {
 	var err error
 	var conn *grpc.ClientConn
 
-	req := registry.RegisterControllerRequest{
-		NodeId:   pmemd.cfg.NodeID,
-		Endpoint: pmemd.cfg.ControllerEndpoint,
-	}
-
 	for {
 		glog.V(3).Infof("Connecting to registry server at: %s\n", pmemd.cfg.RegistryEndpoint)
-		conn, err = pmemgrpc.Connect(pmemd.cfg.RegistryEndpoint, pmemd.clientTLSConfig, connectionTimeout)
+		conn, err = pmemgrpc.Connect(pmemd.cfg.RegistryEndpoint, pmemd.clientTLSConfig)
 		if err == nil {
 			break
 		}
@@ -231,12 +245,51 @@ func (pmemd *pmemDriver) registerNodeController() error {
 		time.Sleep(retryTimeout)
 	}
 
-	client := registry.NewRegistryClient(conn)
+	req := &registry.RegisterControllerRequest{
+		NodeId:   pmemd.cfg.NodeID,
+		Endpoint: pmemd.cfg.ControllerEndpoint,
+	}
+
+	if err := register(context.Background(), conn, req); err != nil {
+		return err
+	}
+	go waitAndWatchConnection(conn, req)
+
+	return nil
+}
+
+// waitAndWatchConnection Keeps watching for connection changes, and whenever the
+// connection state changed from lost to ready, it re-register the node controller with registry server.
+func waitAndWatchConnection(conn *grpc.ClientConn, req *registry.RegisterControllerRequest) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	connectionLost := false
+
+	for {
+		s := conn.GetState()
+		if s == connectivity.Ready {
+			if connectionLost {
+				glog.Info("ReConnected.")
+				if err := register(ctx, conn, req); err != nil {
+					glog.Warning(err)
+				}
+			}
+		} else {
+			connectionLost = true
+			glog.Info("Connection state: ", s)
+		}
+		conn.WaitForStateChange(ctx, s)
+	}
+}
+
+// register Tries to register with RegistryServer in endless loop till,
+// either the registration succeeds or RegisterController() returns only possible InvalidArgument error.
+func register(ctx context.Context, conn *grpc.ClientConn, req *registry.RegisterControllerRequest) error {
+	client := registry.NewRegistryClient(conn)
 	for {
 		glog.V(3).Info("Registering controller...")
-		if _, err = client.RegisterController(ctx, &req); err != nil {
+		if _, err := client.RegisterController(ctx, req); err != nil {
 			if s, ok := status.FromError(err); ok && s.Code() == codes.InvalidArgument {
 				return fmt.Errorf("Registration failed: %s", s.Message())
 			}

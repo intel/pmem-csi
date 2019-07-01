@@ -18,12 +18,15 @@ package e2e
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/onsi/ginkgo"
 	"github.com/onsi/gomega"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/pkg/version"
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/framework/ginkgowrapper"
@@ -106,6 +109,8 @@ var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 	podlogs.CopyAllLogs(ctx, c, "default", to)
 	podlogs.WatchPods(ctx, c, "default", ginkgo.GinkgoWriter)
 
+	WaitForPMEMDriver(c)
+
 	dc := c.DiscoveryClient
 
 	serverVersion, serverErr := dc.ServerVersion()
@@ -143,4 +148,59 @@ func RunE2ETests(t *testing.T) {
 	// TODO: with "ginkgo ./test/e2e" we shouldn't get verbose output, but somehow we do.
 	gomega.RegisterFailHandler(ginkgowrapper.Fail)
 	ginkgo.RunSpecs(t, "PMEM E2E suite")
+}
+
+// WaitForPMEMDriver ensures that the PMEM-CSI driver is ready for use.
+//
+// A relatively simple check is to check the nodes: if all nodes with
+// "storage: pmem" also have a PMEM-CSI entry in the
+// "csi.volume.kubernetes.io/nodeid" annotation, then kubelet has found
+// the driver, which in turn implies that the node has been registered
+// with the PMEM-CSI controller, because the node driver only makes
+// its csi.sock available after that.
+//
+// There's just one loophole: the annotation might be from a previous
+// successful registration of the driver. For a fresh cluster as in the CI
+// the check should be good enough.
+func WaitForPMEMDriver(c clientset.Interface) {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	deadline, cancel := context.WithTimeout(context.Background(), framework.TestContext.SystemDaemonsetStartupTimeout)
+	defer cancel()
+
+	ready := func() bool {
+		nodes, err := c.CoreV1().Nodes().List(metav1.ListOptions{})
+		if err != nil {
+			framework.Failf("get nodes: %s", err)
+		}
+		var notReady []string
+		for _, node := range nodes.Items {
+			if node.Labels["storage"] == "pmem" &&
+				// Strictly speaking we would have to parse the annotation value (a JSON map),
+				// but a substring search should be good enough.
+				!strings.Contains(node.Annotations["csi.volume.kubernetes.io/nodeid"], `"pmem-csi.intel.com"`) {
+				notReady = append(notReady, node.Name)
+			}
+		}
+		if notReady == nil {
+			// All ready.
+			return true
+		}
+		framework.Logf("WARNING: PMEM-CSI not ready yet on some nodes: %s", strings.Join(notReady, ", "))
+		return false
+	}
+
+	if ready() {
+		return
+	}
+	for {
+		select {
+		case <-ticker.C:
+			if ready() {
+				return
+			}
+		case <-deadline.Done():
+			framework.Failf("giving up waiting for PMEM-CSI to start up, check the previous warnings and log output")
+		}
+	}
 }

@@ -70,7 +70,7 @@ var _ = Describe("pmem registry", func() {
 		tlsConfig, err = pmemgrpc.LoadClientTLS(caFile, nodeCertFile, nodeCertKey, "pmem-registry")
 		Expect(err).NotTo(HaveOccurred())
 
-		registryClientConn, err = pmemgrpc.Connect(registryServerEndpoint, tlsConfig, 10*time.Second)
+		registryClientConn, err = pmemgrpc.Connect(registryServerEndpoint, tlsConfig)
 		Expect(err).NotTo(HaveOccurred())
 		registryClient = registry.NewRegistryClient(registryClientConn)
 	})
@@ -136,7 +136,7 @@ var _ = Describe("pmem registry", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			_, err := registryClient.UnregisterController(ctx, &unregisterReq)
-			Expect(err.Error()).To(ContainSubstring("No entry with id '" + nodeId + "' found in registry"))
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 
@@ -169,7 +169,7 @@ var _ = Describe("pmem registry", func() {
 			It(c.name, func() {
 				tlsConfig, err := pmemgrpc.LoadClientTLS(c.ca, c.cert, c.key, c.peerName)
 				Expect(err).NotTo(HaveOccurred())
-				clientConn, err := pmemgrpc.Connect(registryServerEndpoint, tlsConfig, 10*time.Second)
+				clientConn, err := pmemgrpc.Connect(registryServerEndpoint, tlsConfig)
 				Expect(err).NotTo(HaveOccurred())
 				client := registry.NewRegistryClient(clientConn)
 

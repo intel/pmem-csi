@@ -15,11 +15,11 @@ patchesJson6902:
     version: v1
     kind: StatefulSet
     name: pmem-csi-controller
-  path: ../testing/loglevel5-two-containers-patch.yaml
+  path: ../testing/args-two-containers-patch.yaml
 
 - target:
     group: apps
     version: v1beta2
     kind: DaemonSet
     name: pmem-csi-node
-  path: ../testing/loglevel5-two-containers-patch.yaml
+  path: ../testing/args-two-containers-patch.yaml

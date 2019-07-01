@@ -33,6 +33,7 @@ import (
 
 func init() {
 	klog.SetOutput(GinkgoWriter)
+	klog.InitFlags(flag.CommandLine)
 
 	// Skip slow or distruptive tests by default.
 	flag.Set("ginkgo.skip", `\[Slow|Disruptive\]`)
