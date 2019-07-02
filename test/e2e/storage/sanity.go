@@ -19,12 +19,15 @@ package storage
 import (
 	"bytes"
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -33,6 +36,7 @@ import (
 	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -139,17 +143,19 @@ var _ = Describe("sanity", func() {
 
 	var _ = sanity.DescribeSanity("pmem csi", func(sc *sanity.SanityContext) {
 		var (
-			cl      *sanity.Cleanup
+			// TODO: upstream mutex locking and use sanity.Cleanup again
+			cl      *Cleanup
 			nc      csi.NodeClient
 			cc, ncc csi.ControllerClient
 			nodeID  string
+			v       volume
 		)
 
 		BeforeEach(func() {
 			nc = csi.NewNodeClient(sc.Conn)
 			cc = csi.NewControllerClient(sc.ControllerConn)
 			ncc = csi.NewControllerClient(sc.Conn) // This works because PMEM-CSI exposes the node, controller, and ID server via its csi.sock.
-			cl = &sanity.Cleanup{
+			cl = &Cleanup{
 				Context:                    sc,
 				NodeClient:                 nc,
 				ControllerClient:           cc,
@@ -161,6 +167,14 @@ var _ = Describe("sanity", func() {
 				&csi.NodeGetInfoRequest{})
 			framework.ExpectNoError(err, "get node ID")
 			nodeID = nid.GetNodeId()
+			v = volume{
+				namePrefix: "unset",
+				ctx:        context.Background(),
+				sc:         sc,
+				cc:         cc,
+				nc:         nc,
+				cl:         cl,
+			}
 		})
 
 		AfterEach(func() {
@@ -169,14 +183,14 @@ var _ = Describe("sanity", func() {
 
 		It("stores state across reboots for single volume", func() {
 			execOnTestNode("sync")
-			namePrefix := "state-volume"
+			v.namePrefix = "state-volume"
 
 			// We intentionally check the state of the controller on the node here.
 			// The master caches volumes and does not get rebooted.
 			initialVolumes, err := ncc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
 			framework.ExpectNoError(err, "list volumes")
 
-			volName, vol := createVolume(cc, sc, cl, namePrefix, 11*1024*1024, nodeID)
+			volName, vol := v.create(11*1024*1024, nodeID)
 			createdVolumes, err := ncc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
 			framework.ExpectNoError(err, "Failed to list volumes after reboot")
 			Expect(createdVolumes.Entries).To(HaveLen(len(initialVolumes.Entries)+1), "one more volume on : %s", nodeID)
@@ -189,16 +203,16 @@ var _ = Describe("sanity", func() {
 			framework.ExpectNoError(err, "Failed to list volumes after reboot")
 			Expect(restartedVolumes.Entries).To(ConsistOf(createdVolumes.Entries), "same volumes as before node reboot")
 
-			deleteVolume(cc, vol, volName, cl)
+			v.remove(vol, volName)
 		})
 
 		It("can mount again after reboot", func() {
 			execOnTestNode("sync")
-			namePrefix := "mount-volume"
+			v.namePrefix = "mount-volume"
 
-			name, vol := createVolume(cc, sc, cl, namePrefix, 22*1024*1024, nodeID)
+			name, vol := v.create(22*1024*1024, nodeID)
 			// Publish for the second time.
-			nodeID := publishVolume(cc, nc, sc, cl, name, vol)
+			nodeID := v.publish(name, vol)
 
 			// Restart.
 			restartNode(f.ClientSet, nodeID, sc)
@@ -207,15 +221,13 @@ var _ = Describe("sanity", func() {
 			framework.ExpectNoError(err, "Failed to list volumes after reboot")
 
 			// No failure, is already unpublished.
-			// TODO: In practice this fails with "no mount point specified".
-
-			unpublishVolume(cc, nc, sc, vol, nodeID)
+			v.unpublish(vol, nodeID)
 
 			// Publish for the second time.
-			publishVolume(cc, nc, sc, cl, name, vol)
+			v.publish(name, vol)
 
-			unpublishVolume(cc, nc, sc, vol, nodeID)
-			deleteVolume(cc, vol, name, cl)
+			v.unpublish(vol, nodeID)
+			v.remove(vol, name)
 		})
 
 		It("capacity is restored after controller restart", func() {
@@ -234,6 +246,72 @@ var _ = Describe("sanity", func() {
 				}
 				return currentCapacity.AvailableCapacity
 			}, "3m", "5s").Should(Equal(capacity.AvailableCapacity), "total capacity after controller restart")
+		})
+
+		var (
+			numWorkers = flag.Int("pmem.sanity.workers", 10, "number of worker creating volumes in parallel and thus also the maximum number of volumes at any time")
+			numVolumes = flag.Int("pmem.sanity.volumes", 100, "number of total volumes to create")
+			volumeSize = flag.String("pmem.sanity.volume-size", "15Mi", "size of each volume")
+		)
+		It("stress test", func() {
+			// The load here consists of n workers which
+			// create and test volumes in parallel until
+			// we've created m volumes.
+			wg := sync.WaitGroup{}
+			volumes := int64(0)
+			volSize, err := resource.ParseQuantity(*volumeSize)
+			framework.ExpectNoError(err, "parsing pmem.sanity.volume-size parameter value %s", *volumeSize)
+			wg.Add(*numWorkers)
+			By(fmt.Sprintf("creating %d volumes of size %s in %d workers", *numVolumes, volSize.String(), *numWorkers))
+			for i := 0; i < *numWorkers; i++ {
+				i := i
+				go func() {
+
+					// Order is relevant (first-in-last-out): when returning,
+					// we first let GinkgoRecover do its job, which
+					// may include marking the test as failed, then tell the
+					// parent goroutine that it can proceed.
+					defer func() {
+						By(fmt.Sprintf("worker-%d terminating", i))
+						wg.Done()
+					}()
+
+					// Each worker must use its own pair of directories.
+					targetPath := fmt.Sprintf("%s/worker-%d", sc.TargetPath, i)
+					stagingPath := fmt.Sprintf("%s/worker-%d", sc.StagingPath, i)
+					execOnTestNode("mkdir", targetPath)
+					defer execOnTestNode("rmdir", targetPath)
+					execOnTestNode("mkdir", stagingPath)
+					defer execOnTestNode("rmdir", stagingPath)
+
+					defer GinkgoRecover() // must be invoked directly by defer, otherwise it doesn't see the panic
+
+					for {
+						volume := atomic.AddInt64(&volumes, 1)
+						if volume > int64(*numVolumes) {
+							return
+						}
+
+						lv := v
+						lv.namePrefix = fmt.Sprintf("worker-%d-volume-%d", i, volume)
+						lv.targetPath = targetPath
+						lv.stagingPath = stagingPath
+						// Constant time plus variable component for shredding.
+						secondsPerGigabyte := 2 * time.Second // Measured for direct mode in a VM, may vary.
+						ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second+time.Duration(volSize.Value()/1024/1024/1024)*secondsPerGigabyte)
+						func() {
+							defer cancel()
+							lv.ctx = ctx
+							volName, vol := lv.create(volSize.Value(), nodeID)
+							lv.publish(volName, vol)
+							lv.unpublish(vol, nodeID)
+							lv.remove(vol, volName)
+							By(fmt.Sprintf("%s: done", lv.namePrefix))
+						}()
+					}
+				}()
+			}
+			wg.Wait()
 		})
 
 		Context("cluster", func() {
@@ -272,13 +350,15 @@ var _ = Describe("sanity", func() {
 			})
 
 			It("supports cache volumes", func() {
+				v.namePrefix = "cache"
+
 				// Create a cache volume with as many instances as nodes.
 				sc.Config.TestVolumeParameters = map[string]string{
 					"persistencyModel": "cache",
 					"cacheSize":        fmt.Sprintf("%d", len(nodes)),
 				}
 				sizeInBytes := int64(33 * 1024 * 1024)
-				volName, vol := createVolume(cc, sc, cl, "cache", sizeInBytes, "")
+				volName, vol := v.create(sizeInBytes, "")
 				sc.Config.TestVolumeParameters = map[string]string{}
 				var expectedTopology []*csi.Topology
 				// These node names are sorted.
@@ -312,7 +392,7 @@ var _ = Describe("sanity", func() {
 					}
 				}
 
-				deleteVolume(cc, vol, volName, cl)
+				v.remove(vol, volName)
 
 				// Now those volumes are gone again.
 				for i, node := range nodes {
@@ -374,12 +454,38 @@ func getDaemonSet(cs clientset.Interface, setName string) *appsv1.DaemonSet {
 	return set
 }
 
-func createVolume(s csi.ControllerClient, sc *sanity.SanityContext, cl *sanity.Cleanup, namePrefix string, sizeInBytes int64, nodeID string) (string, *csi.Volume) {
+type volume struct {
+	namePrefix  string
+	ctx         context.Context
+	sc          *sanity.SanityContext
+	cc          csi.ControllerClient
+	nc          csi.NodeClient
+	cl          *Cleanup
+	stagingPath string
+	targetPath  string
+}
+
+func (v volume) getStagingPath() string {
+	if v.stagingPath != "" {
+		return v.stagingPath
+	}
+	return v.sc.StagingPath
+}
+
+func (v volume) getTargetPath() string {
+	if v.targetPath != "" {
+		return v.targetPath
+	}
+	return v.sc.TargetPath
+}
+
+func (v volume) create(sizeInBytes int64, nodeID string) (string, *csi.Volume) {
 	var err error
-	name := sanity.UniqueString(namePrefix)
+	name := sanity.UniqueString(v.namePrefix)
 
 	// Create Volume First
-	By("creating a single node writer volume")
+	create := fmt.Sprintf("%s: creating a single node writer volume", v.namePrefix)
+	By(create)
 	req := &csi.CreateVolumeRequest{
 		Name: name,
 		VolumeCapabilities: []*csi.VolumeCapability{
@@ -395,7 +501,7 @@ func createVolume(s csi.ControllerClient, sc *sanity.SanityContext, cl *sanity.C
 		CapacityRange: &csi.CapacityRange{
 			RequiredBytes: sizeInBytes,
 		},
-		Parameters: sc.Config.TestVolumeParameters,
+		Parameters: v.sc.Config.TestVolumeParameters,
 	}
 	if nodeID != "" {
 		req.AccessibilityRequirements = &csi.TopologyRequirement{
@@ -415,36 +521,35 @@ func createVolume(s csi.ControllerClient, sc *sanity.SanityContext, cl *sanity.C
 			},
 		}
 	}
-	vol, err := s.CreateVolume(
-		context.Background(), req,
+	vol, err := v.cc.CreateVolume(
+		v.ctx, req,
 	)
-	framework.ExpectNoError(err, "create volume")
+	v.cl.MaybeRegisterVolume(name, vol, err)
+	framework.ExpectNoError(err, create)
 	Expect(vol).NotTo(BeNil())
 	Expect(vol.GetVolume()).NotTo(BeNil())
 	Expect(vol.GetVolume().GetVolumeId()).NotTo(BeEmpty())
 	Expect(vol.GetVolume().GetCapacityBytes()).To(Equal(sizeInBytes), "volume capacity")
-	cl.RegisterVolume(name, sanity.VolumeInfo{VolumeID: vol.GetVolume().GetVolumeId()})
 
 	return name, vol.GetVolume()
 }
 
-func publishVolume(s csi.ControllerClient, c csi.NodeClient, sc *sanity.SanityContext, cl *sanity.Cleanup, name string, vol *csi.Volume) string {
+func (v volume) publish(name string, vol *csi.Volume) string {
 	var err error
 
-	By("getting a node id")
-	nid, err := c.NodeGetInfo(
-		context.Background(),
+	By(fmt.Sprintf("%s: getting a node id", v.namePrefix))
+	nid, err := v.nc.NodeGetInfo(
+		v.ctx,
 		&csi.NodeGetInfoRequest{})
 	framework.ExpectNoError(err, "get node ID")
 	Expect(nid).NotTo(BeNil())
 	Expect(nid.GetNodeId()).NotTo(BeEmpty())
 
 	var conpubvol *csi.ControllerPublishVolumeResponse
-	By("controller publishing volume")
-
-	By("node staging volume")
-	nodestagevol, err := c.NodeStageVolume(
-		context.Background(),
+	stage := fmt.Sprintf("%s: node staging volume", v.namePrefix)
+	By(stage)
+	nodestagevol, err := v.nc.NodeStageVolume(
+		v.ctx,
 		&csi.NodeStageVolumeRequest{
 			VolumeId: vol.GetVolumeId(),
 			VolumeCapability: &csi.VolumeCapability{
@@ -455,22 +560,23 @@ func publishVolume(s csi.ControllerClient, c csi.NodeClient, sc *sanity.SanityCo
 					Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
 				},
 			},
-			StagingTargetPath: sc.StagingPath,
+			StagingTargetPath: v.getStagingPath(),
 			VolumeContext:     vol.GetVolumeContext(),
 			PublishContext:    conpubvol.GetPublishContext(),
 		},
 	)
-	framework.ExpectNoError(err, "node stage volume")
+	framework.ExpectNoError(err, stage)
 	Expect(nodestagevol).NotTo(BeNil())
 
 	// NodePublishVolume
-	By("publishing the volume on a node")
-	nodepubvol, err := c.NodePublishVolume(
-		context.Background(),
+	publish := fmt.Sprintf("%s: publishing the volume on a node", v.namePrefix)
+	By(publish)
+	nodepubvol, err := v.nc.NodePublishVolume(
+		v.ctx,
 		&csi.NodePublishVolumeRequest{
 			VolumeId:          vol.GetVolumeId(),
-			TargetPath:        sc.TargetPath + "/target",
-			StagingTargetPath: sc.StagingPath,
+			TargetPath:        v.getTargetPath() + "/target",
+			StagingTargetPath: v.getStagingPath(),
 			VolumeCapability: &csi.VolumeCapability{
 				AccessType: &csi.VolumeCapability_Mount{
 					Mount: &csi.VolumeCapability_MountVolume{},
@@ -483,53 +589,53 @@ func publishVolume(s csi.ControllerClient, c csi.NodeClient, sc *sanity.SanityCo
 			PublishContext: conpubvol.GetPublishContext(),
 		},
 	)
-	framework.ExpectNoError(err, "node publish volume")
+	framework.ExpectNoError(err, publish)
 	Expect(nodepubvol).NotTo(BeNil())
 
 	return nid.GetNodeId()
 }
 
-func unpublishVolume(s csi.ControllerClient, c csi.NodeClient, sc *sanity.SanityContext, vol *csi.Volume, nodeID string) {
+func (v volume) unpublish(vol *csi.Volume, nodeID string) {
 	var err error
 
-	By("cleaning up calling nodeunpublish")
-	nodeunpubvol, err := c.NodeUnpublishVolume(
-		context.Background(),
+	unpublish := fmt.Sprintf("%s: cleaning up calling nodeunpublish", v.namePrefix)
+	By(unpublish)
+	nodeunpubvol, err := v.nc.NodeUnpublishVolume(
+		v.ctx,
 		&csi.NodeUnpublishVolumeRequest{
 			VolumeId:   vol.GetVolumeId(),
-			TargetPath: sc.TargetPath + "/target",
+			TargetPath: v.getTargetPath() + "/target",
 		})
-	framework.ExpectNoError(err, "node unpublish volume")
+	framework.ExpectNoError(err, unpublish)
 	Expect(nodeunpubvol).NotTo(BeNil())
 
-	By("cleaning up calling nodeunstage")
-	nodeunstagevol, err := c.NodeUnstageVolume(
-		context.Background(),
+	unstage := fmt.Sprintf("%s: cleaning up calling nodeunstage", v.namePrefix)
+	By(unstage)
+	nodeunstagevol, err := v.nc.NodeUnstageVolume(
+		v.ctx,
 		&csi.NodeUnstageVolumeRequest{
 			VolumeId:          vol.GetVolumeId(),
-			StagingTargetPath: sc.StagingPath,
+			StagingTargetPath: v.getStagingPath(),
 		},
 	)
-	framework.ExpectNoError(err, "node unstage volume")
+	framework.ExpectNoError(err, unstage)
 	Expect(nodeunstagevol).NotTo(BeNil())
 }
 
-func deleteVolume(s csi.ControllerClient, vol *csi.Volume, volName string, cl *sanity.Cleanup) {
+func (v volume) remove(vol *csi.Volume, volName string) {
 	var err error
 
-	By("Deleting the volume: " + vol.GetVolumeId())
-	_, err = s.DeleteVolume(
-		context.Background(),
+	delete := fmt.Sprintf("%s: deleting the volume %s", v.namePrefix, vol.GetVolumeId())
+	By(delete)
+	_, err = v.cc.DeleteVolume(
+		v.ctx,
 		&csi.DeleteVolumeRequest{
 			VolumeId: vol.GetVolumeId(),
 		},
 	)
-	if err != nil {
-		By("Deleting volume  " + vol.GetVolumeId() + " reply: " + err.Error())
-	}
 
-	cl.UnregisterVolume(volName)
-	framework.ExpectNoError(err, "delete volume %s", vol.GetVolumeId())
+	v.cl.UnregisterVolume(volName)
+	framework.ExpectNoError(err, delete)
 }
 
 // restartNode works only for one of the nodes in the QEMU virtual cluster.
