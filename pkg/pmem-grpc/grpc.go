@@ -12,6 +12,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/resolver"
 	"k8s.io/klog/glog"
 
@@ -41,6 +42,11 @@ func Connect(endpoint string, tlsConfig *tls.Config) (*grpc.ClientConn, error) {
 	} else if proto == "unix" {
 		dialOptions = append(dialOptions, grpc.WithDialer(unixDialer))
 	}
+	// This is necessary when connecting via TCP and does not hurt
+	// when using Unix domain sockets. It ensures that gRPC detects a dead connection
+	// in a timely manner.
+	// Code lifted from https://github.com/kubernetes-csi/csi-test/commit/6b8830bf5959a1c51c6e98fe514b22818b51eeeb
+	dialOptions = append(dialOptions, grpc.WithKeepaliveParams(keepalive.ClientParameters{PermitWithoutStream: true}))
 
 	return grpc.Dial(address, dialOptions...)
 

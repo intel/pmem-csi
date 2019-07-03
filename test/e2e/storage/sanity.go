@@ -45,7 +45,7 @@ import (
 )
 
 var (
-	cleanup              func()
+	cleanup func()
 )
 
 // Run the csi-test sanity tests against a pmem-csi driver
@@ -523,12 +523,14 @@ func deleteVolume(s csi.ControllerClient, vol *csi.Volume, volName string, cl *s
 	framework.ExpectNoError(err, "delete volume %s", vol.GetVolumeId())
 }
 
-//var unreachable = v1.Taint{Key: "node.kubernetes.io/unreachable", Effect: "NoSchedule"}
-
 // restartNode works only for one of the nodes in the QEMU virtual cluster.
 // It does a hard poweroff via SysRq and relies on Docker to restart the
 // "failed" node.
 func restartNode(cs clientset.Interface, nodeID string, sc *sanity.SanityContext) {
+	cc := csi.NewControllerClient(sc.ControllerConn)
+	capacity, err := cc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
+	framework.ExpectNoError(err, "get capacity before restart")
+
 	if !regexp.MustCompile(`worker\d+$`).MatchString(nodeID) {
 		framework.Skipf("node %q not one of the expected QEMU nodes (worker<number>))", nodeID)
 	}
@@ -564,25 +566,24 @@ sudo sh -c 'echo b > /proc/sysrq-trigger'`)
 		return false
 	}, "5m", "1s").Should(Equal(true), "node up again")
 
-	By("node reboot success!")
+	By("Node reboot success! Waiting for driver restore connections")
+	Eventually(func() int64 {
+		currentCapacity, err := cc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
+		if err != nil {
+			// Probably not running again yet.
+			return 0
+		}
+		return currentCapacity.AvailableCapacity
+	}, "3m", "2s").Should(Equal(capacity.AvailableCapacity), "total capacity after node restart")
+
+	By("Probing node")
 	Eventually(func() bool {
-		By("Node driver: Probing...")
 		if _, err := csi.NewIdentityClient(sc.Conn).Probe(context.Background(), &csi.ProbeRequest{}); err != nil {
 			return false
 		}
 		By("Node driver: Probe success")
 		return true
 	}, "5m", "2s").Should(Equal(true), "node driver not ready")
-
-	Eventually(func() bool {
-		By("Controller driver: Probing...")
-		_, err := csi.NewIdentityClient(sc.ControllerConn).Probe(context.Background(), &csi.ProbeRequest{})
-		if err != nil {
-			return false
-		}
-		By("Controller driver: Probe success")
-		return true
-	}, "5m", "2s").Should(Equal(true), "controller driver not ready")
 }
 
 // restartControllerNode determines where the PMEM-CSI controller runs, then restarts
