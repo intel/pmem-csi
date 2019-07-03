@@ -13,8 +13,17 @@ KUBECTL="${KUBECTL:-${WORK_DIRECTORY}/ssh-${CLUSTER} kubectl}"
 KUBERNETES_VERSION="$(${KUBECTL} version --short | grep 'Server Version' | \
         sed -e 's/.*: v\([0-9]*\)\.\([0-9]*\)\..*/\1.\2/')"
 DEPLOYMENT_DIRECTORY="${REPO_DIRECTORY}/deploy/kubernetes-$KUBERNETES_VERSION"
+case ${TEST_DEPLOYMENTMODE} in
+    testing)
+        deployment_suffix="-testing";;
+    production)
+        deployment_suffix="";;
+    *)
+        echo >&2 "invalid TEST_DEPLOYMENTMODE: ${TEST_DEPLOYMENTMODE}"
+        exit 1
+esac
 DEPLOYMENT_FILES=(
-    pmem-csi-${TEST_DEVICEMODE}-testing.yaml
+    pmem-csi-${TEST_DEVICEMODE}${deployment_suffix}.yaml
     pmem-storageclass-ext4.yaml
     pmem-storageclass-xfs.yaml
     pmem-storageclass-cache.yaml
