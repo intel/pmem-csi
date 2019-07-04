@@ -58,8 +58,10 @@ func FlushDevice(dev PmemDeviceInfo, blocks uint64) error {
 	}
 	if blocks == 0 {
 		glog.V(5).Infof("Wiping entire device: %s", dev.Path)
-		// use one iteration instead of shred's default=3 for speed
-		if _, err := pmemexec.RunCommand("shred", "-n", "1", dev.Path); err != nil {
+		// Use one iteration instead of shred's default=3 for speed.
+		// Use "NoMutex" variant because shred takes long time on bigger volumes,
+		// and regular RunCommand uses mutex always.
+		if _, err := pmemexec.RunCommandNoMutex("shred", "-n", "1", dev.Path); err != nil {
 			return fmt.Errorf("device shred failure: %v", err.Error())
 		}
 	} else {

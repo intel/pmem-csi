@@ -136,6 +136,8 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		options = append(options, "ro")
 	}
 	glog.V(5).Infof("NodePublishVolume: bind-mount %s %s", stagingtargetPath, targetPath)
+	pmemexec.Commandmutex.Lock()
+	defer pmemexec.Commandmutex.Unlock()
 	mounter := mount.New("")
 	if err := mounter.Mount(stagingtargetPath, targetPath, "", options); err != nil {
 		return nil, err
@@ -162,6 +164,8 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 
 	// Unmounting the image
 	glog.V(3).Infof("NodeUnpublishVolume: unmount %s", targetPath)
+	pmemexec.Commandmutex.Lock()
+	defer pmemexec.Commandmutex.Unlock()
 	// Check if the target path is really a mount point. If its not a mount point do nothing
 	if notMnt, err := mount.New("").IsLikelyNotMountPoint(targetPath); notMnt || err != nil && !os.IsNotExist(err) {
 		return &csi.NodeUnpublishVolumeResponse{}, nil
@@ -323,6 +327,8 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	}
 
 	// Find out device name for mounted path
+	pmemexec.Commandmutex.Lock()
+	defer pmemexec.Commandmutex.Unlock()
 	mounter := mount.New("")
 	mountedDev, _, err := mount.GetDeviceNameFromMount(mounter, stagingtargetPath)
 	if err != nil {
