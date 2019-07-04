@@ -13,7 +13,6 @@ ARG SWUPD_UPDATE_ARG=
 # - ndctl installed
 FROM ${CLEAR_LINUX_BASE} AS build
 
-ARG VERSION="unknown"
 ARG NDCTL_VERSION="65"
 ARG NDCTL_CONFIGFLAGS="--libdir=/usr/lib64 --disable-docs --without-systemd --without-bash"
 ARG NDCTL_BUILD_DEPS="os-core-dev devpkg-util-linux devpkg-kmod devpkg-json-c"
@@ -42,6 +41,7 @@ RUN ldconfig
 FROM build as binaries
 
 # build pmem-csi-driver
+ARG VERSION="unknown"
 ADD . /go/src/github.com/intel/pmem-csi
 ENV GOPATH=/go
 ENV PKG_CONFIG_PATH=/usr/lib/pkgconfig/
