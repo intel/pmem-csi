@@ -64,6 +64,7 @@ var _ = Describe("sanity", func() {
 
 	f := framework.NewDefaultFramework("pmem")
 	f.SkipNamespaceCreation = true // We don't need a per-test namespace and skipping it makes the tests run faster.
+	var execOnTestNode func(args ...string) string
 
 	BeforeEach(func() {
 		cs := f.ClientSet
@@ -94,7 +95,7 @@ var _ = Describe("sanity", func() {
 		// any node, what matters is the service port.
 		config.ControllerAddress = fmt.Sprintf("dns:///%s:%d", host, getServicePort(cs, "pmem-csi-controller-testing"))
 
-		exec := func(args ...string) string {
+		execOnTestNode = func(args ...string) string {
 			// Wait for socat pod on that node. We need it for
 			// creating directories.  We could use the PMEM-CSI
 			// node container, but that then forces us to have
@@ -117,10 +118,10 @@ var _ = Describe("sanity", func() {
 			return stdout
 		}
 		mkdir := func(path string) (string, error) {
-			return exec("mktemp", "-d", path), nil
+			return execOnTestNode("mktemp", "-d", path), nil
 		}
 		rmdir := func(path string) error {
-			exec("rmdir", path)
+			execOnTestNode("rmdir", path)
 			return nil
 		}
 
@@ -167,6 +168,7 @@ var _ = Describe("sanity", func() {
 		})
 
 		It("stores state across reboots for single volume", func() {
+			execOnTestNode("sync")
 			namePrefix := "state-volume"
 
 			// We intentionally check the state of the controller on the node here.
@@ -191,6 +193,7 @@ var _ = Describe("sanity", func() {
 		})
 
 		It("can mount again after reboot", func() {
+			execOnTestNode("sync")
 			namePrefix := "mount-volume"
 
 			name, vol := createVolume(cc, sc, cl, namePrefix, 22*1024*1024, nodeID)
@@ -216,6 +219,7 @@ var _ = Describe("sanity", func() {
 		})
 
 		It("capacity is restored after controller restart", func() {
+			execOnTestNode("sync")
 			capacity, err := cc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
 			framework.ExpectNoError(err, "get capacity before restart")
 
