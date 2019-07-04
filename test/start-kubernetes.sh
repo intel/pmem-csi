@@ -88,7 +88,7 @@ function download_image() (
                          -inform DER \
                          -content "${CLOUD_IMAGE}-SHA512SUMS" \
                          -CAfile "ClearLinuxRoot.pem"; then
-                        cat <<EOF
+                        cat >&2 <<EOF
 Image verification failed, see error above.
 
 "unsupported certificate purpose" is a known issue caused by an incompatible openssl
