@@ -288,13 +288,13 @@ func (cs *masterController) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 		for node := range vol.nodeIDs {
 			conn, err := cs.rs.ConnectToNodeController(node)
 			if err != nil {
-				glog.Warningf("Failed to connect to node controller:%s, stale volume(%s) on %s should be cleaned manually", err.Error(), vol.id, node)
+				return nil, status.Error(codes.Internal, "Failed to connect to node "+node+": "+err.Error())
 			}
+			defer conn.Close() // nolint:errcheck
 
 			if _, err := csi.NewControllerClient(conn).DeleteVolume(ctx, req); err != nil {
-				glog.Warningf("Failed to delete volume %s on %s: %s", vol.id, node, err.Error())
+				return nil, status.Error(codes.Internal, "Failed to delete volume "+vol.id+" on "+node+": "+err.Error())
 			}
-			conn.Close() // nolint:gosec
 		}
 		cs.mutex.Lock()
 		defer cs.mutex.Unlock()
