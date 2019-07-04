@@ -66,7 +66,7 @@ test: build
 
 # Build production binaries.
 $(CMDS):
-	GOOS=linux go build -ldflags '-X main.version=${VERSION}' -a -o ${OUTPUT_DIR}/$@ ./cmd/$@
+	GOOS=linux go build -ldflags '-X github.com/intel/pmem-csi/pkg/$@.version=${VERSION}' -a -o ${OUTPUT_DIR}/$@ ./cmd/$@
 
 # Build a test binary that can be used instead of the normal one with
 # additional "-run" parameters. In contrast to the normal it then also
