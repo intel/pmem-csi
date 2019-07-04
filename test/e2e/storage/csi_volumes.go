@@ -17,6 +17,7 @@ limitations under the License.
 package storage
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"strings"
@@ -30,6 +31,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/kubernetes/test/e2e/framework"
+	"k8s.io/kubernetes/test/e2e/framework/podlogs"
 	"k8s.io/kubernetes/test/e2e/storage/testpatterns"
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
 	"k8s.io/kubernetes/test/e2e/storage/utils"
@@ -157,6 +159,17 @@ var _ = Describe("PMEM Volumes", func() {
 			// The load here consists of n workers which
 			// create and test volumes in parallel until
 			// we've tested m volumes.
+
+			// Because this test creates a lot of pods, it is useful to
+			// log their progress.
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			to := podlogs.LogOutput{
+				StatusWriter: GinkgoWriter,
+				LogWriter:    GinkgoWriter,
+			}
+			podlogs.CopyAllLogs(ctx, f.ClientSet, f.Namespace.Name, to)
+			podlogs.WatchPods(ctx, f.ClientSet, f.Namespace.Name, GinkgoWriter)
 
 			wg := sync.WaitGroup{}
 			volumes := int64(0)
