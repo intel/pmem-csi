@@ -266,7 +266,7 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 			}
 		}
 	} else {
-		glog.V(3).Infof("Volume %s not found in driver cache.", req.VolumeId)
+		return &csi.DeleteVolumeResponse{}, nil
 	}
 
 	if err := cs.dm.DeleteDevice(req.VolumeId, eraseafter); err != nil {
