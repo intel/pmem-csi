@@ -2,14 +2,14 @@ package pmdmanager
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"sync"
+	"time"
 
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 	"k8s.io/klog/glog"
 	"k8s.io/utils/keymutex"
-	"os"
-	"strconv"
-	"time"
 )
 
 const (
@@ -43,6 +43,8 @@ func ClearDevice(device PmemDeviceInfo, flush bool) error {
 }
 
 func FlushDevice(dev PmemDeviceInfo, blocks uint64) error {
+	volumeMutex.LockKey(dev.Name)
+	defer volumeMutex.UnlockKey(dev.Name)
 	// erase data on block device.
 	// zero number of blocks causes overwriting whole device with random data.
 	// nonzero number of blocks clears blocks*1024 bytes.

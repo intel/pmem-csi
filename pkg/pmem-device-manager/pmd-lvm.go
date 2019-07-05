@@ -12,6 +12,7 @@ import (
 
 type pmemLvm struct {
 	volumeGroups []string
+	devices      map[string]PmemDeviceInfo
 }
 
 var _ PmemDeviceManager = &pmemLvm{}
@@ -22,6 +23,9 @@ var vgsArgs = []string{"--noheadings", "--nosuffix", "-o", "vg_name,vg_size,vg_f
 // The pre-requisite for this manager is that all the pmem regions which should be managed by
 // this LMV manager are devided into namespaces and grouped as volume groups.
 func NewPmemDeviceManagerLVM() (PmemDeviceManager, error) {
+	devicemutex.Lock()
+	defer devicemutex.Unlock()
+
 	ctx, err := ndctl.NewContext()
 	if err != nil {
 		return nil, fmt.Errorf("Failed to initialize pmem context: %s", err.Error())
@@ -42,8 +46,14 @@ func NewPmemDeviceManagerLVM() (PmemDeviceManager, error) {
 	}
 	ctx.Free()
 
+	devices, err := listDevices(volumeGroups...)
+	if err != nil {
+		return nil, err
+	}
+
 	return &pmemLvm{
 		volumeGroups: volumeGroups,
+		devices:      devices,
 	}, nil
 }
 
@@ -55,22 +65,9 @@ type vgInfo struct {
 }
 
 func (lvm *pmemLvm) GetCapacity() (map[string]uint64, error) {
-	capacity := map[string]uint64{}
-	nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
-	for _, nsmod := range nsmodes {
-		vgs, err := getVolumeGroups(lvm.volumeGroups, string(nsmod))
-		if err != nil {
-			return nil, err
-		}
-
-		for _, vg := range vgs {
-			if vg.free > capacity[string(nsmod)] {
-				capacity[string(nsmod)] = vg.free
-			}
-		}
-	}
-
-	return capacity, nil
+	devicemutex.Lock()
+	defer devicemutex.Unlock()
+	return lvm.getCapacity()
 }
 
 // nsmode is expected to be either "fsdax" or "sector"
@@ -85,10 +82,9 @@ func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error 
 	// this function is asked to create new devices repeatedly, forcing running out of space.
 	// Avoid device filling with garbage entries by returning error.
 	// Overall, no point having more than one namespace with same name.
-	_, err := lvm.GetDevice(name)
+	_, err := lvm.getDevice(name)
 	if err == nil {
-		glog.V(4).Infof("Device with name: %s already exists, refuse to create another", name)
-		return fmt.Errorf("CreateDevice: Failed: namespace with that name exists")
+		return fmt.Errorf("CreateDevice: Failed: namespace with that name '%s' exists", name)
 	}
 	// pick a region, few possible strategies:
 	// 1. pick first with enough available space: simplest, regions get filled in order;
@@ -117,7 +113,7 @@ func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error 
 				glog.V(3).Infof("lvcreate failed with error: %v, trying for next free region", err)
 			} else {
 				// clear start of device to avoid old data being recognized as file system
-				device, err := lvm.GetDevice(name)
+				device, err := getUncachedDevice(name, vg.name)
 				if err != nil {
 					return err
 				}
@@ -129,6 +125,9 @@ func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error 
 				if err != nil {
 					return err
 				}
+
+				lvm.devices[device.Name] = device
+
 				return nil
 			}
 		}
@@ -137,45 +136,75 @@ func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error 
 }
 
 func (lvm *pmemLvm) DeleteDevice(name string, flush bool) error {
-	volumeMutex.LockKey(name)
-	defer volumeMutex.UnlockKey(name)
-	device, err := lvm.GetDevice(name)
+	devicemutex.Lock()
+	defer devicemutex.Unlock()
+
+	device, err := lvm.getDevice(name)
 	if err != nil {
 		return err
 	}
-	err = ClearDevice(device, flush)
-	if err != nil {
+	if err := ClearDevice(device, flush); err != nil {
 		return err
 	}
+
 	_, err = pmemexec.RunCommand("lvremove", "-fy", device.Path)
 	return err
 }
 
 func (lvm *pmemLvm) FlushDeviceData(name string) error {
-	volumeMutex.LockKey(name)
-	defer volumeMutex.UnlockKey(name)
-	device, err := lvm.GetDevice(name)
+	devicemutex.Lock()
+	defer devicemutex.Unlock()
+
+	device, err := lvm.getDevice(name)
 	if err != nil {
 		return err
 	}
+
 	return ClearDevice(device, true)
 }
 
+func (lvm *pmemLvm) ListDevices() ([]PmemDeviceInfo, error) {
+	devicemutex.Lock()
+	defer devicemutex.Unlock()
+
+	devices := []PmemDeviceInfo{}
+	for _, dev := range lvm.devices {
+		devices = append(devices, dev)
+	}
+
+	return devices, nil
+}
+
 func (lvm *pmemLvm) GetDevice(id string) (PmemDeviceInfo, error) {
-	devices, err := lvm.ListDevices()
+	devicemutex.Lock()
+	defer devicemutex.Unlock()
+
+	return lvm.getDevice(id)
+}
+
+func (lvm *pmemLvm) getDevice(id string) (PmemDeviceInfo, error) {
+	if dev, ok := lvm.devices[id]; ok {
+		return dev, nil
+	}
+
+	return PmemDeviceInfo{}, fmt.Errorf("Device not found with name %s", id)
+}
+
+func getUncachedDevice(id string, volumeGroup string) (PmemDeviceInfo, error) {
+	devices, err := listDevices(volumeGroup)
 	if err != nil {
 		return PmemDeviceInfo{}, err
 	}
-	for _, dev := range devices {
-		if dev.Name == id {
-			return dev, nil
-		}
+
+	if dev, ok := devices[id]; ok {
+		return dev, nil
 	}
 	return PmemDeviceInfo{}, fmt.Errorf("Device not found with name %s", id)
 }
 
-func (lvm *pmemLvm) ListDevices() ([]PmemDeviceInfo, error) {
-	args := append(lvsArgs, lvm.volumeGroups...)
+// listDevices Lists available logical devices in given volume groups
+func listDevices(volumeGroups ...string) (map[string]PmemDeviceInfo, error) {
+	args := append(lvsArgs, volumeGroups...)
 	output, err := pmemexec.RunCommand("lvs", args...)
 	if err != nil {
 		return nil, fmt.Errorf("list volumes failed : %s(lvs output: %s)", err.Error(), output)
@@ -188,8 +217,8 @@ func vgName(bus *ndctl.Bus, region *ndctl.Region, nsmode ndctl.NamespaceMode) st
 }
 
 //lvs options "lv_name,lv_path,lv_size,lv_free"
-func parseLVSOuput(output string) ([]PmemDeviceInfo, error) {
-	devices := []PmemDeviceInfo{}
+func parseLVSOuput(output string) (map[string]PmemDeviceInfo, error) {
+	devices := map[string]PmemDeviceInfo{}
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
 		fields := strings.Fields(strings.TrimSpace(line))
@@ -202,10 +231,29 @@ func parseLVSOuput(output string) ([]PmemDeviceInfo, error) {
 		dev.Path = fields[1]
 		dev.Size, _ = strconv.ParseUint(fields[2], 10, 64)
 
-		devices = append(devices, dev)
+		devices[dev.Name] = dev
 	}
 
 	return devices, nil
+}
+
+func (lvm *pmemLvm) getCapacity() (map[string]uint64, error) {
+	capacity := map[string]uint64{}
+	nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
+	for _, nsmod := range nsmodes {
+		vgs, err := getVolumeGroups(lvm.volumeGroups, string(nsmod))
+		if err != nil {
+			return nil, err
+		}
+
+		for _, vg := range vgs {
+			if vg.free > capacity[string(nsmod)] {
+				capacity[string(nsmod)] = vg.free
+			}
+		}
+	}
+
+	return capacity, nil
 }
 
 func getVolumeGroups(groups []string, wantedTag string) ([]vgInfo, error) {
