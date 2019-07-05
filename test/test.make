@@ -111,7 +111,7 @@ RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 	REPO_ROOT=`pwd` \
 	CLUSTER=$(CLUSTER) \
 	TEST_DEPLOYMENTMODE=$(shell source test/test-config.sh; echo $$TEST_DEPLOYMENTMODE) \
-	go test -count=1 -timeout 0 -v ./test/e2e -ginkgo.skip='$(subst $(space),|,$(TEST_E22_SKIP))'
+	go test -count=1 -timeout 0 -v ./test/e2e -ginkgo.skip='$(subst $(space),|,$(TEST_E22_SKIP))' -ginkgo.focus='sanity.*stress.test' -pmem.sanity.workers=1
 test_e2e: start
 	$(RUN_E2E)
 
