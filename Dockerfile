@@ -81,7 +81,8 @@ COPY --from=binaries /go/bin/ /go/bin/
 # WARNING: Failed to connect to lvmetad. Falling back to device scanning.
 # So, ask lvm not to use lvmetad
 RUN mkdir -p /etc/lvm
-RUN echo "global { use_lvmetad = 0 }" >> /etc/lvm/lvm.conf
+RUN echo "global { use_lvmetad = 0 }" >> /etc/lvm/lvm.conf && \
+    echo "activation { udev_sync = 0 udev_rules = 0 }" >> /etc/lvm/lvm.conf
 
 ENV LD_LIBRARY_PATH=/usr/lib
 ENTRYPOINT ["/go/bin/pmem-csi-driver"]
