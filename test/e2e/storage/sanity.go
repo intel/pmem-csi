@@ -182,6 +182,8 @@ var _ = Describe("sanity", func() {
 		})
 
 		It("stores state across reboots for single volume", func() {
+			canRestartNode(nodeID)
+
 			execOnTestNode("sync")
 			v.namePrefix = "state-volume"
 
@@ -207,6 +209,7 @@ var _ = Describe("sanity", func() {
 		})
 
 		It("can mount again after reboot", func() {
+			canRestartNode(nodeID)
 			execOnTestNode("sync")
 			v.namePrefix = "mount-volume"
 
@@ -231,11 +234,22 @@ var _ = Describe("sanity", func() {
 		})
 
 		It("capacity is restored after controller restart", func() {
+			By("Fetching pmem-csi-controller pod name")
+			pods, err := WaitForPodsWithLabelRunningReady(f.ClientSet, "default",
+				labels.Set{"app": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, time.Minute)
+			framework.ExpectNoError(err, "PMEM-CSI controller running with one replica")
+			controllerNode := pods.Items[0].Spec.NodeName
+			canRestartNode(controllerNode)
+
 			execOnTestNode("sync")
 			capacity, err := cc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
 			framework.ExpectNoError(err, "get capacity before restart")
 
-			restartControllerNode(f, sc)
+			restartNode(f.ClientSet, controllerNode, sc)
+
+			_, err = WaitForPodsWithLabelRunningReady(f.ClientSet, "default",
+				labels.Set{"app": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, 5*time.Minute)
+			framework.ExpectNoError(err, "PMEM-CSI controller running again with one replica")
 
 			By("waiting for full capacity")
 			Eventually(func() int64 {
@@ -638,6 +652,12 @@ func (v volume) remove(vol *csi.Volume, volName string) {
 	framework.ExpectNoError(err, delete)
 }
 
+func canRestartNode(nodeID string) {
+	if !regexp.MustCompile(`worker\d+$`).MatchString(nodeID) {
+		framework.Skipf("node %q not one of the expected QEMU nodes (worker<number>))", nodeID)
+	}
+}
+
 // restartNode works only for one of the nodes in the QEMU virtual cluster.
 // It does a hard poweroff via SysRq and relies on Docker to restart the
 // "failed" node.
@@ -646,9 +666,6 @@ func restartNode(cs clientset.Interface, nodeID string, sc *sanity.SanityContext
 	capacity, err := cc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
 	framework.ExpectNoError(err, "get capacity before restart")
 
-	if !regexp.MustCompile(`worker\d+$`).MatchString(nodeID) {
-		framework.Skipf("node %q not one of the expected QEMU nodes (worker<number>))", nodeID)
-	}
 	node := strings.Split(nodeID, "worker")[1]
 	ssh := fmt.Sprintf("%s/_work/%s/ssh.%s",
 		os.Getenv("REPO_ROOT"),
@@ -699,21 +716,6 @@ sudo sh -c 'echo b > /proc/sysrq-trigger'`)
 		By("Node driver: Probe success")
 		return true
 	}, "5m", "2s").Should(Equal(true), "node driver not ready")
-}
-
-// restartControllerNode determines where the PMEM-CSI controller runs, then restarts
-// that node.
-func restartControllerNode(f *framework.Framework, sc *sanity.SanityContext) {
-	By("Fetching pmem-csi-controller pod name")
-	pods, err := WaitForPodsWithLabelRunningReady(f.ClientSet, "default",
-		labels.Set{"app": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, time.Minute)
-	framework.ExpectNoError(err, "PMEM-CSI controller running with one replica")
-	node := pods.Items[0].Spec.NodeName
-	By(fmt.Sprintf("restarting controller node %s", node))
-	restartNode(f.ClientSet, node, sc)
-	_, err = WaitForPodsWithLabelRunningReady(f.ClientSet, "default",
-		labels.Set{"app": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, 5*time.Minute)
-	framework.ExpectNoError(err, "PMEM-CSI controller running again with one replica")
 }
 
 // This is a copy from framework/utils.go with the fix from https://github.com/kubernetes/kubernetes/pull/78687
