@@ -29,8 +29,10 @@ const (
 // All-device mutex i.e. global in driver context:
 var devicemutex = &sync.Mutex{}
 
-// Finer-grain mutexes used by name:
-var volumeMutex = keymutex.NewHashed(-1)
+// flushVolumeMutex is used to avoid concurrent calls to flush a device.
+// this is internal to FlushDevice(), so device managers are not allowed to
+// access this mutex.
+var flushVolumeMutex = keymutex.NewHashed(-1)
 
 func ClearDevice(device PmemDeviceInfo, flush bool) error {
 	glog.V(4).Infof("ClearDevice: path: %v flush:%v", device.Path, flush)
@@ -44,8 +46,8 @@ func ClearDevice(device PmemDeviceInfo, flush bool) error {
 }
 
 func FlushDevice(dev PmemDeviceInfo, blocks uint64) error {
-	volumeMutex.LockKey(dev.Name)
-	defer volumeMutex.UnlockKey(dev.Name)
+	flushVolumeMutex.LockKey(dev.Name)
+	defer flushVolumeMutex.UnlockKey(dev.Name)
 	// erase data on block device.
 	// zero number of blocks causes overwriting whole device with random data.
 	// nonzero number of blocks clears blocks*1024 bytes.
