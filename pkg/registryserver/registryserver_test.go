@@ -2,6 +2,7 @@ package registryserver_test
 
 import (
 	"crypto/tls"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -46,11 +47,13 @@ var _ = Describe("pmem registry", func() {
 		nbServer           *pmemcsidriver.NonBlockingGRPCServer
 		registryClientConn *grpc.ClientConn
 		registryClient     registry.RegistryClient
-		registryServer     = registryserver.New(nil)
+		registryServer     *registryserver.RegistryServer
 	)
 
 	BeforeEach(func() {
 		var err error
+
+		registryServer = registryserver.New(nil)
 
 		caFile := os.ExpandEnv("${TEST_WORK}/pmem-ca/ca.pem")
 		certFile := os.ExpandEnv("${TEST_WORK}/pmem-ca/pmem-registry.pem")
@@ -111,6 +114,22 @@ var _ = Describe("pmem registry", func() {
 
 			_, err = registryServer.GetNodeController(nodeId)
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Registration should fail", func() {
+			Expect(registryClient).ShouldNot(BeNil())
+
+			l := listener{}
+
+			registryServer.AddListener(l)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_, err := registryClient.RegisterController(ctx, &registerReq)
+			Expect(err).To(HaveOccurred())
+
+			_, err = registryServer.GetNodeController(nodeId)
+			Expect(err).To(HaveOccurred())
 		})
 
 		It("Unregister node controller", func() {
@@ -186,3 +205,12 @@ var _ = Describe("pmem registry", func() {
 	})
 
 })
+
+type listener struct{}
+
+func (l listener) OnNodeAdded(ctx context.Context, node *registryserver.NodeInfo) error {
+	return fmt.Errorf("failed")
+}
+
+func (l listener) OnNodeDeleted(ctx context.Context, node *registryserver.NodeInfo) {
+}
