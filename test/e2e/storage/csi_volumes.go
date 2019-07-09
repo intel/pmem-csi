@@ -139,12 +139,14 @@ var _ = Describe("PMEM Volumes", func() {
 		})
 
 		var (
-			// TODO: bump up these numbers to something higher
-			numWorkers = flag.Int("pmem.latebinding.workers", 3, "number of worker creating volumes in parallel and thus also the maximum number of volumes at any time")
-			numVolumes = flag.Int("pmem.latebinding.volumes", 30, "number of total volumes to create")
+			numWorkers = flag.Int("pmem.latebinding.workers", 10, "number of worker creating volumes in parallel and thus also the maximum number of volumes at any time")
+			numVolumes = flag.Int("pmem.latebinding.volumes", 100, "number of total volumes to create")
 		)
 
-		It("stress test", func() {
+		// This test is pending because pod startup itself failed
+		// occasionally for reasons that are out of our control
+		// (https://github.com/clearlinux/distribution/issues/966).
+		PIt("stress test", func() {
 			// We cannot test directly whether pod and
 			// volume were created on the same node by
 			// chance or because the code enforces it.
