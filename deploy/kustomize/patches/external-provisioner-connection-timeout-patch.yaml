@@ -1,0 +1,4 @@
+# Add -connection-timeout to external-controller in second container.
+- op: add
+  path: /spec/template/spec/containers/1/args/0
+  value: "--connection-timeout=5m"
