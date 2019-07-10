@@ -280,7 +280,6 @@ var _ = Describe("sanity", func() {
 			for i := 0; i < *numWorkers; i++ {
 				i := i
 				go func() {
-
 					// Order is relevant (first-in-last-out): when returning,
 					// we first let GinkgoRecover do its job, which
 					// may include marking the test as failed, then tell the
@@ -289,6 +288,7 @@ var _ = Describe("sanity", func() {
 						By(fmt.Sprintf("worker-%d terminating", i))
 						wg.Done()
 					}()
+					defer GinkgoRecover() // must be invoked directly by defer, otherwise it doesn't see the panic
 
 					// Each worker must use its own pair of directories.
 					targetPath := fmt.Sprintf("%s/worker-%d", sc.TargetPath, i)
@@ -297,8 +297,6 @@ var _ = Describe("sanity", func() {
 					defer execOnTestNode("rmdir", targetPath)
 					execOnTestNode("mkdir", stagingPath)
 					defer execOnTestNode("rmdir", stagingPath)
-
-					defer GinkgoRecover() // must be invoked directly by defer, otherwise it doesn't see the panic
 
 					for {
 						volume := atomic.AddInt64(&volumes, 1)
