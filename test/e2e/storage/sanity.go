@@ -672,9 +672,9 @@ func restartNode(cs clientset.Interface, nodeID string, sc *sanity.SanityContext
 		os.Getenv("CLUSTER"),
 		node)
 	// We detect a successful reboot because a temporary file in the
-	// tmpfs /tmp will be gone after the reboot.
-	out, err := exec.Command(ssh, "touch", "/tmp/delete-me").CombinedOutput()
-	framework.ExpectNoError(err, "%s touch /tmp/delete-me:\n%s", ssh, string(out))
+	// tmpfs /run will be gone after the reboot.
+	out, err := exec.Command(ssh, "sudo", "touch", "/run/delete-me").CombinedOutput()
+	framework.ExpectNoError(err, "%s touch /run/delete-me:\n%s", ssh, string(out))
 
 	// Shutdown via SysRq b (https://major.io/2009/01/29/linux-emergency-reboot-or-shutdown-with-magic-commands/).
 	// TCPKeepAlive is necessary because otherwise ssh can hang for a long time when the remote end dies without
@@ -689,12 +689,12 @@ sudo sh -c 'echo b > /proc/sysrq-trigger'`)
 	By("waiting for node to restart")
 	Eventually(func() bool {
 		test := exec.Command(ssh)
-		test.Stdin = bytes.NewBufferString("test ! -e /tmp/delete-me")
+		test.Stdin = bytes.NewBufferString("test ! -e /run/delete-me")
 		out, err := test.CombinedOutput()
 		if err == nil {
 			return true
 		}
-		framework.Logf("test for /tmp/delete-me with %s:\n%s\n%s", ssh, err, out)
+		framework.Logf("test for /run/delete-me with %s:\n%s\n%s", ssh, err, out)
 		return false
 	}, "5m", "1s").Should(Equal(true), "node up again")
 
