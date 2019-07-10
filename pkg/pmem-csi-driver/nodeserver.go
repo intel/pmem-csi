@@ -160,13 +160,14 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	volumeMutex.LockKey(volumeID)
 	defer volumeMutex.UnlockKey(volumeID)
 
-	// Unmounting the image
-	glog.V(3).Infof("NodeUnpublishVolume: unmount %s", targetPath)
 	// Check if the target path is really a mount point. If its not a mount point do nothing
 	if notMnt, err := mount.New("").IsLikelyNotMountPoint(targetPath); notMnt || err != nil && !os.IsNotExist(err) {
+		glog.V(5).Infof("NodeUnpublishVolume: %s is not mount point, skip", targetPath)
 		return &csi.NodeUnpublishVolumeResponse{}, nil
 	}
 
+	// Unmounting the image
+	glog.V(3).Infof("NodeUnpublishVolume: unmount %s", targetPath)
 	err := mount.New("").Unmount(targetPath)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
