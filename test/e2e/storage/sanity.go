@@ -309,7 +309,15 @@ var _ = Describe("sanity", func() {
 			volSize, err := resource.ParseQuantity(*volumeSize)
 			framework.ExpectNoError(err, "parsing pmem.sanity.volume-size parameter value %s", *volumeSize)
 			wg.Add(*numWorkers)
-			By(fmt.Sprintf("creating %d volumes of size %s in %d workers", *numVolumes, volSize.String(), *numWorkers))
+
+			// Constant time plus variable component for shredding.
+			// When using multiple workers, they either share IO bandwidth (parallel shredding)
+			// or do it sequentially, therefore we have to multiply by the maximum number
+			// of shredding operations.
+			secondsPerGigabyte := 10 * time.Second // 2s/GB masured for direct mode in a VM on a fast machine, probably slower elsewhere
+			timeout := 300*time.Second + time.Duration(int64(*numWorkers)*volSize.Value()/1024/1024/1024)*secondsPerGigabyte
+
+			By(fmt.Sprintf("creating %d volumes of size %s in %d workers, with a timeout per volume of %s", *numVolumes, volSize.String(), *numWorkers, timeout))
 			for i := 0; i < *numWorkers; i++ {
 				i := i
 				go func() {
@@ -341,17 +349,27 @@ var _ = Describe("sanity", func() {
 						lv.namePrefix = fmt.Sprintf("worker-%d-volume-%d", i, volume)
 						lv.targetPath = targetPath
 						lv.stagingPath = stagingPath
-						// Constant time plus variable component for shredding.
-						secondsPerGigabyte := 2 * time.Second // Measured for direct mode in a VM, may vary.
-						ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second+time.Duration(volSize.Value()/1024/1024/1024)*secondsPerGigabyte)
 						func() {
-							defer cancel()
+							ctx, cancel := context.WithTimeout(context.Background(), timeout)
+							start := time.Now()
+							success := false
+							defer func() {
+								cancel()
+								if !success {
+									duration := time.Since(start)
+									By(fmt.Sprintf("%s: failed after %s", duration))
+								}
+							}()
 							lv.ctx = ctx
 							volName, vol := lv.create(volSize.Value(), nodeID)
 							lv.publish(volName, vol)
 							lv.unpublish(vol, nodeID)
 							lv.remove(vol, volName)
-							By(fmt.Sprintf("%s: done", lv.namePrefix))
+
+							// Success!
+							duration := time.Since(start)
+							success = true
+							By(fmt.Sprintf("%s: done, in %s", lv.namePrefix, duration))
 						}()
 					}
 				}()
