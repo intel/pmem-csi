@@ -9,6 +9,7 @@ import (
 
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 	"k8s.io/klog/glog"
+	"k8s.io/kubernetes/pkg/util/mount"
 	"k8s.io/utils/keymutex"
 )
 
@@ -57,6 +58,13 @@ func FlushDevice(dev PmemDeviceInfo, blocks uint64) error {
 	if (fileinfo.Mode() & os.ModeDevice) == 0 {
 		glog.Errorf("FlushDevice: %s is not device", dev.Path)
 		return fmt.Errorf("%s is not device", dev.Path)
+	}
+	devOpen, err := mount.New("").DeviceOpened(dev.Path)
+	if err != nil {
+		return err
+	}
+	if devOpen == true {
+		return fmt.Errorf("%s is in use", dev.Path)
 	}
 	if blocks == 0 {
 		glog.V(5).Infof("Wiping entire device: %s", dev.Path)
