@@ -100,21 +100,36 @@ var _ = Describe("sanity", func() {
 		// any node, what matters is the service port.
 		config.ControllerAddress = fmt.Sprintf("dns:///%s:%d", host, getServicePort(cs, "pmem-csi-controller-testing"))
 
+		// f.ExecCommandInContainerWithFullOutput assumes that we want a pod in the test's namespace,
+		// so we have to set one.
+		f.Namespace = &v1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "default",
+			},
+		}
+
+		// Avoid looking for the socat pod unless we actually need it.
+		// Some tests might just get skipped. This has to be thread-safe
+		// for the sanity stress test.
+		var socat *v1.Pod
+		var mutex sync.Mutex
+		getSocatPod := func() *v1.Pod {
+			mutex.Lock()
+			defer mutex.Unlock()
+			if socat != nil {
+				return socat
+			}
+			socat = getAppInstance(cs, "pmem-csi-node-testing", host)
+			return socat
+		}
+
 		execOnTestNode = func(args ...string) string {
 			// Wait for socat pod on that node. We need it for
 			// creating directories.  We could use the PMEM-CSI
 			// node container, but that then forces us to have
 			// mkdir and rmdir in that container, which we might
 			// not want long-term.
-			socat := getAppInstance(cs, "pmem-csi-node-testing", host)
-
-			// f.ExecCommandInContainerWithFullOutput assumes that we want a pod in the test's namespace,
-			// so we have to set one.
-			f.Namespace = &v1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "default",
-				},
-			}
+			socat := getSocatPod()
 
 			for {
 				stdout, stderr, err := f.ExecCommandInContainerWithFullOutput(socat.Name, "socat", args...)
