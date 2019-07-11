@@ -177,6 +177,7 @@ var _ = Describe("sanity", func() {
 			cc, ncc csi.ControllerClient
 			nodeID  string
 			v       volume
+			cancel  func()
 		)
 
 		BeforeEach(func() {
@@ -195,9 +196,12 @@ var _ = Describe("sanity", func() {
 				&csi.NodeGetInfoRequest{})
 			framework.ExpectNoError(err, "get node ID")
 			nodeID = nid.GetNodeId()
+			// Default timeout for tests.
+			ctx, c := context.WithTimeout(context.Background(), 5*time.Minute)
+			cancel = c
 			v = volume{
 				namePrefix: "unset",
-				ctx:        context.Background(),
+				ctx:        ctx,
 				sc:         sc,
 				cc:         cc,
 				nc:         nc,
@@ -207,6 +211,7 @@ var _ = Describe("sanity", func() {
 
 		AfterEach(func() {
 			cl.DeleteVolumes()
+			cancel()
 		})
 
 		It("stores state across reboots for single volume", func() {
@@ -561,9 +566,13 @@ func (v volume) create(sizeInBytes int64, nodeID string) (string, *csi.Volume) {
 			},
 		}
 	}
-	vol, err := v.cc.CreateVolume(
-		v.ctx, req,
-	)
+	var vol *csi.CreateVolumeResponse
+	err = v.retry(func() error {
+		vol, err = v.cc.CreateVolume(
+			v.ctx, req,
+		)
+		return err
+	}, "CreateVolume")
 	v.cl.MaybeRegisterVolume(name, vol, err)
 	framework.ExpectNoError(err, create)
 	Expect(vol).NotTo(BeNil())
@@ -588,47 +597,55 @@ func (v volume) publish(name string, vol *csi.Volume) string {
 	var conpubvol *csi.ControllerPublishVolumeResponse
 	stage := fmt.Sprintf("%s: node staging volume", v.namePrefix)
 	By(stage)
-	nodestagevol, err := v.nc.NodeStageVolume(
-		v.ctx,
-		&csi.NodeStageVolumeRequest{
-			VolumeId: vol.GetVolumeId(),
-			VolumeCapability: &csi.VolumeCapability{
-				AccessType: &csi.VolumeCapability_Mount{
-					Mount: &csi.VolumeCapability_MountVolume{},
+	var nodestagevol interface{}
+	err = v.retry(func() error {
+		nodestagevol, err = v.nc.NodeStageVolume(
+			v.ctx,
+			&csi.NodeStageVolumeRequest{
+				VolumeId: vol.GetVolumeId(),
+				VolumeCapability: &csi.VolumeCapability{
+					AccessType: &csi.VolumeCapability_Mount{
+						Mount: &csi.VolumeCapability_MountVolume{},
+					},
+					AccessMode: &csi.VolumeCapability_AccessMode{
+						Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+					},
 				},
-				AccessMode: &csi.VolumeCapability_AccessMode{
-					Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
-				},
+				StagingTargetPath: v.getStagingPath(),
+				VolumeContext:     vol.GetVolumeContext(),
+				PublishContext:    conpubvol.GetPublishContext(),
 			},
-			StagingTargetPath: v.getStagingPath(),
-			VolumeContext:     vol.GetVolumeContext(),
-			PublishContext:    conpubvol.GetPublishContext(),
-		},
-	)
+		)
+		return err
+	}, "NodeStageVolume")
 	framework.ExpectNoError(err, stage)
 	Expect(nodestagevol).NotTo(BeNil())
 
 	// NodePublishVolume
 	publish := fmt.Sprintf("%s: publishing the volume on a node", v.namePrefix)
 	By(publish)
-	nodepubvol, err := v.nc.NodePublishVolume(
-		v.ctx,
-		&csi.NodePublishVolumeRequest{
-			VolumeId:          vol.GetVolumeId(),
-			TargetPath:        v.getTargetPath() + "/target",
-			StagingTargetPath: v.getStagingPath(),
-			VolumeCapability: &csi.VolumeCapability{
-				AccessType: &csi.VolumeCapability_Mount{
-					Mount: &csi.VolumeCapability_MountVolume{},
+	var nodepubvol interface{}
+	v.retry(func() error {
+		nodepubvol, err = v.nc.NodePublishVolume(
+			v.ctx,
+			&csi.NodePublishVolumeRequest{
+				VolumeId:          vol.GetVolumeId(),
+				TargetPath:        v.getTargetPath() + "/target",
+				StagingTargetPath: v.getStagingPath(),
+				VolumeCapability: &csi.VolumeCapability{
+					AccessType: &csi.VolumeCapability_Mount{
+						Mount: &csi.VolumeCapability_MountVolume{},
+					},
+					AccessMode: &csi.VolumeCapability_AccessMode{
+						Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+					},
 				},
-				AccessMode: &csi.VolumeCapability_AccessMode{
-					Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
-				},
+				VolumeContext:  vol.GetVolumeContext(),
+				PublishContext: conpubvol.GetPublishContext(),
 			},
-			VolumeContext:  vol.GetVolumeContext(),
-			PublishContext: conpubvol.GetPublishContext(),
-		},
-	)
+		)
+		return err
+	}, "NodePublishVolume")
 	framework.ExpectNoError(err, publish)
 	Expect(nodepubvol).NotTo(BeNil())
 
@@ -640,24 +657,32 @@ func (v volume) unpublish(vol *csi.Volume, nodeID string) {
 
 	unpublish := fmt.Sprintf("%s: cleaning up calling nodeunpublish", v.namePrefix)
 	By(unpublish)
-	nodeunpubvol, err := v.nc.NodeUnpublishVolume(
-		v.ctx,
-		&csi.NodeUnpublishVolumeRequest{
-			VolumeId:   vol.GetVolumeId(),
-			TargetPath: v.getTargetPath() + "/target",
-		})
+	var nodeunpubvol interface{}
+	err = v.retry(func() error {
+		nodeunpubvol, err = v.nc.NodeUnpublishVolume(
+			v.ctx,
+			&csi.NodeUnpublishVolumeRequest{
+				VolumeId:   vol.GetVolumeId(),
+				TargetPath: v.getTargetPath() + "/target",
+			})
+		return err
+	}, "NodeUnpublishVolume")
 	framework.ExpectNoError(err, unpublish)
 	Expect(nodeunpubvol).NotTo(BeNil())
 
 	unstage := fmt.Sprintf("%s: cleaning up calling nodeunstage", v.namePrefix)
 	By(unstage)
-	nodeunstagevol, err := v.nc.NodeUnstageVolume(
-		v.ctx,
-		&csi.NodeUnstageVolumeRequest{
-			VolumeId:          vol.GetVolumeId(),
-			StagingTargetPath: v.getStagingPath(),
-		},
-	)
+	var nodeunstagevol interface{}
+	err = v.retry(func() error {
+		nodeunstagevol, err = v.nc.NodeUnstageVolume(
+			v.ctx,
+			&csi.NodeUnstageVolumeRequest{
+				VolumeId:          vol.GetVolumeId(),
+				StagingTargetPath: v.getStagingPath(),
+			},
+		)
+		return err
+	}, "NodeUnstageVolume")
 	framework.ExpectNoError(err, unstage)
 	Expect(nodeunstagevol).NotTo(BeNil())
 }
@@ -667,15 +692,41 @@ func (v volume) remove(vol *csi.Volume, volName string) {
 
 	delete := fmt.Sprintf("%s: deleting the volume %s", v.namePrefix, vol.GetVolumeId())
 	By(delete)
-	_, err = v.cc.DeleteVolume(
-		v.ctx,
-		&csi.DeleteVolumeRequest{
-			VolumeId: vol.GetVolumeId(),
-		},
-	)
+	var deletevol interface{}
+	err = v.retry(func() error {
+		deletevol, err = v.cc.DeleteVolume(
+			v.ctx,
+			&csi.DeleteVolumeRequest{
+				VolumeId: vol.GetVolumeId(),
+			},
+		)
+		return err
+	}, "DeleteVolume")
+	framework.ExpectNoError(err, delete)
+	Expect(deletevol).NotTo(BeNil())
 
 	v.cl.UnregisterVolume(volName)
-	framework.ExpectNoError(err, delete)
+}
+
+// retry will execute the operation rapidly until it succeeds or the
+// context times out. Each failure gets logged. This is meant for
+// operations that are slow (and therefore delay the loop themselves
+// with some explicit sleep) and unlikely to fail (hence logging all
+// failures).
+func (v volume) retry(operation func() error, what string) error {
+	for i := 0; ; i++ {
+		err := operation()
+		if err == nil {
+			return nil
+		}
+		select {
+		case <-v.ctx.Done():
+			framework.Logf("%s: %s failed and deadline exceeded, giving up", v.namePrefix, what)
+			return err
+		default:
+			framework.Logf("%s: %s failed at attempt %#d, will try again: %s", v.namePrefix, what, i, err)
+		}
+	}
 }
 
 func canRestartNode(nodeID string) {
