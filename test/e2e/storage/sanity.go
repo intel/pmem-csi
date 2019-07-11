@@ -358,6 +358,9 @@ var _ = Describe("sanity", func() {
 								if !success {
 									duration := time.Since(start)
 									By(fmt.Sprintf("%s: failed after %s", duration))
+
+									// Stop testing.
+									atomic.AddInt64(&volumes, int64(*numVolumes))
 								}
 							}()
 							lv.ctx = ctx
