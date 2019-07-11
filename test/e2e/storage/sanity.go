@@ -41,6 +41,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
+	clientexec "k8s.io/client-go/util/exec"
 	"k8s.io/kubernetes/test/e2e/framework"
 	testutils "k8s.io/kubernetes/test/utils"
 
@@ -115,11 +116,23 @@ var _ = Describe("sanity", func() {
 				},
 			}
 
-			stdout, stderr, err := f.ExecCommandInContainerWithFullOutput(socat.Name, "socat", args...)
-			framework.ExpectNoError(err, "%s in socat container, stderr:\n%s", args, stderr)
-			Expect(stderr).To(BeEmpty(), "unexpected stderr from %s in socat container", args)
-			By("Exec Output: " + stdout)
-			return stdout
+			for {
+				stdout, stderr, err := f.ExecCommandInContainerWithFullOutput(socat.Name, "socat", args...)
+				if err != nil {
+					exitErr, ok := err.(clientexec.ExitError)
+					if ok && exitErr.ExitStatus() == 126 {
+						// This doesn't necessarily mean that the actual binary cannot
+						// be executed. It also can be an error in the code which
+						// prepares for running in the container.
+						framework.Logf("126 = 'cannot execute' error, trying again")
+						continue
+					}
+				}
+				framework.ExpectNoError(err, "%s in socat container, stderr:\n%s", args, stderr)
+				Expect(stderr).To(BeEmpty(), "unexpected stderr from %s in socat container", args)
+				By("Exec Output: " + stdout)
+				return stdout
+			}
 		}
 		mkdir := func(path string) (string, error) {
 			return execOnTestNode("mktemp", "-d", path), nil
