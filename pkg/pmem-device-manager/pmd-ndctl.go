@@ -60,9 +60,16 @@ func (pmem *pmemNdctl) GetCapacity() (map[string]uint64, error) {
 	Capacity := map[string]uint64{}
 	nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
 	var capacity uint64
+	align := uint64(1024 * 1024 * 1024)
 	for _, bus := range pmem.ctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
+			realalign := align * r.InterleaveWays()
 			available := r.MaxAvailableExtent()
+			// align down, avoid claiming more than what we really can serve
+			glog.V(4).Infof("GetCapacity: available before realalign: %d", available)
+			available /= realalign
+			available *= realalign
+			glog.V(4).Infof("GetCapacity: available after realalign: %d", available)
 			if available > capacity {
 				capacity = available
 			}

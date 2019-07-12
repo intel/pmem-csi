@@ -83,6 +83,11 @@ func (r *Region) Readonly() bool {
 	return C.ndctl_region_get_ro(ndr) != 0
 }
 
+func (r *Region) InterleaveWays() uint64 {
+	ndr := (*C.struct_ndctl_region)(r)
+	return uint64(C.ndctl_region_get_interleave_ways(ndr))
+}
+
 //ActiveNamespaces returns all active namespaces in the region
 func (r *Region) ActiveNamespaces() []*Namespace {
 	return r.namespaces(true)
