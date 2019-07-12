@@ -41,6 +41,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
+	clientexec "k8s.io/client-go/util/exec"
 	"k8s.io/kubernetes/test/e2e/framework"
 	testutils "k8s.io/kubernetes/test/utils"
 
@@ -99,27 +100,54 @@ var _ = Describe("sanity", func() {
 		// any node, what matters is the service port.
 		config.ControllerAddress = fmt.Sprintf("dns:///%s:%d", host, getServicePort(cs, "pmem-csi-controller-testing"))
 
+		// f.ExecCommandInContainerWithFullOutput assumes that we want a pod in the test's namespace,
+		// so we have to set one.
+		f.Namespace = &v1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "default",
+			},
+		}
+
+		// Avoid looking for the socat pod unless we actually need it.
+		// Some tests might just get skipped. This has to be thread-safe
+		// for the sanity stress test.
+		var socat *v1.Pod
+		var mutex sync.Mutex
+		getSocatPod := func() *v1.Pod {
+			mutex.Lock()
+			defer mutex.Unlock()
+			if socat != nil {
+				return socat
+			}
+			socat = getAppInstance(cs, "pmem-csi-node-testing", host)
+			return socat
+		}
+
 		execOnTestNode = func(args ...string) string {
 			// Wait for socat pod on that node. We need it for
 			// creating directories.  We could use the PMEM-CSI
 			// node container, but that then forces us to have
 			// mkdir and rmdir in that container, which we might
 			// not want long-term.
-			socat := getAppInstance(cs, "pmem-csi-node-testing", host)
+			socat := getSocatPod()
 
-			// f.ExecCommandInContainerWithFullOutput assumes that we want a pod in the test's namespace,
-			// so we have to set one.
-			f.Namespace = &v1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "default",
-				},
+			for {
+				stdout, stderr, err := f.ExecCommandInContainerWithFullOutput(socat.Name, "socat", args...)
+				if err != nil {
+					exitErr, ok := err.(clientexec.ExitError)
+					if ok && exitErr.ExitStatus() == 126 {
+						// This doesn't necessarily mean that the actual binary cannot
+						// be executed. It also can be an error in the code which
+						// prepares for running in the container.
+						framework.Logf("126 = 'cannot execute' error, trying again")
+						continue
+					}
+				}
+				framework.ExpectNoError(err, "%s in socat container, stderr:\n%s", args, stderr)
+				Expect(stderr).To(BeEmpty(), "unexpected stderr from %s in socat container", args)
+				By("Exec Output: " + stdout)
+				return stdout
 			}
-
-			stdout, stderr, err := f.ExecCommandInContainerWithFullOutput(socat.Name, "socat", args...)
-			framework.ExpectNoError(err, "%s in socat container, stderr:\n%s", args, stderr)
-			Expect(stderr).To(BeEmpty(), "unexpected stderr from %s in socat container", args)
-			By("Exec Output: " + stdout)
-			return stdout
 		}
 		mkdir := func(path string) (string, error) {
 			return execOnTestNode("mktemp", "-d", path), nil
@@ -149,6 +177,7 @@ var _ = Describe("sanity", func() {
 			cc, ncc csi.ControllerClient
 			nodeID  string
 			v       volume
+			cancel  func()
 		)
 
 		BeforeEach(func() {
@@ -167,9 +196,12 @@ var _ = Describe("sanity", func() {
 				&csi.NodeGetInfoRequest{})
 			framework.ExpectNoError(err, "get node ID")
 			nodeID = nid.GetNodeId()
+			// Default timeout for tests.
+			ctx, c := context.WithTimeout(context.Background(), 5*time.Minute)
+			cancel = c
 			v = volume{
 				namePrefix: "unset",
-				ctx:        context.Background(),
+				ctx:        ctx,
 				sc:         sc,
 				cc:         cc,
 				nc:         nc,
@@ -179,6 +211,7 @@ var _ = Describe("sanity", func() {
 
 		AfterEach(func() {
 			cl.DeleteVolumes()
+			cancel()
 		})
 
 		It("stores state across reboots for single volume", func() {
@@ -276,11 +309,18 @@ var _ = Describe("sanity", func() {
 			volSize, err := resource.ParseQuantity(*volumeSize)
 			framework.ExpectNoError(err, "parsing pmem.sanity.volume-size parameter value %s", *volumeSize)
 			wg.Add(*numWorkers)
-			By(fmt.Sprintf("creating %d volumes of size %s in %d workers", *numVolumes, volSize.String(), *numWorkers))
+
+			// Constant time plus variable component for shredding.
+			// When using multiple workers, they either share IO bandwidth (parallel shredding)
+			// or do it sequentially, therefore we have to multiply by the maximum number
+			// of shredding operations.
+			secondsPerGigabyte := 10 * time.Second // 2s/GB masured for direct mode in a VM on a fast machine, probably slower elsewhere
+			timeout := 300*time.Second + time.Duration(int64(*numWorkers)*volSize.Value()/1024/1024/1024)*secondsPerGigabyte
+
+			By(fmt.Sprintf("creating %d volumes of size %s in %d workers, with a timeout per volume of %s", *numVolumes, volSize.String(), *numWorkers, timeout))
 			for i := 0; i < *numWorkers; i++ {
 				i := i
 				go func() {
-
 					// Order is relevant (first-in-last-out): when returning,
 					// we first let GinkgoRecover do its job, which
 					// may include marking the test as failed, then tell the
@@ -289,6 +329,7 @@ var _ = Describe("sanity", func() {
 						By(fmt.Sprintf("worker-%d terminating", i))
 						wg.Done()
 					}()
+					defer GinkgoRecover() // must be invoked directly by defer, otherwise it doesn't see the panic
 
 					// Each worker must use its own pair of directories.
 					targetPath := fmt.Sprintf("%s/worker-%d", sc.TargetPath, i)
@@ -297,8 +338,6 @@ var _ = Describe("sanity", func() {
 					defer execOnTestNode("rmdir", targetPath)
 					execOnTestNode("mkdir", stagingPath)
 					defer execOnTestNode("rmdir", stagingPath)
-
-					defer GinkgoRecover() // must be invoked directly by defer, otherwise it doesn't see the panic
 
 					for {
 						volume := atomic.AddInt64(&volumes, 1)
@@ -310,17 +349,30 @@ var _ = Describe("sanity", func() {
 						lv.namePrefix = fmt.Sprintf("worker-%d-volume-%d", i, volume)
 						lv.targetPath = targetPath
 						lv.stagingPath = stagingPath
-						// Constant time plus variable component for shredding.
-						secondsPerGigabyte := 2 * time.Second // Measured for direct mode in a VM, may vary.
-						ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second+time.Duration(volSize.Value()/1024/1024/1024)*secondsPerGigabyte)
 						func() {
-							defer cancel()
+							ctx, cancel := context.WithTimeout(context.Background(), timeout)
+							start := time.Now()
+							success := false
+							defer func() {
+								cancel()
+								if !success {
+									duration := time.Since(start)
+									By(fmt.Sprintf("%s: failed after %s", duration))
+
+									// Stop testing.
+									atomic.AddInt64(&volumes, int64(*numVolumes))
+								}
+							}()
 							lv.ctx = ctx
 							volName, vol := lv.create(volSize.Value(), nodeID)
 							lv.publish(volName, vol)
 							lv.unpublish(vol, nodeID)
 							lv.remove(vol, volName)
-							By(fmt.Sprintf("%s: done", lv.namePrefix))
+
+							// Success!
+							duration := time.Since(start)
+							success = true
+							By(fmt.Sprintf("%s: done, in %s", lv.namePrefix, duration))
 						}()
 					}
 				}()
@@ -535,9 +587,13 @@ func (v volume) create(sizeInBytes int64, nodeID string) (string, *csi.Volume) {
 			},
 		}
 	}
-	vol, err := v.cc.CreateVolume(
-		v.ctx, req,
-	)
+	var vol *csi.CreateVolumeResponse
+	err = v.retry(func() error {
+		vol, err = v.cc.CreateVolume(
+			v.ctx, req,
+		)
+		return err
+	}, "CreateVolume")
 	v.cl.MaybeRegisterVolume(name, vol, err)
 	framework.ExpectNoError(err, create)
 	Expect(vol).NotTo(BeNil())
@@ -562,47 +618,55 @@ func (v volume) publish(name string, vol *csi.Volume) string {
 	var conpubvol *csi.ControllerPublishVolumeResponse
 	stage := fmt.Sprintf("%s: node staging volume", v.namePrefix)
 	By(stage)
-	nodestagevol, err := v.nc.NodeStageVolume(
-		v.ctx,
-		&csi.NodeStageVolumeRequest{
-			VolumeId: vol.GetVolumeId(),
-			VolumeCapability: &csi.VolumeCapability{
-				AccessType: &csi.VolumeCapability_Mount{
-					Mount: &csi.VolumeCapability_MountVolume{},
+	var nodestagevol interface{}
+	err = v.retry(func() error {
+		nodestagevol, err = v.nc.NodeStageVolume(
+			v.ctx,
+			&csi.NodeStageVolumeRequest{
+				VolumeId: vol.GetVolumeId(),
+				VolumeCapability: &csi.VolumeCapability{
+					AccessType: &csi.VolumeCapability_Mount{
+						Mount: &csi.VolumeCapability_MountVolume{},
+					},
+					AccessMode: &csi.VolumeCapability_AccessMode{
+						Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+					},
 				},
-				AccessMode: &csi.VolumeCapability_AccessMode{
-					Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
-				},
+				StagingTargetPath: v.getStagingPath(),
+				VolumeContext:     vol.GetVolumeContext(),
+				PublishContext:    conpubvol.GetPublishContext(),
 			},
-			StagingTargetPath: v.getStagingPath(),
-			VolumeContext:     vol.GetVolumeContext(),
-			PublishContext:    conpubvol.GetPublishContext(),
-		},
-	)
+		)
+		return err
+	}, "NodeStageVolume")
 	framework.ExpectNoError(err, stage)
 	Expect(nodestagevol).NotTo(BeNil())
 
 	// NodePublishVolume
 	publish := fmt.Sprintf("%s: publishing the volume on a node", v.namePrefix)
 	By(publish)
-	nodepubvol, err := v.nc.NodePublishVolume(
-		v.ctx,
-		&csi.NodePublishVolumeRequest{
-			VolumeId:          vol.GetVolumeId(),
-			TargetPath:        v.getTargetPath() + "/target",
-			StagingTargetPath: v.getStagingPath(),
-			VolumeCapability: &csi.VolumeCapability{
-				AccessType: &csi.VolumeCapability_Mount{
-					Mount: &csi.VolumeCapability_MountVolume{},
+	var nodepubvol interface{}
+	v.retry(func() error {
+		nodepubvol, err = v.nc.NodePublishVolume(
+			v.ctx,
+			&csi.NodePublishVolumeRequest{
+				VolumeId:          vol.GetVolumeId(),
+				TargetPath:        v.getTargetPath() + "/target",
+				StagingTargetPath: v.getStagingPath(),
+				VolumeCapability: &csi.VolumeCapability{
+					AccessType: &csi.VolumeCapability_Mount{
+						Mount: &csi.VolumeCapability_MountVolume{},
+					},
+					AccessMode: &csi.VolumeCapability_AccessMode{
+						Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+					},
 				},
-				AccessMode: &csi.VolumeCapability_AccessMode{
-					Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
-				},
+				VolumeContext:  vol.GetVolumeContext(),
+				PublishContext: conpubvol.GetPublishContext(),
 			},
-			VolumeContext:  vol.GetVolumeContext(),
-			PublishContext: conpubvol.GetPublishContext(),
-		},
-	)
+		)
+		return err
+	}, "NodePublishVolume")
 	framework.ExpectNoError(err, publish)
 	Expect(nodepubvol).NotTo(BeNil())
 
@@ -614,24 +678,32 @@ func (v volume) unpublish(vol *csi.Volume, nodeID string) {
 
 	unpublish := fmt.Sprintf("%s: cleaning up calling nodeunpublish", v.namePrefix)
 	By(unpublish)
-	nodeunpubvol, err := v.nc.NodeUnpublishVolume(
-		v.ctx,
-		&csi.NodeUnpublishVolumeRequest{
-			VolumeId:   vol.GetVolumeId(),
-			TargetPath: v.getTargetPath() + "/target",
-		})
+	var nodeunpubvol interface{}
+	err = v.retry(func() error {
+		nodeunpubvol, err = v.nc.NodeUnpublishVolume(
+			v.ctx,
+			&csi.NodeUnpublishVolumeRequest{
+				VolumeId:   vol.GetVolumeId(),
+				TargetPath: v.getTargetPath() + "/target",
+			})
+		return err
+	}, "NodeUnpublishVolume")
 	framework.ExpectNoError(err, unpublish)
 	Expect(nodeunpubvol).NotTo(BeNil())
 
 	unstage := fmt.Sprintf("%s: cleaning up calling nodeunstage", v.namePrefix)
 	By(unstage)
-	nodeunstagevol, err := v.nc.NodeUnstageVolume(
-		v.ctx,
-		&csi.NodeUnstageVolumeRequest{
-			VolumeId:          vol.GetVolumeId(),
-			StagingTargetPath: v.getStagingPath(),
-		},
-	)
+	var nodeunstagevol interface{}
+	err = v.retry(func() error {
+		nodeunstagevol, err = v.nc.NodeUnstageVolume(
+			v.ctx,
+			&csi.NodeUnstageVolumeRequest{
+				VolumeId:          vol.GetVolumeId(),
+				StagingTargetPath: v.getStagingPath(),
+			},
+		)
+		return err
+	}, "NodeUnstageVolume")
 	framework.ExpectNoError(err, unstage)
 	Expect(nodeunstagevol).NotTo(BeNil())
 }
@@ -641,15 +713,41 @@ func (v volume) remove(vol *csi.Volume, volName string) {
 
 	delete := fmt.Sprintf("%s: deleting the volume %s", v.namePrefix, vol.GetVolumeId())
 	By(delete)
-	_, err = v.cc.DeleteVolume(
-		v.ctx,
-		&csi.DeleteVolumeRequest{
-			VolumeId: vol.GetVolumeId(),
-		},
-	)
+	var deletevol interface{}
+	err = v.retry(func() error {
+		deletevol, err = v.cc.DeleteVolume(
+			v.ctx,
+			&csi.DeleteVolumeRequest{
+				VolumeId: vol.GetVolumeId(),
+			},
+		)
+		return err
+	}, "DeleteVolume")
+	framework.ExpectNoError(err, delete)
+	Expect(deletevol).NotTo(BeNil())
 
 	v.cl.UnregisterVolume(volName)
-	framework.ExpectNoError(err, delete)
+}
+
+// retry will execute the operation rapidly until it succeeds or the
+// context times out. Each failure gets logged. This is meant for
+// operations that are slow (and therefore delay the loop themselves
+// with some explicit sleep) and unlikely to fail (hence logging all
+// failures).
+func (v volume) retry(operation func() error, what string) error {
+	for i := 0; ; i++ {
+		err := operation()
+		if err == nil {
+			return nil
+		}
+		select {
+		case <-v.ctx.Done():
+			framework.Logf("%s: %s failed and deadline exceeded, giving up", v.namePrefix, what)
+			return err
+		default:
+			framework.Logf("%s: %s failed at attempt %#d, will try again: %s", v.namePrefix, what, i, err)
+		}
+	}
 }
 
 func canRestartNode(nodeID string) {

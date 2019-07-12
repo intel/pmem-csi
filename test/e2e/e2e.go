@@ -29,7 +29,6 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/pkg/version"
 	"k8s.io/kubernetes/test/e2e/framework"
-	"k8s.io/kubernetes/test/e2e/framework/ginkgowrapper"
 	"k8s.io/kubernetes/test/e2e/framework/podlogs"
 )
 
@@ -146,7 +145,8 @@ var _ = ginkgo.SynchronizedAfterSuite(func() {
 // This function is called on each Ginkgo node in parallel mode.
 func RunE2ETests(t *testing.T) {
 	// TODO: with "ginkgo ./test/e2e" we shouldn't get verbose output, but somehow we do.
-	gomega.RegisterFailHandler(ginkgowrapper.Fail)
+	// TODO: use ginkgowrapper.Fail again after upstreaming our enhancements in wrapper.go
+	gomega.RegisterFailHandler(FailWrapper)
 	ginkgo.RunSpecs(t, "PMEM E2E suite")
 }
 
