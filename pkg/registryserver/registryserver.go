@@ -7,6 +7,7 @@ import (
 
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
+	"github.com/pkg/errors"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -21,7 +22,8 @@ import (
 type RegistryListener interface {
 	// OnNodeAdded is called by RegistryServer whenever a new node controller is registered
 	// or node controller updated its endpoint.
-	OnNodeAdded(ctx context.Context, node *NodeInfo)
+	// In case of error, the node registration would fail and removed from registry.
+	OnNodeAdded(ctx context.Context, node *NodeInfo) error
 	// OnNodeDeleted is called by RegistryServer whenever a node controller unregistered.
 	// Callback implementations has to note that by the time this method is called,
 	// the NodeInfo for that node have already removed from in-memory registry.
@@ -29,7 +31,11 @@ type RegistryListener interface {
 }
 
 type RegistryServer struct {
-	mutex           sync.Mutex
+	// mutex is used to protect concurrent access of RegistryServer's
+	// data(nodeClients)
+	mutex sync.Mutex
+	// rpcMutex is used to avoid concurrent RPC(RegisterController, UnregisterController)
+	// requests from the same node
 	rpcMutex        keymutex.KeyMutex
 	clientTLSConfig *tls.Config
 	nodeClients     map[string]*NodeInfo
@@ -115,7 +121,12 @@ func (rs *RegistryServer) RegisterController(ctx context.Context, req *registry.
 
 	if !found {
 		for l := range rs.listeners {
-			l.OnNodeAdded(ctx, node)
+			if err := l.OnNodeAdded(ctx, node); err != nil {
+				rs.mutex.Lock()
+				delete(rs.nodeClients, req.NodeId)
+				rs.mutex.Unlock()
+				return nil, errors.Wrap(err, "failed to register node")
+			}
 		}
 	}
 

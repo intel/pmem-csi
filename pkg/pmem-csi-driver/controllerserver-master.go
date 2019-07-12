@@ -91,17 +91,16 @@ func (cs *masterController) RegisterService(rpcServer *grpc.Server) {
 
 // OnNodeAdded retrieves the existing volumes at recently added Node.
 // It uses ControllerServer.ListVolume() CSI call to retrieve volumes.
-func (cs *masterController) OnNodeAdded(ctx context.Context, node *registryserver.NodeInfo) {
+func (cs *masterController) OnNodeAdded(ctx context.Context, node *registryserver.NodeInfo) error {
 	conn, err := cs.rs.ConnectToNodeController(node.NodeID)
 	if err != nil {
-		glog.Warningf("Failed to connect to node controller at : %s on node %s: %s", node.Endpoint, node.NodeID, err.Error())
-		return
+		return fmt.Errorf("Connection failure on given endpoint %s : %s", node.Endpoint, err.Error())
 	}
 
 	csiClient := csi.NewControllerClient(conn)
 	resp, err := csiClient.ListVolumes(ctx, &csi.ListVolumesRequest{})
 	if err != nil {
-		glog.Warningf("Failed to get volumes on node %s: %s", node.NodeID, err.Error())
+		return fmt.Errorf("Node failed to report volumes: %s", err.Error())
 	}
 
 	glog.V(5).Infof("Found Volumes at %s: %v", node.NodeID, resp.Entries)
@@ -128,6 +127,8 @@ func (cs *masterController) OnNodeAdded(ctx context.Context, node *registryserve
 			}
 		}
 	}
+
+	return nil
 }
 
 func (cs *masterController) OnNodeDeleted(ctx context.Context, node *registryserver.NodeInfo) {
