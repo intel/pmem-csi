@@ -2,6 +2,7 @@ package pmdmanager
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	"k8s.io/klog/glog"
@@ -14,10 +15,16 @@ type pmemNdctl struct {
 
 var _ PmemDeviceManager = &pmemNdctl{}
 
+// mutex to synchronize all ndctl calls
+// https://github.com/pmem/ndctl/issues/96
+// Once ndctl supports concurrent calls we need to revisit
+// our locking strategy.
+var ndctlMutex = &sync.Mutex{}
+
 //NewPmemDeviceManagerNdctl Instantiates a new ndctl based pmem device manager
 func NewPmemDeviceManagerNdctl() (PmemDeviceManager, error) {
-	devicemutex.Lock()
-	defer devicemutex.Unlock()
+	ndctlMutex.Lock()
+	defer ndctlMutex.Unlock()
 
 	ctx, err := ndctl.NewContext()
 	if err != nil {
@@ -47,8 +54,8 @@ func NewPmemDeviceManagerNdctl() (PmemDeviceManager, error) {
 }
 
 func (pmem *pmemNdctl) GetCapacity() (map[string]uint64, error) {
-	devicemutex.Lock()
-	defer devicemutex.Unlock()
+	ndctlMutex.Lock()
+	defer ndctlMutex.Unlock()
 
 	Capacity := map[string]uint64{}
 	nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
@@ -71,8 +78,8 @@ func (pmem *pmemNdctl) GetCapacity() (map[string]uint64, error) {
 }
 
 func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) error {
-	devicemutex.Lock()
-	defer devicemutex.Unlock()
+	ndctlMutex.Lock()
+	defer ndctlMutex.Unlock()
 	// Check that such name does not exist. In certain error states, for example when
 	// namespace creation works but device zeroing fails (missing /dev/pmemX.Y in container),
 	// this function is asked to create new devices repeatedly, forcing running out of space.
@@ -113,8 +120,8 @@ func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) err
 }
 
 func (pmem *pmemNdctl) DeleteDevice(name string, flush bool) error {
-	devicemutex.Lock()
-	defer devicemutex.Unlock()
+	ndctlMutex.Lock()
+	defer ndctlMutex.Unlock()
 
 	device, err := pmem.getDevice(name)
 	if err != nil {
@@ -128,8 +135,8 @@ func (pmem *pmemNdctl) DeleteDevice(name string, flush bool) error {
 }
 
 func (pmem *pmemNdctl) FlushDeviceData(name string) error {
-	devicemutex.Lock()
-	defer devicemutex.Unlock()
+	ndctlMutex.Lock()
+	defer ndctlMutex.Unlock()
 
 	device, err := pmem.getDevice(name)
 	if err != nil {
@@ -139,15 +146,15 @@ func (pmem *pmemNdctl) FlushDeviceData(name string) error {
 }
 
 func (pmem *pmemNdctl) GetDevice(name string) (PmemDeviceInfo, error) {
-	devicemutex.Lock()
-	defer devicemutex.Unlock()
+	ndctlMutex.Lock()
+	defer ndctlMutex.Unlock()
 
 	return pmem.getDevice(name)
 }
 
 func (pmem *pmemNdctl) ListDevices() ([]PmemDeviceInfo, error) {
-	devicemutex.Lock()
-	defer devicemutex.Unlock()
+	ndctlMutex.Lock()
+	defer ndctlMutex.Unlock()
 
 	devices := []PmemDeviceInfo{}
 	for _, ns := range pmem.ctx.GetActiveNamespaces() {

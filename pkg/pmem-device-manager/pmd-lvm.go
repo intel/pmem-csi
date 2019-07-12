@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
@@ -19,12 +20,19 @@ var _ PmemDeviceManager = &pmemLvm{}
 var lvsArgs = []string{"--noheadings", "--nosuffix", "-o", "lv_name,lv_path,lv_size", "--units", "B"}
 var vgsArgs = []string{"--noheadings", "--nosuffix", "-o", "vg_name,vg_size,vg_free,vg_tags", "--units", "B"}
 
+// mutex to synchronize all LVM calls
+// The reason we chose not to support concurrent LVM calls was
+// due to LVM's inconsistent behavior when made concurrent calls
+// in our stress tests. One should revisit this and choose better
+// suitable synchronization policy.
+var lvmMutex = &sync.Mutex{}
+
 // NewPmemDeviceManagerLVM Instantiates a new LVM based pmem device manager
 // The pre-requisite for this manager is that all the pmem regions which should be managed by
 // this LMV manager are devided into namespaces and grouped as volume groups.
 func NewPmemDeviceManagerLVM() (PmemDeviceManager, error) {
-	devicemutex.Lock()
-	defer devicemutex.Unlock()
+	lvmMutex.Lock()
+	defer lvmMutex.Unlock()
 
 	ctx, err := ndctl.NewContext()
 	if err != nil {
@@ -65,8 +73,8 @@ type vgInfo struct {
 }
 
 func (lvm *pmemLvm) GetCapacity() (map[string]uint64, error) {
-	devicemutex.Lock()
-	defer devicemutex.Unlock()
+	lvmMutex.Lock()
+	defer lvmMutex.Unlock()
 	return lvm.getCapacity()
 }
 
@@ -75,8 +83,8 @@ func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error 
 	if nsmode != string(ndctl.FsdaxMode) && nsmode != string(ndctl.SectorMode) {
 		return fmt.Errorf("Unknown nsmode(%v)", nsmode)
 	}
-	devicemutex.Lock()
-	defer devicemutex.Unlock()
+	lvmMutex.Lock()
+	defer lvmMutex.Unlock()
 	// Check that such name does not exist. In certain error states, for example when
 	// namespace creation works but device zeroing fails (missing /dev/pmemX.Y in container),
 	// this function is asked to create new devices repeatedly, forcing running out of space.
@@ -136,8 +144,8 @@ func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error 
 }
 
 func (lvm *pmemLvm) DeleteDevice(name string, flush bool) error {
-	devicemutex.Lock()
-	defer devicemutex.Unlock()
+	lvmMutex.Lock()
+	defer lvmMutex.Unlock()
 
 	device, err := lvm.getDevice(name)
 	if err != nil {
@@ -152,8 +160,8 @@ func (lvm *pmemLvm) DeleteDevice(name string, flush bool) error {
 }
 
 func (lvm *pmemLvm) FlushDeviceData(name string) error {
-	devicemutex.Lock()
-	defer devicemutex.Unlock()
+	lvmMutex.Lock()
+	defer lvmMutex.Unlock()
 
 	device, err := lvm.getDevice(name)
 	if err != nil {
@@ -164,8 +172,8 @@ func (lvm *pmemLvm) FlushDeviceData(name string) error {
 }
 
 func (lvm *pmemLvm) ListDevices() ([]PmemDeviceInfo, error) {
-	devicemutex.Lock()
-	defer devicemutex.Unlock()
+	lvmMutex.Lock()
+	defer lvmMutex.Unlock()
 
 	devices := []PmemDeviceInfo{}
 	for _, dev := range lvm.devices {
@@ -176,8 +184,8 @@ func (lvm *pmemLvm) ListDevices() ([]PmemDeviceInfo, error) {
 }
 
 func (lvm *pmemLvm) GetDevice(id string) (PmemDeviceInfo, error) {
-	devicemutex.Lock()
-	defer devicemutex.Unlock()
+	lvmMutex.Lock()
+	defer lvmMutex.Unlock()
 
 	return lvm.getDevice(id)
 }
