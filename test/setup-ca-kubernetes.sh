@@ -97,7 +97,7 @@ existing_nodes=""
 # Get existing node certificates if any
 if [ -n "$($KUBECTL get secret pmem-csi-node-secrets 2> /dev/null)" ]; then
     # Retrieve existing node certificates
-    existing_secrets=$($KUBECTL get secret pmem-csi-node-secrets -o go-template="'"'{{range $key, $value := .data}}  {{$key}}: {{$value}}{{"\n"}}{{end}}'"'")
+    existing_secrets=$($KUBECTL get secret pmem-csi-node-secrets -o go-template=""'{{range $key, $value := .data}}{{$key}}: {{$value}}{{"\n"}}{{end}}'"")
     existing_nodes=$(echo "$existing_secrets" | cut -f1 -d':' | sed -e 's;.key;;' -e 's;.crt;;' | uniq)
 fi
 
