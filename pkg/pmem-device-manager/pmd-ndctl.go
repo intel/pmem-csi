@@ -2,6 +2,7 @@ package pmdmanager
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	"k8s.io/klog/glog"
@@ -14,8 +15,17 @@ type pmemNdctl struct {
 
 var _ PmemDeviceManager = &pmemNdctl{}
 
+// mutex to synchronize all ndctl calls
+// https://github.com/pmem/ndctl/issues/96
+// Once ndctl supports concurrent calls we need to revisit
+// our locking strategy.
+var ndctlMutex = &sync.Mutex{}
+
 //NewPmemDeviceManagerNdctl Instantiates a new ndctl based pmem device manager
 func NewPmemDeviceManagerNdctl() (PmemDeviceManager, error) {
+	ndctlMutex.Lock()
+	defer ndctlMutex.Unlock()
+
 	ctx, err := ndctl.NewContext()
 	if err != nil {
 		return nil, fmt.Errorf("Failed to initialize pmem context: %s", err.Error())
@@ -44,6 +54,9 @@ func NewPmemDeviceManagerNdctl() (PmemDeviceManager, error) {
 }
 
 func (pmem *pmemNdctl) GetCapacity() (map[string]uint64, error) {
+	ndctlMutex.Lock()
+	defer ndctlMutex.Unlock()
+
 	Capacity := map[string]uint64{}
 	nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
 	var capacity uint64
@@ -65,14 +78,14 @@ func (pmem *pmemNdctl) GetCapacity() (map[string]uint64, error) {
 }
 
 func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) error {
-	devicemutex.Lock()
-	defer devicemutex.Unlock()
+	ndctlMutex.Lock()
+	defer ndctlMutex.Unlock()
 	// Check that such name does not exist. In certain error states, for example when
 	// namespace creation works but device zeroing fails (missing /dev/pmemX.Y in container),
 	// this function is asked to create new devices repeatedly, forcing running out of space.
 	// Avoid device filling with garbage entries by returning error.
 	// Overall, no point having more than one namespace with same name.
-	_, err := pmem.GetDevice(name)
+	_, err := pmem.getDevice(name)
 	if err == nil {
 		glog.V(4).Infof("Device with name: %s already exists, refuse to create another", name)
 		return fmt.Errorf("CreateDevice: Failed: namespace with that name exists")
@@ -94,7 +107,7 @@ func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) err
 	data, _ := ns.MarshalJSON() //nolint: gosec
 	glog.V(3).Infof("Namespace created: %s", data)
 	// clear start of device to avoid old data being recognized as file system
-	device, err := pmem.GetDevice(name)
+	device, err := pmem.getDevice(name)
 	if err != nil {
 		return err
 	}
@@ -107,9 +120,10 @@ func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) err
 }
 
 func (pmem *pmemNdctl) DeleteDevice(name string, flush bool) error {
-	volumeMutex.LockKey(name)
-	defer volumeMutex.UnlockKey(name)
-	device, err := pmem.GetDevice(name)
+	ndctlMutex.Lock()
+	defer ndctlMutex.Unlock()
+
+	device, err := pmem.getDevice(name)
 	if err != nil {
 		return err
 	}
@@ -121,9 +135,10 @@ func (pmem *pmemNdctl) DeleteDevice(name string, flush bool) error {
 }
 
 func (pmem *pmemNdctl) FlushDeviceData(name string) error {
-	volumeMutex.LockKey(name)
-	defer volumeMutex.UnlockKey(name)
-	device, err := pmem.GetDevice(name)
+	ndctlMutex.Lock()
+	defer ndctlMutex.Unlock()
+
+	device, err := pmem.getDevice(name)
 	if err != nil {
 		return err
 	}
@@ -131,20 +146,30 @@ func (pmem *pmemNdctl) FlushDeviceData(name string) error {
 }
 
 func (pmem *pmemNdctl) GetDevice(name string) (PmemDeviceInfo, error) {
+	ndctlMutex.Lock()
+	defer ndctlMutex.Unlock()
+
+	return pmem.getDevice(name)
+}
+
+func (pmem *pmemNdctl) ListDevices() ([]PmemDeviceInfo, error) {
+	ndctlMutex.Lock()
+	defer ndctlMutex.Unlock()
+
+	devices := []PmemDeviceInfo{}
+	for _, ns := range pmem.ctx.GetActiveNamespaces() {
+		devices = append(devices, namespaceToPmemInfo(ns))
+	}
+	return devices, nil
+}
+
+func (pmem *pmemNdctl) getDevice(name string) (PmemDeviceInfo, error) {
 	ns, err := pmem.ctx.GetNamespaceByName(name)
 	if err != nil {
 		return PmemDeviceInfo{}, err
 	}
 
 	return namespaceToPmemInfo(ns), nil
-}
-
-func (pmem *pmemNdctl) ListDevices() ([]PmemDeviceInfo, error) {
-	devices := []PmemDeviceInfo{}
-	for _, ns := range pmem.ctx.GetActiveNamespaces() {
-		devices = append(devices, namespaceToPmemInfo(ns))
-	}
-	return devices, nil
 }
 
 func namespaceToPmemInfo(ns *ndctl.Namespace) PmemDeviceInfo {
