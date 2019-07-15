@@ -17,14 +17,15 @@ LOCKFILE="${LOCKFILE:-${REPO_DIRECTORY}/_work/start-kubernetes.exclusivelock}"
 LOCKDELAY="${LOCKDELAY:-300}" # seconds
 NODES=( $DEPLOYMENT_ID-master
         $DEPLOYMENT_ID-worker1
-        $DEPLOYMENT_ID-worker2)
+        $DEPLOYMENT_ID-worker2
+        $DEPLOYMENT_ID-worker3)
 CLOUD="${CLOUD:-true}"
 FLAVOR="${FLAVOR:-medium}"
 SSH_KEY="${SSH_KEY:-${RESOURCES_DIRECTORY}/id_rsa}"
 SSH_PUBLIC_KEY="${SSH_KEY}.pub"
 EFI="${EFI:-true}"
 KVM_CPU_OPTS="${KVM_CPU_OPTS:-\
- -m 2G,slots=${TEST_MEM_SLOTS:-2},maxmem=34G -smp 2\
+ -m 2G,slots=${TEST_MEM_SLOTS:-2},maxmem=34G -smp 4\
  -machine pc,accel=kvm,nvdimm=on}"
 EXTRA_QEMU_OPTS="${EXTRA_QWEMU_OPTS:-\
  -object memory-backend-file,id=mem1,share=${TEST_PMEM_SHARE:-on},\
