@@ -206,6 +206,7 @@ spec:
         - mountPath: /var/lib/pmem-csi-coverage
           name: coverage-dir
       - args:
+        - --timeout=5m
         - --v=3
         - --csi-address=/csi/csi-controller.sock
         - --feature-gates=Topology=true

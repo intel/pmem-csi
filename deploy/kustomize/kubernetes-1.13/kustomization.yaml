@@ -11,3 +11,13 @@ images:
   newTag: v1.0.1
 - name: quay.io/k8scsi/csi-node-driver-registrar
   newTag: v1.1.0
+
+# How to increase the external-provisioner timeout also depends on the
+# version.
+patchesJson6902:
+- target:
+    group: apps
+    version: v1
+    kind: StatefulSet
+    name: pmem-csi-controller
+  path: ../patches/external-provisioner-connection-timeout-patch.yaml
