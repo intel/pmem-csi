@@ -6,16 +6,16 @@ This readme describes a complete example to deploy a Redis cluster through the [
 * [Docker registry](https://docs.docker.com/registry/deploying/).
 
 ## PMEM-CSI installation
-The steps below describe how to install PMEM-CSI within a K8S cluster that contains one master and three worker nodes. We use a specific version of [Clear Linux OS](https://clearlinux.org/) for the nodes, so the following steps can be reproduced.
+The steps below describe how to install PMEM-CSI within a Kubernetes cluster that contains one master and three worker nodes. We use a specific version of [Clear Linux OS](https://clearlinux.org/) for the nodes, so the following steps can be reproduced.
 1. Clone this project into `$GOPATH/src/github.com/intel`.
 2. Build PMEM-CSI:
     ```sh
-     $ cd $GOPATH/src/github.com/intel/pmem-CSI
+     $ cd $GOPATH/src/github.com/intel/pmem-csi
      $ make push-images
     ```
     **Note**: By default, the build images are pushed into a local [Docker registry](https://docs.docker.com/registry/deploying/).
 
-3. Start the K8s cluster:
+3. Start the Kubernetes cluster:
     ```sh
     $ TEST_CLEAR_LINUX_VERSION=29820 make start
     ```
@@ -77,7 +77,7 @@ The steps to install the Redis operator by Spotahome are listed below:
 
 ## Verify that the Redis instances are using the volumes provided
 First, match the volumes claim name used by each Redis instance to the current `pvc` which is provisioned by `pmem-csi-sc-ext4`. Both items must be properly bound.
-Next, check the block devices in the worker nodes of your K8S cluster and match the ones under the pmem `block` device, as shown below.
+Next, check the block devices in the worker nodes of your Kubernetes cluster and match the ones under the pmem `block` device, as shown below.
 ```sh
 $ kubectl get pvc
 NAME                                               STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS       AGE
@@ -112,3 +112,52 @@ The steps to start playing around with Redis cluster *through sentinel instances
     "world!"
     ```
 4. Feel free to play around with the Redis cluster.
+
+## High availability for Redis instances
+In order to ensure high availability for Redis instances, it's required to use `hardAntiAffinity: True` and `storageClassName: pmem-csi-sc-late-binding` under Redis deployment specification, i.e.:
+```
+apiVersion: databases.spotahome.com/v1
+kind: RedisFailover
+metadata:
+  name: redisfailover-pmem-lb
+spec:
+  sentinel:
+    replicas: 3
+    ...
+  redis:
+    hardAntiAffinity: True
+    replicas: 3
+    ...
+    storage:
+      persistentVolumeClaim:
+        metadata:
+          name: redisfailover-pmem-data
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 100Mi
+          storageClassName: pmem-csi-sc-late-binding
+```
+
+The deployment can be done in the same way as mentioned before, i.e.:
+```
+$ kubectl create -f /path/to/pmem-lb.yaml
+redisfailover.databases.spotahome.com/redisfailover-pmem-lb created
+
+$ kubectl get po -o custom-columns=NAME:.metadata.name,STATUS:.status.phase,NODE:.spec.nodeName,IP:.status.podIP
+NAME                                         STATUS    NODE                          IP
+pmem-csi-controller-0                        Running   pmem-csi-clear-govm-worker3   10.244.3.2
+pmem-csi-node-l8d58                          Running   pmem-csi-clear-govm-worker3   172.17.0.5
+pmem-csi-node-v8cb4                          Running   pmem-csi-clear-govm-worker2   172.17.0.4
+pmem-csi-node-xwk2l                          Running   pmem-csi-clear-govm-worker1   172.17.0.3
+redisoperator-688f6f4fcc-l6p4f               Running   pmem-csi-clear-govm-worker1   10.244.2.2
+rfr-redisfailover-pmem-lb-0                  Running   pmem-csi-clear-govm-worker2   10.244.1.3
+rfr-redisfailover-pmem-lb-1                  Running   pmem-csi-clear-govm-worker1   10.244.2.4
+rfr-redisfailover-pmem-lb-2                  Running   pmem-csi-clear-govm-worker3   10.244.3.4
+rfs-redisfailover-pmem-lb-5c455d7974-9twjz   Running   pmem-csi-clear-govm-worker1   10.244.2.3
+rfs-redisfailover-pmem-lb-5c455d7974-dscmx   Running   pmem-csi-clear-govm-worker2   10.244.1.2
+rfs-redisfailover-pmem-lb-5c455d7974-jtznn   Running   pmem-csi-clear-govm-worker3   10.244.3.3
+```
+As it is shown, each `rfr-redisfailover-pmem-lb-X` gets assigned to a different Kubernetes cluster node `pmem-csi-clear-govm-workerX`, where `X` &isin; {1,2,3}.
