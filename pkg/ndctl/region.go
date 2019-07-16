@@ -83,6 +83,11 @@ func (r *Region) Readonly() bool {
 	return C.ndctl_region_get_ro(ndr) != 0
 }
 
+func (r *Region) InterleaveWays() uint64 {
+	ndr := (*C.struct_ndctl_region)(r)
+	return uint64(C.ndctl_region_get_interleave_ways(ndr))
+}
+
 //ActiveNamespaces returns all active namespaces in the region
 func (r *Region) ActiveNamespaces() []*Namespace {
 	return r.namespaces(true)
@@ -188,10 +193,9 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 		ways := uint64(C.ndctl_region_get_interleave_ways(ndr))
 		align := opts.Align * ways
 		if opts.Size%align != 0 {
-			// force-align down to block boundary. More sensible would be to align up, but then it may fail because we ask more then there is left
-			opts.Size /= align
-			opts.Size *= align
-			glog.Warningf("%s: namespace size must align to interleave-width:%d * alignment:%d, force-align to %d",
+			// Round up size to align with next block boundary.
+			opts.Size = (opts.Size/align + 1) * align
+			glog.V(4).Infof("%s: namespace size must align to interleave-width:%d * alignment:%d, force-align to %d",
 				regionName, ways, opts.Align, opts.Size)
 		}
 	}

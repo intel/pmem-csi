@@ -174,12 +174,6 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 	}
 
 	asked := req.GetCapacityRange().GetRequiredBytes()
-	// Required==zero means unspecified by CSI spec, we create a small 4 Mbyte volume
-	// as lvcreate does not allow zero size (csi-sanity creates zero-sized volumes)
-	// FIXME(avalluri): This check should be handled by LvmDeviceManager??
-	if asked <= 0 {
-		asked = 4 * 1024 * 1024
-	}
 
 	if vol = cs.getVolumeByName(req.Name); vol != nil {
 		// Check if the size of existing volume can cover the new request

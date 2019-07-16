@@ -72,10 +72,12 @@ func initNVdimms(ctx *ndctl.Context, useforfsdax int, useforsector int) {
 }
 
 func createNS(r *ndctl.Region, uselimit int, nsmode ndctl.NamespaceMode) {
+	const align uint64 = 1024 * 1024 * 1024
+	realalign := align * r.InterleaveWays()
 	// uselimit is the percentage we can use
 	canUse := uint64(uselimit) * r.Size() / 100
-	glog.V(3).Infof("Create %s-namespaces in %v, allowed %d %%:\ntotal       : %16d\navail       : %16d\ncan use     : %16d",
-		nsmode, r.DeviceName(), uselimit, r.Size(), r.AvailableSize(), canUse)
+	glog.V(3).Infof("Create %s-namespaces in %v, allowed %d %%, real align %d:\ntotal       : %16d\navail       : %16d\ncan use     : %16d",
+		nsmode, r.DeviceName(), uselimit, realalign, r.Size(), r.AvailableSize(), canUse)
 	// Subtract sizes of existing active namespaces with currently handled mode and owned by pmem-csi
 	for _, ns := range r.ActiveNamespaces() {
 		glog.V(5).Infof("createNS: Exists: Size %16d Mode:%v Device:%v Name:%v", ns.Size(), ns.Mode(), ns.DeviceName(), ns.Name())
@@ -94,14 +96,18 @@ func createNS(r *ndctl.Region, uselimit int, nsmode ndctl.NamespaceMode) {
 		glog.V(4).Infof("MaxAvailableExtent in Region:%v is less than desired size, limit to that", r.MaxAvailableExtent())
 		canUse = r.MaxAvailableExtent()
 	}
+	// Align down to next real alignment boundary, as trying creation above it may fail.
+	canUse /= realalign
+	canUse *= realalign
 	// If less than 2GB usable, don't attempt as creation would fail
-	if canUse >= 2*1024*1024*1024 {
+	const minsize uint64 = 2 * 1024 * 1024 * 1024
+	if canUse >= minsize {
 		glog.V(3).Infof("Create %v-bytes %s-namespace", canUse, nsmode)
 		_, err := r.CreateNamespace(ndctl.CreateNamespaceOpts{
 			Name:  "pmem-csi",
 			Mode:  nsmode,
 			Size:  canUse,
-			Align: 1024 * 1024 * 1024,
+			Align: align,
 		})
 		if err != nil {
 			glog.Warning("Failed to create namespace:", err.Error())

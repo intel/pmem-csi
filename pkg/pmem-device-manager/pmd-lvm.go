@@ -110,6 +110,11 @@ func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error 
 	// Division by 1M should not result in smaller-than-asked here
 	// as lvcreate will round up to next 4MB boundary.
 	sizeM := int(size / (1024 * 1024))
+	// Asked==zero means unspecified by CSI spec, we create a small 4 Mbyte volume
+	// as lvcreate does not allow zero size (csi-sanity creates zero-sized volumes)
+	if sizeM <= 0 {
+		sizeM = 4
+	}
 	strSz := strconv.Itoa(sizeM)
 
 	for _, vg := range vgs {

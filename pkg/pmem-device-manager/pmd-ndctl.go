@@ -60,9 +60,16 @@ func (pmem *pmemNdctl) GetCapacity() (map[string]uint64, error) {
 	Capacity := map[string]uint64{}
 	nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
 	var capacity uint64
+	align := uint64(1024 * 1024 * 1024)
 	for _, bus := range pmem.ctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
+			realalign := align * r.InterleaveWays()
 			available := r.MaxAvailableExtent()
+			// align down, avoid claiming more than what we really can serve
+			glog.V(4).Infof("GetCapacity: available before realalign: %d", available)
+			available /= realalign
+			available *= realalign
+			glog.V(4).Infof("GetCapacity: available after realalign: %d", available)
 			if available > capacity {
 				capacity = available
 			}
@@ -90,11 +97,13 @@ func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) err
 		glog.V(4).Infof("Device with name: %s already exists, refuse to create another", name)
 		return fmt.Errorf("CreateDevice: Failed: namespace with that name exists")
 	}
-	// align up by 1 GB, also compensate for libndctl giving us 1 GB less than we ask
-	var align uint64 = 1024 * 1024 * 1024
-	size /= align
-	size += 2
-	size *= align
+	// Increase to minimum size supported by libndctl.
+	const minsize uint64 = 2 * 1024 * 1024 * 1024
+	if size < minsize {
+		size = minsize
+	}
+	// use align by 1 GB in creation request
+	const align uint64 = 1024 * 1024 * 1024
 	ns, err := pmem.ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
 		Name:  name,
 		Size:  size,
