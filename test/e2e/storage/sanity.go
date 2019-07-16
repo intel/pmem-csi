@@ -297,7 +297,18 @@ var _ = Describe("sanity", func() {
 
 		var (
 			numWorkers = flag.Int("pmem.sanity.workers", 10, "number of worker creating volumes in parallel and thus also the maximum number of volumes at any time")
-			numVolumes = flag.Int("pmem.sanity.volumes", 100, "number of total volumes to create")
+			numVolumes = flag.Int("pmem.sanity.volumes",
+				func() int {
+					switch os.Getenv("TEST_DEVICEMODE") {
+					case "direct":
+						// The minimum volume size in direct mode is 2GB, which makes
+						// testing a lot slower than in LVM mode. Therefore we create less
+						// volumes.
+						return 20
+					default:
+						return 100
+					}
+				}(), "number of total volumes to create")
 			volumeSize = flag.String("pmem.sanity.volume-size", "15Mi", "size of each volume")
 		)
 		It("stress test", func() {
