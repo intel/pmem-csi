@@ -84,11 +84,14 @@ $(TEST_CMDS): %-test:
 BUILD_IMAGE_ID?=$(shell date +%Y-%m-%d)
 
 # Build and publish images for production or testing (i.e. with test binaries).
+# Pushing images also automatically rebuilds the image first. This can be disabled
+# with `make push-images PUSH_IMAGE_DEP=`.
 build-images: build-image build-test-image
 push-images: push-image push-test-image
 build-image build-test-image: build%-image:
 	docker build --pull --build-arg CACHEBUST=$(BUILD_IMAGE_ID) --build-arg BIN_SUFFIX=$(findstring -test,$*) $(BUILD_ARGS) -t $(IMAGE_TAG) -f ./Dockerfile . --label revision=$(VERSION)
-push-image push-test-image: push%-image: build%-image
+PUSH_IMAGE_DEP = build%-image
+push-image push-test-image: push%-image: $(PUSH_IMAGE_DEP)
 	docker push $(IMAGE_TAG)
 
 clean:

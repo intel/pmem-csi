@@ -27,7 +27,8 @@ pipeline {
         CLEAR_LINUX_VERSION_1_13 = "28620"
 
         PMEM_PATH = "/go/src/github.com/intel/pmem-csi"
-        BUILD_IMAGE = "clearlinux-builder"
+        REGISTRY_NAME = "cloud-native-image-registry.westus.cloudapp.azure.com"
+        BUILD_IMAGE = "${env.REGISTRY_NAME}/pmem-clearlinux-builder"
     }
 
     stages {
@@ -81,6 +82,7 @@ pipeline {
 
                 sh "docker run --rm \
                     -e BUILD_IMAGE_ID=${env.BUILD_ID} \
+                    -e REGISTRY_NAME=${env.REGISTRY_NAME} \
                     -v /var/run/docker.sock:/var/run/docker.sock \
                     -v /usr/bin/docker:/usr/bin/docker \
                     -v `pwd`:${env.PMEM_PATH} \
@@ -120,6 +122,7 @@ pipeline {
                         sh "docker run --rm \
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
                             -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
@@ -140,6 +143,7 @@ pipeline {
                             sh "docker run --rm \
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
                             -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
@@ -171,6 +175,7 @@ pipeline {
                         sh "docker run --rm \
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
                             -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
@@ -192,6 +197,7 @@ pipeline {
                             sh "docker run --rm \
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
                             -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
@@ -224,6 +230,7 @@ pipeline {
                         sh "docker run --rm \
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
                             -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
@@ -244,6 +251,7 @@ pipeline {
                             sh "docker run --rm \
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
                             -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
@@ -276,6 +284,7 @@ pipeline {
                         sh "docker run --rm \
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
                             -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
@@ -297,6 +306,7 @@ pipeline {
                             sh "docker run --rm \
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
                             -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
@@ -334,6 +344,7 @@ pipeline {
                         sh "docker run --rm \
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
                             -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
@@ -354,6 +365,7 @@ pipeline {
                             sh "docker run --rm \
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
                             -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
@@ -386,6 +398,7 @@ pipeline {
                         sh "docker run --rm \
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
                             -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
@@ -407,6 +420,7 @@ pipeline {
                             sh "docker run --rm \
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
                             -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
@@ -439,6 +453,7 @@ pipeline {
                         sh "docker run --rm \
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
                             -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
@@ -459,6 +474,7 @@ pipeline {
                             sh "docker run --rm \
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
                             -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
@@ -491,6 +507,7 @@ pipeline {
                         sh "docker run --rm \
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
                             -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
@@ -512,6 +529,7 @@ pipeline {
                             sh "docker run --rm \
                             -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
                             -e CLUSTER=${env.CLUSTER} \
+                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
                             -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
                             -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
                             -e TEST_CREATE_REGISTRY=true \
@@ -527,5 +545,24 @@ pipeline {
                         }
                     }
                 }
+
+    stage('Push images') {
+        when { not { changeRequest() } }
+        steps {
+                withDockerRegistry([ credentialsId: "e16bd38a-76cb-4900-a5cb-7f6aa3aeb22d", url: "https://${REGISTRY_NAME}" ]) {
+                    sh "docker run --rm \
+                        -e REGISTRY_NAME=${env.REGISTRY_NAME} \
+                        -e DOCKER_CONFIG=$DOCKER_CONFIG \
+                        -v /var/run/docker.sock:/var/run/docker.sock \
+                        -v /usr/bin/docker:/usr/bin/docker \
+                        -v `pwd`:${env.PMEM_PATH} \
+                        -v $DOCKER_CONFIG:$DOCKER_CONFIG \
+                        -w ${env.PMEM_PATH} \
+                        ${env.BUILD_IMAGE} \
+                        make push-images PUSH_IMAGE_DEP="
+                    sh "docker image push ${env.BUILD_IMAGE}"
+                }
+            }
+        }
     }
 }
