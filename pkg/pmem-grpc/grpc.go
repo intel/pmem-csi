@@ -29,7 +29,6 @@ func Connect(endpoint string, tlsConfig *tls.Config) (*grpc.ClientConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	glog.V(3).Infof("Connecting to %s", address)
 	dialOptions := []grpc.DialOption{grpc.WithBackoffMaxDelay(time.Second)}
 	if tlsConfig != nil {
 		dialOptions = append(dialOptions, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
