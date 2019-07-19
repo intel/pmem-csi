@@ -151,6 +151,12 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 		return nil, status.Error(codes.InvalidArgument, "Name missing in request")
 	}
 
+	for _, cap := range req.VolumeCapabilities {
+		if cap.GetBlock() != nil {
+			return nil, status.Error(codes.Unimplemented, "VolumeCapability access_type:block unimplemented")
+		}
+	}
+
 	asked := req.GetCapacityRange().GetRequiredBytes()
 
 	outTopology := []*csi.Topology{}
@@ -331,6 +337,12 @@ func (cs *masterController) ValidateVolumeCapabilities(ctx context.Context, req 
 			return &csi.ValidateVolumeCapabilitiesResponse{
 				Confirmed: nil,
 				Message:   "Driver does not support '" + cap.AccessMode.Mode.String() + "' mode",
+			}, nil
+		}
+		if cap.GetBlock() != nil {
+			return &csi.ValidateVolumeCapabilitiesResponse{
+				Confirmed: nil,
+				Message:   "Driver does not support access type: block",
 			}, nil
 		}
 	}
