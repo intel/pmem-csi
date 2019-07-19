@@ -39,7 +39,7 @@ IMAGE_VERSION?=canary
 IMAGE_TAG=$(REGISTRY_NAME)/pmem-csi-driver$*:$(IMAGE_VERSION)
 # Pass proxy config via --build-arg only if these are set,
 # enabling proxy config other way, like ~/.docker/config.json
-BUILD_ARGS=
+BUILD_ARGS?=
 ifneq ($(HTTP_PROXY),)
 	BUILD_ARGS:=${BUILD_ARGS} --build-arg http_proxy=${HTTP_PROXY}
 endif

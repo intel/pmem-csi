@@ -28,7 +28,12 @@ pipeline {
 
         PMEM_PATH = "/go/src/github.com/intel/pmem-csi"
         REGISTRY_NAME = "cloud-native-image-registry.westus.cloudapp.azure.com"
-        BUILD_IMAGE = "${env.REGISTRY_NAME}/pmem-clearlinux-builder"
+        // Per-branch build environment, marked as "do not promote to public registry".
+        BUILD_IMAGE = "${env.REGISTRY_NAME}/pmem-clearlinux-builder:${env.CHANGE_TARGET}-rejected"
+        // This image is pulled at the beginning and used as cache.
+        // TODO: Here we use "canary" which is correct for the "devel" branch, but other
+        // branches may need something else to get better caching.
+        PMEM_CSI_IMAGE = "${env.REGISTRY_NAME}/pmem-csi-driver:canary"
     }
 
     stages {
@@ -42,10 +47,25 @@ pipeline {
             }
 
             steps {
-
                 sh 'docker version'
-                sh "docker build --target build --build-arg CACHEBUST=${env.BUILD_ID} -t ${env.BUILD_IMAGE} ."
-
+                withDockerRegistry([ credentialsId: "e16bd38a-76cb-4900-a5cb-7f6aa3aeb22d", url: "https://${REGISTRY_NAME}" ]) {
+                    // Pull previous image and use it as cache (https://andrewlock.net/caching-docker-layers-on-serverless-build-hosts-with-multi-stage-builds---target,-and---cache-from/).
+                    sh "docker image pull ${env.BUILD_IMAGE} || true"
+                    sh "docker image pull ${env.PMEM_CSI_IMAGE} || true"
+                    script {
+                        if ( changeRequest() ) {
+                            // PR jobs need to use the same CACHEBUST value as the latest build for their
+                            // target branch, otherwise they cannot reuse the cached layers. Another advantage
+                            // is that they use a version of Clear Linux that is known to work, because "swupd update"
+                            // will be cached.
+                            env.CACHEBUST = sh ( script: "docker inspect -f '{{ .Config.Labels.cachebust }}' ${env.BUILD_IMAGE} 2>/dev/null || true", returnStdout: true).trim()
+                        }
+                        if ( env.CACHEBUST == "" ) {
+                            env.CACHEBUST = env.BUILD_ID
+                        }
+                    }
+                    sh "docker build --cache-from ${env.BUILD_IMAGE} --label cachebust=${env.CACHEBUST} --target build --build-arg CACHEBUST=${env.CACHEBUST} -t ${env.BUILD_IMAGE} ."
+                }
              }
 
         }
@@ -79,9 +99,9 @@ pipeline {
             }
 
             steps {
-
                 sh "docker run --rm \
-                    -e BUILD_IMAGE_ID=${env.BUILD_ID} \
+                    -e BUILD_IMAGE_ID=${env.CACHEBUST} \
+                    -e 'BUILD_ARGS=--cache-from ${env.BUILD_IMAGE} --cache-from ${env.PMEM_CSI_IMAGE}' \
                     -e REGISTRY_NAME=${env.REGISTRY_NAME} \
                     -v /var/run/docker.sock:/var/run/docker.sock \
                     -v /usr/bin/docker:/usr/bin/docker \
