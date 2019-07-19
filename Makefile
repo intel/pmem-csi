@@ -94,6 +94,10 @@ PUSH_IMAGE_DEP = build%-image
 push-image push-test-image: push%-image: $(PUSH_IMAGE_DEP)
 	docker push $(IMAGE_TAG)
 
+.PHONY: print-image-version
+print-image-version:
+	@ echo "$(IMAGE_VERSION)"
+
 clean:
 	go clean -r -x
 	-rm -rf $(OUTPUT_DIR)

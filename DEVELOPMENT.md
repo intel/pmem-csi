@@ -4,6 +4,9 @@ Table of Contents
 - [Code quality](#code-quality)
     - [Coding style](#coding-style)
     - [Input validation](#input-validation)
+- [Release management](#release-management)
+-   - [Branching](#branching)
+    - [Tagging](#tagging)
 - [APIs](#apis)
     - [CSI API](#csi-api)
     - [Network ports](#network-ports)
@@ -55,6 +58,68 @@ Nonetheless, input needs to be validated to catch mistakes:
   refuses to send messages that are larger
   (https://godoc.org/google.golang.org/grpc#MaxSendMsgSize)
 
+Release management
+==================
+
+Branching
+---------
+
+The `master` branch is the main branch. It is guaranteed to have
+passed full CI testing. However, it always uses the latest Clear Linux
+for building container images, so changes in Clear Linux can break the
+building of older revisions.
+
+The `devel` branch contains additional commits on top of `master`
+which might not have been tested in that combination yet. Therefore it
+may be a bit less stable than `master`. The `master` branch gets
+advanced via a fast-forward merge after successful testing by the CI job
+that rebuilds and tests the `devel` branch.
+
+Code changes are made via pull requests against `devel`. Each of them
+will get tested separately by the CI system before merging, but only a
+subset of the tests can be run due to time constraints.
+
+Beware that after merging one PR, the existing pre-merge tests results
+for other PRs become stale because they were based on the old `devel`
+branch. Because `devel` is allowed to be less stable than `master`, it
+is okay to merge two PRs quickly after one another without
+retesting. If two PRs that merged that don't have code conflicts
+(which would get detected by GitHub) but which nonetheless don't work
+together, the combined testing in the `devel` branch will find
+that. This will block updating `master` and thus needs to be dealt
+quickly.
+
+Releases are created by branching `release-x.y` from `master` or some
+older, stable revision. On that new branch, the base image is locked
+onto a certain Clear Linux version with the
+`hack/update-clear-linux-base.sh` script. Those `release-x.y` branches
+are then fully reproducible. The actual `vx.y.z` release tags are set
+on revisions in the corresponding `release-x.y` branch.
+
+Releases and the corresponding images are never changed. If something
+goes wrong after setting a tag (like detecting a bug while testing the
+release images), a new release is created.
+
+Container images reference a fixed base image. To ensure that the base
+image remains secure, `hack/update-clear-linux-base.sh` gets run
+periodically to update a `release-x.y` branch and a new release with
+`z` increased by one is created. Other bug fixed might be added to
+that release by merging into the branch.
+
+Tagging
+-------
+
+The `devel` and `master` branch build and use the `canary` version of
+the PMEM-CSI driver images. Before tagging a release, all of those
+version strings need to be replaced by the upcoming version. All
+tagged releases then use the image that corresponds to that release.
+
+The `hack/set-version.sh` script can be used to set these versions.
+The modified files then need to be committed. Merging such a commit
+triggers a rebuild of the `devel` branch, but does not yet produce a
+release: the actual image only gets pushed when there is a tag that
+corresponds to the version embedded in the source code. The
+Jenkinsfile ensures that.
 
 APIs
 ============
