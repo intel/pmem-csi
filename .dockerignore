@@ -1,2 +1,8 @@
-_output
-_work
+*
+! **/*.make
+! Makefile
+! cmd/**
+! pkg/**
+! test/test-config.d/**
+! test/test-config.sh
+! vendor/**

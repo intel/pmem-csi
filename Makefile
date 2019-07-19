@@ -125,7 +125,7 @@ _work/kustomize-$(KUSTOMIZE_VERSION):
 # in the git repo because not all users will have kustomize or it
 # might be an unsuitable version. When any file changes, update the
 # output.
-KUSTOMIZE_INPUT := $(shell find deploy/kustomize -type f)
+KUSTOMIZE_INPUT := $(shell [ ! -d deploy/kustomize ] || find deploy/kustomize -type f)
 
 # Output files and their corresponding kustomize target.
 # The "testing" flavor of the generated files contains both
