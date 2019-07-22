@@ -60,17 +60,42 @@ listening for API requests and provisioning volumes accordingly.
 
 ### Architecture and Operation
 
-The PMEM-CSI driver can operate in two different DeviceModes: LVM and Direct
+The PMEM-CSI driver can operate in two different device modes: *LVM* and *direct*. This table contains an overview and comparison of those modes. There is more detailed modes explanation down in following paragraphs.
+
+|                   |LVM                    |direct              |
+|:--                |:--                    |:--                 |
+|Main advantage     |avoids free space fragmentation<sup>1</sup>   |simpler, somewhat faster, but free space may get fragmented<sup>1</sup>   |
+|What is served     |LVM logical volume     |pmem block device   |
+|Region affinity<sup>2</sup>    |yes: one LVM volume group is created per region, and a volume has to be in one volume group  |yes: namespace can belong to one region only  |
+|Startup            |two extra stages: pmem-ns-init (creates namespaces), vgm (creates volume groups)   |no extra steps at startup |
+|Namespace modes    |*fsdax, sector* mode<sup>3</sup> namespaces pre-created as pools   |namespace in required mode created directly, no need to pre-create pools   |
+|Limiting space usage | can leave part of device unused during pools creation  |no limits, creates namespaces on device until runs out of space  |
+| *Name* field in namespace | *Name* gets set to 'pmem-csi' to achieve own vs. foreign marking | *Name* gets set to VolumeID, without attempting own vs. foreign marking  |
+|Minimum volume size| 4 MB                   | 1 GB (see also alignment adjustment below) |
+|Alignment requirements |LVM creation aligns size up to next 4MB boundary  |driver aligns  size up to next alignment boundary. The default alignment step is 1 GB. Device(s) in interleaved mode will require larger minimum as size has to be at least one alignment step. The possibly bigger alignment step is calculated as interleave-set-size multiplied by 1 GB |
+
+<sup>1 </sup> *Fragmented free space* state may develop via series of creation and deletion operations where the driver is no longer able to allocate a new namespace contiguously, although the free capacity (i.e. sum of available free section sizes) indicates the opposite. The PMEM-CSI driver is not capable of de-fragmenting the space or create allocation using combined smaller blocks. 
+A simplified example: This state develops after steps: create 63 GB namespace, create 1 GB namespace, delete 63 GB namespace. The free capacity is 127 GB, but the driver fails to create a namespace bigger than 64 GB. 
+
+```
+---------------------------------------------------------------------
+|         63 GB free         | 1GB used |         64 GB free        |
+---------------------------------------------------------------------
+```
+
+<sup>2 </sup> *Region affinity* means that all parts of a provisioned file system are physically located on device(s) that belong to same PMEM region. This is important on multi-socket systems where media access time may vary based on where the storage device(s) are physically attached.
+
+<sup>3 </sup> *fsdax, sector* modes refer to the modes of NVDIMM namespaces. See [Persistent Memory Programming](https://pmem.io/ndctl/ndctl-create-namespace.html) for details
 
 ### LVM device mode
 
 The following diagram illustrates the operation in LVM device mode:
 ![devicemode-lvm diagram](/docs/images/devicemodes/pmem-csi-lvm.png)
 
-In LVM device mode PMEM-CSI driver uses LVM for Logical Volumes
+In LVM device mode PMEM-CSI driver uses LVM for logical volumes
 Management to avoid the risk of fragmentation. The LVM logical volumes
-are served to satisfy API requests. There is one Volume Group created
-per Region, ensuring the region-affinity of served volumes.
+are served to satisfy API requests. There is one volume group created
+per region, ensuring the region-affinity of served volumes.
 
 The driver consists of three separate binaries that form two
 initialization stages and a third API-serving stage.
@@ -89,14 +114,14 @@ starts serving CSI API requests.
 
 #### Namespace modes in LVM device mode
 
-The PMEM-CSI driver can pre-create Namespaces in two modes, forming
-corresponding LVM Volume groups, to serve volumes based on `fsdax` or
-`sector` (alias `safe`) mode Namespaces. The amount of space to be
+The PMEM-CSI driver can pre-create namespaces in two modes, forming
+corresponding LVM volume groups, to serve volumes based on `fsdax` or
+`sector` (alias `safe`) mode namespaces. The amount of space to be
 used is determined using two options `-useforfsdax` and
 `-useforsector` given to _pmem-ns-init_. These options specify an
 integer presenting limit as percentage, which is applied separately in
-each Region. The default values are `useforfsdax=100` and
-`useforsector=0`. A CSI request for volume can specify the Namespace
+each region. The default values are `useforfsdax=100` and
+`useforsector=0`. A CSI request for volume can specify the namespace
 mode using the driver-specific argument `nsmode` which has a value of
 either "fsdax" (default) or "sector". A volume provisioned in `fsdax`
 mode will have the `dax` option added to mount options.
@@ -107,21 +132,21 @@ The PMEM-CSI driver can leave space on devices for others, and
 recognize "own" namespaces. Leaving space for others can be achieved
 by specifying lower-than-100 values to `-useforfsdax` and/or
 `-useforsector` options. The distinction "own" vs. "foreign" is
-implemented by setting the _Name_ field in Namespace to a static
-string "pmem-csi" during Namespace creation. When adding Physical
-Volumes to Volume Groups, only Physical Volumes that are based on
-Namespaces with the name "pmem-csi" are considered.
+implemented by setting the _Name_ field in namespace to a static
+string "pmem-csi" during namespace creation. When adding physical
+volumes to volume groups, only those physical volumes that are based on
+namespaces with the name "pmem-csi" are considered.
 
 ### Direct device mode
 
 The following diagram illustrates the operation in Direct device mode:
 ![devicemode-direct diagram](/docs/images/devicemodes/pmem-csi-direct.png)
 
-In direct device mode PMEM-CSI driver allocates Namespaces directly
+In direct device mode PMEM-CSI driver allocates namespaces directly
 from the storage device. This creates device space fragmentation risk,
 but reduces complexity and run-time overhead by avoiding additional
 device mapping layer. Direct mode also ensures the region-affinity of
-served volumes, because provisioned volume can belong to one Region
+served volumes, because provisioned volume can belong to one region
 only.
 
 In Direct mode, the two preparation stages used in LVM mode, are not
@@ -129,15 +154,15 @@ needed.
 
 #### Namespace modes in direct device mode
 
-The PMEM-CSI driver creates a Namespace directly in the mode which is
-asked by Volume creation request, thus bypassing the complexity of
+The PMEM-CSI driver creates a namespace directly in the mode which is
+asked by volume creation request, thus bypassing the complexity of
 pre-allocated pools that are used in LVM device mode.
 
 #### Using limited amount of total space in direct device mode
 
 In direct device mode, the driver does not attempt to limit space
 use. It also does not mark "own" namespaces. The _Name_ field of a
-Namespace gets value of the VolumeID.
+namespace gets value of the VolumeID.
 
 ### Driver modes
 
@@ -277,19 +302,19 @@ designing and deploying applications that are to use *local storage*.
 Below are the volume persistency models considered for implementation
 in PMEM-CSI to serve different application use cases:
 
-* Persistent Volumes  
+* Persistent volumes
 A volume gets created independently of the application, on some node
 where there is enough free space. Applications using such a volume are
 then forced to run on that node and cannot run when the node is
 down. Data is retained until the volume gets deleted.
 
-* Ephemeral Volumes  
+* Ephemeral volumes
 Each time an application starts to run on a node, a new volume is
 created for it on that node. When the application stops, the volume is
 deleted. The volume cannot be shared with other applications. Data on
 this volume is retained only while the application runs.
 
-* Cache Volumes  
+* Cache volumes
 Volumes are pre-created on a certain set of nodes, each with its own
 local data. Applications are started on those nodes and then get to
 use the volume on their node. Data persists across application
@@ -694,6 +719,29 @@ one with ext4-format and another with xfs-format file system.
     /dev/ndbus0region0fsdax/5ccaa889-551d-11e9-a584-928299ac4b17 on /data type ext4 (rw,relatime,dax)
     $ kubectl exec my-csi-app-2 -- mount |grep /data
     /dev/ndbus0region0fsdax/5cc9b19e-551d-11e9-a584-928299ac4b17 on /data type xfs (rw,relatime,attr2,dax,inode64,noquota)
+```
+
+#### Note about using the sector mode
+
+PMEM-CSI can create a namespace in the *sector* (alias safe) mode instead of default *fsdax* mode. See [Persistent Memory Programming](https://pmem.io/ndctl/ndctl-create-namespace.html) for more details about namespace modes. The main difference in PMEM-CSI context is that a sector-mode volume will not get 'dax' mount option. The deployment examples do not describe sector mode to keep the amount of combinations smaller. Here are the changes to be made to deploy volumes in sector mode:
+
+- add `nsmode: "sector"` line in parameters section in the storageclass definition file pmem-storageclass-XYZ.yaml:
+```
+parameters:
+  csi.storage.k8s.io/fstype: ext4
+  eraseafter: "true"
+  nsmode: "sector"                   <-- add this
+```
+
+* Only if using LVM device mode: Modify pmem-ns-init options to create sector-mode pools in addition to fsdax-mode pools. Add `-useforfsdax` and `-useforsector` options to pmem-ns-init arguments in pmem-csi-lvm.yaml: (select the percentage values that fit your needs)
+```
+       initContainers:
+       - args:
+         - -v=3
+         - -useforfsdax=60                   <-- add this
+         - -useforsector=40                  <-- add this
+         command:
+         - /go/bin/pmem-ns-init
 ```
 
 <!-- FILL TEMPLATE:

@@ -224,32 +224,31 @@ Notes about switching device mode
 ================================
 
 If device mode is switched between LVM and direct(aka ndctl), please keep
-in mind that PMEM-CSI driver does not clean up or reclaim Namespaces,
-therefore Namespaces plus other related context (LVM state)
+in mind that PMEM-CSI driver does not clean up or reclaim namespaces,
+therefore namespaces plus other related context (LVM state)
 created in previous mode will remain stored on device and most likely
 will create trouble in another device mode.
 
 Going from LVM device mode to direct device mode
 ------------------------------------------------
 
-- examine LV Groups state on a node: `vgs`
-- examine LV Phys.Volumes state on a node: `pvs`
-- Delete LV Groups before deleting namespaces: `vgremove VGNAME`, to
-  avoid orphaned VGroups
+- examine LV groups state on a node: `vgs`
+- examine LV physical volumes state on a node: `pvs`
+- delete LV groups before deleting namespaces to avoid orphaned volume groups: `vgremove VGNAME`
 
 NOTE: The next **WILL DELETE ALL NAMESPACES** so be careful!
 
-- Delete Namespaces on a node using CLI: `ndctl destroy-namespace all --force`
+- Delete namespaces on a node using CLI: `ndctl destroy-namespace all --force`
 
 Going from direct device mode to LVM device mode
 ----------------------------------------------
 
-No special steps are needed to clean up Namespaces state.
+No special steps are needed to clean up namespaces state.
 
 If PMEM-CSI driver has been operating correctly, there should not be
-existing Namespaces as CSI Volume lifecycle should have been deleted
-those after end of life of Volume. If there are, you can either keep
-those (LVM device mode does honor "foreign" Namespaces and leaves those
+existing namespaces as CSI volume lifecycle should have been deleted
+those after end of life of volume. If there are, you can either keep
+those (LVM device mode does honor "foreign" namespaces and leaves those
 alone) if you have enough space, or you can choose to delete those
 using `ndctl` on node.
 
@@ -265,7 +264,7 @@ Read-only access to /sys
 
 In some deployment schemes /sys remains mounted read-only in the
 container running pmsm-csi-driver. This creates problem for the
-driver which needs write access to /sys for Namespaces management
+driver which needs write access to /sys for namespaces management
 operations. There is start-time check for read-write mount of /sys in
 the code. An error in pod log `pmem-driver: Failed to run driver:
 FATAL: /sys mounted read-only, can not operate` is the sign of such
