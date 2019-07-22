@@ -17,8 +17,10 @@ limitations under the License.
 package framework
 
 import (
+	"bytes"
 	"fmt"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,6 +36,7 @@ import (
 	"k8s.io/kubernetes/pkg/kubelet/events"
 	"k8s.io/kubernetes/pkg/kubelet/sysctl"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
+	clientset "k8s.io/client-go/kubernetes"
 
 	"github.com/onsi/ginkgo"
 	"github.com/onsi/gomega"
@@ -312,4 +315,55 @@ func (c *PodClient) PodIsReady(name string) bool {
 	pod, err := c.Get(name, metav1.GetOptions{})
 	ExpectNoError(err)
 	return podutil.IsPodReady(pod)
+}
+
+// ExecWithOptions executes a command in the specified container,
+// returning stdout, stderr and error. `options` allowed for
+// additional parameters to be passed.
+func (c *PodClient) ExecWithOptions(options ExecOptions, cs clientset.Interface) (string, string, error) {
+        Logf("ExecWithOptions %+v", options)
+
+        config, err := LoadConfig()
+        ExpectNoError(err, "failed to load restclient config")
+
+        const tty = false
+
+        req := cs.CoreV1().RESTClient().Post().
+                Resource("pods").
+                Name(options.PodName).
+                Namespace(options.Namespace).
+                SubResource("exec").
+                Param("container", options.ContainerName)
+        req.VersionedParams(&v1.PodExecOptions{
+                Container: options.ContainerName,
+                Command:   options.Command,
+                Stdin:     options.Stdin != nil,
+                Stdout:    options.CaptureStdout,
+                Stderr:    options.CaptureStderr,
+                TTY:       tty,
+        }, scheme.ParameterCodec)
+
+        var stdout, stderr bytes.Buffer
+        err = execute("POST", req.URL(), config, options.Stdin, &stdout, &stderr, tty)
+
+        if options.PreserveWhitespace {
+                return stdout.String(), stderr.String(), err
+        }
+        return strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String()), err
+}
+
+// ExecCommandInContainerWithFullOutput executes a command in the
+// specified container and return stdout, stderr and error
+func (c *PodClient) ExecCommandInContainerWithFullOutput(podName, containerName string, namespaceName string, cs clientset.Interface, cmd ...string) (string, string, error) {
+        return c.ExecWithOptions(ExecOptions{
+                Command:       cmd,
+                Namespace:     namespaceName,
+                PodName:       podName,
+                ContainerName: containerName,
+
+                Stdin:              nil,
+                CaptureStdout:      true,
+                CaptureStderr:      true,
+                PreserveWhitespace: false,
+        }, cs)
 }

@@ -33,6 +33,7 @@ import (
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
+	clientexec "k8s.io/client-go/util/exec"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2elog "k8s.io/kubernetes/test/e2e/framework/log"
@@ -62,14 +63,17 @@ const (
 	podSecurityPolicyPrivilegedClusterRoleName = "e2e-test-privileged-psp"
 )
 
-// PodExec wraps RunKubectl to execute a bash cmd in target pod
-func PodExec(pod *v1.Pod, bashExec string) (string, error) {
-	return framework.RunKubectl("exec", fmt.Sprintf("--namespace=%s", pod.Namespace), pod.Name, "--", "/bin/sh", "-c", bashExec)
+// PodExec runs podClient.ExecCommandInContainerWithFullOutpu to execute a shell cmd in target pod
+func PodExec(f *framework.Framework, pod *v1.Pod, bashExec string) (string, error) {
+	clientSet := f.ClientSet
+	podClient := f.PodClient()
+	stdout, _, err := podClient.ExecCommandInContainerWithFullOutput(pod.Name, pod.Spec.Containers[0].Name, pod.Namespace, clientSet, "/bin/sh", "-c", bashExec)
+	return stdout, err
 }
 
 // VerifyExecInPodSucceed verifies bash cmd in target pod succeed
-func VerifyExecInPodSucceed(pod *v1.Pod, bashExec string) {
-	_, err := PodExec(pod, bashExec)
+func VerifyExecInPodSucceed(f *framework.Framework, pod *v1.Pod, bashExec string) {
+	_, err := PodExec(f, pod, bashExec)
 	if err != nil {
 		if err, ok := err.(uexec.CodeExitError); ok {
 			exitCode := err.ExitStatus()
@@ -85,10 +89,10 @@ func VerifyExecInPodSucceed(pod *v1.Pod, bashExec string) {
 }
 
 // VerifyExecInPodFail verifies bash cmd in target pod fail with certain exit code
-func VerifyExecInPodFail(pod *v1.Pod, bashExec string, exitCode int) {
-	_, err := PodExec(pod, bashExec)
+func VerifyExecInPodFail(f *framework.Framework, pod *v1.Pod, bashExec string, exitCode int) {
+	_, err := PodExec(f, pod, bashExec)
 	if err != nil {
-		if err, ok := err.(uexec.CodeExitError); ok {
+		if err, ok := err.(clientexec.ExitError); ok {
 			actualExitCode := err.ExitStatus()
 			framework.ExpectEqual(actualExitCode, exitCode,
 				"%q should fail with exit code %d, but failed with exit code %d and error message %q",
@@ -549,46 +553,46 @@ func PrivilegedTestPSPClusterRoleBinding(client clientset.Interface,
 }
 
 // CheckVolumeModeOfPath check mode of volume
-func CheckVolumeModeOfPath(pod *v1.Pod, volMode v1.PersistentVolumeMode, path string) {
+func CheckVolumeModeOfPath(f *framework.Framework, pod *v1.Pod, volMode v1.PersistentVolumeMode, path string) {
 	if volMode == v1.PersistentVolumeBlock {
 		// Check if block exists
-		VerifyExecInPodSucceed(pod, fmt.Sprintf("test -b %s", path))
+		VerifyExecInPodSucceed(f, pod, fmt.Sprintf("test -b %s", path))
 
 		// Double check that it's not directory
-		VerifyExecInPodFail(pod, fmt.Sprintf("test -d %s", path), 1)
+		VerifyExecInPodFail(f, pod, fmt.Sprintf("test -d %s", path), 1)
 	} else {
 		// Check if directory exists
-		VerifyExecInPodSucceed(pod, fmt.Sprintf("test -d %s", path))
+		VerifyExecInPodSucceed(f, pod, fmt.Sprintf("test -d %s", path))
 
 		// Double check that it's not block
-		VerifyExecInPodFail(pod, fmt.Sprintf("test -b %s", path), 1)
+		VerifyExecInPodFail(f, pod, fmt.Sprintf("test -b %s", path), 1)
 	}
 }
 
 // CheckReadWriteToPath check that path can b e read and written
-func CheckReadWriteToPath(pod *v1.Pod, volMode v1.PersistentVolumeMode, path string) {
+func CheckReadWriteToPath(f *framework.Framework, pod *v1.Pod, volMode v1.PersistentVolumeMode, path string) {
 	if volMode == v1.PersistentVolumeBlock {
 		// random -> file1
-		VerifyExecInPodSucceed(pod, "dd if=/dev/urandom of=/tmp/file1 bs=64 count=1")
+		VerifyExecInPodSucceed(f, pod, "dd if=/dev/urandom of=/tmp/file1 bs=64 count=1")
 		// file1 -> dev (write to dev)
-		VerifyExecInPodSucceed(pod, fmt.Sprintf("dd if=/tmp/file1 of=%s bs=64 count=1", path))
+		VerifyExecInPodSucceed(f, pod, fmt.Sprintf("dd if=/tmp/file1 of=%s bs=64 count=1", path))
 		// dev -> file2 (read from dev)
-		VerifyExecInPodSucceed(pod, fmt.Sprintf("dd if=%s of=/tmp/file2 bs=64 count=1", path))
+		VerifyExecInPodSucceed(f, pod, fmt.Sprintf("dd if=%s of=/tmp/file2 bs=64 count=1", path))
 		// file1 == file2 (check contents)
-		VerifyExecInPodSucceed(pod, "diff /tmp/file1 /tmp/file2")
+		VerifyExecInPodSucceed(f, pod, "diff /tmp/file1 /tmp/file2")
 		// Clean up temp files
-		VerifyExecInPodSucceed(pod, "rm -f /tmp/file1 /tmp/file2")
+		VerifyExecInPodSucceed(f, pod, "rm -f /tmp/file1 /tmp/file2")
 
 		// Check that writing file to block volume fails
-		VerifyExecInPodFail(pod, fmt.Sprintf("echo 'Hello world.' > %s/file1.txt", path), 1)
+		VerifyExecInPodFail(f, pod, fmt.Sprintf("echo 'Hello world.' > %s/file1.txt", path), 1)
 	} else {
 		// text -> file1 (write to file)
-		VerifyExecInPodSucceed(pod, fmt.Sprintf("echo 'Hello world.' > %s/file1.txt", path))
+		VerifyExecInPodSucceed(f, pod, fmt.Sprintf("echo 'Hello world.' > %s/file1.txt", path))
 		// grep file1 (read from file and check contents)
-		VerifyExecInPodSucceed(pod, fmt.Sprintf("grep 'Hello world.' %s/file1.txt", path))
+		VerifyExecInPodSucceed(f, pod, fmt.Sprintf("grep 'Hello world.' %s/file1.txt", path))
 
 		// Check that writing to directory as block volume fails
-		VerifyExecInPodFail(pod, fmt.Sprintf("dd if=/dev/urandom of=%s bs=64 count=1", path), 1)
+		VerifyExecInPodFail(f, pod, fmt.Sprintf("dd if=/dev/urandom of=%s bs=64 count=1", path), 1)
 	}
 }
 
