@@ -29,7 +29,8 @@ pipeline {
         PMEM_PATH = "/go/src/github.com/intel/pmem-csi"
         REGISTRY_NAME = "cloud-native-image-registry.westus.cloudapp.azure.com"
         // Per-branch build environment, marked as "do not promote to public registry".
-        BUILD_IMAGE = "${env.REGISTRY_NAME}/pmem-clearlinux-builder:${env.CHANGE_TARGET}-rejected"
+        // Set below via a script, must *not* be set here as it can't be overwritten.
+        // BUILD_IMAGE = ""
         // This image is pulled at the beginning and used as cache.
         // TODO: Here we use "canary" which is correct for the "devel" branch, but other
         // branches may need something else to get better caching.
@@ -49,18 +50,24 @@ pipeline {
             steps {
                 sh 'docker version'
                 withDockerRegistry([ credentialsId: "e16bd38a-76cb-4900-a5cb-7f6aa3aeb22d", url: "https://${REGISTRY_NAME}" ]) {
-                    // Pull previous image and use it as cache (https://andrewlock.net/caching-docker-layers-on-serverless-build-hosts-with-multi-stage-builds---target,-and---cache-from/).
-                    sh "docker image pull ${env.BUILD_IMAGE} || true"
-                    sh "docker image pull ${env.PMEM_CSI_IMAGE} || true"
                     script {
-                        if ( changeRequest() ) {
+                        if (env.CHANGE_ID != null) {
+                            env.BUILD_IMAGE = "${env.REGISTRY_NAME}/pmem-clearlinux-builder:${env.CHANGE_TARGET}-rejected"
+
+                            // Pull previous image and use it as cache (https://andrewlock.net/caching-docker-layers-on-serverless-build-hosts-with-multi-stage-builds---target,-and---cache-from/).
+                            sh ( script: "docker image pull ${env.BUILD_IMAGE} || true")
+                            sh ( script: "docker image pull ${env.PMEM_CSI_IMAGE} || true")
+
                             // PR jobs need to use the same CACHEBUST value as the latest build for their
                             // target branch, otherwise they cannot reuse the cached layers. Another advantage
                             // is that they use a version of Clear Linux that is known to work, because "swupd update"
                             // will be cached.
                             env.CACHEBUST = sh ( script: "docker inspect -f '{{ .Config.Labels.cachebust }}' ${env.BUILD_IMAGE} 2>/dev/null || true", returnStdout: true).trim()
+                        } else {
+                            env.BUILD_IMAGE = "${env.REGISTRY_NAME}/pmem-clearlinux-builder:${env.BRANCH_NAME}-rejected"
                         }
-                        if ( env.CACHEBUST == "" ) {
+
+                        if (env.CACHEBUST == null || env.CACHEBUST == "") {
                             env.CACHEBUST = env.BUILD_ID
                         }
                     }
