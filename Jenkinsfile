@@ -87,13 +87,17 @@ pipeline {
             steps {
                 withDockerRegistry([ credentialsId: "e16bd38a-76cb-4900-a5cb-7f6aa3aeb22d", url: "https://${REGISTRY_NAME}" ]) {
                     // Push PMEM-CSI images without rebuilding them.
+                    // When building a tag, we expect the code to contain that version as image version.
+                    // When building a branch, we expect "canary" for the "devel" branch and (currently) don't publish
+                    // canary images for other branches.
+                    // This relies on GIT_LOCAL_BRANCH, which despite its name contains the tag name respectively the branch name.
                     sh "imageversion=\$(docker run --rm ${env.BUILD_IMAGE} make print-image-version) && \
-                        if (echo canary; git tag --points-at HEAD) | grep -q -w \$imageversion; then \
+                        if [ \"\$imageversion\" = \"\${GIT_LOCAL_BRANCH/devel/canary/}\" ] ; then \
                             docker run --rm ${DockerBuildArgs()} -e DOCKER_CONFIG=$DOCKER_CONFIG -v $DOCKER_CONFIG:$DOCKER_CONFIG ${env.BUILD_IMAGE} make push-images PUSH_IMAGE_DEP=; \
                         else \
-                            echo 'Skipping the pushing of PMEM-CSI driver images version \$imageversion because it is not tagged.'; \
+                            echo \"Skipping the pushing of PMEM-CSI driver images version \$imageversion because it is not tagged.\"; \
                         fi"
-                    // Also push the build images, for later reuse in PR jobs.
+                    // Also push the build image, for later reuse in PR jobs.
                     sh "docker image push ${env.BUILD_IMAGE}"
                 }
             }
