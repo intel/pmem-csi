@@ -42,6 +42,7 @@ pipeline {
 
             steps {
                 sh 'docker version'
+                sh 'env'
                 withDockerRegistry([ credentialsId: "e16bd38a-76cb-4900-a5cb-7f6aa3aeb22d", url: "https://${REGISTRY_NAME}" ]) {
                     script {
                         if (env.CHANGE_ID != null) {
