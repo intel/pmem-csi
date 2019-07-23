@@ -89,7 +89,7 @@ pipeline {
                     sh "imageversion=\$(docker run --rm ${env.BUILD_IMAGE} make print-image-version) && \
                         if (echo canary; git tag --points-at HEAD) | grep -q -w \$imageversion; then \
                             docker run --rm ${DockerBuildArgs()} -e DOCKER_CONFIG=$DOCKER_CONFIG -v $DOCKER_CONFIG:$DOCKER_CONFIG ${env.BUILD_IMAGE} make push-images PUSH_IMAGE_DEP=";
-                        else
+                        else \
                             echo 'Skipping the pushing of PMEM-CSI driver images version \$imageversion because it is not tagged.'; \
                         fi"
                     // Also push the build images, for later reuse in PR jobs.
