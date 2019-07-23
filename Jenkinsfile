@@ -92,7 +92,7 @@ pipeline {
                     // canary images for other branches.
                     // This relies on GIT_LOCAL_BRANCH, which despite its name contains the tag name respectively the branch name.
                     sh "imageversion=\$(docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} make print-image-version) && \
-                        expectedversion=\${GIT_LOCAL_BRANCH/devel/canary} && \
+                        expectedversion=\$(echo '${GIT_LOCAL_BRANCH}' | sed -e 's/devel/canary') && \
                         if [ \"\$imageversion\" = \"\$expectedversion\" ] ; then \
                             docker run --rm ${DockerBuildArgs()} -e DOCKER_CONFIG=$DOCKER_CONFIG -v $DOCKER_CONFIG:$DOCKER_CONFIG ${env.BUILD_IMAGE} make push-images PUSH_IMAGE_DEP=; \
                         else \
