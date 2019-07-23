@@ -69,16 +69,6 @@ pipeline {
             }
         }
 
-        stage('make test') {
-            options {
-                timeout(time: 20, unit: "MINUTES")
-            }
-
-            steps {
-                sh "docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} make test"
-            }
-        }
-
         stage('Build test image') {
             options {
                 timeout(time: 60, unit: "MINUTES")
@@ -90,96 +80,6 @@ pipeline {
             }
         }
 
-        stage('testing 1.14 LVM') {
-            options {
-                timeout(time: 90, unit: "MINUTES")
-                retry(2)
-            }
-            steps {
-                TestInVM("lvm", "testing", "${env.CLEAR_LINUX_VERSION_1_14}")
-            }
-        }
-
-        stage('testing 1.14 direct') {
-            options {
-                timeout(time: 180, unit: "MINUTES")
-                retry(2)
-            }
-            steps {
-                TestInVM("direct", "testing", "${env.CLEAR_LINUX_VERSION_1_14}")
-            }
-        }
-
-        stage('testing 1.13 LVM') {
-            when { not { changeRequest() } }
-            options {
-                timeout(time: 90, unit: "MINUTES")
-                retry(2)
-            }
-            steps {
-                TestInVM("lvm", "testing", "${env.CLEAR_LINUX_VERSION_1_13}")
-            }
-        }
-
-        stage('testing 1.13 direct') {
-            when { not { changeRequest() } }
-            options {
-                timeout(time: 180, unit: "MINUTES")
-                retry(2)
-            }
-            steps {
-                TestInVM("direct", "testing", "${env.CLEAR_LINUX_VERSION_1_13}")
-            }
-        }
-
-        /*
-          In production we can only run E2E testing, no sanity testing.
-          Therefore it is faster.
-        */
-
-        stage('production 1.14 LVM') {
-            when { not { changeRequest() } }
-            options {
-                timeout(time: 30, unit: "MINUTES")
-                retry(2)
-            }
-            steps {
-                TestInVM("lvm", "production", "${env.CLEAR_LINUX_VERSION_1_14}")
-            }
-        }
-
-        stage('production 1.14 direct') {
-            when { not { changeRequest() } }
-            options {
-                timeout(time: 30, unit: "MINUTES")
-                retry(2)
-            }
-            steps {
-                TestInVM("direct", "production", "${env.CLEAR_LINUX_VERSION_1_14}")
-            }
-        }
-
-        stage('production 1.13 LVM') {
-            when { not { changeRequest() } }
-            options {
-                timeout(time: 30, unit: "MINUTES")
-                retry(2)
-            }
-            steps {
-                TestInVM("lvm", "production", "${env.CLEAR_LINUX_VERSION_1_13}")
-            }
-        }
-
-        stage('production 1.13 direct') {
-            when { not { changeRequest() } }
-            options {
-                timeout(time: 30, unit: "MINUTES")
-                retry(2)
-            }
-            steps {
-                TestInVM("direct", "production", "${env.CLEAR_LINUX_VERSION_1_13}")
-            }
-        }
 
         stage('Push images') {
             when { not { changeRequest() } }
