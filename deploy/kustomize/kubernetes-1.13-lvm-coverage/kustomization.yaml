@@ -23,9 +23,9 @@ patchesJson6902:
   path: ../testing/lvm-coverage-patch.yaml
 
 images:
-- name: PMEM_REGISTRY/pmem-csi-driver
-  newName: PMEM_REGISTRY/pmem-csi-driver-test
-- name: PMEM_REGISTRY/pmem-ns-init
-  newName: PMEM_REGISTRY/pmem-ns-init-test
-- name: PMEM_REGISTRY/pmem-vgm
-  newName: PMEM_REGISTRY/pmem-vgm-test
+- name: intel/pmem-csi-driver
+  newName: intel/pmem-csi-driver-test
+- name: intel/pmem-ns-init
+  newName: intel/pmem-ns-init-test
+- name: intel/pmem-vgm
+  newName: intel/pmem-vgm-test
