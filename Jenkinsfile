@@ -91,7 +91,7 @@ pipeline {
                     // When building a branch, we expect "canary" for the "devel" branch and (currently) don't publish
                     // canary images for other branches.
                     // This relies on GIT_LOCAL_BRANCH, which despite its name contains the tag name respectively the branch name.
-                    sh "imageversion=\$(docker run --rm ${env.BUILD_IMAGE} make print-image-version) && \
+                    sh "imageversion=\$(docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} make print-image-version) && \
                         if [ \"\$imageversion\" = \"\${GIT_LOCAL_BRANCH/devel/canary/}\" ] ; then \
                             docker run --rm ${DockerBuildArgs()} -e DOCKER_CONFIG=$DOCKER_CONFIG -v $DOCKER_CONFIG:$DOCKER_CONFIG ${env.BUILD_IMAGE} make push-images PUSH_IMAGE_DEP=; \
                         else \
