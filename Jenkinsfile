@@ -1,12 +1,9 @@
 pipeline {
-
     agent {
-
         label "pmem-csi"
     }
 
     environment {
-
         /*
           For each major Kubernetes release we need one version of Clear Linux
           which had that release. Installing different Kubernetes releases
@@ -38,13 +35,9 @@ pipeline {
     }
 
     stages {
-
         stage('Create build environment') {
-
             options {
-
                 timeout(time: 60, unit: "MINUTES")
-
             }
 
             steps {
@@ -73,523 +66,194 @@ pipeline {
                     }
                     sh "docker build --cache-from ${env.BUILD_IMAGE} --label cachebust=${env.CACHEBUST} --target build --build-arg CACHEBUST=${env.CACHEBUST} -t ${env.BUILD_IMAGE} ."
                 }
-             }
-
+            }
         }
 
         stage('make test') {
-
             options {
-
                 timeout(time: 20, unit: "MINUTES")
-
             }
 
             steps {
-
-                sh "docker run --rm \
-                -v `pwd`:${env.PMEM_PATH} \
-                -w $PMEM_PATH \
-                ${env.BUILD_IMAGE} \
-                make test"
+                sh "docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} make test"
             }
-
         }
 
         stage('Build test image') {
-
             options {
-
                 timeout(time: 60, unit: "MINUTES")
                 retry(2)
-
             }
 
             steps {
-                sh "docker run --rm \
-                    -e BUILD_IMAGE_ID=${env.CACHEBUST} \
-                    -e 'BUILD_ARGS=--cache-from ${env.BUILD_IMAGE} --cache-from ${env.PMEM_CSI_IMAGE}' \
-                    -e REGISTRY_NAME=${env.REGISTRY_NAME} \
-                    -v /var/run/docker.sock:/var/run/docker.sock \
-                    -v /usr/bin/docker:/usr/bin/docker \
-                    -v `pwd`:${env.PMEM_PATH} \
-                    -w ${env.PMEM_PATH} \
-                    ${env.BUILD_IMAGE} \
-                    make build-images"
-
+                sh "docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} make build-images"
             }
-
         }
 
-            /*
-             We have to run "make start" in the current directory
-             because the QEMU instances that it starts under Docker
-             run outside of the container. For "make test_e2e" we
-             then have to switch into the GOPATH. Once we can
-             build outside of the GOPATH, we can simplify that to
-             build inside one directory.
+        stage('testing 1.14 LVM') {
+            options {
+                timeout(time: 90, unit: "MINUTES")
+                retry(2)
+            }
+            steps {
+                TestInVM("lvm", "testing", "${env.CLEAR_LINUX_VERSION_1_14}")
+            }
+        }
 
-             TODO: test in parallel (on different nodes? single node didn't work,
-             https://github.com/intel/pmem-CSI/pull/309#issuecomment-504659383)
+        stage('testing 1.14 direct') {
+            options {
+                timeout(time: 180, unit: "MINUTES")
+                retry(2)
+            }
+            steps {
+                TestInVM("direct", "testing", "${env.CLEAR_LINUX_VERSION_1_14}")
+            }
+        }
 
-             TODO: avoid cut-and-paste - all steps are identical except for the environment
-            */
-                stage('testing 1.14 LVM') {
-                    options {
-                        timeout(time: 90, unit: "MINUTES")
-                        retry(2)
-                    }
-                    environment {
-                        CLUSTER = "clear-1-14-lvm"
-                        TEST_DEVICE_MODE = "lvm"
-                        TEST_DEPLOYMENT_MODE = "testing"
-                        CLEAR_LINUX_VERSION = "${env.CLEAR_LINUX_VERSION_1_14}"
-                    }
-                    steps {
-                        sh "docker run --rm \
-                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
-                            -e CLUSTER=${env.CLUSTER} \
-                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
-                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
-                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
-                            -e TEST_CREATE_REGISTRY=true \
-                            -e TEST_CHECK_SIGNED_FILES=false \
-                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
-                            -v /var/run/docker.sock:/var/run/docker.sock \
-                            -v `pwd`:$PMEM_PATH \
-                            -v /usr/bin/docker:/usr/bin/docker \
-                            -v `pwd`:`pwd` \
-                            -w `pwd` \
-                            ${env.BUILD_IMAGE} \
-                            bash -c 'swupd bundle-add openssh-server &&  \
-                                make start && cd ${env.PMEM_PATH} && \
-                                make test_e2e'"
-                    }
-                    post {
-                        always {
-                            sh "docker run --rm \
-                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
-                            -e CLUSTER=${env.CLUSTER} \
-                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
-                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
-                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
-                            -e TEST_CREATE_REGISTRY=true \
-                            -e TEST_CHECK_SIGNED_FILES=false \
-                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
-                            -v /var/run/docker.sock:/var/run/docker.sock \
-                            -v `pwd`:$PMEM_PATH \
-                            -v /usr/bin/docker:/usr/bin/docker \
-                            -v `pwd`:`pwd` \
-                            -w `pwd` \
-                            ${env.BUILD_IMAGE} \
-                            bash -c 'make stop'"
-                        }
-                    }
-                }
+        stage('testing 1.13 LVM') {
+            when { not { changeRequest() } }
+            options {
+                timeout(time: 90, unit: "MINUTES")
+                retry(2)
+            }
+            steps {
+                TestInVM("lvm", "testing", "${env.CLEAR_LINUX_VERSION_1_13}")
+            }
+        }
 
-                stage('testing 1.14 direct') {
-                    options {
-                        timeout(time: 180, unit: "MINUTES")
-                        retry(2)
-                    }
-                    environment {
-                        CLUSTER = "clear-1-14-direct"
-                        TEST_DEVICE_MODE = "direct"
-                        TEST_DEPLOYMENT_MODE = "testing"
-                        CLEAR_LINUX_VERSION = "${env.CLEAR_LINUX_VERSION_1_14}"
-                    }
-                    steps {
-                        sh "docker run --rm \
-                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
-                            -e CLUSTER=${env.CLUSTER} \
-                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
-                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
-                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
-                            -e TEST_CREATE_REGISTRY=true \
-                            -e TEST_CHECK_SIGNED_FILES=false \
-                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
-                            -v /var/run/docker.sock:/var/run/docker.sock \
-                            -v `pwd`:$PMEM_PATH \
-                            -v /usr/bin/docker:/usr/bin/docker \
-                            -v `pwd`:`pwd` \
-                            -w `pwd` \
-                            ${env.BUILD_IMAGE} \
-                            bash -c 'swupd bundle-add openssh-server &&  \
-                                make start && cd ${env.PMEM_PATH} && \
-                                make test_e2e'"
+        stage('testing 1.13 direct') {
+            when { not { changeRequest() } }
+            options {
+                timeout(time: 180, unit: "MINUTES")
+                retry(2)
+            }
+            steps {
+                TestInVM("direct", "testing", "${env.CLEAR_LINUX_VERSION_1_13}")
+            }
+        }
 
-                    }
-                    post {
-                        always {
-                            sh "docker run --rm \
-                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
-                            -e CLUSTER=${env.CLUSTER} \
-                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
-                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
-                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
-                            -e TEST_CREATE_REGISTRY=true \
-                            -e TEST_CHECK_SIGNED_FILES=false \
-                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
-                            -v /var/run/docker.sock:/var/run/docker.sock \
-                            -v `pwd`:$PMEM_PATH \
-                            -v /usr/bin/docker:/usr/bin/docker \
-                            -v `pwd`:`pwd` \
-                            -w `pwd` \
-                            ${env.BUILD_IMAGE} \
-                            bash -c 'make stop'"
-                        }
-                    }
-                }
+        /*
+          In production we can only run E2E testing, no sanity testing.
+          Therefore it is faster.
+        */
 
-                stage('testing 1.13 LVM') {
-                    when { not { changeRequest() } }
-                    options {
-                        timeout(time: 90, unit: "MINUTES")
-                        retry(2)
-                    }
-                    environment {
-                        CLUSTER = "clear-1-13-lvm"
-                        TEST_DEVICE_MODE = "lvm"
-                        TEST_DEPLOYMENT_MODE = "testing"
-                        CLEAR_LINUX_VERSION = "${env.CLEAR_LINUX_VERSION_1_13}"
-                    }
-                    steps {
-                        sh "docker run --rm \
-                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
-                            -e CLUSTER=${env.CLUSTER} \
-                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
-                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
-                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
-                            -e TEST_CREATE_REGISTRY=true \
-                            -e TEST_CHECK_SIGNED_FILES=false \
-                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
-                            -v /var/run/docker.sock:/var/run/docker.sock \
-                            -v `pwd`:$PMEM_PATH \
-                            -v /usr/bin/docker:/usr/bin/docker \
-                            -v `pwd`:`pwd` \
-                            -w `pwd` \
-                            ${env.BUILD_IMAGE} \
-                            bash -c 'swupd bundle-add openssh-server &&  \
-                                make start && cd ${env.PMEM_PATH} && \
-                                make test_e2e'"
-                    }
-                    post {
-                        always {
-                            sh "docker run --rm \
-                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
-                            -e CLUSTER=${env.CLUSTER} \
-                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
-                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
-                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
-                            -e TEST_CREATE_REGISTRY=true \
-                            -e TEST_CHECK_SIGNED_FILES=false \
-                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
-                            -v /var/run/docker.sock:/var/run/docker.sock \
-                            -v `pwd`:$PMEM_PATH \
-                            -v /usr/bin/docker:/usr/bin/docker \
-                            -v `pwd`:`pwd` \
-                            -w `pwd` \
-                            ${env.BUILD_IMAGE} \
-                            bash -c 'make stop'"
-                        }
-                    }
-                }
+        stage('production 1.14 LVM') {
+            when { not { changeRequest() } }
+            options {
+                timeout(time: 30, unit: "MINUTES")
+                retry(2)
+            }
+            steps {
+                TestInVM("lvm", "production", "${env.CLEAR_LINUX_VERSION_1_14}")
+            }
+        }
 
-                stage('testing 1.13 direct') {
-                    when { not { changeRequest() } }
-                    options {
-                        timeout(time: 180, unit: "MINUTES")
-                        retry(2)
-                    }
-                    environment {
-                        CLUSTER = "clear-1-13-direct"
-                        TEST_DEVICE_MODE = "direct"
-                        TEST_DEPLOYMENT_MODE = "testing"
-                        CLEAR_LINUX_VERSION = "${env.CLEAR_LINUX_VERSION_1_13}"
-                    }
-                    steps {
-                        sh "docker run --rm \
-                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
-                            -e CLUSTER=${env.CLUSTER} \
-                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
-                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
-                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
-                            -e TEST_CREATE_REGISTRY=true \
-                            -e TEST_CHECK_SIGNED_FILES=false \
-                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
-                            -v /var/run/docker.sock:/var/run/docker.sock \
-                            -v `pwd`:$PMEM_PATH \
-                            -v /usr/bin/docker:/usr/bin/docker \
-                            -v `pwd`:`pwd` \
-                            -w `pwd` \
-                            ${env.BUILD_IMAGE} \
-                            bash -c 'swupd bundle-add openssh-server &&  \
-                                make start && cd ${env.PMEM_PATH} && \
-                                make test_e2e'"
+        stage('production 1.14 direct') {
+            when { not { changeRequest() } }
+            options {
+                timeout(time: 30, unit: "MINUTES")
+                retry(2)
+            }
+            steps {
+                TestInVM("direct", "production", "${env.CLEAR_LINUX_VERSION_1_14}")
+            }
+        }
 
-                    }
-                    post {
-                        always {
-                            sh "docker run --rm \
-                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
-                            -e CLUSTER=${env.CLUSTER} \
-                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
-                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
-                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
-                            -e TEST_CREATE_REGISTRY=true \
-                            -e TEST_CHECK_SIGNED_FILES=false \
-                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
-                            -v /var/run/docker.sock:/var/run/docker.sock \
-                            -v `pwd`:$PMEM_PATH \
-                            -v /usr/bin/docker:/usr/bin/docker \
-                            -v `pwd`:`pwd` \
-                            -w `pwd` \
-                            ${env.BUILD_IMAGE} \
-                            bash -c 'make stop'"
-                        }
-                    }
-                }
+        stage('production 1.13 LVM') {
+            when { not { changeRequest() } }
+            options {
+                timeout(time: 30, unit: "MINUTES")
+                retry(2)
+            }
+            steps {
+                TestInVM("lvm", "production", "${env.CLEAR_LINUX_VERSION_1_13}")
+            }
+        }
 
-                /*
-                  In production we can only run E2E testing, no sanity testing.
-                  Therefore it is faster.
-                */
+        stage('production 1.13 direct') {
+            when { not { changeRequest() } }
+            options {
+                timeout(time: 30, unit: "MINUTES")
+                retry(2)
+            }
+            steps {
+                TestInVM("direct", "production", "${env.CLEAR_LINUX_VERSION_1_13}")
+            }
+        }
 
-                stage('production 1.14 LVM') {
-                    when { not { changeRequest() } }
-                    options {
-                        timeout(time: 30, unit: "MINUTES")
-                        retry(2)
-                    }
-                    environment {
-                        CLUSTER = "clear-1-14-lvm"
-                        TEST_DEVICE_MODE = "lvm"
-                        TEST_DEPLOYMENT_MODE = "production"
-                        CLEAR_LINUX_VERSION = "${env.CLEAR_LINUX_VERSION_1_14}"
-                    }
-                    steps {
-                        sh "docker run --rm \
-                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
-                            -e CLUSTER=${env.CLUSTER} \
-                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
-                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
-                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
-                            -e TEST_CREATE_REGISTRY=true \
-                            -e TEST_CHECK_SIGNED_FILES=false \
-                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
-                            -v /var/run/docker.sock:/var/run/docker.sock \
-                            -v `pwd`:$PMEM_PATH \
-                            -v /usr/bin/docker:/usr/bin/docker \
-                            -v `pwd`:`pwd` \
-                            -w `pwd` \
-                            ${env.BUILD_IMAGE} \
-                            bash -c 'swupd bundle-add openssh-server &&  \
-                                make start && cd ${env.PMEM_PATH} && \
-                                make test_e2e'"
-                    }
-                    post {
-                        always {
-                            sh "docker run --rm \
-                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
-                            -e CLUSTER=${env.CLUSTER} \
-                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
-                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
-                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
-                            -e TEST_CREATE_REGISTRY=true \
-                            -e TEST_CHECK_SIGNED_FILES=false \
-                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
-                            -v /var/run/docker.sock:/var/run/docker.sock \
-                            -v `pwd`:$PMEM_PATH \
-                            -v /usr/bin/docker:/usr/bin/docker \
-                            -v `pwd`:`pwd` \
-                            -w `pwd` \
-                            ${env.BUILD_IMAGE} \
-                            bash -c 'make stop'"
-                        }
-                    }
-                }
-
-                stage('production 1.14 direct') {
-                    when { not { changeRequest() } }
-                    options {
-                        timeout(time: 30, unit: "MINUTES")
-                        retry(2)
-                    }
-                    environment {
-                        CLUSTER = "clear-1-14-direct"
-                        TEST_DEVICE_MODE = "direct"
-                        TEST_DEPLOYMENT_MODE = "production"
-                        CLEAR_LINUX_VERSION = "${env.CLEAR_LINUX_VERSION_1_14}"
-                    }
-                    steps {
-                        sh "docker run --rm \
-                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
-                            -e CLUSTER=${env.CLUSTER} \
-                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
-                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
-                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
-                            -e TEST_CREATE_REGISTRY=true \
-                            -e TEST_CHECK_SIGNED_FILES=false \
-                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
-                            -v /var/run/docker.sock:/var/run/docker.sock \
-                            -v `pwd`:$PMEM_PATH \
-                            -v /usr/bin/docker:/usr/bin/docker \
-                            -v `pwd`:`pwd` \
-                            -w `pwd` \
-                            ${env.BUILD_IMAGE} \
-                            bash -c 'swupd bundle-add openssh-server &&  \
-                                make start && cd ${env.PMEM_PATH} && \
-                                make test_e2e'"
-
-                    }
-                    post {
-                        always {
-                            sh "docker run --rm \
-                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
-                            -e CLUSTER=${env.CLUSTER} \
-                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
-                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
-                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
-                            -e TEST_CREATE_REGISTRY=true \
-                            -e TEST_CHECK_SIGNED_FILES=false \
-                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
-                            -v /var/run/docker.sock:/var/run/docker.sock \
-                            -v `pwd`:$PMEM_PATH \
-                            -v /usr/bin/docker:/usr/bin/docker \
-                            -v `pwd`:`pwd` \
-                            -w `pwd` \
-                            ${env.BUILD_IMAGE} \
-                            bash -c 'make stop'"
-                        }
-                    }
-                }
-
-                stage('production 1.13 LVM') {
-                    when { not { changeRequest() } }
-                    options {
-                        timeout(time: 30, unit: "MINUTES")
-                        retry(2)
-                    }
-                    environment {
-                        CLUSTER = "clear-1-13-lvm"
-                        TEST_DEVICE_MODE = "lvm"
-                        TEST_DEPLOYMENT_MODE = "production"
-                        CLEAR_LINUX_VERSION = "${env.CLEAR_LINUX_VERSION_1_13}"
-                    }
-                    steps {
-                        sh "docker run --rm \
-                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
-                            -e CLUSTER=${env.CLUSTER} \
-                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
-                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
-                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
-                            -e TEST_CREATE_REGISTRY=true \
-                            -e TEST_CHECK_SIGNED_FILES=false \
-                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
-                            -v /var/run/docker.sock:/var/run/docker.sock \
-                            -v `pwd`:$PMEM_PATH \
-                            -v /usr/bin/docker:/usr/bin/docker \
-                            -v `pwd`:`pwd` \
-                            -w `pwd` \
-                            ${env.BUILD_IMAGE} \
-                            bash -c 'swupd bundle-add openssh-server &&  \
-                                make start && cd ${env.PMEM_PATH} && \
-                                make test_e2e'"
-                    }
-                    post {
-                        always {
-                            sh "docker run --rm \
-                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
-                            -e CLUSTER=${env.CLUSTER} \
-                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
-                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
-                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
-                            -e TEST_CREATE_REGISTRY=true \
-                            -e TEST_CHECK_SIGNED_FILES=false \
-                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
-                            -v /var/run/docker.sock:/var/run/docker.sock \
-                            -v `pwd`:$PMEM_PATH \
-                            -v /usr/bin/docker:/usr/bin/docker \
-                            -v `pwd`:`pwd` \
-                            -w `pwd` \
-                            ${env.BUILD_IMAGE} \
-                            bash -c 'make stop'"
-                        }
-                    }
-                }
-
-                stage('production 1.13 direct') {
-                    when { not { changeRequest() } }
-                    options {
-                        timeout(time: 30, unit: "MINUTES")
-                        retry(2)
-                    }
-                    environment {
-                        CLUSTER = "clear-1-13-direct"
-                        TEST_DEVICE_MODE = "direct"
-                        TEST_DEPLOYMENT_MODE = "production"
-                        CLEAR_LINUX_VERSION = "${env.CLEAR_LINUX_VERSION_1_13}"
-                    }
-                    steps {
-                        sh "docker run --rm \
-                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
-                            -e CLUSTER=${env.CLUSTER} \
-                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
-                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
-                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
-                            -e TEST_CREATE_REGISTRY=true \
-                            -e TEST_CHECK_SIGNED_FILES=false \
-                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
-                            -v /var/run/docker.sock:/var/run/docker.sock \
-                            -v `pwd`:$PMEM_PATH \
-                            -v /usr/bin/docker:/usr/bin/docker \
-                            -v `pwd`:`pwd` \
-                            -w `pwd` \
-                            ${env.BUILD_IMAGE} \
-                            bash -c 'swupd bundle-add openssh-server &&  \
-                                make start && cd ${env.PMEM_PATH} && \
-                                make test_e2e'"
-
-                    }
-                    post {
-                        always {
-                            sh "docker run --rm \
-                            -e GOVM_YAML=`pwd`/_work/$CLUSTER/deployment.yaml \
-                            -e CLUSTER=${env.CLUSTER} \
-                            -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
-                            -e TEST_DEVICEMODE=${env.TEST_DEVICE_MODE} \
-                            -e TEST_DEPLOYMENTMODE=${env.TEST_DEPLOYMENT_MODE} \
-                            -e TEST_CREATE_REGISTRY=true \
-                            -e TEST_CHECK_SIGNED_FILES=false \
-                            -e TEST_CLEAR_LINUX_VERSION=${env.CLEAR_LINUX_VERSION} \
-                            -v /var/run/docker.sock:/var/run/docker.sock \
-                            -v `pwd`:$PMEM_PATH \
-                            -v /usr/bin/docker:/usr/bin/docker \
-                            -v `pwd`:`pwd` \
-                            -w `pwd` \
-                            ${env.BUILD_IMAGE} \
-                            bash -c 'make stop'"
-                        }
-                    }
-                }
-
-    stage('Push images') {
-        when { not { changeRequest() } }
-        steps {
+        stage('Push images') {
+            when { not { changeRequest() } }
+            steps {
                 withDockerRegistry([ credentialsId: "e16bd38a-76cb-4900-a5cb-7f6aa3aeb22d", url: "https://${REGISTRY_NAME}" ]) {
-                    sh "docker run --rm \
-                        -e REGISTRY_NAME=${env.REGISTRY_NAME} \
-                        -e DOCKER_CONFIG=$DOCKER_CONFIG \
-                        -v /var/run/docker.sock:/var/run/docker.sock \
-                        -v /usr/bin/docker:/usr/bin/docker \
-                        -v `pwd`:${env.PMEM_PATH} \
-                        -v $DOCKER_CONFIG:$DOCKER_CONFIG \
-                        -w ${env.PMEM_PATH} \
-                        ${env.BUILD_IMAGE} \
-                        make push-images PUSH_IMAGE_DEP="
+                    // Push PMEM-CSI images without rebuilding them.
+                    sh "docker run --rm ${DockerBuildArgs()} -e DOCKER_CONFIG=$DOCKER_CONFIG -v $DOCKER_CONFIG:$DOCKER_CONFIG ${env.BUILD_IMAGE} make push-images PUSH_IMAGE_DEP="
+                    // Also push the build images, for later reuse in PR jobs.
                     sh "docker image push ${env.BUILD_IMAGE}"
                 }
             }
         }
+    }
+}
+
+/*
+ "docker run" parameters which:
+ - make the Docker instance on the host available inside a container (socket and command)
+ - set common Makefile values (cachebust, cache populated from images if available)
+ - source in $GOPATH as current directory
+
+ A function is used because a variable, even one which uses a closure with lazy evaluation,
+ didn't actually result in a string with all variables replaced by the current values.
+ Do not use lazy evaluation inside the function, that caused steps which use
+ this function to get skipped silently?!
+*/
+String DockerBuildArgs() {
+    "\
+    -e BUILD_IMAGE_ID=${env.CACHEBUST} \
+    -e 'BUILD_ARGS=--cache-from ${env.BUILD_IMAGE} --cache-from ${env.PMEM_CSI_IMAGE}' \
+    -e REGISTRY_NAME=${env.REGISTRY_NAME} \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -v /usr/bin/docker:/usr/bin/docker \
+    -v `pwd`:${env.PMEM_PATH} \
+    -w ${env.PMEM_PATH} \
+    "
+}
+
+void TestInVM(deviceMode, deploymentMode, clearVersion) {
+    try {
+        /*
+        We have to run "make start" in the current directory
+        because the QEMU instances that it starts under Docker
+        run outside of the container and thus paths used inside
+        the container have to be the same as outside.
+
+        For "make test_e2e" we then have to switch into the
+        GOPATH. Once we can build outside of the GOPATH, we can
+        simplify that to build inside one directory.
+
+        TODO: test in parallel (on different nodes? single node didn't work,
+        https://github.com/intel/pmem-CSI/pull/309#issuecomment-504659383)
+        */
+        sh " \
+           docker run --rm \
+                  -e CLUSTER=clear \
+                  -e GOVM_YAML=`pwd`/_work/clear/deployment.yaml \
+                  -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
+                  -e TEST_DEVICEMODE=${deviceMode} \
+                  -e TEST_DEPLOYMENTMODE=${deploymentMode} \
+                  -e TEST_CREATE_REGISTRY=true \
+                  -e TEST_CHECK_SIGNED_FILES=false \
+                  -e TEST_CLEAR_LINUX_VERSION=${clearVersion} \
+                  ${DockerBuildArgs()} \
+                  -v `pwd`:`pwd` \
+                  -w `pwd` \
+                  ${env.BUILD_IMAGE} \
+                  bash -c 'swupd bundle-add openssh-server && \
+                           make start && cd ${env.PMEM_PATH} && \
+                           make test_e2e' \
+           "
+    } finally {
+        // Always shut down the cluster to free up resources. As in "make start", we have to expose
+        // the path as used on the host also inside the containner, but we don't need to be in it.
+        sh "docker run --rm -e CLUSTER=clear ${DockerBuildArgs()} -v `pwd`:`pwd` ${env.BUILD_IMAGE} make stop"
     }
 }
