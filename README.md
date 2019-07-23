@@ -576,7 +576,8 @@ The `deploy/kubernetes-<kubernetes version>` directory contains
 `pmem-csi*.yaml` files which can be used to deploy the driver on that
 Kubernetes version. The files in the directory with the highest
 Kubernetes version might also work for more recent Kubernetes
-releases.
+releases. All of these deployments use images published by Intel on
+[Docker Hub](https://hub.docker.com/u/intel).
 
 For each Kubernetes version, four different deployment variants are provided:
 
@@ -584,14 +585,10 @@ For each Kubernetes version, four different deployment variants are provided:
    - `testing`: the variants with `testing` in the name enable debugging
      features and shouldn't be used in production.
 
-All of these files use `PMEM_REGISTRY` as placeholder for the actual Docker registry
-that contains the PMEM-CSI image. This needs to be replaced as part of the command which
-deploys to Kubernetes.
-
 For example, to deploy for production with DeviceMode:LVM onto Kubernetes 1.14, use:
 
 ```sh
-    $ sed -e 's/PMEM_REGISTRY/<your registry>/' deploy/kubernetes-1.14/pmem-csi-lvm.yaml | kubectl create -f -
+    $ kubectl create -f - deploy/kubernetes-1.14/pmem-csi-lvm.yaml
 ```
 
 These variants were generated with
@@ -607,7 +604,6 @@ The `Makefile` can be used to build a suitable `kustomize`:
     go build -o /work/gopath/src/github.com/intel/pmem-csi/_work/kustomize-e42933ec54ce9a65f65e125a1ccf482927f0e515 sigs.k8s.io/kustomize
     ...
     $ _work/kustomize build --load_restrictor none deploy/kustomize/kubernetes-1.14-lvm |
-      sed -e 's/PMEM_REGISTRY/<your registry>/' |
       kubectl create -f -
 ```
 
