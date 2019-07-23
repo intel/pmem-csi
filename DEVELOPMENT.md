@@ -17,18 +17,18 @@ Table of Contents
     - [Specific arguments to pmem-vgm](#specific-arguments-to-pmem-vgm)
     - [Specific arguments to pmem-csi-driver](#specific-arguments-to-pmem-csi-driver)
     - [Environment variables](#environment-variables)
-- [Notes about switching DeviceMode](#notes-about-switching-devicemode)
-    - [Going from DeviceMode:LVM to DeviceMode:Direct](#going-from-devicemodelvm-to-devicemodedirect)
-    - [Going from DeviceMode:Direct to DeviceMode:LVM](#going-from-devicemodedirect-to-devicemodelvm)
+- [Notes about switching device mode](#notes-about-switching-device-mode)
+    - [Going from LVM device mode to direct device mode](#going-from-lvm-device-mode-to-direct-device-mode)
+    - [Going from direct device mode to LVM device mode](#going-from-direct-device-mode-to-lvm-device-mode)
 - [Notes about accessing system directories in a container](#notes-about-accessing-system-directories-in-a-container)
     - [Read-only access to /sys](#read-only-access-to-sys)
     - [Access to /dev of host](#access-to-dev-of-host)
--   [Repository elements which are generated or created separately](#repository-elements-which-are-generated-or-created-separately)
-    -   [Top-level README diagrams describing LVM and Direct device modes](#top-level-readme-diagrams-describing-lvm-and-direct-device-modes)
-    -   [Top-level README diagram describing communication channels](#top-level-readme-diagram-describing-communication-channels)
-    -   [Diagrams describing provisioning sequence](#diagrams-describing-provisioning-sequence)
-    -   [RegistryServer spec](#registryserver-spec)
-    -   [Table of Contents in README and DEVELOPMENT](#table-of-contents-in-readme-and-development)
+- [Repository elements which are generated or created separately](#repository-elements-which-are-generated-or-created-separately)
+    - [Top-level README diagrams describing LVM and Direct device modes](#top-level-readme-diagrams-describing-lvm-and-direct-device-modes)
+    - [Top-level README diagram describing communication channels](#top-level-readme-diagram-describing-communication-channels)
+    - [Diagrams describing provisioning sequence](#diagrams-describing-provisioning-sequence)
+    - [RegistryServer spec](#registryserver-spec)
+    - [Table of Contents in README and DEVELOPMENT](#table-of-contents-in-readme-and-development)
 
 Code quality
 ============
@@ -160,9 +160,9 @@ Command line arguments
 ----------------------
 
 Note that different set of programs is used in different
-DeviceModes. Three stages: *pmem-ns-init*, *pmem-vgm*,
-*pmem-csi-driver* run in DeviceMode:LVM. Only *pmem-csi-driver* runs
-in DeviceMode:Direct.
+device modes. Three stages: *pmem-ns-init*, *pmem-vgm*,
+*pmem-csi-driver* run in LVM device mode. Only *pmem-csi-driver* runs
+in direct device mode.
 
 Common arguments
 ----------------
@@ -205,7 +205,7 @@ argument name        | meaning                                           | type 
 -clientCertFile string | Client SSL certificate file to use for authenticating peer connections | string | | certFile
 -clientKeyFile string | Client private key associated to client certificate | string |              | keyFile
 -controllerEndpoint string | internal node controller endpoint              | string |              |
--deviceManager string      | device manager to use to manage pmem devices   | string | lvm or ndctl | lvm
+-deviceManager string      | device mode to use. ndctl selects mode which is described as direct mode in documentation. | string | lvm or ndctl | lvm
 -drivername string         | name of the driver                             | string |              | pmem-csi
 -endpoint string           | PMEM CSI endpoint                              | string |              | unix:///tmp/pmem-csi.sock
 -keyFile string            | Private key file associated to certificate     | string |              |
@@ -220,17 +220,17 @@ Environment variables
 TEST_WORK is used by registry server unit-test code to specify path to certificates in test system. 
 Note, THIS IS NOT USED IN PRODUCTION
 
-Notes about switching DeviceMode
+Notes about switching device mode
 ================================
 
-If DeviceMode is switched between LVM and Direct(ndctl), please keep
+If device mode is switched between LVM and direct(aka ndctl), please keep
 in mind that PMEM-CSI driver does not clean up or reclaim Namespaces,
-therefore Namespaces plus other related context (possibly LVM state)
+therefore Namespaces plus other related context (LVM state)
 created in previous mode will remain stored on device and most likely
-will create trouble in another DeviceMode.
+will create trouble in another device mode.
 
-Going from DeviceMode:LVM to DeviceMode:Direct
-----------------------------------------------
+Going from LVM device mode to direct device mode
+------------------------------------------------
 
 - examine LV Groups state on a node: `vgs`
 - examine LV Phys.Volumes state on a node: `pvs`
@@ -241,7 +241,7 @@ NOTE: The next **WILL DELETE ALL NAMESPACES** so be careful!
 
 - Delete Namespaces on a node using CLI: `ndctl destroy-namespace all --force`
 
-Going from DeviceMode:Direct to DeviceMode:LVM
+Going from direct device mode to LVM device mode
 ----------------------------------------------
 
 No special steps are needed to clean up Namespaces state.
@@ -249,7 +249,7 @@ No special steps are needed to clean up Namespaces state.
 If PMEM-CSI driver has been operating correctly, there should not be
 existing Namespaces as CSI Volume lifecycle should have been deleted
 those after end of life of Volume. If there are, you can either keep
-those (DeviceMode:LVM does honor "foreign" Namespaces and leaves those
+those (LVM device mode does honor "foreign" Namespaces and leaves those
 alone) if you have enough space, or you can choose to delete those
 using `ndctl` on node.
 
@@ -264,9 +264,8 @@ Read-only access to /sys
 ------------------------
 
 In some deployment schemes /sys remains mounted read-only in the
-container running pmsm-csi-driver. This is not problem in
-DeviceMode:LVM, but is a blocking problem in DeviceMode:Direct where
-the driver needs write access to /sys for Namespaces management
+container running pmsm-csi-driver. This creates problem for the
+driver which needs write access to /sys for Namespaces management
 operations. There is start-time check for read-write mount of /sys in
 the code. An error in pod log `pmem-driver: Failed to run driver:
 FATAL: /sys mounted read-only, can not operate` is the sign of such
@@ -276,8 +275,7 @@ Access to /dev of host
 ----------------------
 
 Containers runtime may not pass /dev from host into the
-container. This is, again, problem in DeviceMode:Direct. If the /dev/
-of the host is not accessible in the PMEM-CSI container, there will be
+container. If the /dev/ of the host is not accessible in the PMEM-CSI container, there will be
 failure in accessing of newly created block device /dev/pmemX.Y which
 will not be visible inside container. The driver does not detect the
 root cause of that problem during start-up, but only when a volume

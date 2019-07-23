@@ -1,32 +1,32 @@
--   [PMEM-CSI for Kubernetes](#pmem-csi-for-kubernetes)
-    -   [About](#about)
-    -   [Design](#design)
-        -   [Architecture and Operation](#architecture-and-operation)
-        -   [DeviceMode:LVM](#devicemodelvm)
-        -   [DeviceMode:Direct](#devicemodedirect)
-        -   [Driver modes](#driver-modes)
-        -   [Driver Components](#driver-components)
-        -   [Communication between components](#communication-between-components)
-        -   [Security](#security)
-        -   [Volume Persistency](#volume-persistency)
-    -   [Prerequisites](#prerequisites)
-        -   [Software required](#software-required)
-        -   [Hardware required](#hardware-required)
-        -   [Persistent memory pre-provisioning](#persistent-memory-pre-provisioning)
-    -   [Supported Kubernetes versions](#supported-kubernetes-versions)
-    -   [Setup](#setup)
-        -   [Get source code](#get-source-code)
-        -   [Build PMEM-CSI](#build-pmem-csi)
-        -   [Run PMEM-CSI on Kubernetes](#run-pmem-csi-on-kubernetes)
-    -   [Automated testing](#automated-testing)
-        -   [Unit testing and code quality](#unit-testing-and-code-quality)
-        -   [QEMU and Kubernetes](#qemu-and-kubernetes)
-        -   [Starting and stopping a test cluster](#starting-and-stopping-a-test-cluster)
-        -   [Running commands on test cluster nodes over ssh](#running-commands-on-test-cluster-nodes-over-ssh)
-        -   [Configuration options](#configuration-options)
-        -   [Running E2E tests](#running-e2e-tests)
-    -   [Application examples](#application-examples)
-    -   [Communication and contribution](#communication-and-contribution)
+- [PMEM-CSI for Kubernetes](#pmem-csi-for-kubernetes)
+    - [About](#about)
+    - [Design](#design)
+        - [Architecture and Operation](#architecture-and-operation)
+        - [LVM device mode](#lvm-device-mode)
+        - [Direct device mode](#direct-device-mode)
+        - [Driver modes](#driver-modes)
+        - [Driver Components](#driver-components)
+        - [Communication between components](#communication-between-components)
+        - [Security](#security)
+        - [Volume Persistency](#volume-persistency)
+    - [Prerequisites](#prerequisites)
+        - [Software required](#software-required)
+        - [Hardware required](#hardware-required)
+        - [Persistent memory pre-provisioning](#persistent-memory-pre-provisioning)
+    - [Supported Kubernetes versions](#supported-kubernetes-versions)
+    - [Setup](#setup)
+        - [Get source code](#get-source-code)
+        - [Build PMEM-CSI](#build-pmem-csi)
+        - [Run PMEM-CSI on Kubernetes](#run-pmem-csi-on-kubernetes)
+    - [Automated testing](#automated-testing)
+        - [Unit testing and code quality](#unit-testing-and-code-quality)
+        - [QEMU and Kubernetes](#qemu-and-kubernetes)
+        - [Starting and stopping a test cluster](#starting-and-stopping-a-test-cluster)
+        - [Running commands on test cluster nodes over ssh](#running-commands-on-test-cluster-nodes-over-ssh)
+        - [Configuration options](#configuration-options)
+        - [Running E2E tests](#running-e2e-tests)
+    - [Application examples](#application-examples)
+    - [Communication and contribution](#communication-and-contribution)
 
 <!-- based on template now, remaining parts marked as FILL TEMPLATE:  -->
 
@@ -62,12 +62,12 @@ listening for API requests and provisioning volumes accordingly.
 
 The PMEM-CSI driver can operate in two different DeviceModes: LVM and Direct
 
-### DeviceMode:LVM
+### LVM device mode
 
-The following diagram illustrates the operation in DeviceMode:LVM:
+The following diagram illustrates the operation in LVM device mode:
 ![devicemode-lvm diagram](/docs/images/devicemodes/pmem-csi-lvm.png)
 
-In DeviceMode:LVM PMEM-CSI driver uses LVM for Logical Volumes
+In LVM device mode PMEM-CSI driver uses LVM for Logical Volumes
 Management to avoid the risk of fragmentation. The LVM logical volumes
 are served to satisfy API requests. There is one Volume Group created
 per Region, ensuring the region-affinity of served volumes.
@@ -87,7 +87,7 @@ binary _pmem-vgm_.
 After two initialization stages, the third binary _pmem-csi-driver_
 starts serving CSI API requests.
 
-#### Namespace modes in DeviceMode:LVM
+#### Namespace modes in LVM device mode
 
 The PMEM-CSI driver can pre-create Namespaces in two modes, forming
 corresponding LVM Volume groups, to serve volumes based on `fsdax` or
@@ -101,7 +101,7 @@ mode using the driver-specific argument `nsmode` which has a value of
 either "fsdax" (default) or "sector". A volume provisioned in `fsdax`
 mode will have the `dax` option added to mount options.
 
-#### Using limited amount of total space in DeviceMode:LVM
+#### Using limited amount of total space in LVM device mode
 
 The PMEM-CSI driver can leave space on devices for others, and
 recognize "own" namespaces. Leaving space for others can be achieved
@@ -112,12 +112,12 @@ string "pmem-csi" during Namespace creation. When adding Physical
 Volumes to Volume Groups, only Physical Volumes that are based on
 Namespaces with the name "pmem-csi" are considered.
 
-### DeviceMode:Direct
+### Direct device mode
 
-The following diagram illustrates the operation in DeviceMode:Direct:
+The following diagram illustrates the operation in Direct device mode:
 ![devicemode-direct diagram](/docs/images/devicemodes/pmem-csi-direct.png)
 
-In DeviceMode:Direct PMEM-CSI driver allocates Namespaces directly
+In direct device mode PMEM-CSI driver allocates Namespaces directly
 from the storage device. This creates device space fragmentation risk,
 but reduces complexity and run-time overhead by avoiding additional
 device mapping layer. Direct mode also ensures the region-affinity of
@@ -127,15 +127,15 @@ only.
 In Direct mode, the two preparation stages used in LVM mode, are not
 needed.
 
-#### Namespace modes in DeviceMode:Direct
+#### Namespace modes in direct device mode
 
 The PMEM-CSI driver creates a Namespace directly in the mode which is
 asked by Volume creation request, thus bypassing the complexity of
-pre-allocated pools that are used in DeviceMode:LVM.
+pre-allocated pools that are used in LVM device mode.
 
-#### Using limited amount of total space in DeviceMode:Direct
+#### Using limited amount of total space in direct device mode
 
-In DeviceMode:Direct, the driver does not attempt to limit space
+In direct device mode, the driver does not attempt to limit space
 use. It also does not mark "own" namespaces. The _Name_ field of a
 Namespace gets value of the VolumeID.
 
@@ -530,7 +530,7 @@ on the Kubernetes version.
 - **Label the cluster nodes that provide persistent memory device(s)**
 
 ```sh
-    $ kubectl label node <your node> storage=pmem
+    $ kubectl label node <your node> storage=pmem
 ```
 
 - **Install add-on storage CRDs if using Kubernetes 1.13**
@@ -581,11 +581,11 @@ releases. All of these deployments use images published by Intel on
 
 For each Kubernetes version, four different deployment variants are provided:
 
-   - `direct` or `lvm`: one uses DeviceMode:Direct, the other DeviceMode:LVM.
+   - `direct` or `lvm`: one uses direct device mode, the other LVM device mode.
    - `testing`: the variants with `testing` in the name enable debugging
      features and shouldn't be used in production.
 
-For example, to deploy for production with DeviceMode:LVM onto Kubernetes 1.14, use:
+For example, to deploy for production with LVM device mode onto Kubernetes 1.14, use:
 
 ```sh
     $ kubectl create -f - deploy/kubernetes-1.14/pmem-csi-lvm.yaml
@@ -637,8 +637,8 @@ and that the driver's log output doesn't contain errors.
 - **Define two storage classes using the driver**
 
 ```sh
-    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-storageclass-ext4.yaml
-    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-storageclass-xfs.yaml
+    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-storageclass-ext4.yaml
+    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-storageclass-xfs.yaml
 ```
 
 - **Provision two pmem-csi volumes**
@@ -802,7 +802,7 @@ Multiple different clusters can be brought up in parallel by changing
 the default `clear-govm` cluster name via the `CLUSTER` env variable.
 
 For example, this invocation sets up a cluster using the non-default
-direct DeviceMode:
+direct device mode:
 
 ``` sh
 TEST_DEVICEMODE=direct CLUSTER=clear-govm-direct make start
