@@ -379,7 +379,8 @@ application](deploy/common/pmem-app-cache.yaml) example.
 
 ### Software required
 
-Building of Docker images has been verified using Docker-ce: version 18.06.1
+Building of Docker images has been verified using Docker-ce versions 18.06.1, 19.03.0.
+The recommended mimimum Linux kernel version for running the PMEM-CSI driver is 4.15. See [Persistent Memory Programming](https://pmem.io/2018/05/15/using_persistent_memory_devices_with_the_linux_device_mapper.html) for more details about supported kernel versions.
 
 ### Hardware required
 
@@ -489,6 +490,7 @@ Kubernetes cluster has been verified on:
 |-------------------|--------------------------------|------------------------------- |
 | devel             | Kubernetes 1.13                | CSINodeInfo, CSIDriverRegistry |
 | devel             | Kubernetes 1.14                |                                |
+| devel             | Kubernetes 1.15                |                                |
 
 ## Setup
 
