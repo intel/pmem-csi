@@ -97,16 +97,25 @@ func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) err
 		glog.V(4).Infof("Device with name: %s already exists, refuse to create another", name)
 		return fmt.Errorf("CreateDevice: Failed: namespace with that name exists")
 	}
-	// Increase to minimum size supported by libndctl.
-	const minsize uint64 = 2 * 1024 * 1024 * 1024
-	if size < minsize {
-		size = minsize
+	if size <= 0 {
+		// Allocating volumes of zero size isn't supported.
+		// We use some arbitrary small minimum size instead.
+		// It will get rounded up by libndctl to meet the alignment.
+		size = 1
 	}
-	// use align by 1 GB in creation request
+	// Pass align = 1 GB into creation request as that has proven to be reliable.
 	const align uint64 = 1024 * 1024 * 1024
+	// libndctl needs to store meta data and will use some of the allocated
+	// space for that (https://github.com/pmem/ndctl/issues/79).
+	// We don't know exactly how much space that is, just
+	// that it should be a small amount. But because libndctl
+	// rounds up to the alignment, in practice that means we need
+	// to request `align` additional bytes.
+	compensatedsize := size + align
+	glog.V(4).Infof("CreateDevice:%s: Compensate for libndctl creating one alignment step smaller: change size %d to %d", name, size, compensatedsize)
 	ns, err := pmem.ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
 		Name:  name,
-		Size:  size,
+		Size:  compensatedsize,
 		Align: align,
 		Mode:  ndctl.NamespaceMode(nsmode),
 	})
