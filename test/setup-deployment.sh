@@ -33,7 +33,7 @@ DEPLOYMENT_FILES=(
 echo "$KUBERNETES_VERSION" > $WORK_DIRECTORY/kubernetes.version
 for deployment_file in ${DEPLOYMENT_FILES[@]}; do
     if [ -e ${DEPLOYMENT_DIRECTORY}/${deployment_file} ]; then
-        sed "s|PMEM_REGISTRY|${TEST_PMEM_REGISTRY}|g" ${DEPLOYMENT_DIRECTORY}/${deployment_file} | ${KUBECTL} apply -f -
+        sed "s|intel/pmem|${TEST_PMEM_REGISTRY}/pmem|g" ${DEPLOYMENT_DIRECTORY}/${deployment_file} | ${KUBECTL} apply -f -
     fi
 done
 

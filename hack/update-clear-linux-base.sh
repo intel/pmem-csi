@@ -23,13 +23,19 @@ echo "Base image: $base"
 # updated to with "swupd update --version". This might not be the very latest
 # Clear Linux, for example when there has been a format bump and the
 # base image is still using the older format.
-output=$(docker run $base swupd check-update) || die "failed to obtain information about available updates"
-
-# The expected output is:
-# Current OS version: 29940
-# Latest server version: 29970
-# There is a new OS version available: 29970
-version=$(echo "$output" | tail -n 1 | sed -e 's/.*: *//')
+output=$(docker run $base swupd check-update) # will return non-zero exit code if there is nothing to update
+# The expected output on failure is one of:
+#     Current OS version: 30450
+#     Latest server version: 30450
+#     There are no updates available
+# or:
+#     Current OS version: 29940
+#     Latest server version: 29970
+#     There is a new OS version available: 29970
+version=$(echo "$output" | grep "Latest server version" | tail -n 1 | sed -e 's/.*: *//')
+if [ ! "$version" ]; then
+    die "failed to obtain information about available updates"
+fi
 echo "Update version: $version"
 
 # Do a trial-run with these parameters.
