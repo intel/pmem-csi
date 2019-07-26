@@ -273,7 +273,7 @@ spec:
       - args:
         - -v=3
         command:
-        - /go/bin/pmem-ns-init
+        - /usr/local/bin/pmem-ns-init
         env:
         - name: TERMINATION_LOG_PATH
           value: /tmp/pmem-ns-init-termination-log
@@ -289,7 +289,7 @@ spec:
       - args:
         - -v=3
         command:
-        - /go/bin/pmem-vgm
+        - /usr/local/bin/pmem-vgm
         env:
         - name: TERMINATION_LOG_PATH
           value: /tmp/pmem-vgm-termination-log

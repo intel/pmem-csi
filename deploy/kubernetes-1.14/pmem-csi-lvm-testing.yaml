@@ -382,7 +382,7 @@ spec:
         - -v=5
         - -coverprofile=/var/lib/pmem-csi-coverage/pmem-ns-init-*.out
         command:
-        - /go/bin/pmem-ns-init
+        - /usr/local/bin/pmem-ns-init
         env:
         - name: TERMINATION_LOG_PATH
           value: /tmp/pmem-ns-init-termination-log
@@ -402,7 +402,7 @@ spec:
         - -v=5
         - -coverprofile=/var/lib/pmem-csi-coverage/pmem-vgm-*.out
         command:
-        - /go/bin/pmem-vgm
+        - /usr/local/bin/pmem-vgm
         env:
         - name: TERMINATION_LOG_PATH
           value: /tmp/pmem-vgm-termination-log

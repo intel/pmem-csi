@@ -10,7 +10,7 @@
   - name: pmem-ns-init
     imagePullPolicy: Always
     image: intel/pmem-csi-driver:canary
-    command: ["/go/bin/pmem-ns-init"]
+    command: ["/usr/local/bin/pmem-ns-init"]
     args: [ "-v=3" ]
     env:
       - name: TERMINATION_LOG_PATH
@@ -24,7 +24,7 @@
   - name: pmem-vgm
     imagePullPolicy: Always
     image: intel/pmem-csi-driver:canary
-    command: ["/go/bin/pmem-vgm"]
+    command: ["/usr/local/bin/pmem-vgm"]
     args: [ "-v=3" ]
     env:
       - name: TERMINATION_LOG_PATH
