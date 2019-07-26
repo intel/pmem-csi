@@ -273,15 +273,15 @@
   version = "v0.6.1"
 
 [[projects]]
-  digest = "1:9e63a566db7ba47559fdedad77b7567a24bce4e1b16b4bd0bb565b7bfe87ad1a"
+  digest = "1:173004cac936810aec4c83ec2799826164b94b45797148b633a0abe535fb0ba7"
   name = "github.com/kubernetes-csi/csi-test"
   packages = [
     "pkg/sanity",
     "utils",
   ]
   pruneopts = "UT"
-  revision = "6738ab2206eac88874f0a3ede59b40f680f59f43"
-  version = "v2.0.1"
+  revision = "c094d203953c046257f30ed80bfff5b202f00d60"
+  version = "v2.1.0"
 
 [[projects]]
   branch = "master"
@@ -1406,28 +1406,34 @@
     "google.golang.org/grpc/codes",
     "google.golang.org/grpc/connectivity",
     "google.golang.org/grpc/credentials",
+    "google.golang.org/grpc/keepalive",
     "google.golang.org/grpc/resolver",
     "google.golang.org/grpc/status",
     "k8s.io/api/apps/v1",
     "k8s.io/api/core/v1",
     "k8s.io/api/storage/v1",
     "k8s.io/api/storage/v1beta1",
+    "k8s.io/apimachinery/pkg/api/errors",
+    "k8s.io/apimachinery/pkg/api/resource",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
+    "k8s.io/apimachinery/pkg/labels",
     "k8s.io/apimachinery/pkg/runtime/schema",
     "k8s.io/apimachinery/pkg/util/sets",
+    "k8s.io/apimachinery/pkg/util/wait",
     "k8s.io/client-go/discovery",
     "k8s.io/client-go/kubernetes",
+    "k8s.io/client-go/util/exec",
     "k8s.io/klog",
     "k8s.io/klog/glog",
     "k8s.io/kubernetes/pkg/util/mount",
     "k8s.io/kubernetes/pkg/version",
     "k8s.io/kubernetes/test/e2e/framework",
-    "k8s.io/kubernetes/test/e2e/framework/ginkgowrapper",
     "k8s.io/kubernetes/test/e2e/framework/podlogs",
     "k8s.io/kubernetes/test/e2e/framework/testfiles",
     "k8s.io/kubernetes/test/e2e/storage/testpatterns",
     "k8s.io/kubernetes/test/e2e/storage/testsuites",
     "k8s.io/kubernetes/test/e2e/storage/utils",
+    "k8s.io/kubernetes/test/utils",
     "k8s.io/utils/keymutex",
   ]
   solver-name = "gps-cdcl"

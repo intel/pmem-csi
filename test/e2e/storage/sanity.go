@@ -171,8 +171,7 @@ var _ = Describe("sanity", func() {
 
 	var _ = sanity.DescribeSanity("pmem csi", func(sc *sanity.SanityContext) {
 		var (
-			// TODO: upstream mutex locking and use sanity.Cleanup again
-			cl      *Cleanup
+			cl      *sanity.Cleanup
 			nc      csi.NodeClient
 			cc, ncc csi.ControllerClient
 			nodeID  string
@@ -184,7 +183,7 @@ var _ = Describe("sanity", func() {
 			nc = csi.NewNodeClient(sc.Conn)
 			cc = csi.NewControllerClient(sc.ControllerConn)
 			ncc = csi.NewControllerClient(sc.Conn) // This works because PMEM-CSI exposes the node, controller, and ID server via its csi.sock.
-			cl = &Cleanup{
+			cl = &sanity.Cleanup{
 				Context:                    sc,
 				NodeClient:                 nc,
 				ControllerClient:           cc,
@@ -537,7 +536,7 @@ type volume struct {
 	sc          *sanity.SanityContext
 	cc          csi.ControllerClient
 	nc          csi.NodeClient
-	cl          *Cleanup
+	cl          *sanity.Cleanup
 	stagingPath string
 	targetPath  string
 }
