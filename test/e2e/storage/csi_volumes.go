@@ -70,6 +70,7 @@ var _ = Describe("PMEM Volumes", func() {
 						testsuites.CapPersistence: true,
 						testsuites.CapFsGroup:     true,
 						testsuites.CapExec:        true,
+						testsuites.CapBlock:       true,
 					},
 				},
 				scManifest: map[string]string{
