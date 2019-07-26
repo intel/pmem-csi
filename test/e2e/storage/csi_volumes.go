@@ -92,7 +92,7 @@ var _ = Describe("PMEM Volumes", func() {
 		// testsuites.InitSnapshottableTestSuite,
 		// testsuites.InitSubPathTestSuite,
 		// testsuites.InitVolumeIOTestSuite,
-		// testsuites.InitVolumeModeTestSuite,
+		testsuites.InitVolumeModeTestSuite,
 		testsuites.InitVolumesTestSuite,
 	}
 
