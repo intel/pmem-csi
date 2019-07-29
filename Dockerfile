@@ -14,7 +14,7 @@ ARG SWUPD_UPDATE_ARG=
 FROM ${CLEAR_LINUX_BASE} AS build
 
 ARG NDCTL_VERSION="65"
-ARG NDCTL_CONFIGFLAGS="--libdir=/usr/lib64 --disable-docs --without-systemd --without-bash"
+ARG NDCTL_CONFIGFLAGS="--disable-docs --without-systemd --without-bash"
 ARG NDCTL_BUILD_DEPS="os-core-dev devpkg-util-linux devpkg-kmod devpkg-json-c"
 
 #pull dependencies required for downloading and building libndctl
@@ -29,8 +29,19 @@ RUN curl --fail --location --remote-name https://github.com/pmem/ndctl/archive/v
 RUN tar zxvf v${NDCTL_VERSION}.tar.gz && mv ndctl-${NDCTL_VERSION} ndctl
 WORKDIR /ndctl
 RUN ./autogen.sh
-RUN ./configure ${NDCTL_CONFIGFLAGS}
-RUN make install
+# We install into /usr/local (keeps content separate from OS) but
+# then symlink the .pc files to ensure that they are found without
+# having to set PKG_CONFIG_PATH. The .pc file doesn't contain an -rpath
+# and thus linked binaries do not find the shared libs unless we
+# also symlink those.
+RUN ./configure --prefix=/usr/local ${NDCTL_CONFIGFLAGS}
+RUN make install && \
+    ln -s /usr/local/lib/pkgconfig/libndctl.pc /usr/lib64/pkgconfig/ && \
+    ln -s /usr/local/lib/pkgconfig/libdaxctl.pc /usr/lib64/pkgconfig/ && \
+    for i in /usr/local/lib/lib*.so.*; do ln -s $i /usr/lib64; done
+
+# The source archive has no license file. We link to the copy in GitHub instead.
+RUN echo "For source code and licensing of ndctl, see https://github.com/pmem/ndctl/blob/v${NDCTL_VERSION}/COPYING" >/usr/local/lib/NDCTL.COPYING
 
 # Workaround for "error while loading shared libraries: libndctl.so.6" when using older Docker (?)
 # and running "make test" inside this container.
@@ -55,7 +66,8 @@ RUN make VERSION=${VERSION} pmem-csi-driver${BIN_SUFFIX} pmem-vgm${BIN_SUFFIX} p
     mkdir -p /go/bin/ && \
     mv _output/pmem-csi-driver${BIN_SUFFIX} /go/bin/pmem-csi-driver && \
     mv _output/pmem-vgm${BIN_SUFFIX} /go/bin/pmem-vgm && \
-    mv _output/pmem-ns-init${BIN_SUFFIX} /go/bin/pmem-ns-init
+    mv _output/pmem-ns-init${BIN_SUFFIX} /go/bin/pmem-ns-init && \
+    cp LICENSE /go/bin/PMEM-CSI.LICENSE
 
 # Clean image for deploying PMEM-CSI.
 FROM ${CLEAR_LINUX_BASE}
@@ -72,11 +84,14 @@ RUN swupd update ${SWUPD_UPDATE_ARG} && swupd bundle-add file xfsprogs storage-u
 # (see https://github.com/clearlinux/distribution/issues/831)
 RUN ldconfig
 
-# move required binaries and libraries to clean container
-COPY --from=binaries /usr/lib64/libndctl.so.* /usr/lib/
-COPY --from=binaries /usr/lib64/libdaxctl.so.* /usr/lib/
-RUN mkdir -p /go/bin
-COPY --from=binaries /go/bin/ /go/bin/
+# Move required binaries and libraries to clean container.
+# All of our custom content is in /usr/local.
+COPY --from=binaries /usr/local/lib/libndctl.so.* /usr/local/lib/
+COPY --from=binaries /usr/local/lib/libdaxctl.so.* /usr/local/lib/
+COPY --from=binaries /usr/local/lib/NDCTL.COPYING /usr/local/lib/
+# We need to overwrite the system libs, hence -f here.
+RUN for i in /usr/local/lib/lib*.so.*; do ln -fs $i /usr/lib64; done
+COPY --from=binaries /go/bin/ /usr/local/bin/
 # default lvm config uses lvmetad and throwing below warning for all lvm tools
 # WARNING: Failed to connect to lvmetad. Falling back to device scanning.
 # So, ask lvm not to use lvmetad
@@ -85,4 +100,4 @@ RUN echo "global { use_lvmetad = 0 }" >> /etc/lvm/lvm.conf && \
     echo "activation { udev_sync = 0 udev_rules = 0 }" >> /etc/lvm/lvm.conf
 
 ENV LD_LIBRARY_PATH=/usr/lib
-ENTRYPOINT ["/go/bin/pmem-csi-driver"]
+ENTRYPOINT ["/usr/local/bin/pmem-csi-driver"]

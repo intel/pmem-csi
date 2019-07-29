@@ -1,5 +1,6 @@
 *
 ! **/*.make
+! LICENSE
 ! Makefile
 ! cmd/**
 ! pkg/**
