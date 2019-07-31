@@ -476,6 +476,11 @@ function check_status() { # intentionally a composite command, so "exit" will ex
             exit 0
         fi
     fi
+
+    if [ ! -e /dev/kvm ]; then
+        echo "ERROR: /dev/kvm does not exist. KVM has to be enabled before starting the virtual cluster."
+        exit 1
+    fi
 }
 
 FAILED=true

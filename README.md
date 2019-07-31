@@ -821,11 +821,14 @@ available.
 E2E testing is known to work on a Linux development host system. The user
 must be allowed to use Docker.
 
-KVM must be enabled and the user must be allowed to use it. Usually this
-is done by adding the user to the `kvm` group. The
-["Install QEMU-KVM"](https://clearlinux.org/documentation/clear-linux/get-started/virtual-machine-install/kvm)
-section in the Clear Linux documentation contains further information
-about enabling KVM.
+KVM must be enabled. Usually this is the case when `/dev/kvm` exists.
+The current user does not need the privileges to use KVM and QEMU
+doesn't have to be installed because GoVM will run QEMU inside a
+container with root privileges.
+
+Note that cloud providers often don't offer KVM support on their
+regular machines. Search for "nested virtualization" for your provider
+to determine whether and how it supports KVM.
 
 The `clear-cloud` image is downloaded automatically. By default,
 four different virtual machines are prepared. Each image is pre-configured
