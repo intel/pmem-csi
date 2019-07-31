@@ -14,3 +14,4 @@ if [ $# != 1 ] || [ "$1" = "?" ] || [ "$1" = "--help" ]; then
 fi
 
 sed -i -e "s;\(IMAGE_VERSION?*=\|intel/pmem-[^ ]*:\)[^ ]*;\1$1;g" $(git grep -l 'IMAGE_VERSION?*=\|intel/pmem-[^ ]*:' Makefile test deploy)
+sed -i -e "s;/pmem-csi-driver\([^ ]*\):[^ {}]*;/pmem-csi-driver\1:$1;g" test/test-config.sh
