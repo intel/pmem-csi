@@ -399,23 +399,28 @@ var _ = Describe("sanity", func() {
 				volumes []*csi.ListVolumesResponse_Entry
 			}
 			var (
-				nodes []nodeClient
+				nodes map[string]nodeClient
 			)
 
 			BeforeEach(func() {
-				nodes = nil
+				nodes = make(map[string]nodeClient)
 				for i, addr := range workerSocatAddresses {
 					conn, err := sanityutils.Connect(addr)
 					framework.ExpectNoError(err, "connect to socat instance on node #%d via %s", i+1, addr)
-					nodes = append(nodes, nodeClient{
+					node := nodeClient{
 						host: addr,
 						conn: conn,
 						nc:   csi.NewNodeClient(conn),
 						cc:   csi.NewControllerClient(conn),
-					})
-					initialVolumes, err := nodes[len(nodes)-1].cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+					}
+					info, err := node.nc.NodeGetInfo(context.Background(), &csi.NodeGetInfoRequest{})
+					framework.ExpectNoError(err, "node name #%d", i+1)
+					initialVolumes, err := node.cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
 					framework.ExpectNoError(err, "list volumes on node #%d", i+1)
-					nodes[len(nodes)-1].volumes = initialVolumes.Entries
+					node.volumes = initialVolumes.Entries
+
+					//nodes = append(nodes, node)
+					nodes[info.NodeId] = node
 				}
 			})
 
@@ -423,6 +428,84 @@ var _ = Describe("sanity", func() {
 				for _, node := range nodes {
 					node.conn.Close()
 				}
+			})
+
+			It("supports persistent volumes", func() {
+				sizeInBytes := int64(33 * 1024 * 1024)
+				volName, vol := v.create(sizeInBytes, "")
+
+				Expect(len(vol.AccessibleTopology)).To(Equal(1), "accessible topology mismatch")
+				volNodeName := vol.AccessibleTopology[0].Segments["pmem-csi.intel.com/node"]
+				Expect(volNodeName).NotTo(BeNil(), "wrong topology")
+
+				// Node now should have one additional volume only one node,
+				// and its size should match the requested one.
+				for nodeName, node := range nodes {
+					currentVolumes, err := node.cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+					framework.ExpectNoError(err, "list volumes on node %s", nodeName)
+					if nodeName == volNodeName {
+						Expect(len(currentVolumes.Entries)).To(Equal(len(node.volumes)+1), "one additional volume on node %s", nodeName)
+						for _, e := range currentVolumes.Entries {
+							if e.Volume.VolumeId == vol.VolumeId {
+								Expect(e.Volume.CapacityBytes).To(Equal(sizeInBytes), "additional volume size on node #%s(%s)", nodeName, node.host)
+								break
+							}
+						}
+					} else {
+						// ensure that no new volume on other nodes
+						Expect(len(currentVolumes.Entries)).To(Equal(len(node.volumes)), "volume count mismatch on node %s", nodeName)
+					}
+				}
+
+				v.remove(vol, volName)
+			})
+
+			It("persistent volume retains data", func() {
+				sizeInBytes := int64(33 * 1024 * 1024)
+				volName, vol := v.create(sizeInBytes, nodeID)
+
+				Expect(len(vol.AccessibleTopology)).To(Equal(1), "accessible topology mismatch")
+				Expect(vol.AccessibleTopology[0].Segments["pmem-csi.intel.com/node"]).To(Equal(nodeID), "unexpected node")
+
+				// Node now should have one additional volume only one node,
+				// and its size should match the requested one.
+				node := nodes[nodeID]
+				currentVolumes, err := node.cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+				framework.ExpectNoError(err, "list volumes on node %s", nodeID)
+				Expect(len(currentVolumes.Entries)).To(Equal(len(node.volumes)+1), "one additional volume on node %s", nodeID)
+				for _, e := range currentVolumes.Entries {
+					if e.Volume.VolumeId == vol.VolumeId {
+						Expect(e.Volume.CapacityBytes).To(Equal(sizeInBytes), "additional volume size on node #%s(%s)", nodeID, node.host)
+						break
+					}
+				}
+
+				v.publish(volName, vol)
+
+				i := strings.Split(nodeID, "worker")[1]
+
+				// write some data to mounted volume
+				ssh := exec.Command(fmt.Sprintf("%s/_work/%s/ssh.%s", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"), i))
+				ssh.Stdin = bytes.NewBufferString(`sudo sh -c 'echo -n "hello" > ` + v.getTargetPath() + "/target/test-file" + `'`)
+				out, err := ssh.CombinedOutput()
+				framework.ExpectNoError(err, "write failure:\n%s", string(out))
+
+				// unmount volume
+				v.unpublish(vol, nodeID)
+
+				// republish volume
+				v.publish(volName, vol)
+
+				// ensure the data retained
+				ssh = exec.Command(fmt.Sprintf("%s/_work/%s/ssh.%s", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"), i))
+				ssh.Stdin = bytes.NewBufferString(`sudo sh -c 'cat ` + v.getTargetPath() + "/target/test-file" + `'`)
+				out, err = ssh.CombinedOutput()
+				framework.ExpectNoError(err, "read failure:\n%s", string(out))
+				Expect(string(out)).To(Equal("hello"), "read failure")
+
+				// end of test cleanup
+				v.unpublish(vol, nodeID)
+				v.remove(vol, volName)
 			})
 
 			It("supports cache volumes", func() {
@@ -456,13 +539,13 @@ var _ = Describe("sanity", func() {
 
 				// Each node now should have one additional volume,
 				// and its size should match the requested one.
-				for i, node := range nodes {
+				for nodeName, node := range nodes {
 					currentVolumes, err := node.cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
-					framework.ExpectNoError(err, "list volumes on node #%d via %s", i+1)
-					Expect(len(currentVolumes.Entries)).To(Equal(len(node.volumes)+1), "one additional volume on node #%d", i+1)
-					for i, e := range currentVolumes.Entries {
+					framework.ExpectNoError(err, "list volumes on node %s via %s", nodeName)
+					Expect(len(currentVolumes.Entries)).To(Equal(len(node.volumes)+1), "one additional volume on node %s", nodeName)
+					for _, e := range currentVolumes.Entries {
 						if e.Volume.VolumeId == vol.VolumeId {
-							Expect(e.Volume.CapacityBytes).To(Equal(sizeInBytes), "additional volume size on node #%d(%s)", i+1, node.host)
+							Expect(e.Volume.CapacityBytes).To(Equal(sizeInBytes), "additional volume size on node %s(%s)", nodeName, node.host)
 							break
 						}
 					}
@@ -471,10 +554,10 @@ var _ = Describe("sanity", func() {
 				v.remove(vol, volName)
 
 				// Now those volumes are gone again.
-				for i, node := range nodes {
+				for nodeName, node := range nodes {
 					currentVolumes, err := node.cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
-					framework.ExpectNoError(err, "list volumes on node #%d via %s", i+1)
-					Expect(len(currentVolumes.Entries)).To(Equal(len(node.volumes)), "same volumes as before on node #%d", i+1)
+					framework.ExpectNoError(err, "list volumes on node %s", nodeName)
+					Expect(len(currentVolumes.Entries)).To(Equal(len(node.volumes)), "same volumes as before on node %s", nodeName)
 				}
 			})
 		})
