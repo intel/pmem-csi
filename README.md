@@ -899,9 +899,11 @@ $ REPO_ROOT=`pwd` ginkgo '-focus=sanity' -failFast ./test/e2e/
 ```
 
 ## Application examples
-This section covers a set of reproducible application examples for PMEM-CSI:
 
-* Deploying a Redis cluster through the redis-operator using QEMU-emulated persistent memory devices [Link-to-example](examples/redis-operator.md).
+Information about specific usages of PMEM-CSI are described in separate documents:
+
+* Deploying a Redis cluster through the redis-operator using QEMU-emulated persistent memory devices ([examples/redis-operator.md](examples/redis-operator.md)).
+* Installing Kubernetes and PMEM-CSI on Google Cloud machines. ([examples/gce.md](examples/gce.md)).
 
 ## Communication and contribution
 
