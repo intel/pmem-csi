@@ -19,7 +19,7 @@ type PmemDeviceManager interface {
 	CreateDevice(name string, size uint64, nsmode string) error
 
 	//GetDevice returns the block device information for given name
-	GetDevice(name string) (PmemDeviceInfo, error)
+	GetDevice(name string) (*PmemDeviceInfo, error)
 
 	//DeleteDevice deletes an existing block device with give name.
 	// If 'flush' is 'true', then the device data is zerod beofore deleting the device
@@ -29,5 +29,5 @@ type PmemDeviceManager interface {
 	FlushDeviceData(name string) error
 
 	//ListDevices returns all the block devices information that was created by this device manager
-	ListDevices() ([]PmemDeviceInfo, error)
+	ListDevices() ([]*PmemDeviceInfo, error)
 }

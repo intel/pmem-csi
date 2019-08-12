@@ -15,7 +15,7 @@ const (
 	retryStatTimeout time.Duration = 100 * time.Millisecond
 )
 
-func ClearDevice(device PmemDeviceInfo, flush bool) error {
+func ClearDevice(device *PmemDeviceInfo, flush bool) error {
 	klog.V(4).Infof("ClearDevice: path: %v flush:%v", device.Path, flush)
 	// by default, clear 4 kbytes to avoid recognizing file system by next volume seeing data area
 	var blocks uint64 = 4
@@ -26,7 +26,7 @@ func ClearDevice(device PmemDeviceInfo, flush bool) error {
 	return FlushDevice(device, blocks)
 }
 
-func FlushDevice(dev PmemDeviceInfo, blocks uint64) error {
+func FlushDevice(dev *PmemDeviceInfo, blocks uint64) error {
 	// erase data on block device.
 	// zero number of blocks causes overwriting whole device with random data.
 	// nonzero number of blocks clears blocks*1024 bytes.
@@ -68,7 +68,7 @@ func FlushDevice(dev PmemDeviceInfo, blocks uint64) error {
 	return nil
 }
 
-func WaitDeviceAppears(dev PmemDeviceInfo) error {
+func WaitDeviceAppears(dev *PmemDeviceInfo) error {
 	for i := 0; i < 10; i++ {
 		_, err := os.Stat(dev.Path)
 		if err == nil {

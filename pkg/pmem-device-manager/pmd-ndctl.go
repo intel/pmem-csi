@@ -160,35 +160,35 @@ func (pmem *pmemNdctl) FlushDeviceData(volumeId string) error {
 	return ClearDevice(device, true)
 }
 
-func (pmem *pmemNdctl) GetDevice(volumeId string) (PmemDeviceInfo, error) {
+func (pmem *pmemNdctl) GetDevice(volumeId string) (*PmemDeviceInfo, error) {
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
 
 	return pmem.getDevice(volumeId)
 }
 
-func (pmem *pmemNdctl) ListDevices() ([]PmemDeviceInfo, error) {
+func (pmem *pmemNdctl) ListDevices() ([]*PmemDeviceInfo, error) {
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
 
-	devices := []PmemDeviceInfo{}
+	devices := []*PmemDeviceInfo{}
 	for _, ns := range pmem.ctx.GetActiveNamespaces() {
 		devices = append(devices, namespaceToPmemInfo(ns))
 	}
 	return devices, nil
 }
 
-func (pmem *pmemNdctl) getDevice(volumeId string) (PmemDeviceInfo, error) {
+func (pmem *pmemNdctl) getDevice(volumeId string) (*PmemDeviceInfo, error) {
 	ns, err := pmem.ctx.GetNamespaceByName(volumeId)
 	if err != nil {
-		return PmemDeviceInfo{}, err
+		return nil, err
 	}
 
 	return namespaceToPmemInfo(ns), nil
 }
 
-func namespaceToPmemInfo(ns *ndctl.Namespace) PmemDeviceInfo {
-	return PmemDeviceInfo{
+func namespaceToPmemInfo(ns *ndctl.Namespace) *PmemDeviceInfo {
+	return &PmemDeviceInfo{
 		VolumeId: ns.Name(),
 		Path:     "/dev/" + ns.BlockDeviceName(),
 		Size:     ns.Size(),
