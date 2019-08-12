@@ -96,6 +96,14 @@
   version = "v2.7.1"
 
 [[projects]]
+  digest = "1:e95ef557dc3120984bb66b385ae01b4bb8ff56bcde28e7b0d1beed0cccc4d69f"
+  name = "github.com/docker/go-units"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "519db1ee28dcc9fd2474ae59fca29a810482bfb1"
+  version = "v0.4.0"
+
+[[projects]]
   branch = "master"
   digest = "1:ecdc8e0fe3bc7d549af1c9c36acf3820523b707d6c071b6d0c3860882c6f7b42"
   name = "github.com/docker/spdystream"
@@ -1262,12 +1270,15 @@
   analyzer-version = 1
   input-imports = [
     "github.com/container-storage-interface/spec/lib/go/csi",
+    "github.com/docker/go-units",
     "github.com/golang/protobuf/proto",
     "github.com/google/uuid",
     "github.com/kubernetes-csi/csi-lib-utils/protosanitizer",
     "github.com/kubernetes-csi/csi-test/pkg/sanity",
     "github.com/kubernetes-csi/csi-test/utils",
     "github.com/onsi/ginkgo",
+    "github.com/onsi/ginkgo/config",
+    "github.com/onsi/ginkgo/reporters",
     "github.com/onsi/gomega",
     "github.com/pkg/errors",
     "golang.org/x/net/context",
@@ -1299,6 +1310,7 @@
     "k8s.io/kubernetes/pkg/volume/util/hostutil",
     "k8s.io/kubernetes/test/e2e/framework",
     "k8s.io/kubernetes/test/e2e/framework/config",
+    "k8s.io/kubernetes/test/e2e/framework/ginkgowrapper",
     "k8s.io/kubernetes/test/e2e/framework/pod",
     "k8s.io/kubernetes/test/e2e/framework/podlogs",
     "k8s.io/kubernetes/test/e2e/framework/ssh",

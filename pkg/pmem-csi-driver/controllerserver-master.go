@@ -38,9 +38,9 @@ const (
 	pmemParameterKeyPersistencyModel = "persistencyModel"
 	pmemParameterKeyCacheSize        = "cacheSize"
 
-	pmemPersistencyModelNone  PmemPersistencyModel = "none"
-	pmemPersistencyModelCache PmemPersistencyModel = "cache"
-	//pmemPersistencyModelEphemeral PmemPersistencyModel = "ephemeral"
+	pmemPersistencyModelNone      PmemPersistencyModel = "none"
+	pmemPersistencyModelCache     PmemPersistencyModel = "cache"
+	pmemPersistencyModelEphemeral PmemPersistencyModel = "ephemeral"
 )
 
 type PmemPersistencyModel string

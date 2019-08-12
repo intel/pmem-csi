@@ -1,4 +1,5 @@
 Go,https://github.com/golang/go,9051
+go-units,https://github.com/docker/go-units,9173
 golang-protobuf,https://github.com/golang/protobuf
 google uuid,https://github.com/google/uuid
 grpc-go,https://github.com/grpc/grpc-go

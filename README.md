@@ -325,7 +325,7 @@ can reuse existing local data when restarting.
 Volume | Kubernetes | PMEM-CSI | Limitations
 --- | --- | --- | ---
 Persistent | supported | supported | topology aware scheduling<sup>1</sup>
-Ephemeral | [in design](https://github.com/kubernetes/enhancements/blob/master/keps/sig-storage/20190122-csi-inline-volumes.md#proposal) | in design | topology aware scheduling<sup>1</sup>, resource constraints<sup>2</sup>
+Ephemeral | supported<sup>2</sup> | supported | resource constraints<sup>3</sup>
 Cache | supported | supported | topology aware scheduling<sup>1</sup>
 
 <sup>1 </sup>[Topology aware
@@ -335,7 +335,10 @@ created. For CSI-based drivers like PMEM-CSI, Kubernetes >= 1.13 is
 needed. On older Kubernetes releases, pods must be scheduled manually
 onto the right node(s).
 
-<sup>2 </sup>The upstream design for ephemeral volumes currently does
+<sup>2 </sup> [CSI ephemeral volumes](https://kubernetes.io/docs/concepts/storage/volumes/#csi-ephemeral-volumes)
+feature support is alpha in Kubernetes v1.15, and beta in v1.16.
+
+<sup>3 </sup>The upstream design for ephemeral volumes currently does
 not take [resource
 constraints](https://github.com/kubernetes/enhancements/pull/716#discussion_r250536632)
 into account. If an application gets scheduled onto a node and then
@@ -344,8 +347,8 @@ the node cannot start until resources become available.
 
 #### Usage on Kubernetes
 
-Kubernetes cluster administrators can expose above mentioned [volume
-persistency types](#volume-persistency) to applications using
+Kubernetes cluster administrators can expose above mentioned persistent and cache volumes
+to applications using
 [`StorageClass
 Parameters`](https://kubernetes.io/docs/concepts/storage/storage-classes/#parameters). An
 optional `persistencyModel` parameter differentiates how the
@@ -396,6 +399,16 @@ application](deploy/common/pmem-app-cache.yaml) example.
 * A node is only chosen the first time a pod starts. After that it will always restart
   on that node, because that is where the persistent volume was created.
 
+Volume requests embedded in Pod spec are provisioned as ephemeral volumes. The volume request could use below fields as [`volumeAttributes`](https://kubernetes.io/docs/concepts/storage/volumes/#csi):
+
+|key|meaning|optional|values|
+|---|-------|--------|-------------|
+|`size`|Size of the requested ephemeral volume|No||
+|`nsmode`|PMEM namespace mode of requested<br> ephemeral volume|Yes|`fsdax` (default),<br> `sector`|
+|`eraseAfter`|Clear all data after use and before<br> deleting the volume|Yes|`true` (default),<br> `false`|
+
+Check with provided [example application](deploy/kubernetes-1.15/pmem-app-ephemeral.yaml) for
+ephemeral volume usage.
 ## Prerequisites
 
 ### Software required
@@ -513,7 +526,7 @@ versions:
 |--------------------|--------------------------------|----------------
 | 1.13               | CSINodeInfo, CSIDriverRegistry,<br>CSIBlockVolume</br>| unsupported <sup>1</sup>
 | 1.14               |                                |
-| 1.15               |                                |
+| 1.15               | CSIInlineVolume                |
 | 1.16               |                                |
 
 <sup>1</sup> Several relevant features are only available in alpha
