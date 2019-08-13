@@ -12,6 +12,7 @@ ARG SWUPD_UPDATE_ARG=
 # - up-to-date Clear Linux
 # - ndctl installed
 FROM ${CLEAR_LINUX_BASE} AS build
+ARG SWUPD_UPDATE_ARG
 
 ARG NDCTL_VERSION="65"
 ARG NDCTL_CONFIGFLAGS="--disable-docs --without-systemd --without-bash"
@@ -71,6 +72,7 @@ RUN make VERSION=${VERSION} pmem-csi-driver${BIN_SUFFIX} pmem-vgm${BIN_SUFFIX} p
 
 # Clean image for deploying PMEM-CSI.
 FROM ${CLEAR_LINUX_BASE}
+ARG SWUPD_UPDATE_ARG
 LABEL maintainers="Intel"
 LABEL description="PMEM CSI Driver"
 
