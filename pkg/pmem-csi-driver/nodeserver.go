@@ -302,6 +302,9 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	volumeMutex.LockKey(req.GetVolumeId())
 	defer volumeMutex.UnlockKey(req.GetVolumeId())
 
+	klog.V(4).Infof("NodeStageVolume: VolumeID:%v Staging target path:%v Requested fsType:%v",
+		req.GetVolumeId(), stagingtargetPath, requestedFsType)
+
 	device, err := ns.cs.dm.GetDevice(req.VolumeId)
 	if err != nil {
 		if errors.Is(err, pmdmanager.ErrDeviceNotFound) {
@@ -346,7 +349,6 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	volumeMutex.LockKey(req.GetVolumeId())
 	defer volumeMutex.UnlockKey(req.GetVolumeId())
 
-	// showing for debug:
 	klog.V(4).Infof("NodeUnStageVolume: VolumeID:%v Staging target path:%v",
 		req.GetVolumeId(), stagingtargetPath)
 
