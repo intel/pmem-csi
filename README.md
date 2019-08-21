@@ -615,7 +615,7 @@ For each Kubernetes version, four different deployment variants are provided:
 For example, to deploy for production with LVM device mode onto Kubernetes 1.14, use:
 
 ```sh
-    $ kubectl create -f - deploy/kubernetes-1.14/pmem-csi-lvm.yaml
+    $ kubectl create -f deploy/kubernetes-1.14/pmem-csi-lvm.yaml
 ```
 
 These variants were generated with
