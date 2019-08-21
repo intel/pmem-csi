@@ -202,14 +202,13 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	volumeMutex.LockKey(req.GetVolumeId())
 	defer volumeMutex.UnlockKey(req.GetVolumeId())
 
-	// showing for debug:
 	glog.V(4).Infof("NodeStageVolume: VolumeID:%v Staging target path:%v Requested fsType:%v",
 		req.GetVolumeId(), stagingtargetPath, requestedFsType)
 
 	device, err := ns.dm.GetDevice(req.VolumeId)
 	if err != nil {
 		glog.Errorf("NodeStageVolume: did not find volume %s", req.VolumeId)
-		return nil, status.Error(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.NotFound, err.Error())
 	}
 
 	// Check does devicepath already contain a filesystem?
@@ -217,6 +216,27 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	if err != nil {
 		glog.Errorf("NodeStageVolume: determineFilesystemType failed: %v", err)
 		return nil, err
+	}
+	if existingFsType != "" && existingFsType != requestedFsType {
+		glog.Errorf("NodeStageVolume: File system with different type %v exists on %s",
+			existingFsType, device.Path)
+		return nil, status.Error(codes.AlreadyExists, "File system with different type exists")
+	}
+	// Check is something already mounted to stagingtargetPath
+	mounter := mount.New("")
+	mountedDev, _, err := mount.GetDeviceNameFromMount(mounter, stagingtargetPath)
+	if err != nil {
+		glog.Errorf("NodeStageVolume: Error getting device name for mount")
+		return nil, err
+	}
+	if mountedDev == device.Path {
+		glog.V(4).Infof("NodeStageVolume: Device %s already mounted to path %s", mountedDev, stagingtargetPath)
+		// Check are the capabilities compatible.
+		if existingFsType == requestedFsType {
+			// If fstype compatible, return OK.
+			glog.V(4).Infof("NodeStageVolume: Device:%s fsType:%s matches", mountedDev, requestedFsType)
+			return &csi.NodeStageVolumeResponse{}, nil
+		}
 	}
 
 	// what to do if existing file system is detected and is different from request;
@@ -226,37 +246,29 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		// Is existing filesystem type same as requested?
 		if existingFsType == requestedFsType {
 			glog.V(4).Infof("Skip mkfs as %v file system already exists on %v", existingFsType, device.Path)
-		} else {
-			glog.Errorf("NodeStageVolume: File system with different type %v exist on %v",
-				existingFsType, device.Path)
-			return nil, status.Error(codes.InvalidArgument, "File system with different type exists")
 		}
 	} else {
 		// no existing file system, make fs
-		// Empty FsType means "unspecified" and we pick default, currently hard-codes to ext4
 		cmd := ""
 		args := []string{}
-		// hard-code block size to 4k to avoid smaller values and trouble to dax mount option
-		if requestedFsType == "ext4" || requestedFsType == "" {
+		// requestedFsType can't be empty here as it is set to ext4 above in case of empty
+		if requestedFsType == "ext4" {
 			cmd = "mkfs.ext4"
+			// hard-code block size to 4k to avoid smaller values and trouble to dax mount option
 			args = []string{"-b 4096", "-F", device.Path}
 		} else if requestedFsType == "xfs" {
 			cmd = "mkfs.xfs"
 			args = []string{"-b", "size=4096", "-f", device.Path}
 		} else {
 			glog.Errorf("NodeStageVolume: Unsupported fstype: %v", requestedFsType)
-			return nil, status.Error(codes.InvalidArgument, "xfs, ext4 are supported as file system types")
+			return nil, status.Error(codes.Unimplemented, "xfs, ext4 are supported as file system types")
 		}
 		output, err := pmemexec.RunCommand(cmd, args...)
 		if err != nil {
-			return nil, status.Error(codes.InvalidArgument, "mkfs failed: "+output)
+			return nil, status.Error(codes.Unknown, "mkfs failed: "+output)
 		}
 	}
 
-	// If file system is already mounted, can happen if out-of-sync "stage" is asked again without unstage
-	// then the mount here will fail. I guess it's ok to not check explicitly for existing mount,
-	// as end result after mount attempt will be same: no new mount and existing mount remains.
-	// TODO: cleaner is to explicitly check (although CSI spec may tell that out-of-order call is illegal (check it))
 	glog.V(5).Infof("NodeStageVolume: mount %s %s", device.Path, stagingtargetPath)
 
 	/* THIS is how it could go with using "mount" package
@@ -287,7 +299,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	args = append(args, device.Path, stagingtargetPath)
 	glog.V(4).Infof("NodeStageVolume: mount args: [%v]", args)
 	if _, err := pmemexec.RunCommand("mount", args...); err != nil {
-		return nil, status.Error(codes.InvalidArgument, "mount filesystem failed"+err.Error())
+		return nil, status.Error(codes.Unknown, "mount filesystem failed"+err.Error())
 	}
 
 	return &csi.NodeStageVolumeResponse{}, nil
@@ -310,7 +322,6 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	volumeMutex.LockKey(req.GetVolumeId())
 	defer volumeMutex.UnlockKey(req.GetVolumeId())
 
-	// showing for debug:
 	glog.V(4).Infof("NodeUnStageVolume: VolumeID:%v VolumeName:%v Staging target path:%v",
 		req.GetVolumeId(), volName, stagingtargetPath)
 
