@@ -64,10 +64,11 @@ var _ = Describe("E2E", func() {
 					"ext4": "deploy/common/pmem-storageclass-ext4.yaml",
 					"xfs":  "deploy/common/pmem-storageclass-xfs.yaml",
 				},
-				// We use 16Mi size volumes because this is the minimum size supported
-				// by xfs filesystem's allocation group
+				// There is test in VolumeIO suite creating 102 MB of content
+				// so we use 110 MB claimSize to fit that with some margin.
+				// Without VolumeIO suite, 16Mi would be enough as smallest xfs system size.
 				// Ref: http://man7.org/linux/man-pages/man8/mkfs.xfs.8.html
-				claimSize:     "16Mi",
+				claimSize:     "110Mi",
 				csiDriverName: "pmem-csi.intel.com",
 			}
 		},
@@ -80,7 +81,7 @@ var _ = Describe("E2E", func() {
 		testsuites.InitProvisioningTestSuite,
 		// testsuites.InitSnapshottableTestSuite,
 		// testsuites.InitSubPathTestSuite,
-		// testsuites.InitVolumeIOTestSuite,
+		testsuites.InitVolumeIOTestSuite,
 		testsuites.InitVolumeModeTestSuite,
 		testsuites.InitVolumesTestSuite,
 		testsuites.InitEphemeralTestSuite,
