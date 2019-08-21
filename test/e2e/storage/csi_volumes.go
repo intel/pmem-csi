@@ -79,7 +79,8 @@ var _ = Describe("PMEM Volumes", func() {
 				// We use 16Mi size volumes because this is the minimum size supported
 				// by xfs filesystem's allocation group
 				// Ref: http://man7.org/linux/man-pages/man8/mkfs.xfs.8.html
-				claimSize: "16Mi",
+				claimSize: "110Mi",
+				// VolumeIO test suite requires at least 102 MB volume.
 			}
 		},
 	}
@@ -91,7 +92,7 @@ var _ = Describe("PMEM Volumes", func() {
 		testsuites.InitProvisioningTestSuite,
 		// testsuites.InitSnapshottableTestSuite,
 		// testsuites.InitSubPathTestSuite,
-		// testsuites.InitVolumeIOTestSuite,
+		testsuites.InitVolumeIOTestSuite,
 		testsuites.InitVolumeModeTestSuite,
 		testsuites.InitVolumesTestSuite,
 	}
