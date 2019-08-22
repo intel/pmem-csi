@@ -195,5 +195,6 @@ func namespaceToPmemInfo(ns *ndctl.Namespace) PmemDeviceInfo {
 		Name: ns.Name(),
 		Path: "/dev/" + ns.BlockDeviceName(),
 		Size: ns.Size(),
+		Mode: string(ns.Mode()),
 	}
 }

@@ -17,7 +17,7 @@ type pmemLvm struct {
 }
 
 var _ PmemDeviceManager = &pmemLvm{}
-var lvsArgs = []string{"--noheadings", "--nosuffix", "-o", "lv_name,lv_path,lv_size", "--units", "B"}
+var lvsArgs = []string{"--noheadings", "--nosuffix", "-o", "lv_name,lv_path,lv_size,vg_tags", "--units", "B"}
 var vgsArgs = []string{"--noheadings", "--nosuffix", "-o", "vg_name,vg_size,vg_free,vg_tags", "--units", "B"}
 
 // mutex to synchronize all LVM calls
@@ -243,6 +243,7 @@ func parseLVSOuput(output string) (map[string]PmemDeviceInfo, error) {
 		dev.Name = fields[0]
 		dev.Path = fields[1]
 		dev.Size, _ = strconv.ParseUint(fields[2], 10, 64)
+		dev.Mode = fields[3] //vg_tags
 
 		devices[dev.Name] = dev
 	}

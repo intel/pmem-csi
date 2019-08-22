@@ -8,6 +8,8 @@ type PmemDeviceInfo struct {
 	Path string
 	//Size size allocated for block device
 	Size uint64
+	//Mode device namespace mode
+	Mode string
 }
 
 //PmemDeviceManager interface to manage the PMEM block devices
