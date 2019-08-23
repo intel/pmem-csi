@@ -10,6 +10,8 @@ type PmemDeviceInfo struct {
 	Size uint64
 	//Mode device namespace mode
 	Mode string
+	//NumaNode attached numa node number
+	NumaNode int
 }
 
 //PmemDeviceManager interface to manage the PMEM block devices

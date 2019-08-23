@@ -192,9 +192,10 @@ func (pmem *pmemNdctl) getDevice(name string) (PmemDeviceInfo, error) {
 
 func namespaceToPmemInfo(ns *ndctl.Namespace) PmemDeviceInfo {
 	return PmemDeviceInfo{
-		Name: ns.Name(),
-		Path: "/dev/" + ns.BlockDeviceName(),
-		Size: ns.Size(),
-		Mode: string(ns.Mode()),
+		Name:     ns.Name(),
+		Path:     "/dev/" + ns.BlockDeviceName(),
+		Size:     ns.Size(),
+		Mode:     string(ns.Mode()),
+		NumaNode: ns.NumaNode(),
 	}
 }

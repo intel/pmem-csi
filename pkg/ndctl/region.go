@@ -67,6 +67,12 @@ func (r *Region) Type() RegionType {
 	return UnknownRegion
 }
 
+//NumaNode returns numa node number attached to this region
+func (r *Region) NumaNode() int {
+	ndr := (*C.struct_ndctl_region)(r)
+	return int(C.ndctl_region_get_numa_node(ndr))
+}
+
 //TypeName returns region type
 func (r *Region) TypeName() string {
 	ndr := (*C.struct_ndctl_region)(r)

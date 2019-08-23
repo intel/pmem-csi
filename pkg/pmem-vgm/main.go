@@ -3,13 +3,14 @@ package pmemvgm
 import (
 	"flag"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"k8s.io/klog"
 	"k8s.io/klog/glog"
 
 	"github.com/intel/pmem-csi/pkg/ndctl"
-	"github.com/intel/pmem-csi/pkg/pmem-common"
+	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 )
 
@@ -107,7 +108,8 @@ func createVolumesForRegion(r *ndctl.Region, vgName string, nsmode ndctl.Namespa
 	if err != nil {
 		return err
 	}
+
 	// Tag add works without error if repeated, so it is safe to run without checking for existing
-	_, err = pmemexec.RunCommand("vgchange", "--addtag", string(nsmode), vgName)
+	_, err = pmemexec.RunCommand("vgchange", "--addtag", "nsmode="+string(nsmode), "--addtag", "numanode="+strconv.Itoa(r.NumaNode()))
 	return err
 }

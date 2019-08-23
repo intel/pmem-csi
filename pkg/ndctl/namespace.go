@@ -10,6 +10,7 @@ import "C"
 import (
 	"encoding/json"
 	"fmt"
+
 	/* needed for nullify
 	"os"
 	"syscall"*/
@@ -184,6 +185,12 @@ func (ns *Namespace) Type() NamespaceType {
 	}
 
 	return UnknownType
+}
+
+//NumaNode returns numa node number attached to this namespace
+func (ns *Namespace) NumaNode() int {
+	ndns := (*C.struct_ndctl_namespace)(ns)
+	return int(C.ndctl_namespace_get_numa_node(ndns))
 }
 
 //Enabled return if namespace is enabled

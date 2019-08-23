@@ -66,10 +66,10 @@ func NewPmemDeviceManagerLVM() (PmemDeviceManager, error) {
 }
 
 type vgInfo struct {
-	name string
-	size uint64
-	free uint64
-	tag  string
+	name   string
+	size   uint64
+	free   uint64
+	nsmode string
 }
 
 func (lvm *pmemLvm) GetCapacity() (map[string]uint64, error) {
@@ -232,10 +232,10 @@ func vgName(bus *ndctl.Bus, region *ndctl.Region, nsmode ndctl.NamespaceMode) st
 //lvs options "lv_name,lv_path,lv_size,lv_free"
 func parseLVSOuput(output string) (map[string]PmemDeviceInfo, error) {
 	devices := map[string]PmemDeviceInfo{}
-	lines := strings.Split(string(output), "\n")
+	lines := strings.Split(output, "\n")
 	for _, line := range lines {
 		fields := strings.Fields(strings.TrimSpace(line))
-		if len(fields) != 3 {
+		if len(fields) != 4 {
 			continue
 		}
 
@@ -243,7 +243,12 @@ func parseLVSOuput(output string) (map[string]PmemDeviceInfo, error) {
 		dev.Name = fields[0]
 		dev.Path = fields[1]
 		dev.Size, _ = strconv.ParseUint(fields[2], 10, 64)
-		dev.Mode = fields[3] //vg_tags
+		tags := parseTags(fields[3]) //vg_tags
+		dev.Mode = tags["nsmode"]
+		if nn, ok := tags["numanode"]; ok {
+			n, _ := strconv.ParseInt(nn, 10, 32)
+			dev.NumaNode = int(n)
+		}
 
 		devices[dev.Name] = dev
 	}
@@ -270,7 +275,7 @@ func (lvm *pmemLvm) getCapacity() (map[string]uint64, error) {
 	return capacity, nil
 }
 
-func getVolumeGroups(groups []string, wantedTag string) ([]vgInfo, error) {
+func getVolumeGroups(groups []string, wantedMode string) ([]vgInfo, error) {
 	vgs := []vgInfo{}
 	args := append(vgsArgs, groups...)
 	output, err := pmemexec.RunCommand("vgs", args...)
@@ -282,16 +287,35 @@ func getVolumeGroups(groups []string, wantedTag string) ([]vgInfo, error) {
 		if len(fields) != 4 {
 			return vgs, fmt.Errorf("Failed to parse vgs output line: %s", line)
 		}
-		tag := fields[3]
-		if tag == wantedTag {
+		tags := parseTags(fields[3]) //vg_tags
+
+		if mode := tags["nsmode"]; wantedMode != "" && mode == wantedMode {
 			vg := vgInfo{}
 			vg.name = fields[0]
 			vg.size, _ = strconv.ParseUint(fields[1], 10, 64)
 			vg.free, _ = strconv.ParseUint(fields[2], 10, 64)
-			vg.tag = tag
+			vg.nsmode = mode
 			vgs = append(vgs, vg)
 		}
 	}
 
 	return vgs, nil
+}
+
+// parseTags parse vg_tag string and returns map[string]string
+func parseTags(vgTags string) map[string]string {
+	tags := map[string]string{}
+
+	entries := strings.Split(vgTags, ",")
+	for _, tag := range entries {
+		if keyval := strings.SplitN(tag, "=", 2); len(keyval) == 2 {
+			tags[keyval[0]] = keyval[1]
+		} else {
+			// fallback to single tag value
+			tags["nsmode"] = keyval[0]
+			break
+		}
+	}
+
+	return tags
 }
