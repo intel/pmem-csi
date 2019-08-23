@@ -11,6 +11,11 @@ import (
 	"k8s.io/klog"
 )
 
+const (
+	// 4 MB alignment is used by LVM
+	lvmAlign uint64 = 4 * 1024 * 1024
+)
+
 type pmemLvm struct {
 	volumeGroups []string
 	devices      map[string]PmemDeviceInfo
@@ -94,30 +99,24 @@ func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error 
 	if err == nil {
 		return fmt.Errorf("CreateDevice: Failed: namespace with that name '%s' exists", name)
 	}
-	// pick a region, few possible strategies:
-	// 1. pick first with enough available space: simplest, regions get filled in order;
-	// 2. pick first with largest available space: regions get used round-robin, i.e. load-balanced, but does not leave large unused;
-	// 3. pick first with smallest available which satisfies the request: ordered initially, but later leaves bigger free available;
-	// Let's implement strategy 1 for now, simplest to code as no need to compare sizes in all regions
-	// NOTE: We walk buses and regions in ndctl context, but avail.size we check in LV context
 	vgs, err := getVolumeGroups(lvm.volumeGroups, nsmode)
 	if err != nil {
 		return err
 	}
-	// lvcreate takes size in MBytes if no unit.
-	// We use MBytes here to avoid problems with byte-granularity, as lvcreate
-	// may refuse to create some arbitrary sizes.
-	// Division by 1M should not result in smaller-than-asked here
-	// as lvcreate will round up to next 4MB boundary.
-	sizeM := int(size / (1024 * 1024))
-	// Asked==zero means unspecified by CSI spec, we create a small 4 Mbyte volume
-	// as lvcreate does not allow zero size (csi-sanity creates zero-sized volumes)
-	if sizeM <= 0 {
-		sizeM = 4
+	// Adjust up to next alignment boundary, if not aligned already.
+	// This logic relies on size guaranteed to be nonzero,
+	// which is now achieved by check in upper layer.
+	// If zero size possible then we would need to check and increment by lvmAlign,
+	// because LVM does not tolerate creation of zero size.
+	if reminder := size % lvmAlign; reminder != 0 {
+		klog.V(5).Infof("CreateDevice align size up by %v: from %v", lvmAlign-reminder, size)
+		size += lvmAlign - reminder
+		klog.V(5).Infof("CreateDevice align size up: to %v", size)
 	}
-	strSz := strconv.Itoa(sizeM)
+	strSz := strconv.FormatUint(size, 10) + "B"
 
 	for _, vg := range vgs {
+		// use first Vgroup with enough available space
 		if vg.free >= size {
 			// In some container environments clearing device fails with race condition.
 			// So, we ask lvm not to clear(-Zn) the newly created device, instead we do ourself in later stage.

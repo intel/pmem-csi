@@ -9,6 +9,12 @@ import (
 	"k8s.io/kubernetes/pkg/util/mount"
 )
 
+const (
+	// 1 GB align in ndctl creation request has proven to be reliable.
+	// Newer kernels may allow smaller alignment but we do not want to introduce kernel depenency.
+	ndctlAlign uint64 = 1024 * 1024 * 1024
+)
+
 type pmemNdctl struct {
 	ctx *ndctl.Context
 }
@@ -60,10 +66,9 @@ func (pmem *pmemNdctl) GetCapacity() (map[string]uint64, error) {
 	Capacity := map[string]uint64{}
 	nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
 	var capacity uint64
-	align := uint64(1024 * 1024 * 1024)
 	for _, bus := range pmem.ctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
-			realalign := align * r.InterleaveWays()
+			realalign := ndctlAlign * r.InterleaveWays()
 			available := r.MaxAvailableExtent()
 			// align down, avoid claiming more than what we really can serve
 			klog.V(4).Infof("GetCapacity: available before realalign: %d", available)
@@ -97,26 +102,18 @@ func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) err
 		klog.V(4).Infof("Device with name: %s already exists, refuse to create another", name)
 		return fmt.Errorf("CreateDevice: Failed: namespace with that name exists")
 	}
-	if size <= 0 {
-		// Allocating volumes of zero size isn't supported.
-		// We use some arbitrary small minimum size instead.
-		// It will get rounded up by libndctl to meet the alignment.
-		size = 1
-	}
-	// Pass align = 1 GB into creation request as that has proven to be reliable.
-	const align uint64 = 1024 * 1024 * 1024
 	// libndctl needs to store meta data and will use some of the allocated
 	// space for that (https://github.com/pmem/ndctl/issues/79).
 	// We don't know exactly how much space that is, just
 	// that it should be a small amount. But because libndctl
 	// rounds up to the alignment, in practice that means we need
 	// to request `align` additional bytes.
-	compensatedsize := size + align
-	klog.V(4).Infof("CreateDevice:%s: Compensate for libndctl creating one alignment step smaller: change size %d to %d", name, size, compensatedsize)
+	size += ndctlAlign
+	klog.V(4).Infof("Compensate for libndctl creating one alignment step smaller: increase size to %d", size)
 	ns, err := pmem.ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
 		Name:  name,
-		Size:  compensatedsize,
-		Align: align,
+		Size:  size,
+		Align: ndctlAlign,
 		Mode:  ndctl.NamespaceMode(nsmode),
 	})
 	if err != nil {
