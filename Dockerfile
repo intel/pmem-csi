@@ -1,7 +1,7 @@
 # CLEARLINUX_BASE and SWUPD_UPDATE_ARG can be used to make the build reproducible
-# by choosing an image by its hash and updating to a certain version with -m:
+# by choosing an image by its hash and updating to a certain version with -V:
 # CLEAR_LINUX_BASE=clearlinux@sha256:b8e5d3b2576eb6d868f8d52e401f678c873264d349e469637f98ee2adf7b33d4
-# SWUPD_UPDATE_ARG=-m 29970
+# SWUPD_UPDATE_ARG=-V 29970
 #
 # This is used on release branches before tagging a stable version. The master and devel
 # branches default to using the latest Clear Linux.
@@ -12,6 +12,7 @@ ARG SWUPD_UPDATE_ARG="--version=30670"
 # - up-to-date Clear Linux
 # - ndctl installed
 FROM ${CLEAR_LINUX_BASE} AS build
+ARG SWUPD_UPDATE_ARG
 
 ARG NDCTL_VERSION="65"
 ARG NDCTL_CONFIGFLAGS="--disable-docs --without-systemd --without-bash"
@@ -71,6 +72,7 @@ RUN make VERSION=${VERSION} pmem-csi-driver${BIN_SUFFIX} pmem-vgm${BIN_SUFFIX} p
 
 # Clean image for deploying PMEM-CSI.
 FROM ${CLEAR_LINUX_BASE}
+ARG SWUPD_UPDATE_ARG
 LABEL maintainers="Intel"
 LABEL description="PMEM CSI Driver"
 
