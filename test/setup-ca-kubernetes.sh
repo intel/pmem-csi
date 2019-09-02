@@ -6,8 +6,6 @@
 # The default relies on a functional kubectl that uses the target cluster.
 : ${KUBECTL:=kubectl}
 
-# Directory to use for storing intermediate files
-WORKDIR=${WORKDIR:-$(mktemp -d -u -t pmem-XXXX)}
 
 cfssl_found=1
 (command -v cfssl 2>&1 >/dev/null && command -v cfssljson 2>&1 >/dev/null) || cfssl_found=0
@@ -63,12 +61,15 @@ EOF
     echo "Created: $CSR_NAME.crt"
 }
 
-mkdir -p $WORKDIR 2> /dev/null && cd $WORKDIR
-trap cleaup INT
+# Directory to use for storing intermediate files
+WORKDIR=`mktemp -d -t pmem-XXXX`
+cd $WORKDIR
+
+trap cleanup INT EXIT
 cleanup()
 {
-    echo "Cleaning up..."
-    cd .. && rm -rf $WORKDIR 2> /dev/null
+    echo "Cleaning up, deleting $WORKDIR"
+    rm -rf $WORKDIR 2> /dev/null
 }
 
 echo "Generating certificate files in: $WORKDIR"
@@ -133,5 +134,3 @@ echo "  $name.key: $(base64 -w 0 $name-key.pem)"
 done)
 EOF
 fi
-
-[ "$(ls -A $WORKDIR)" ] || cleanup
