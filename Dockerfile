@@ -20,6 +20,7 @@ ARG NDCTL_BUILD_DEPS="os-core-dev devpkg-util-linux devpkg-kmod devpkg-json-c"
 
 #pull dependencies required for downloading and building libndctl
 ARG CACHEBUST
+# TODO: download Go from https://golang.org/dl/
 RUN swupd update ${SWUPD_UPDATE_ARG} && swupd bundle-add ${NDCTL_BUILD_DEPS} go-basic-dev && rm -rf /var/lib/swupd
 # Workaround for "pkg-config: error while loading shared libraries" when using older Docker
 # (see https://github.com/clearlinux/distribution/issues/831)
