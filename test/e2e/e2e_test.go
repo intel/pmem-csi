@@ -31,7 +31,7 @@ import (
 	_ "github.com/intel/pmem-csi/test/e2e/storage"
 )
 
-func init() {
+func TestMain(m *testing.M) {
 	klog.SetOutput(GinkgoWriter)
 	klog.InitFlags(flag.CommandLine)
 
@@ -47,6 +47,9 @@ func init() {
 	if repoRoot != "" {
 		testfiles.AddFileSource(RootFileSource{Root: repoRoot})
 	}
+
+	// Now run the test suite.
+	os.Exit(m.Run())
 }
 
 func TestE2E(t *testing.T) {
