@@ -175,12 +175,18 @@ var _ = Describe("pmem registry", func() {
 
 		// This covers different scenarios for connections to the registry.
 		cases := []struct {
-			name, ca, cert, key, peerName, errorText string
+			name, ca, cert, key, peerName, errorRE string
 		}{
-			{"registry should detect man-in-the-middle", ca, evilCert, evilKey, "pmem-registry", "authentication handshake failed: remote error: tls: bad certificate"},
+			// The exact error for the server side depends on whether TLS 1.3 is active (https://golang.org/doc/go1.12#tls_1_3).
+			// It looks like error detection is less precise in that case.
+			{"registry should detect man-in-the-middle", ca, evilCert, evilKey, "pmem-registry",
+				"authentication handshake failed: remote error: tls: bad certificate|all SubConns are in TransientFailure",
+			},
 			{"client should detect man-in-the-middle", evilCA, evilCert, evilKey, "pmem-registry", "transport: authentication handshake failed: x509: certificate signed by unknown authority"},
 			{"client should detect wrong peer", ca, cert, key, "unknown-registry", "transport: authentication handshake failed: x509: certificate is valid for pmem-registry, not unknown-registry"},
-			{"server should detect wrong peer", ca, wrongCert, wrongKey, "pmem-registry", "transport: authentication handshake failed: remote error: tls: bad certificate"},
+			{"server should detect wrong peer", ca, wrongCert, wrongKey, "pmem-registry",
+				"transport: authentication handshake failed: remote error: tls: bad certificate|all SubConns are in TransientFailure",
+			},
 		}
 
 		for _, c := range cases {
@@ -199,7 +205,7 @@ var _ = Describe("pmem registry", func() {
 
 				_, err = client.RegisterController(context.Background(), &req)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring(c.errorText))
+				Expect(err.Error()).To(MatchRegexp(c.errorRE))
 			})
 		}
 	})
