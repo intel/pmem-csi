@@ -49,45 +49,46 @@
 # see https://github.com/kubernetes/kubernetes/issues/72638.
 [[constraint]]
   name = "k8s.io/kubernetes"
-  source = "github.com/avalluri/kubernetes"
-  branch = "automated-cherry-pick-of-#83609-upstream-release-1.16"
+  # We can revert to a specific version once https://github.com/kubernetes/kubernetes/commit/cf477475ed3c0ab29e445f87447f6d5c25eb0ed1
+  # is part of a release; it missed v1.16.3-beta.0 but perhaps will still make it into v1.16.3.
+  branch = "release-1.16"
 
 [[override]]
   name = "k8s.io/apimachinery"
-  version = "kubernetes-1.16.0"
+  version = "kubernetes-1.16.2"
 [[override]]
   name = "k8s.io/api"
-  version = "kubernetes-1.16.0"
+  version = "kubernetes-1.16.2"
 [[override]]
   name = "k8s.io/apiserver"
-  version = "kubernetes-1.16.0"
+  version = "kubernetes-1.16.2"
 [[override]]
   name = "k8s.io/apiextensions-apiserver"
-  version = "kubernetes-1.16.0"
+  version = "kubernetes-1.16.2"
 [[override]]
   name = "k8s.io/cli-runtime"
-  version = "kubernetes-1.16.0"
+  version = "kubernetes-1.16.2"
 [[override]]
   name = "k8s.io/client-go"
-  version = "kubernetes-1.16.0"
+  version = "kubernetes-1.16.2"
 [[override]]
   name = "k8s.io/cloud-provider"
-  version = "kubernetes-1.16.0"
+  version = "kubernetes-1.16.2"
 [[override]]
   name = "k8s.io/cluster-bootstrap"
-  version = "kubernetes-1.16.0"
+  version = "kubernetes-1.16.2"
 [[override]]
   name = "k8s.io/csi-api"
-  version = "kubernetes-1.16.0"
+  version = "kubernetes-1.16.2"
 [[override]]
   name = "k8s.io/kube-aggregator"
-  version = "kubernetes-1.16.0"
+  version = "kubernetes-1.16.2"
 [[override]]
   name = "k8s.io/component-base"
-  version = "kubernetes-1.16.0"
+  version = "kubernetes-1.16.2"
 [[override]]
   name = "k8s.io/csi-translation-lib"
-  version = "kubernetes-1.16.0"
+  version = "kubernetes-1.16.2"
 # There is a api breakage in latest(v1.0.0) prometheus release
 # vendor/k8s.io/component-base/metrics/legacyregistry/registry.go:44:9: undefined: prometheus.InstrumentHandler
 [[override]]
