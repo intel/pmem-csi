@@ -28,6 +28,7 @@ type nodeServer struct {
 	nodeCaps []*csi.NodeServiceCapability
 	nodeID   string
 	dm       pmdmanager.PmemDeviceManager
+	volInfo  map[string]string
 }
 
 var _ csi.NodeServer = &nodeServer{}
@@ -45,7 +46,8 @@ func NewNodeServer(nodeId string, dm pmdmanager.PmemDeviceManager) *nodeServer {
 				},
 			},
 		},
-		dm: dm,
+		dm:      dm,
+		volInfo: map[string]string{},
 	}
 }
 
@@ -301,13 +303,16 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	if len(stagingtargetPath) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Target path missing in request")
 	}
+
+	volName := ns.volInfo[req.VolumeId]
+
 	// Serialize by VolumeId
 	volumeMutex.LockKey(req.GetVolumeId())
 	defer volumeMutex.UnlockKey(req.GetVolumeId())
 
 	// showing for debug:
-	glog.V(4).Infof("NodeUnStageVolume: VolumeID:%v Staging target path:%v",
-		req.GetVolumeId(), stagingtargetPath)
+	glog.V(4).Infof("NodeUnStageVolume: VolumeID:%v VolumeName:%v Staging target path:%v",
+		req.GetVolumeId(), volName, stagingtargetPath)
 
 	// by spec, we have to return OK if asked volume is not mounted on asked path,
 	// so we look up the current device by volumeID and see is that device
