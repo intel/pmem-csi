@@ -7,13 +7,14 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"strconv"
 	"sync"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/google/uuid"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -170,8 +171,9 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 
 		chosenNodes = vol.nodeIDs
 	} else {
-		id, _ := uuid.NewUUID() //nolint: gosec
-		volumeID := id.String()
+		hasher := sha1.New()
+		hasher.Write([]byte(req.Name))
+		volumeID := hex.EncodeToString(hasher.Sum(nil))
 		inTopology := []*csi.Topology{}
 		cacheCount := uint64(1)
 
