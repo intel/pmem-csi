@@ -53,6 +53,22 @@ RUN echo "For source code and licensing of ndctl, see https://github.com/pmem/nd
 # - same as https://github.com/clearlinux/distribution/issues/831?
 RUN ldconfig
 
+# Clean image for deploying PMEM-CSI.
+FROM ${CLEAR_LINUX_BASE} as runtime
+ARG SWUPD_UPDATE_ARG
+LABEL maintainers="Intel"
+LABEL description="PMEM CSI Driver"
+
+# update and install needed bundles:
+# file - driver uses file utility to determine filesystem type
+# xfsprogs - XFS filesystem utilities
+# storge-utils - for lvm2 and ext4(e2fsprogs) utilities
+ARG CACHEBUST
+RUN swupd update ${SWUPD_UPDATE_ARG} && swupd bundle-add file xfsprogs storage-utils && rm -rf /var/lib/swupd
+# Workaround for "pkg-config: error while loading shared libraries" when using older Docker
+# (see https://github.com/clearlinux/distribution/issues/831)
+RUN ldconfig
+
 # Image in which PMEM-CSI binaries get built.
 FROM build as binaries
 
@@ -74,21 +90,8 @@ RUN make VERSION=${VERSION} pmem-csi-driver${BIN_SUFFIX} pmem-vgm${BIN_SUFFIX} p
     mv _output/pmem-ns-init${BIN_SUFFIX} /go/bin/pmem-ns-init && \
     cp LICENSE /go/bin/PMEM-CSI.LICENSE
 
-# Clean image for deploying PMEM-CSI.
-FROM ${CLEAR_LINUX_BASE}
-ARG SWUPD_UPDATE_ARG
-LABEL maintainers="Intel"
-LABEL description="PMEM CSI Driver"
-
-# update and install needed bundles:
-# file - driver uses file utility to determine filesystem type
-# xfsprogs - XFS filesystem utilities
-# storge-utils - for lvm2 and ext4(e2fsprogs) utilities
-ARG CACHEBUST
-RUN swupd update ${SWUPD_UPDATE_ARG} && swupd bundle-add file xfsprogs storage-utils && rm -rf /var/lib/swupd
-# Workaround for "pkg-config: error while loading shared libraries" when using older Docker
-# (see https://github.com/clearlinux/distribution/issues/831)
-RUN ldconfig
+# The actual pmem-csi-driver image.
+FROM runtime as pmem
 
 # Move required binaries and libraries to clean container.
 # All of our custom content is in /usr/local.
