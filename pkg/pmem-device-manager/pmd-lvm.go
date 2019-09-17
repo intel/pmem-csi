@@ -140,6 +140,8 @@ func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error 
 				}
 
 				lvm.devices[device.Name] = device
+				glog.V(5).Infof("CreateDevice: add [%+v] to lvm.devices", device)
+				glog.V(5).Infof("CreateDevice: lvm.devices now [%+v]", lvm.devices)
 
 				return nil
 			}
@@ -196,6 +198,7 @@ func (lvm *pmemLvm) GetDevice(id string) (PmemDeviceInfo, error) {
 }
 
 func (lvm *pmemLvm) getDevice(id string) (PmemDeviceInfo, error) {
+	glog.V(5).Infof("getDevice: lvm.devices now [%+v]", lvm.devices)
 	if dev, ok := lvm.devices[id]; ok {
 		return dev, nil
 	}
