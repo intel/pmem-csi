@@ -12,6 +12,7 @@ ARG SWUPD_UPDATE_ARG=
 # - up-to-date Clear Linux
 # - ndctl installed
 FROM ${CLEAR_LINUX_BASE} AS build
+ARG CLEAR_LINUX_BASE
 ARG SWUPD_UPDATE_ARG
 
 ARG NDCTL_VERSION="66"
@@ -21,6 +22,7 @@ ARG GO_VERSION="1.12.9"
 
 #pull dependencies required for downloading and building libndctl
 ARG CACHEBUST
+RUN echo "Updating build image from ${CLEAR_LINUX_BASE} to ${SWUPD_UPDATE_ARG:-the latest release}."
 RUN swupd update ${SWUPD_UPDATE_ARG} && swupd bundle-add ${NDCTL_BUILD_DEPS} c-basic && rm -rf /var/lib/swupd /var/tmp/swupd
 # Workaround for "pkg-config: error while loading shared libraries" when using older Docker
 # (see https://github.com/clearlinux/distribution/issues/831)
@@ -55,6 +57,7 @@ RUN ldconfig
 
 # Clean image for deploying PMEM-CSI.
 FROM ${CLEAR_LINUX_BASE} as runtime
+ARG CLEAR_LINUX_BASE
 ARG SWUPD_UPDATE_ARG
 LABEL maintainers="Intel"
 LABEL description="PMEM CSI Driver"
@@ -64,6 +67,7 @@ LABEL description="PMEM CSI Driver"
 # xfsprogs - XFS filesystem utilities
 # storge-utils - for lvm2 and ext4(e2fsprogs) utilities
 ARG CACHEBUST
+RUN echo "Updating runtime image from ${CLEAR_LINUX_BASE} to ${SWUPD_UPDATE_ARG:-the latest release}."
 RUN swupd update ${SWUPD_UPDATE_ARG} && swupd bundle-add file xfsprogs storage-utils && rm -rf /var/lib/swupd /var/tmp/swupd
 # Workaround for "pkg-config: error while loading shared libraries" when using older Docker
 # (see https://github.com/clearlinux/distribution/issues/831)
