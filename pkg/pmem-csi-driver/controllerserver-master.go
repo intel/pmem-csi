@@ -171,6 +171,8 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 
 		chosenNodes = vol.nodeIDs
 	} else {
+		// VolumeID is hashed from Volume Name.
+		// Hashing guarantees same ID for repeated requests.
 		hasher := sha1.New()
 		hasher.Write([]byte(req.Name))
 		volumeID := hex.EncodeToString(hasher.Sum(nil))

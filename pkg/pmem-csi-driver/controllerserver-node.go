@@ -7,11 +7,12 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"sync"
 
-	"github.com/google/uuid"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -167,10 +168,12 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 	// persist volume name and to pass to Master via ListVolumes.
 	params["Name"] = req.Name
 
-	/* choose volume uid if not provided by master controller */
+	// VolumeID is hashed from Volume Name if not provided by master controller.
+	// Hashing guarantees same ID for repeated requests.
 	if volumeID == "" {
-		id, _ := uuid.NewUUID() //nolint: gosec
-		volumeID = id.String()
+		hasher := sha1.New()
+		hasher.Write([]byte(req.Name))
+		volumeID = hex.EncodeToString(hasher.Sum(nil))
 	}
 
 	asked := req.GetCapacityRange().GetRequiredBytes()
