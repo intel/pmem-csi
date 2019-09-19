@@ -128,8 +128,8 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	attrib := req.GetVolumeContext()
 	mountFlags := req.GetVolumeCapability().GetMount().GetMountFlags()
 
-	klog.V(3).Infof("NodePublishVolume: targetpath %v\nStagingtargetpath %v\nreadonly %v\nattributes %v\n mountflags %v\n",
-		targetPath, stagingtargetPath, readOnly, attrib, mountFlags)
+	klog.V(3).Infof("NodePublishVolume: id:%s targetpath:%v stagingtargetpath:%v readonly:%v attributes:%v mountflags:%v",
+		req.GetVolumeId(), targetPath, stagingtargetPath, readOnly, attrib, mountFlags)
 
 	options := []string{"bind"}
 	if readOnly {
@@ -172,7 +172,7 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	klog.V(5).Infof("volume %s/%s has been unmounted.", targetPath, volumeID)
+	klog.V(5).Infof("NodeUnpublishVolume: volume id:%s targetpath:%s has been unmounted", volumeID, targetPath)
 
 	os.Remove(targetPath) // nolint: gosec
 
@@ -311,8 +311,8 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	defer volumeMutex.UnlockKey(req.GetVolumeId())
 
 	// showing for debug:
-	klog.V(4).Infof("NodeUnStageVolume: VolumeID:%v VolumeName:%v Staging target path:%v",
-		req.GetVolumeId(), volName, stagingtargetPath)
+	klog.V(4).Infof("NodeUnStageVolume: name:%s id:%v Staging target path:%s",
+		volName, req.GetVolumeId(), stagingtargetPath)
 
 	// by spec, we have to return OK if asked volume is not mounted on asked path,
 	// so we look up the current device by volumeID and see is that device
