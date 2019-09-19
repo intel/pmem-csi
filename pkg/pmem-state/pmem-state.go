@@ -15,7 +15,7 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
-	"k8s.io/klog/glog"
+	"k8s.io/klog"
 )
 
 // GetAllFunc callback function used for StateManager.GetAll().
@@ -77,7 +77,7 @@ func (fs *fileState) Create(id string, data interface{}) error {
 		// cleanup file entry before returning error
 		fp.Close() //nolint: errcheck, gosec
 		if e := os.Remove(file); e != nil {
-			glog.Warningf("file-state: fail to remove file %s: %s", file, e.Error())
+			klog.Warningf("file-state: fail to remove file %s: %s", file, e.Error())
 		}
 		return errors.Wrap(err, "file-state: failed to encode metadata")
 	}

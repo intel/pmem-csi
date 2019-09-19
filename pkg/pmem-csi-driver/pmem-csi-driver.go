@@ -25,7 +25,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/status"
-	"k8s.io/klog/glog"
+	"k8s.io/klog"
 )
 
 const (
@@ -224,7 +224,7 @@ func (pmemd *pmemDriver) Run() error {
 	sig := <-c
 	// Here we want to shut down cleanly, i.e. let running
 	// gRPC calls complete.
-	glog.Infof("Caught signal %s, terminating.", sig)
+	klog.Infof("Caught signal %s, terminating.", sig)
 	s.Stop()
 	s.Wait()
 
@@ -236,12 +236,12 @@ func (pmemd *pmemDriver) registerNodeController() error {
 	var conn *grpc.ClientConn
 
 	for {
-		glog.V(3).Infof("Connecting to registry server at: %s\n", pmemd.cfg.RegistryEndpoint)
+		klog.V(3).Infof("Connecting to registry server at: %s\n", pmemd.cfg.RegistryEndpoint)
 		conn, err = pmemgrpc.Connect(pmemd.cfg.RegistryEndpoint, pmemd.clientTLSConfig)
 		if err == nil {
 			break
 		}
-		glog.V(4).Infof("Failed to connect registry server: %s, retrying after %v seconds...", err.Error(), retryTimeout.Seconds())
+		klog.V(4).Infof("Failed to connect registry server: %s, retrying after %v seconds...", err.Error(), retryTimeout.Seconds())
 		time.Sleep(retryTimeout)
 	}
 
@@ -270,14 +270,14 @@ func waitAndWatchConnection(conn *grpc.ClientConn, req *registry.RegisterControl
 		s := conn.GetState()
 		if s == connectivity.Ready {
 			if connectionLost {
-				glog.Info("ReConnected.")
+				klog.Info("ReConnected.")
 				if err := register(ctx, conn, req); err != nil {
-					glog.Warning(err)
+					klog.Warning(err)
 				}
 			}
 		} else {
 			connectionLost = true
-			glog.Info("Connection state: ", s)
+			klog.Info("Connection state: ", s)
 		}
 		conn.WaitForStateChange(ctx, s)
 	}
@@ -288,18 +288,18 @@ func waitAndWatchConnection(conn *grpc.ClientConn, req *registry.RegisterControl
 func register(ctx context.Context, conn *grpc.ClientConn, req *registry.RegisterControllerRequest) error {
 	client := registry.NewRegistryClient(conn)
 	for {
-		glog.V(3).Info("Registering controller...")
+		klog.V(3).Info("Registering controller...")
 		if _, err := client.RegisterController(ctx, req); err != nil {
 			if s, ok := status.FromError(err); ok && s.Code() == codes.InvalidArgument {
 				return fmt.Errorf("Registration failed: %s", s.Message())
 			}
-			glog.V(5).Infof("Failed to register: %s, retrying after %v seconds...", err.Error(), retryTimeout.Seconds())
+			klog.V(5).Infof("Failed to register: %s, retrying after %v seconds...", err.Error(), retryTimeout.Seconds())
 			time.Sleep(retryTimeout)
 		} else {
 			break
 		}
 	}
-	glog.V(4).Info("Registration success")
+	klog.V(4).Info("Registration success")
 
 	return nil
 }

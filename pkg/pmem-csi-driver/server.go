@@ -13,7 +13,7 @@ import (
 
 	"github.com/intel/pmem-csi/pkg/pmem-grpc"
 	"google.golang.org/grpc"
-	"k8s.io/klog/glog"
+	"k8s.io/klog"
 )
 
 type PmemService interface {
@@ -48,11 +48,11 @@ func (s *NonBlockingGRPCServer) Start(endpoint string, tlsConfig *tls.Config, se
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
-		glog.V(3).Infof("Listening for connections on address: %v", l.Addr())
+		klog.V(3).Infof("Listening for connections on address: %v", l.Addr())
 		if err := rpcServer.Serve(l); err != nil {
-			glog.Errorf("Server Listen failure: %s", err.Error())
+			klog.Errorf("Server Listen failure: %s", err.Error())
 		}
-		glog.V(3).Infof("Server on '%s' stopped", endpoint)
+		klog.V(3).Infof("Server on '%s' stopped", endpoint)
 	}()
 
 	return nil

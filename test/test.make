@@ -80,7 +80,6 @@ RUNTIME_DEPS += sed \
 	-e 's;github.com/google/uuid;google uuid,https://github.com/google/uuid;' \
 	-e 's;github.com/golang/protobuf;golang-protobuf,https://github.com/golang/protobuf;' \
 	-e 's;github.com/gogo/protobuf;gogo protobuf,https://github.com/gogo/protobuf;' \
-	-e 's;github.com/golang/glog;glog,https://github.com/golang/glog;' \
 	-e 's;github.com/pkg/errors;pkg/errors,https://github.com/pkg/errors;' \
 	-e 's;github.com/vgough/grpc-proxy;grpc-proxy,https://github.com/vgough/grpc-proxy;' \
 	-e 's;golang.org/x/.*;Go,https://github.com/golang/go,9051;' \

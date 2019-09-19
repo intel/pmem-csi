@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"k8s.io/klog"
-	"k8s.io/klog/glog"
 
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	"github.com/intel/pmem-csi/pkg/pmem-common"
@@ -33,7 +32,7 @@ func Main() int {
 		return 0
 	}
 
-	glog.V(3).Info("Version: ", version)
+	klog.V(3).Info("Version: ", version)
 
 	if err := CheckArgs(*useforfsdax, *useforsector); err != nil {
 		pmemcommon.ExitError("invalid arguments", err)
@@ -76,24 +75,24 @@ func createNS(r *ndctl.Region, uselimit int, nsmode ndctl.NamespaceMode) {
 	realalign := align * r.InterleaveWays()
 	// uselimit is the percentage we can use
 	canUse := uint64(uselimit) * r.Size() / 100
-	glog.V(3).Infof("Create %s-namespaces in %v, allowed %d %%, real align %d:\ntotal       : %16d\navail       : %16d\ncan use     : %16d",
+	klog.V(3).Infof("Create %s-namespaces in %v, allowed %d %%, real align %d:\ntotal       : %16d\navail       : %16d\ncan use     : %16d",
 		nsmode, r.DeviceName(), uselimit, realalign, r.Size(), r.AvailableSize(), canUse)
 	// Subtract sizes of existing active namespaces with currently handled mode and owned by pmem-csi
 	for _, ns := range r.ActiveNamespaces() {
-		glog.V(5).Infof("createNS: Exists: Size %16d Mode:%v Device:%v Name:%v", ns.Size(), ns.Mode(), ns.DeviceName(), ns.Name())
+		klog.V(5).Infof("createNS: Exists: Size %16d Mode:%v Device:%v Name:%v", ns.Size(), ns.Mode(), ns.DeviceName(), ns.Name())
 		if ns.Mode() == nsmode && ns.Name() == "pmem-csi" {
 			canUse -= ns.Size()
 		}
 	}
-	glog.V(4).Infof("Calculated canUse:%v, available by Region info:%v", canUse, r.AvailableSize())
+	klog.V(4).Infof("Calculated canUse:%v, available by Region info:%v", canUse, r.AvailableSize())
 	// Because of overhead by alignement and extra space for page mapping, calculated available may show more than actual
 	if r.AvailableSize() < canUse {
-		glog.V(4).Infof("Available in Region:%v is less than desired size, limit to that", r.AvailableSize())
+		klog.V(4).Infof("Available in Region:%v is less than desired size, limit to that", r.AvailableSize())
 		canUse = r.AvailableSize()
 	}
 	// Should not happen often: fragmented space could lead to r.MaxAvailableExtent() being less than r.AvailableSize()
 	if r.MaxAvailableExtent() < canUse {
-		glog.V(4).Infof("MaxAvailableExtent in Region:%v is less than desired size, limit to that", r.MaxAvailableExtent())
+		klog.V(4).Infof("MaxAvailableExtent in Region:%v is less than desired size, limit to that", r.MaxAvailableExtent())
 		canUse = r.MaxAvailableExtent()
 	}
 	// Align down to next real alignment boundary, as trying creation above it may fail.
@@ -102,7 +101,7 @@ func createNS(r *ndctl.Region, uselimit int, nsmode ndctl.NamespaceMode) {
 	// If less than 2GB usable, don't attempt as creation would fail
 	const minsize uint64 = 2 * 1024 * 1024 * 1024
 	if canUse >= minsize {
-		glog.V(3).Infof("Create %v-bytes %s-namespace", canUse, nsmode)
+		klog.V(3).Infof("Create %v-bytes %s-namespace", canUse, nsmode)
 		_, err := r.CreateNamespace(ndctl.CreateNamespaceOpts{
 			Name:  "pmem-csi",
 			Mode:  nsmode,
@@ -110,7 +109,7 @@ func createNS(r *ndctl.Region, uselimit int, nsmode ndctl.NamespaceMode) {
 			Align: align,
 		})
 		if err != nil {
-			glog.Warning("Failed to create namespace:", err.Error())
+			klog.Warning("Failed to create namespace:", err.Error())
 		}
 	}
 }

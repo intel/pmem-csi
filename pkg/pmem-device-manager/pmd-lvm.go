@@ -8,7 +8,7 @@ import (
 
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
-	"k8s.io/klog/glog"
+	"k8s.io/klog"
 )
 
 type pmemLvm struct {
@@ -45,7 +45,7 @@ func NewPmemDeviceManagerLVM() (PmemDeviceManager, error) {
 			for _, nsmod := range nsmodes {
 				vgname := vgName(bus, r, nsmod)
 				if _, err := pmemexec.RunCommand("vgs", vgname); err != nil {
-					glog.V(5).Infof("NewPmemDeviceManagerLVM: VG %v non-existent, skip", vgname)
+					klog.V(5).Infof("NewPmemDeviceManagerLVM: VG %v non-existent, skip", vgname)
 				} else {
 					volumeGroups = append(volumeGroups, vgname)
 				}
@@ -123,7 +123,7 @@ func (lvm *pmemLvm) CreateDevice(name string, size uint64, nsmode string) error 
 			// So, we ask lvm not to clear(-Zn) the newly created device, instead we do ourself in later stage.
 			// lvcreate takes size in MBytes if no unit
 			if _, err := pmemexec.RunCommand("lvcreate", "-Zn", "-L", strSz, "-n", name, vg.name); err != nil {
-				glog.V(3).Infof("lvcreate failed with error: %v, trying for next free region", err)
+				klog.V(3).Infof("lvcreate failed with error: %v, trying for next free region", err)
 			} else {
 				// clear start of device to avoid old data being recognized as file system
 				device, err := getUncachedDevice(name, vg.name)
