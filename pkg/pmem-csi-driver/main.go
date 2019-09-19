@@ -12,7 +12,6 @@ import (
 	"fmt"
 
 	"k8s.io/klog"
-	"k8s.io/klog/glog"
 
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 )
@@ -50,7 +49,7 @@ func Main() int {
 		return 0
 	}
 
-	glog.V(3).Info("Version: ", version)
+	klog.V(3).Info("Version: ", version)
 
 	driver, err := GetPMEMDriver(Config{
 		DriverName:         *driverName,

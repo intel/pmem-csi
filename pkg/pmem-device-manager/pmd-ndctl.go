@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/intel/pmem-csi/pkg/ndctl"
-	"k8s.io/klog/glog"
+	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/util/mount"
 )
 
@@ -34,12 +34,12 @@ func NewPmemDeviceManagerNdctl() (PmemDeviceManager, error) {
 	mounter := mount.New("")
 	mounts, err := mounter.List()
 	for i := range mounts {
-		glog.V(5).Infof("NewPmemDeviceManagerNdctl: Check mounts: device=%s path=%s opts=%s",
+		klog.V(5).Infof("NewPmemDeviceManagerNdctl: Check mounts: device=%s path=%s opts=%s",
 			mounts[i].Device, mounts[i].Path, mounts[i].Opts)
 		if mounts[i].Device == "sysfs" && mounts[i].Path == "/sys" {
 			for _, opt := range mounts[i].Opts {
 				if opt == "rw" {
-					glog.V(4).Infof("NewPmemDeviceManagerNdctl: /sys mounted read-write, good")
+					klog.V(4).Infof("NewPmemDeviceManagerNdctl: /sys mounted read-write, good")
 				} else if opt == "ro" {
 					return nil, fmt.Errorf("FATAL: /sys mounted read-only, can not operate\n")
 				}
@@ -66,10 +66,10 @@ func (pmem *pmemNdctl) GetCapacity() (map[string]uint64, error) {
 			realalign := align * r.InterleaveWays()
 			available := r.MaxAvailableExtent()
 			// align down, avoid claiming more than what we really can serve
-			glog.V(4).Infof("GetCapacity: available before realalign: %d", available)
+			klog.V(4).Infof("GetCapacity: available before realalign: %d", available)
 			available /= realalign
 			available *= realalign
-			glog.V(4).Infof("GetCapacity: available after realalign: %d", available)
+			klog.V(4).Infof("GetCapacity: available after realalign: %d", available)
 			if available > capacity {
 				capacity = available
 			}
@@ -94,7 +94,7 @@ func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) err
 	// Overall, no point having more than one namespace with same name.
 	_, err := pmem.getDevice(name)
 	if err == nil {
-		glog.V(4).Infof("Device with name: %s already exists, refuse to create another", name)
+		klog.V(4).Infof("Device with name: %s already exists, refuse to create another", name)
 		return fmt.Errorf("CreateDevice: Failed: namespace with that name exists")
 	}
 	if size <= 0 {
@@ -112,7 +112,7 @@ func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) err
 	// rounds up to the alignment, in practice that means we need
 	// to request `align` additional bytes.
 	compensatedsize := size + align
-	glog.V(4).Infof("CreateDevice:%s: Compensate for libndctl creating one alignment step smaller: change size %d to %d", name, size, compensatedsize)
+	klog.V(4).Infof("CreateDevice:%s: Compensate for libndctl creating one alignment step smaller: change size %d to %d", name, size, compensatedsize)
 	ns, err := pmem.ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
 		Name:  name,
 		Size:  compensatedsize,
@@ -123,7 +123,7 @@ func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) err
 		return err
 	}
 	data, _ := ns.MarshalJSON() //nolint: gosec
-	glog.V(3).Infof("Namespace created: %s", data)
+	klog.V(3).Infof("Namespace created: %s", data)
 	// clear start of device to avoid old data being recognized as file system
 	device, err := pmem.getDevice(name)
 	if err != nil {

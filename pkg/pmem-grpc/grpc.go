@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/resolver"
-	"k8s.io/klog/glog"
+	"k8s.io/klog"
 
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 )
@@ -114,7 +114,7 @@ func LoadClientTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, err
 	if err != nil {
 		return nil, err
 	}
-	glog.V(3).Infof("Using Servername: %s", peerName)
+	klog.V(3).Infof("Using Servername: %s", peerName)
 	return &tls.Config{
 		ServerName:   peerName,
 		Certificates: []tls.Certificate{*peerCert},

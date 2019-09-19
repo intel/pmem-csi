@@ -10,7 +10,7 @@ import "C"
 import (
 	"fmt"
 	"github.com/pkg/errors"
-	"k8s.io/klog/glog"
+	"k8s.io/klog"
 )
 
 const (
@@ -72,10 +72,10 @@ func (ctx *Context) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error
 	for _, bus := range ctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
 			if ns, err = r.CreateNamespace(opts); err == nil {
-				glog.V(3).Infof("Namespace %s created in %s", ns.Name(), r.DeviceName())
+				klog.V(3).Infof("Namespace %s created in %s", ns.Name(), r.DeviceName())
 				return ns, nil
 			} else {
-				glog.Errorf("Namespace creation failure in %s: %s", r.DeviceName(), err.Error())
+				klog.Errorf("Namespace creation failure in %s: %s", r.DeviceName(), err.Error())
 			}
 		}
 	}

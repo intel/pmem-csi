@@ -7,7 +7,7 @@ import (
 	"time"
 
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
-	"k8s.io/klog/glog"
+	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/util/mount"
 )
 
@@ -16,7 +16,7 @@ const (
 )
 
 func ClearDevice(device PmemDeviceInfo, flush bool) error {
-	glog.V(4).Infof("ClearDevice: path: %v flush:%v", device.Path, flush)
+	klog.V(4).Infof("ClearDevice: path: %v flush:%v", device.Path, flush)
 	// by default, clear 4 kbytes to avoid recognizing file system by next volume seeing data area
 	var blocks uint64 = 4
 	if flush {
@@ -33,11 +33,11 @@ func FlushDevice(dev PmemDeviceInfo, blocks uint64) error {
 	// Before action, check that dev.Path exists and is device
 	fileinfo, err := os.Stat(dev.Path)
 	if err != nil {
-		glog.Errorf("FlushDevice: %s does not exist", dev.Path)
+		klog.Errorf("FlushDevice: %s does not exist", dev.Path)
 		return err
 	}
 	if (fileinfo.Mode() & os.ModeDevice) == 0 {
-		glog.Errorf("FlushDevice: %s is not device", dev.Path)
+		klog.Errorf("FlushDevice: %s is not device", dev.Path)
 		return fmt.Errorf("%s is not device", dev.Path)
 	}
 	devOpen, err := mount.New("").DeviceOpened(dev.Path)
@@ -48,13 +48,13 @@ func FlushDevice(dev PmemDeviceInfo, blocks uint64) error {
 		return fmt.Errorf("%s is in use", dev.Path)
 	}
 	if blocks == 0 {
-		glog.V(5).Infof("Wiping entire device: %s", dev.Path)
+		klog.V(5).Infof("Wiping entire device: %s", dev.Path)
 		// use one iteration instead of shred's default=3 for speed
 		if _, err := pmemexec.RunCommand("shred", "-n", "1", dev.Path); err != nil {
 			return fmt.Errorf("device shred failure: %v", err.Error())
 		}
 	} else {
-		glog.V(5).Infof("Zeroing %d 1k blocks at start of device: %s Size %v", blocks, dev.Path, dev.Size)
+		klog.V(5).Infof("Zeroing %d 1k blocks at start of device: %s Size %v", blocks, dev.Path, dev.Size)
 		of := "of=" + dev.Path
 		// guard against writing more than volume size
 		if blocks*1024 > dev.Size {
@@ -74,7 +74,7 @@ func WaitDeviceAppears(dev PmemDeviceInfo) error {
 		if err == nil {
 			return nil
 		} else {
-			glog.Warningf("WaitDeviceAppears[%d]: %s does not exist, sleep %v and retry",
+			klog.Warningf("WaitDeviceAppears[%d]: %s does not exist, sleep %v and retry",
 				i, dev.Path, retryStatTimeout)
 			time.Sleep(retryStatTimeout)
 		}

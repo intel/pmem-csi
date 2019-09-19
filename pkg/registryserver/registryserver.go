@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"k8s.io/klog/glog"
+	"k8s.io/klog"
 	"k8s.io/utils/keymutex"
 )
 
@@ -81,7 +81,7 @@ func (rs *RegistryServer) ConnectToNodeController(nodeId string) (*grpc.ClientCo
 		return nil, err
 	}
 
-	glog.V(3).Infof("Connecting to node controller : %s", nodeInfo.Endpoint)
+	klog.V(3).Infof("Connecting to node controller : %s", nodeInfo.Endpoint)
 
 	return pmemgrpc.Connect(nodeInfo.Endpoint, rs.clientTLSConfig)
 }
@@ -102,7 +102,7 @@ func (rs *RegistryServer) RegisterController(ctx context.Context, req *registry.
 	rs.rpcMutex.LockKey(req.NodeId)
 	defer rs.rpcMutex.UnlockKey(req.NodeId)
 
-	glog.V(3).Infof("Registering node: %s, endpoint: %s", req.NodeId, req.Endpoint)
+	klog.V(3).Infof("Registering node: %s, endpoint: %s", req.NodeId, req.Endpoint)
 
 	node := &NodeInfo{
 		NodeID:   req.NodeId,
@@ -150,9 +150,9 @@ func (rs *RegistryServer) UnregisterController(ctx context.Context, req *registr
 		for l := range rs.listeners {
 			l.OnNodeDeleted(ctx, node)
 		}
-		glog.V(3).Infof("Unregistered node: %s", req.NodeId)
+		klog.V(3).Infof("Unregistered node: %s", req.NodeId)
 	} else {
-		glog.V(3).Infof("No node registered with id '%s'", req.NodeId)
+		klog.V(3).Infof("No node registered with id '%s'", req.NodeId)
 	}
 
 	return &registry.UnregisterControllerReply{}, nil
