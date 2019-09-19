@@ -88,10 +88,25 @@ var _ = Describe("PMEM Volumes", func() {
 	// List of testSuites to be executed in below loop
 	var csiTestSuites = []func() testsuites.TestSuite{
 		// TODO: investigate how useful these tests are and enable them.
+
 		// testsuites.InitMultiVolumeTestSuite,
+		// === above test suite should come in new e2e release
+
 		testsuites.InitProvisioningTestSuite,
-		// testsuites.InitSnapshottableTestSuite,
+
 		// testsuites.InitSubPathTestSuite,
+		// === above line changes from "Ran 39 of  83 Specs in 89.985  sec, 39 Passed | 0 Failed | 0 Pending | 44 Skipped"
+		// ===                    to   "Ran 57 of 137 Specs in 925.305 sec, 55 Passed | 2 Failed | 0 Pending | 80 Skipped"
+		// === errors:
+		// === [It] should unmount if pod is force deleted while kubelet is down [Disruptive][Slow]
+		//     No external address for pod pod-subpath-test-pmem-csi-dynamicpv-k559 on node pmem-csi-clear-govm-worker2
+		//
+		// === [It] should unmount if pod is gracefully deleted while kubelet is down [Disruptive][Slow]
+		//     No external address for pod pod-subpath-test-pmem-csi-dynamicpv-q9sj on node pmem-csi-clear-govm-worker3
+		//
+		//     Comments from review: Let's keep this disabled. Those tests are occasionally flaky also for Kubernetes, and
+		//     they mostly test Kubernetes features, not so much the driver.
+
 		testsuites.InitVolumeIOTestSuite,
 		testsuites.InitVolumeModeTestSuite,
 		testsuites.InitVolumesTestSuite,
