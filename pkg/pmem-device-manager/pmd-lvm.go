@@ -160,8 +160,14 @@ func (lvm *pmemLvm) DeleteDevice(name string, flush bool) error {
 		return err
 	}
 
-	_, err = pmemexec.RunCommand("lvremove", "-fy", device.Path)
-	return err
+	if _, err := pmemexec.RunCommand("lvremove", "-fy", device.Path); err != nil {
+		return err
+	}
+
+	// Remove device from cache
+	delete(lvm.devices, name)
+
+	return nil
 }
 
 func (lvm *pmemLvm) FlushDeviceData(name string) error {
