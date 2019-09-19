@@ -7,11 +7,12 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"sync"
 
-	"github.com/google/uuid"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -167,19 +168,22 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 	// persist volume name and to pass to Master via ListVolumes.
 	params["Name"] = req.Name
 
-	/* choose volume uid if not provided by master controller */
+	// VolumeID is hashed from Volume Name if not provided by master controller.
+	// Hashing guarantees same ID for repeated requests.
 	if volumeID == "" {
-		id, _ := uuid.NewUUID() //nolint: gosec
-		volumeID = id.String()
+		hasher := sha1.New()
+		hasher.Write([]byte(req.Name))
+		volumeID = hex.EncodeToString(hasher.Sum(nil))
+		klog.V(4).Infof("Node CreateVolume: Create SHA1 hash from name:%s to form id:%s", req.Name, volumeID)
 	}
 
 	asked := req.GetCapacityRange().GetRequiredBytes()
 
 	if vol = cs.getVolumeByName(req.Name); vol != nil {
 		// Check if the size of existing volume can cover the new request
-		klog.V(4).Infof("CreateVolume: Vol %s exists, Size: %v", req.Name, vol.Size)
+		klog.V(4).Infof("Node CreateVolume: Volume exists, name:%s id:%s size:%v", req.Name, vol.ID, vol.Size)
 		if vol.Size < asked {
-			return nil, status.Error(codes.AlreadyExists, fmt.Sprintf("Volume with the same name: %s but with different size already exist", req.Name))
+			return nil, status.Error(codes.AlreadyExists, fmt.Sprintf("Smaller volume with the same name:%s already exists", req.Name))
 		}
 	} else {
 		klog.V(4).Infof("CreateVolume: Name: %v req.Required: %v req.Limit: %v", req.Name, asked, req.GetCapacityRange().GetLimitBytes())
@@ -204,13 +208,13 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 		}
 
 		if err := cs.dm.CreateDevice(volumeID, uint64(asked), nsmode); err != nil {
-			return nil, status.Errorf(codes.Internal, "CreateVolume: failed to create volume: %s", err.Error())
+			return nil, status.Errorf(codes.Internal, "Node CreateVolume: failed to create volume: %s", err.Error())
 		}
 
 		cs.mutex.Lock()
 		defer cs.mutex.Unlock()
 		cs.pmemVolumes[volumeID] = vol
-		klog.V(3).Infof("CreateVolume: Record new volume as %v", *vol)
+		klog.V(3).Infof("Node CreateVolume: Record new volume as %v", *vol)
 	}
 
 	topology = append(topology, &csi.Topology{
@@ -246,7 +250,7 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 	nodeVolumeMutex.LockKey(req.VolumeId)
 	defer nodeVolumeMutex.UnlockKey(req.VolumeId) //nolint: errcheck
 
-	klog.V(4).Infof("DeleteVolume: volumeID: %v", req.GetVolumeId())
+	klog.V(4).Infof("Node DeleteVolume: volumeID: %v", req.GetVolumeId())
 	eraseafter := true
 	if vol := cs.getVolumeByID(req.VolumeId); vol != nil {
 		// We recognize eraseafter=false/true, defaulting to true
@@ -276,8 +280,7 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 	defer cs.mutex.Unlock()
 	delete(cs.pmemVolumes, req.VolumeId)
 
-	klog.V(4).Infof("DeleteVolume: volume %s deleted", req.GetVolumeId())
-
+	klog.V(4).Infof("Node DeleteVolume: volume %s deleted", req.GetVolumeId())
 	return &csi.DeleteVolumeResponse{}, nil
 }
 
