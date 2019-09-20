@@ -25,9 +25,15 @@ pipeline {
 
         PMEM_PATH = "/go/src/github.com/intel/pmem-csi"
         REGISTRY_NAME = "cloud-native-image-registry.westus.cloudapp.azure.com"
+
         // Per-branch build environment, marked as "do not promote to public registry".
         // Set below via a script, must *not* be set here as it can't be overwritten.
         // BUILD_IMAGE = ""
+
+        // Tag or branch name that is getting built, depending on the job.
+        // Set below via a script, must *not* be set here as it can't be overwritten.
+        // BUILD_TARGET = ""
+
         // This image is pulled at the beginning and used as cache.
         // TODO: Here we use "canary" which is correct for the "devel" branch, but other
         // branches may need something else to get better caching.
@@ -42,8 +48,18 @@ pipeline {
 
             steps {
                 sh 'docker version'
+                sh 'git version'
                 withDockerRegistry([ credentialsId: "e16bd38a-76cb-4900-a5cb-7f6aa3aeb22d", url: "https://${REGISTRY_NAME}" ]) {
                     script {
+                        // Despite its name, GIT_LOCAL_BRANCH contains the tag name when building a tag.
+                        // At some point it also contained the branch name when building
+                        // a branch, but not anymore, therefore we fall back to BRANCH_NAME
+                        // if unset.
+                        if (env.GIT_LOCAL_BRANCH != null) {
+                            env.BUILD_TARGET = env.GIT_LOCAL_BRANCH
+                        } else {
+                            env.BUILD_TARGET = env.BRANCH_NAME
+                        }
                         if (env.CHANGE_ID != null) {
                             env.BUILD_IMAGE = "${env.REGISTRY_NAME}/pmem-clearlinux-builder:${env.CHANGE_TARGET}-rejected"
 
@@ -64,6 +80,7 @@ pipeline {
                             env.CACHEBUST = env.BUILD_ID
                         }
                     }
+                    sh "echo Building BUILD_IMAGE=${env.BUILD_IMAGE} for BUILD_TARGET=${env.BUILD_TARGET}, CHANGE_ID=${env.CHANGE_ID}, CACHEBUST=${env.CACHEBUST}."
                     sh "docker build --cache-from ${env.BUILD_IMAGE} --label cachebust=${env.CACHEBUST} --target build --build-arg CACHEBUST=${env.CACHEBUST} -t ${env.BUILD_IMAGE} ."
                 }
             }
@@ -189,13 +206,12 @@ pipeline {
                     // When building a tag, we expect the code to contain that version as image version.
                     // When building a branch, we expect "canary" for the "devel" branch and (currently) don't publish
                     // canary images for other branches.
-                    // This relies on GIT_LOCAL_BRANCH, which despite its name contains the tag name respectively the branch name.
                     sh "imageversion=\$(docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} make print-image-version) && \
-                        expectedversion=\$(echo '${GIT_LOCAL_BRANCH}' | sed -e 's/devel/canary/') && \
+                        expectedversion=\$(echo '${env.BUILD_TARGET}' | sed -e 's/devel/canary/') && \
                         if [ \"\$imageversion\" = \"\$expectedversion\" ] ; then \
                             docker run --rm ${DockerBuildArgs()} -e DOCKER_CONFIG=$DOCKER_CONFIG -v $DOCKER_CONFIG:$DOCKER_CONFIG ${env.BUILD_IMAGE} make push-images PUSH_IMAGE_DEP=; \
                         else \
-                            echo \"Skipping the pushing of PMEM-CSI driver images with version \$imageversion because this build is for ${GIT_LOCAL_BRANCH}.\"; \
+                            echo \"Skipping the pushing of PMEM-CSI driver images with version \$imageversion because this build is for ${env.BUILD_TARGET}.\"; \
                         fi"
                     // Also push the build image, for later reuse in PR jobs.
                     sh "docker image push ${env.BUILD_IMAGE}"
