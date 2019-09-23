@@ -22,12 +22,12 @@ ARG GO_VERSION="1.12.9"
 #pull dependencies required for downloading and building libndctl
 ARG CACHEBUST
 RUN swupd update ${SWUPD_UPDATE_ARG} && swupd bundle-add ${NDCTL_BUILD_DEPS} c-basic && rm -rf /var/lib/swupd
-RUN curl -L https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz | tar -zxf - -C / && \
-    mkdir -p /usr/local/bin/ && \
-    for i in /go/bin/*; do ln -s $i /usr/local/bin/; done
 # Workaround for "pkg-config: error while loading shared libraries" when using older Docker
 # (see https://github.com/clearlinux/distribution/issues/831)
 RUN ldconfig
+RUN curl -L https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz | tar -zxf - -C / && \
+    mkdir -p /usr/local/bin/ && \
+    for i in /go/bin/*; do ln -s $i /usr/local/bin/; done
 
 WORKDIR /
 RUN curl --fail --location --remote-name https://github.com/pmem/ndctl/archive/v${NDCTL_VERSION}.tar.gz
