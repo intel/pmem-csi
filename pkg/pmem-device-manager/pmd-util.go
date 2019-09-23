@@ -7,8 +7,8 @@ import (
 	"time"
 
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
+	"golang.org/x/sys/unix"
 	"k8s.io/klog"
-	"k8s.io/kubernetes/pkg/volume/util/hostutil"
 )
 
 const (
@@ -33,17 +33,20 @@ func clearDevice(dev *PmemDeviceInfo, flush bool) error {
 		klog.Errorf("clearDevice: %s does not exist", dev.Path)
 		return err
 	}
+
+	// Check if device
 	if (fileinfo.Mode() & os.ModeDevice) == 0 {
 		klog.Errorf("clearDevice: %s is not device", dev.Path)
 		return fmt.Errorf("%s is not device", dev.Path)
 	}
-	devOpen, err := hostutil.NewHostUtil().DeviceOpened(dev.Path)
+
+	fd, err := unix.Open(dev.Path, unix.O_RDONLY|unix.O_EXCL|unix.O_CLOEXEC, 0)
+	defer unix.Close(fd)
+
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to clear device %q: %w", dev.Path, ErrDeviceInUse)
 	}
-	if devOpen {
-		return fmt.Errorf("%s is in use", dev.Path)
-	}
+
 	if blocks == 0 {
 		klog.V(5).Infof("Wiping entire device: %s", dev.Path)
 		// use one iteration instead of shred's default=3 for speed
@@ -75,5 +78,5 @@ func waitDeviceAppears(dev *PmemDeviceInfo) error {
 			i, dev.Path, retryStatTimeout)
 		time.Sleep(retryStatTimeout)
 	}
-	return fmt.Errorf("device %s did not appear after multiple retries", dev.Path)
+	return fmt.Errorf("%s: %w", dev.Path, ErrDeviceNotReady)
 }

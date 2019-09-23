@@ -305,7 +305,7 @@ func (cs *masterController) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 			defer conn.Close() // nolint:errcheck
 			klog.V(4).Infof("Asking node %s to delete volume name:%s id:%s", node, vol.name, vol.id)
 			if _, err := csi.NewControllerClient(conn).DeleteVolume(ctx, req); err != nil {
-				return nil, status.Error(codes.Internal, "Failed to delete volume name:"+vol.name+" id:"+vol.id+" on "+node+": "+err.Error())
+				return nil, err
 			}
 		}
 		cs.mutex.Lock()

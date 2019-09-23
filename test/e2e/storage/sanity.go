@@ -34,6 +34,8 @@ import (
 	"github.com/kubernetes-csi/csi-test/pkg/sanity"
 	sanityutils "github.com/kubernetes-csi/csi-test/utils"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -351,6 +353,26 @@ var _ = Describe("sanity", func() {
 			})
 			Expect(err).Should(BeNil(), "Failed to get capacity of controller")
 			Expect(resp.AvailableCapacity).To(Equal(nodeCapacity), "capacity mismatch")
+		})
+
+		It("delete volume should fail with appropriate error", func() {
+			v.namePrefix = "delete-volume"
+
+			name, vol := v.create(2*1024*1024, nodeID)
+			// Publish for the second time.
+			nodeID := v.publish(name, vol)
+
+			_, err := v.cc.DeleteVolume(v.ctx, &csi.DeleteVolumeRequest{
+				VolumeId: vol.GetVolumeId(),
+			})
+			Expect(err).ShouldNot(BeNil(), fmt.Sprintf("Volume(%s) in use cannot be deleted", name))
+			s, ok := status.FromError(err)
+			Expect(ok).Should(BeTrue(), "Expected a status error")
+			Expect(s.Code()).Should(BeEquivalentTo(codes.FailedPrecondition), "Expected device busy error")
+
+			v.unpublish(vol, nodeID)
+
+			v.remove(vol, name)
 		})
 
 		var (

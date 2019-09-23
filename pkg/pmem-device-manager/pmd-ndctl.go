@@ -137,9 +137,15 @@ func (pmem *pmemNdctl) DeleteDevice(volumeId string, flush bool) error {
 
 	device, err := pmem.getDevice(volumeId)
 	if err != nil {
+		if errors.Is(err, ErrDeviceNotFound) {
+			return nil
+		}
 		return err
 	}
 	if err := clearDevice(device, flush); err != nil {
+		if errors.Is(err, ErrDeviceNotFound) {
+			return nil
+		}
 		return err
 	}
 	return pmem.ctx.DestroyNamespaceByName(volumeId)

@@ -1,6 +1,7 @@
 package pmdmanager
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -148,11 +149,21 @@ func (lvm *pmemLvm) DeleteDevice(volumeId string, flush bool) error {
 	lvmMutex.Lock()
 	defer lvmMutex.Unlock()
 
-	device, err := lvm.getDevice(volumeId)
-	if err != nil {
+	var err error
+	var device *PmemDeviceInfo
+
+	if device, err = lvm.getDevice(volumeId); err != nil {
+		if errors.Is(err, ErrDeviceNotFound) {
+			return nil
+		}
 		return err
 	}
 	if err := clearDevice(device, flush); err != nil {
+		if errors.Is(err, ErrDeviceNotFound) {
+			// Remove device from cache
+			delete(lvm.devices, volumeId)
+			return nil
+		}
 		return err
 	}
 
