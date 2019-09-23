@@ -67,6 +67,7 @@ var _ = Describe("sanity", func() {
 		// and deletes all extra entries that it does not know about.
 		TargetPath:  "/var/lib/kubelet/plugins/kubernetes.io/csi/pv/pmem-sanity-target.XXXXXX",
 		StagingPath: "/var/lib/kubelet/plugins/kubernetes.io/csi/pv/pmem-sanity-staging.XXXXXX",
+		IDGen: &sanity.DefaultIDGenerator{},
 	}
 
 	f := framework.NewDefaultFramework("pmem")
