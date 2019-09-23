@@ -131,11 +131,11 @@ func (lvm *pmemLvm) CreateDevice(volumeId string, size uint64, nsmode string) er
 				if err != nil {
 					return err
 				}
-				err = WaitDeviceAppears(device)
+				err = waitDeviceAppears(device)
 				if err != nil {
 					return err
 				}
-				err = ClearDevice(device, false)
+				err = clearDevice(device, false)
 				if err != nil {
 					return err
 				}
@@ -157,7 +157,7 @@ func (lvm *pmemLvm) DeleteDevice(volumeId string, flush bool) error {
 	if err != nil {
 		return err
 	}
-	if err := ClearDevice(device, flush); err != nil {
+	if err := clearDevice(device, flush); err != nil {
 		return err
 	}
 
@@ -169,18 +169,6 @@ func (lvm *pmemLvm) DeleteDevice(volumeId string, flush bool) error {
 	delete(lvm.devices, volumeId)
 
 	return nil
-}
-
-func (lvm *pmemLvm) FlushDeviceData(volumeId string) error {
-	lvmMutex.Lock()
-	defer lvmMutex.Unlock()
-
-	device, err := lvm.getDevice(volumeId)
-	if err != nil {
-		return err
-	}
-
-	return ClearDevice(device, true)
 }
 
 func (lvm *pmemLvm) ListDevices() ([]*PmemDeviceInfo, error) {

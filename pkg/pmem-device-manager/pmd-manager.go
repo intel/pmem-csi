@@ -25,9 +25,6 @@ type PmemDeviceManager interface {
 	// If 'flush' is 'true', then the device data is zerod beofore deleting the device
 	DeleteDevice(name string, flush bool) error
 
-	//FlushDeviceData zeros all blocks in the blocke device with given name
-	FlushDeviceData(name string) error
-
 	//ListDevices returns all the block devices information that was created by this device manager
 	ListDevices() ([]*PmemDeviceInfo, error)
 }

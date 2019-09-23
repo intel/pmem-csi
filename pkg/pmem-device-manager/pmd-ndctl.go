@@ -126,7 +126,7 @@ func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64, nsmode string)
 	if err != nil {
 		return err
 	}
-	err = ClearDevice(device, false)
+	err = clearDevice(device, false)
 	if err != nil {
 		return err
 	}
@@ -142,22 +142,11 @@ func (pmem *pmemNdctl) DeleteDevice(volumeId string, flush bool) error {
 	if err != nil {
 		return err
 	}
-	err = ClearDevice(device, flush)
+	err = clearDevice(device, flush)
 	if err != nil {
 		return err
 	}
 	return pmem.ctx.DestroyNamespaceByName(volumeId)
-}
-
-func (pmem *pmemNdctl) FlushDeviceData(volumeId string) error {
-	ndctlMutex.Lock()
-	defer ndctlMutex.Unlock()
-
-	device, err := pmem.getDevice(volumeId)
-	if err != nil {
-		return err
-	}
-	return ClearDevice(device, true)
 }
 
 func (pmem *pmemNdctl) GetDevice(volumeId string) (*PmemDeviceInfo, error) {
