@@ -54,11 +54,15 @@ pipeline {
                         // Despite its name, GIT_LOCAL_BRANCH contains the tag name when building a tag.
                         // At some point it also contained the branch name when building
                         // a branch, but not anymore, therefore we fall back to BRANCH_NAME
-                        // if unset.
+                        // if unset. Even that isn't set in non-multibranch jobs
+                        // (https://issues.jenkins-ci.org/browse/JENKINS-47226), but at least
+                        // then we have GIT_BRANCH.
                         if (env.GIT_LOCAL_BRANCH != null) {
                             env.BUILD_TARGET = env.GIT_LOCAL_BRANCH
-                        } else {
+                        } else if ( env.BRANCH_NAME != null ) {
                             env.BUILD_TARGET = env.BRANCH_NAME
+                        } else {
+                            env.BUILD_TARGET = env.GIT_BRANCH - 'origin/' // Strip prefix.
                         }
                         if (env.CHANGE_ID != null) {
                             env.BUILD_IMAGE = "${env.REGISTRY_NAME}/pmem-clearlinux-builder:${env.CHANGE_TARGET}-rejected"
