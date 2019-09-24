@@ -42,7 +42,11 @@ type nodeServer struct {
 	nodeCaps []*csi.NodeServiceCapability
 	cs       *nodeControllerServer
 	// Driver deployed to provision only ephemeral volumes(only for Kubernetes v1.15)
-	mounter mount.Interface
+	mounter       mount.Interface
+	volRO         map[string]bool
+	volTargetPath map[string]string
+	volFstype     map[string]string
+	volMountflags map[string][]string
 }
 
 var _ csi.NodeServer = &nodeServer{}
@@ -59,8 +63,12 @@ func NewNodeServer(cs *nodeControllerServer) *nodeServer {
 				},
 			},
 		},
-		cs:      cs,
-		mounter: mount.New(""),
+		cs:            cs,
+		mounter:       mount.New(""),
+		volRO:         map[string]bool{},
+		volTargetPath: map[string]string{},
+		volFstype:     map[string]string{},
+		volMountflags: map[string][]string{},
 	}
 }
 
@@ -110,9 +118,13 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	var device *pmdmanager.PmemDeviceInfo
 	var mountOptions []string
 	var err error
-
 	srcPath := req.GetStagingTargetPath()
 	targetPath := req.GetTargetPath()
+	readOnly := req.GetReadonly()
+	mountFlags := req.GetVolumeCapability().GetMount().GetMountFlags()
+	fsType := req.GetVolumeCapability().GetMount().GetFsType()
+	klog.V(3).Infof("NodePublishVolume request: VolID:%s targetpath:%v sourcepath:%v readonly:%v Capab/mountflags:%v Capab/fsType:%v",
+		req.GetVolumeId(), targetPath, srcPath, readOnly, mountFlags, fsType)
 
 	// Kubernetes v1.16+ would request ephemeral volumes via VolumeContext
 	val, ok := req.GetVolumeContext()[volumeContextEphemeral]
@@ -184,18 +196,34 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 			return nil, status.Error(codes.InvalidArgument, "Staging target path missing in request")
 		}
 
+		// Check is bind-mount already made,
+		// happens when publish is asked repeatedly for already published volume.
 		notMnt, err := mount.IsNotMountPoint(ns.mounter, targetPath)
 		if err != nil && !os.IsNotExist(err) {
 			return nil, status.Error(codes.Internal, "validate target path: "+err.Error())
 		}
 		if !notMnt {
-			// TODO(https://github.com/kubernetes-sigs/gcp-compute-persistent-disk-csi-driver/issues/95): check if mount is compatible. Return OK if it is, or appropriate error.
-			/*
-				1) Target Path MUST be the vol referenced by vol ID
-				2) VolumeCapability MUST match
-				3) Readonly MUST match
-			*/
-			return &csi.NodePublishVolumeResponse{}, nil
+			// TODO(https://github.com/kubernetes-sigs/gcp-compute-persistent-disk-csi-driver/issues/95):
+			// Check if mount is compatible. Return OK if these match:
+			// 1) Requested target path MUST match the published path of that volume ID
+			// 2) VolumeCapability MUST match
+			//   Note that we do not check VolumeCapability/fsType as fsType may not be present (is used in NodeStageVolume scope).
+			//   Means, we check only mountflags part of Capability.
+			//   Mount flags are coded as []string, so instead of creating a loop, we join mount flags to single string
+			//   for easier comparing. Note that if these appear in different order, comparison may fail to find match.
+			// 3) Readonly MUST match
+			// If there is mismatch of any of above, we return ALREADY_EXISTS error.
+			klog.V(5).Infof("NodePublishVolume[%s]: existing RO=%v TargetPath=%v, mountFlags=[%v]",
+				req.VolumeId, ns.volRO[req.VolumeId], ns.volTargetPath[req.VolumeId], ns.volMountflags[req.VolumeId])
+			storedMountFlags := strings.Join(ns.volMountflags[req.VolumeId][:], ",")
+			askedMountFlags := strings.Join(mountFlags[:], ",")
+			if readOnly == ns.volRO[req.VolumeId] && targetPath == ns.volTargetPath[req.VolumeId] && storedMountFlags == askedMountFlags {
+				klog.V(5).Infof("NodePublishVolume[%s]: paremeters match existing, return OK", req.VolumeId)
+				return &csi.NodePublishVolumeResponse{}, nil
+			} else {
+				klog.V(5).Infof("NodePublishVolume[%s]: paremeters do not match existing, return ALREADY_EXISTS", req.VolumeId)
+				return nil, status.Error(codes.AlreadyExists, "Volume published but is incompatible")
+			}
 		}
 
 		if err := os.Mkdir(targetPath, os.FileMode(0755)); err != nil {
@@ -217,6 +245,9 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
+	ns.volRO[req.VolumeId] = readOnly
+	ns.volTargetPath[req.VolumeId] = targetPath
+	ns.volMountflags[req.VolumeId] = mountFlags
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
@@ -267,6 +298,9 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 			return nil, status.Error(codes.Internal, fmt.Sprintf("Failed to delete ephemeral volume %s: %s", req.VolumeId, err.Error()))
 		}
 	}
+	ns.volRO[req.VolumeId] = false
+	ns.volTargetPath[req.VolumeId] = ""
+	ns.volMountflags[req.VolumeId] = []string{}
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
@@ -352,6 +386,8 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
+	// We store fsType in volume registry, but currently it is not used for anything.
+	ns.volFstype[req.VolumeId] = requestedFsType
 	return &csi.NodeStageVolumeResponse{}, nil
 }
 
@@ -370,8 +406,7 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	volumeMutex.LockKey(req.GetVolumeId())
 	defer volumeMutex.UnlockKey(req.GetVolumeId())
 
-	// showing for debug:
-	klog.V(4).Infof("NodeUnStageVolume: VolumeID:%v Staging target path:%v",
+	klog.V(4).Infof("NodeUnStageVolume: id:%v Staging target path:%s",
 		req.GetVolumeId(), stagingtargetPath)
 
 	// by spec, we have to return OK if asked volume is not mounted on asked path,
@@ -399,6 +434,7 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 		return nil, err
 	}
 
+	ns.volFstype[req.VolumeId] = ""
 	return &csi.NodeUnstageVolumeResponse{}, nil
 }
 
