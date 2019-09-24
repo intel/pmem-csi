@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -39,11 +40,18 @@ const (
 	defaultFilesystem         = "ext4"
 )
 
+type volumeInfo struct {
+	readOnly   bool
+	targetPath string
+	mountFlags string // used mount flags, sorted and joined to single string
+}
+
 type nodeServer struct {
 	nodeCaps []*csi.NodeServiceCapability
 	cs       *nodeControllerServer
 	// Driver deployed to provision only ephemeral volumes(only for Kubernetes v1.15)
 	mounter mount.Interface
+	volInfo map[string]volumeInfo
 }
 
 var _ csi.NodeServer = &nodeServer{}
@@ -62,6 +70,7 @@ func NewNodeServer(cs *nodeControllerServer) *nodeServer {
 		},
 		cs:      cs,
 		mounter: mount.New(""),
+		volInfo: map[string]volumeInfo{},
 	}
 }
 
@@ -109,11 +118,15 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 
 	var ephemeral bool
 	var device *pmdmanager.PmemDeviceInfo
-	var mountOptions []string
 	var err error
 
 	srcPath := req.GetStagingTargetPath()
 	targetPath := req.GetTargetPath()
+	mountFlags := req.GetVolumeCapability().GetMount().GetMountFlags()
+	readOnly := req.GetReadonly()
+	fsType := req.GetVolumeCapability().GetMount().GetFsType()
+	klog.V(3).Infof("NodePublishVolume request: VolID:%s targetpath:%v sourcepath:%v readonly:%v mount flags:%v fsType:%v",
+		req.GetVolumeId(), targetPath, srcPath, readOnly, mountFlags, fsType)
 
 	// Kubernetes v1.16+ would request ephemeral volumes via VolumeContext
 	val, ok := req.GetVolumeContext()[volumeContextEphemeral]
@@ -144,7 +157,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		srcPath = device.Path
 		params := req.GetVolumeContext()
 		if nsmode, ok := params[pmemParameterKeyNamespaceMode]; !ok || nsmode == pmemNamespaceModeFsdax {
-			mountOptions = []string{"dax"}
+			mountFlags = append(mountFlags, "dax")
 		}
 	} else {
 		if device, err = ns.cs.dm.GetDevice(req.VolumeId); err != nil {
@@ -153,12 +166,17 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 			}
 			return nil, status.Errorf(codes.Internal, "failed to get device details for volume id %q: %v", req.VolumeId, err)
 		}
-
-		mountOptions = []string{"bind"}
-		// TODO: check is bind-mount already made
-		// (happens when publish is asked repeatedly for already published
-		// namespace)
+		mountFlags = append(mountFlags, "bind")
 	}
+
+	if readOnly {
+		mountFlags = append(mountFlags, "ro")
+	}
+
+	// After mountFlags additions are complete: sort mountFlags slice and join to
+	// become a single string, as this is what we use to compare against existing
+	sort.Strings(mountFlags)
+	joinedMountFlags := strings.Join(mountFlags[:], ",")
 
 	switch req.VolumeCapability.GetAccessType().(type) {
 	case *csi.VolumeCapability_Block:
@@ -190,13 +208,29 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 			return nil, status.Error(codes.Internal, "validate target path: "+err.Error())
 		}
 		if !notMnt {
-			// TODO(https://github.com/kubernetes-sigs/gcp-compute-persistent-disk-csi-driver/issues/95): check if mount is compatible. Return OK if it is, or appropriate error.
-			/*
-				1) Target Path MUST be the vol referenced by vol ID
-				2) VolumeCapability MUST match
-				3) Readonly MUST match
-			*/
-			return &csi.NodePublishVolumeResponse{}, nil
+			// Check if mount is compatible. Return OK if these match:
+			// 1) Requested target path MUST match the published path of that volume ID
+			// 2) VolumeCapability MUST match
+			//    VolumeCapability/Mountflags must match used flags.
+			//    VolumeCapability/fsType (if present in request) must match used fsType.
+			// 3) Readonly MUST match
+			// If there is mismatch of any of above, we return ALREADY_EXISTS error.
+			existingFsType, err := determineFilesystemType(device.Path)
+			if err != nil {
+				return nil, err
+			}
+			klog.V(5).Infof("NodePublishVolume[%s]: existing: RO:%v TargetPath:%v, mountFlags:[%s] fsType:%s",
+				req.VolumeId, ns.volInfo[req.VolumeId].readOnly, ns.volInfo[req.VolumeId].targetPath, ns.volInfo[req.VolumeId].mountFlags, existingFsType)
+			if readOnly == ns.volInfo[req.VolumeId].readOnly &&
+				targetPath == ns.volInfo[req.VolumeId].targetPath &&
+				ns.volInfo[req.VolumeId].mountFlags == joinedMountFlags &&
+				(fsType == "" || fsType == existingFsType) {
+				klog.V(5).Infof("NodePublishVolume[%s]: paremeters match existing, return OK", req.VolumeId)
+				return &csi.NodePublishVolumeResponse{}, nil
+			} else {
+				klog.V(5).Infof("NodePublishVolume[%s]: paremeters do not match existing, return ALREADY_EXISTS", req.VolumeId)
+				return nil, status.Error(codes.AlreadyExists, "Volume published but is incompatible")
+			}
 		}
 
 		if err := os.Mkdir(targetPath, os.FileMode(0755)); err != nil {
@@ -210,14 +244,11 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		}
 	}
 
-	if req.GetReadonly() {
-		mountOptions = append(mountOptions, "ro")
-	}
-
-	if err := ns.mount(srcPath, targetPath, mountOptions); err != nil {
+	if err := ns.mount(srcPath, targetPath, mountFlags); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
+	ns.volInfo[req.VolumeId] = volumeInfo{readOnly: readOnly, targetPath: targetPath, mountFlags: joinedMountFlags}
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
@@ -268,6 +299,7 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 			return nil, status.Error(codes.Internal, fmt.Sprintf("Failed to delete ephemeral volume %s: %s", req.VolumeId, err.Error()))
 		}
 	}
+	delete(ns.volInfo, req.VolumeId)
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
@@ -448,7 +480,6 @@ func (ns *nodeServer) createEphemeralDevice(ctx context.Context, req *csi.NodePu
 // provisionDevice initializes the device with requested filesystem
 // and mounts at given targetPath.
 func (ns *nodeServer) provisionDevice(device *pmdmanager.PmemDeviceInfo, fsType string) error {
-	//targetPath string, mountOptions []string)
 	if fsType == "" {
 		// Default to ext4 filesystem
 		fsType = defaultFilesystem
@@ -499,12 +530,6 @@ func (ns *nodeServer) mount(sourcePath, targetPath string, mountOptions []string
 		return fmt.Errorf("failed to determain if '%s' is a valid mount point: %s", targetPath, err.Error())
 	}
 	if !notMnt {
-		// TODO(https://github.com/kubernetes-sigs/gcp-compute-persistent-disk-csi-driver/issues/95): check if mount is compatible. Return OK if it is, or appropriate error.
-		/*
-			1) Target Path MUST be the vol referenced by vol ID
-			2) VolumeCapability MUST match
-			3) Readonly MUST match
-		*/
 		return nil
 	}
 
@@ -517,11 +542,6 @@ func (ns *nodeServer) mount(sourcePath, targetPath string, mountOptions []string
 			return fmt.Errorf("failed to create '%s': %s", targetPath, err.Error())
 		}
 	}
-
-	// If file system is already mounted, can happen if out-of-sync "stage" is asked again without unstage
-	// then the mount here will fail. I guess it's ok to not check explicitly for existing mount,
-	// as end result after mount attempt will be same: no new mount and existing mount remains.
-	// TODO: cleaner is to explicitly check (although CSI spec may tell that out-of-order call is illegal (check it))
 
 	// We supposed to use "mount" package - ns.mounter.Mount()
 	// but it seems not supporting -c "canonical" option, so do it with exec()
