@@ -187,6 +187,11 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	volumeMutex.LockKey(volumeID)
 	defer volumeMutex.UnlockKey(volumeID)
 
+	_, err := ns.dm.GetDevice(volumeID)
+	if err != nil {
+		klog.Errorf("NodeUnpublishVolume: did not find volume %s", volumeID)
+		return nil, status.Error(codes.NotFound, "Volume not found")
+	}
 	// Check if the target path is really a mount point. If its not a mount point do nothing
 	if notMnt, err := mount.New("").IsLikelyNotMountPoint(targetPath); notMnt || err != nil && !os.IsNotExist(err) {
 		klog.V(5).Infof("NodeUnpublishVolume: %s is not mount point, skip", targetPath)
@@ -195,7 +200,7 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 
 	// Unmounting the image
 	klog.V(3).Infof("NodeUnpublishVolume: unmount %s", targetPath)
-	err := mount.New("").Unmount(targetPath)
+	err = mount.New("").Unmount(targetPath)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
