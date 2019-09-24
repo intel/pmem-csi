@@ -222,7 +222,7 @@ spec:
         - -statePath=/var/lib/pmem-csi.intel.com
         env:
         - name: CSI_ENDPOINT
-          value: unix:///csi/csi.sock
+          value: unix:///var/lib/pmem-csi.intel.com/csi.sock
         - name: KUBE_NODE_NAME
           valueFrom:
             fieldRef:
@@ -242,8 +242,6 @@ spec:
           privileged: true
         terminationMessagePath: /tmp/termination-log
         volumeMounts:
-        - mountPath: /csi
-          name: plugin-socket-dir
         - mountPath: /var/lib/kubelet/plugins/kubernetes.io/csi
           mountPropagation: Bidirectional
           name: mountpoint-dir
@@ -258,14 +256,14 @@ spec:
           name: pmem-state-dir
       - args:
         - -v=3
-        - --kubelet-registration-path=/var/lib/kubelet/plugins/pmem-csi.intel.com/csi.sock
-        - --csi-address=/csi/csi.sock
+        - --kubelet-registration-path=/var/lib/pmem-csi.intel.com/csi.sock
+        - --csi-address=/pmem-csi/csi.sock
         image: quay.io/k8scsi/csi-node-driver-registrar:v1.1.0
         imagePullPolicy: Always
         name: driver-registrar
         volumeMounts:
-        - mountPath: /csi
-          name: plugin-socket-dir
+        - mountPath: /pmem-csi
+          name: pmem-state-dir
         - mountPath: /registration
           name: registration-dir
       hostNetwork: true
@@ -302,10 +300,6 @@ spec:
       nodeSelector:
         storage: pmem
       volumes:
-      - hostPath:
-          path: /var/lib/kubelet/plugins/pmem-csi.intel.com/
-          type: DirectoryOrCreate
-        name: plugin-socket-dir
       - hostPath:
           path: /var/lib/kubelet/plugins_registry/
           type: DirectoryOrCreate

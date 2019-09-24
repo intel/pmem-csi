@@ -11,7 +11,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"k8s.io/klog/glog"
+	"k8s.io/klog"
 )
 
 type RegionType string
@@ -174,11 +174,11 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 
 	if opts.Align != 0 {
 		if opts.Mode == SectorMode || opts.Mode == RawMode {
-			glog.V(4).Infof("%s mode does not support setting an alignment, hence ignoring alignment", opts.Mode)
+			klog.V(4).Infof("%s mode does not support setting an alignment, hence ignoring alignment", opts.Mode)
 		} else {
 			resource := uint64(C.ndctl_region_get_resource(ndr))
 			if resource < uint64(C.ULLONG_MAX) && resource&(mib2-1) != 0 {
-				glog.V(4).Infof("%s: falling back to a 4K alignment", regionName)
+				klog.V(4).Infof("%s: falling back to a 4K alignment", regionName)
 				opts.Align = kib4
 			}
 			if opts.Align != kib4 && opts.Align != mib2 && opts.Align != gib {
@@ -195,7 +195,7 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 		if opts.Size%align != 0 {
 			// Round up size to align with next block boundary.
 			opts.Size = (opts.Size/align + 1) * align
-			glog.V(4).Infof("%s: namespace size must align to interleave-width:%d * alignment:%d, force-align to %d",
+			klog.V(4).Infof("%s: namespace size must align to interleave-width:%d * alignment:%d, force-align to %d",
 				regionName, ways, opts.Align, opts.Size)
 		}
 	}
@@ -223,7 +223,7 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 	}
 
 	if err == nil {
-		glog.V(5).Infof("setting namespace sector size: %v", opts.SectorSize)
+		klog.V(5).Infof("setting namespace sector size: %v", opts.SectorSize)
 		err = ns.SetSectorSize(opts.SectorSize)
 	}
 	if err == nil {
@@ -233,18 +233,18 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 	if err == nil {
 		switch opts.Mode {
 		case FsdaxMode:
-			glog.V(5).Infof("setting pfn")
+			klog.V(5).Infof("setting pfn")
 			err = ns.setPfnSeed(opts.Location, opts.Align)
 		case DaxMode:
-			glog.V(5).Infof("setting dax")
+			klog.V(5).Infof("setting dax")
 			err = ns.setDaxSeed(opts.Location, opts.Align)
 		case SectorMode:
-			glog.V(5).Infof("setting btt")
+			klog.V(5).Infof("setting btt")
 			err = ns.setBttSeed(opts.SectorSize)
 		}
 	}
 	if err == nil {
-		glog.V(5).Infof("enabling namespace")
+		klog.V(5).Infof("enabling namespace")
 		err = ns.Enable()
 	}
 

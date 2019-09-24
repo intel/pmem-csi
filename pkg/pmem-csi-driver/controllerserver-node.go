@@ -7,16 +7,17 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"sync"
 
-	"github.com/google/uuid"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"k8s.io/klog/glog"
+	"k8s.io/klog"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 
@@ -87,7 +88,7 @@ func NewNodeControllerServer(nodeID string, dm pmdmanager.PmemDeviceManager, sm 
 		// Get actual devices at DeviceManager
 		devices, err := dm.ListDevices()
 		if err != nil {
-			glog.Warningf("Failed to get volumes: %s", err.Error())
+			klog.Warningf("Failed to get volumes: %s", err.Error())
 		}
 		cleanupList := []string{}
 		v := &nodeVolume{}
@@ -105,12 +106,12 @@ func NewNodeControllerServer(nodeID string, dm pmdmanager.PmemDeviceManager, sm 
 			return true
 		})
 		if err != nil {
-			glog.Warningf("Failed to load state on node %s: %s", nodeID, err.Error())
+			klog.Warningf("Failed to load state on node %s: %s", nodeID, err.Error())
 		}
 
 		for _, id := range cleanupList {
 			if err := sm.Delete(id); err != nil {
-				glog.Warningf("Failed to delete stale volume %s from state : %s", id, err.Error())
+				klog.Warningf("Failed to delete stale volume %s from state : %s", id, err.Error())
 			}
 		}
 	}
@@ -131,7 +132,7 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 	var resp *csi.CreateVolumeResponse
 
 	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
-		glog.Errorf("invalid create volume req: %v", req)
+		klog.Errorf("invalid create volume req: %v", req)
 		return nil, err
 	}
 
@@ -167,22 +168,25 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 	// persist volume name and to pass to Master via ListVolumes.
 	params["Name"] = req.Name
 
-	/* choose volume uid if not provided by master controller */
+	// VolumeID is hashed from Volume Name if not provided by master controller.
+	// Hashing guarantees same ID for repeated requests.
 	if volumeID == "" {
-		id, _ := uuid.NewUUID() //nolint: gosec
-		volumeID = id.String()
+		hasher := sha1.New()
+		hasher.Write([]byte(req.Name))
+		volumeID = hex.EncodeToString(hasher.Sum(nil))
+		klog.V(4).Infof("Node CreateVolume: Create SHA1 hash from name:%s to form id:%s", req.Name, volumeID)
 	}
 
 	asked := req.GetCapacityRange().GetRequiredBytes()
 
 	if vol = cs.getVolumeByName(req.Name); vol != nil {
 		// Check if the size of existing volume can cover the new request
-		glog.V(4).Infof("CreateVolume: Vol %s exists, Size: %v", req.Name, vol.Size)
+		klog.V(4).Infof("Node CreateVolume: Volume exists, name:%s id:%s size:%v", req.Name, vol.ID, vol.Size)
 		if vol.Size < asked {
-			return nil, status.Error(codes.AlreadyExists, fmt.Sprintf("Volume with the same name: %s but with different size already exist", req.Name))
+			return nil, status.Error(codes.AlreadyExists, fmt.Sprintf("Smaller volume with the same name:%s already exists", req.Name))
 		}
 	} else {
-		glog.V(4).Infof("CreateVolume: Name: %v req.Required: %v req.Limit: %v", req.Name, asked, req.GetCapacityRange().GetLimitBytes())
+		klog.V(4).Infof("CreateVolume: Name: %v req.Required: %v req.Limit: %v", req.Name, asked, req.GetCapacityRange().GetLimitBytes())
 		vol = &nodeVolume{
 			ID:     volumeID,
 			Size:   asked,
@@ -197,20 +201,20 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 				// Incase of failure, remove volume from state
 				if resp == nil {
 					if err := cs.sm.Delete(id); err != nil {
-						glog.Warningf("Delete volume state for id '%s' failed with error: %s", id, err.Error())
+						klog.Warningf("Delete volume state for id '%s' failed with error: %s", id, err.Error())
 					}
 				}
 			}(volumeID)
 		}
 
 		if err := cs.dm.CreateDevice(volumeID, uint64(asked), nsmode); err != nil {
-			return nil, status.Errorf(codes.Internal, "CreateVolume: failed to create volume: %s", err.Error())
+			return nil, status.Errorf(codes.Internal, "Node CreateVolume: failed to create volume: %s", err.Error())
 		}
 
 		cs.mutex.Lock()
 		defer cs.mutex.Unlock()
 		cs.pmemVolumes[volumeID] = vol
-		glog.V(3).Infof("CreateVolume: Record new volume as %v", *vol)
+		klog.V(3).Infof("Node CreateVolume: Record new volume as %v", *vol)
 	}
 
 	topology = append(topology, &csi.Topology{
@@ -238,7 +242,7 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 	}
 
 	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
-		glog.Errorf("invalid delete volume req: %v", req)
+		klog.Errorf("invalid delete volume req: %v", req)
 		return nil, err
 	}
 
@@ -246,14 +250,14 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 	nodeVolumeMutex.LockKey(req.VolumeId)
 	defer nodeVolumeMutex.UnlockKey(req.VolumeId) //nolint: errcheck
 
-	glog.V(4).Infof("DeleteVolume: volumeID: %v", req.GetVolumeId())
+	klog.V(4).Infof("Node DeleteVolume: volumeID: %v", req.GetVolumeId())
 	eraseafter := true
 	if vol := cs.getVolumeByID(req.VolumeId); vol != nil {
 		// We recognize eraseafter=false/true, defaulting to true
 		if val, ok := vol.Params[pmemParameterKeyEraseAfter]; ok {
 			bVal, err := strconv.ParseBool(val)
 			if err != nil {
-				glog.Warningf("Ignoring invalid parameter %s:%s, reason: %s, falling back to default: %v",
+				klog.Warningf("Ignoring invalid parameter %s:%s, reason: %s, falling back to default: %v",
 					pmemParameterKeyEraseAfter, val, err.Error(), eraseafter)
 			} else {
 				eraseafter = bVal
@@ -268,7 +272,7 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 	}
 	if cs.sm != nil {
 		if err := cs.sm.Delete(req.VolumeId); err != nil {
-			glog.Warning("Failed to remove volume from state: ", err)
+			klog.Warning("Failed to remove volume from state: ", err)
 		}
 	}
 
@@ -276,8 +280,7 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 	defer cs.mutex.Unlock()
 	delete(cs.pmemVolumes, req.VolumeId)
 
-	glog.V(4).Infof("DeleteVolume: volume %s deleted", req.GetVolumeId())
-
+	klog.V(4).Infof("Node DeleteVolume: volume %s deleted", req.GetVolumeId())
 	return &csi.DeleteVolumeResponse{}, nil
 }
 
@@ -312,9 +315,9 @@ func (cs *nodeControllerServer) ValidateVolumeCapabilities(ctx context.Context, 
 }
 
 func (cs *nodeControllerServer) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
-	glog.V(5).Infof("ListVolumes")
+	klog.V(5).Infof("ListVolumes")
 	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_LIST_VOLUMES); err != nil {
-		glog.Errorf("invalid list volumes req: %v", req)
+		klog.Errorf("invalid list volumes req: %v", req)
 		return nil, err
 	}
 	cs.mutex.Lock()

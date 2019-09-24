@@ -72,7 +72,7 @@ k8s.io/cloud-provider;kubernetes cloud-provider;Apache License 2.0
 k8s.io/cluster-bootstrap;kubernetes cluster-bootstrap;Apache License 2.0
 k8s.io/component-base;kubernetes component-base;Apache License 2.0
 k8s.io/csi-translation-lib;kubernetes csi-translation-library;Apache License 2.0
-k8s.io/klog;kubernetes glog;Apache License 2.0
+k8s.io/klog;kubernetes klog;Apache License 2.0
 k8s.io/kube-aggregator;kubernetes kube-aggregator;Apache License 2.0
 k8s.io/kube-openapi;kubernetes kube-openapi;Apache License 2.0
 k8s.io/kubernetes;kubernetes;Apache License 2.0

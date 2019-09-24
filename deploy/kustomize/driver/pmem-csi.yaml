@@ -123,7 +123,7 @@ spec:
           privileged: true
         env:
         - name: CSI_ENDPOINT
-          value: unix:///csi/csi.sock
+          value: unix:///var/lib/pmem-csi.intel.com/csi.sock
         - name: KUBE_NODE_NAME
           valueFrom:
             fieldRef:
@@ -137,8 +137,6 @@ spec:
         - name: TERMINATION_LOG_PATH
           value: /tmp/termination-log
         volumeMounts:
-        - name: plugin-socket-dir
-          mountPath: /csi
         - name: mountpoint-dir
           mountPath: /var/lib/kubelet/plugins/kubernetes.io/csi
           mountPropagation: Bidirectional
@@ -155,18 +153,17 @@ spec:
         imagePullPolicy: Always
         image: quay.io/k8scsi/csi-node-driver-registrar:v1.X.Y
         args: [ "-v=3",
-            "--kubelet-registration-path=/var/lib/kubelet/plugins/pmem-csi.intel.com/csi.sock",
-            "--csi-address=/csi/csi.sock" ]
+            "--kubelet-registration-path=/var/lib/pmem-csi.intel.com/csi.sock",
+            "--csi-address=/pmem-csi/csi.sock" ]
         volumeMounts:
-        - name: plugin-socket-dir
-          mountPath: /csi
+        - name: pmem-state-dir
+          mountPath: /pmem-csi
+        # node-driver-registrar uses /registration(hard-coded path) to keep its listening socket
+        # The socket path is used by kubelet for plugin registration
+        # so, we should make sure the appropriate host path available.
         - name: registration-dir
           mountPath: /registration
       volumes:
-        - name: plugin-socket-dir
-          hostPath:
-            path: /var/lib/kubelet/plugins/pmem-csi.intel.com/
-            type: DirectoryOrCreate
         - name: registration-dir
           hostPath:
             path: /var/lib/kubelet/plugins_registry/

@@ -96,18 +96,17 @@ EOF"
 Environment=\"DOCKER_DEFAULT_RUNTIME=--default-runtime runc\"
 EOF
 "
+    sudo mkdir -p /etc/systemd/system/kubelet.service.d/
     case $TEST_CRI in
         docker)
-	    # Choose Docker by disabling the use of CRI-O in KUBELET_EXTRA_ARGS.
 	    cri_daemon=docker
-	    sudo mkdir -p /etc/systemd/system/kubelet.service.d/
+	    # Choose Docker by disabling the use of CRI-O in KUBELET_EXTRA_ARGS.
 	    sudo bash -c "cat >/etc/systemd/system/kubelet.service.d/10-kubeadm.conf <<EOF
 [Service]
 Environment="KUBELET_EXTRA_ARGS="
 EOF"
 	    ;;
         crio)
-	    # Nothing to do, it is the default in Clear Linux.
 	    cri_daemon=cri-o
 	    ;;
         *)
@@ -115,6 +114,13 @@ EOF"
 	    exit 1
 	    ;;
     esac
+
+    # kubelet must start after the container runtime that it depends on.
+    # This is not currently configured in Clear Linux (https://github.com/clearlinux/distribution/issues/1004).
+    sudo bash -c "cat >/etc/systemd/system/kubelet.service.d/10-cri.conf <<EOF
+[Unit]
+After=$cri_daemon.service
+EOF"
 
     # flannel + CRI-O + Kata Containers needs a crio.conf change (https://clearlinux.org/documentation/clear-linux/tutorials/kubernetes):
     #    If you are using CRI-O and flannel and you want to use Kata Containers, edit the /etc/crio/crio.conf file to add:
