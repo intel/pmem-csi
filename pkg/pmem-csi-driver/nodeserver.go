@@ -26,10 +26,13 @@ import (
 )
 
 type nodeServer struct {
-	nodeCaps []*csi.NodeServiceCapability
-	nodeID   string
-	dm       pmdmanager.PmemDeviceManager
-	volInfo  map[string]string
+	nodeCaps      []*csi.NodeServiceCapability
+	nodeID        string
+	dm            pmdmanager.PmemDeviceManager
+	volRO         map[string]bool
+	volTargetPath map[string]string
+	volFstype     map[string]string
+	volMountflags map[string][]string
 }
 
 var _ csi.NodeServer = &nodeServer{}
@@ -47,8 +50,11 @@ func NewNodeServer(nodeId string, dm pmdmanager.PmemDeviceManager) *nodeServer {
 				},
 			},
 		},
-		dm:      dm,
-		volInfo: map[string]string{},
+		dm:            dm,
+		volRO:         map[string]bool{},
+		volTargetPath: map[string]string{},
+		volFstype:     map[string]string{},
+		volMountflags: map[string][]string{},
 	}
 }
 
@@ -97,9 +103,19 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	volumeMutex.LockKey(req.GetVolumeId())
 	defer volumeMutex.UnlockKey(req.GetVolumeId())
 
+	_, err := ns.dm.GetDevice(req.VolumeId)
+	if err != nil {
+		klog.Errorf("NodePublishVolume: did not find volume %s", req.VolumeId)
+		return nil, status.Error(codes.NotFound, "Volume not found")
+	}
 	targetPath := req.TargetPath
 	sourcePath := req.StagingTargetPath
+	readOnly := req.GetReadonly()
+	mountFlags := req.GetVolumeCapability().GetMount().GetMountFlags()
+	fsType := req.GetVolumeCapability().GetMount().GetFsType()
 	mounter := mount.New("")
+	klog.V(3).Infof("NodePublishVolume request: VolID:%s targetpath:%v sourcepath:%v readonly:%v Capab/mountflags:%v Capab/fsType:%v",
+		req.GetVolumeId(), targetPath, sourcePath, readOnly, mountFlags, fsType)
 
 	switch req.VolumeCapability.GetAccessType().(type) {
 	case *csi.VolumeCapability_Block:
@@ -126,18 +142,34 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 			return nil, status.Errorf(codes.Internal, "Could not create target device file %q: %v", targetPath, err)
 		}
 	case *csi.VolumeCapability_Mount:
+		// Check is bind-mount already made,
+		// happens when publish is asked repeatedly for already published volume.
 		notMnt, err := mount.IsNotMountPoint(mounter, targetPath)
 		if err != nil && !os.IsNotExist(err) {
 			return nil, status.Error(codes.Internal, "validate target path: "+err.Error())
 		}
 		if !notMnt {
-			// TODO(https://github.com/kubernetes-sigs/gcp-compute-persistent-disk-csi-driver/issues/95): check if mount is compatible. Return OK if it is, or appropriate error.
-			/*
-				1) Target Path MUST be the vol referenced by vol ID
-				2) VolumeCapability MUST match
-				3) Readonly MUST match
-			*/
-			return &csi.NodePublishVolumeResponse{}, nil
+			// TODO(https://github.com/kubernetes-sigs/gcp-compute-persistent-disk-csi-driver/issues/95):
+			// Check if mount is compatible. Return OK if these match:
+			// 1) Requested target path MUST match the published path of that volume ID
+			// 2) VolumeCapability MUST match
+			//   Note that we do not check VolumeCapability/fsType as fsType may not be present (is used in NodeStageVolume scope).
+			//   Means, we check only mountflags part of Capability.
+			//   Mount flags are coded as []string, so instead of creating a loop, we join mount flags to single string
+			//   for easier comparing. Note that if these appear in different order, comparison may fail to find match.
+			// 3) Readonly MUST match
+			// If there is mismatch of any of above, we return ALREADY_EXISTS error.
+			klog.V(5).Infof("NodePublishVolume[%s]: existing RO=%v TargetPath=%v, mountFlags=[%v]",
+				req.VolumeId, ns.volRO[req.VolumeId], ns.volTargetPath[req.VolumeId], ns.volMountflags[req.VolumeId])
+			storedMountFlags := strings.Join(ns.volMountflags[req.VolumeId][:], ",")
+			askedMountFlags := strings.Join(mountFlags[:], ",")
+			if readOnly == ns.volRO[req.VolumeId] && targetPath == ns.volTargetPath[req.VolumeId] && storedMountFlags == askedMountFlags {
+				klog.V(5).Infof("NodePublishVolume[%s]: paremeters match existing, return OK", req.VolumeId)
+				return &csi.NodePublishVolumeResponse{}, nil
+			} else {
+				klog.V(5).Infof("NodePublishVolume[%s]: paremeters do not match existing, return ALREADY_EXISTS", req.VolumeId)
+				return nil, status.Error(codes.AlreadyExists, "Volume published but is incompatible")
+			}
 		}
 
 		if err := os.Mkdir(targetPath, os.FileMode(0755)); err != nil {
@@ -151,13 +183,6 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		}
 	}
 
-	readOnly := req.GetReadonly()
-	attrib := req.GetVolumeContext()
-	mountFlags := req.GetVolumeCapability().GetMount().GetMountFlags()
-
-	klog.V(3).Infof("NodePublishVolume: \nsourcepath: %v\ntargetpath: %v\nreadonly: %v\nattributes: %v\n mountflags: %v\n",
-		sourcePath, targetPath, readOnly, attrib, mountFlags)
-
 	options := []string{"bind"}
 	if readOnly {
 		options = append(options, "ro")
@@ -168,6 +193,9 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		return nil, err
 	}
 
+	ns.volRO[req.VolumeId] = readOnly
+	ns.volTargetPath[req.VolumeId] = targetPath
+	ns.volMountflags[req.VolumeId] = mountFlags
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
@@ -207,6 +235,9 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	klog.V(5).Infof("NodeUnpublishVolume: volume id:%s targetpath:%s has been unmounted", volumeID, targetPath)
 
 	os.Remove(targetPath) // nolint: gosec
+	ns.volRO[req.VolumeId] = false
+	ns.volTargetPath[req.VolumeId] = ""
+	ns.volMountflags[req.VolumeId] = []string{}
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
@@ -341,6 +372,8 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		return nil, status.Error(codes.Unknown, "mount filesystem failed"+err.Error())
 	}
 
+	// We store fsType in volume registry, but currently it is not used for anything.
+	ns.volFstype[req.VolumeId] = requestedFsType
 	return &csi.NodeStageVolumeResponse{}, nil
 }
 
@@ -355,15 +388,12 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 		return nil, status.Error(codes.InvalidArgument, "Target path missing in request")
 	}
 
-	volName := ns.volInfo[req.VolumeId]
-
 	// Serialize by VolumeId
 	volumeMutex.LockKey(req.GetVolumeId())
 	defer volumeMutex.UnlockKey(req.GetVolumeId())
 
-	// showing for debug:
-	klog.V(4).Infof("NodeUnStageVolume: name:%s id:%v Staging target path:%s",
-		volName, req.GetVolumeId(), stagingtargetPath)
+	klog.V(4).Infof("NodeUnStageVolume: id:%v Staging target path:%s",
+		req.GetVolumeId(), stagingtargetPath)
 
 	// by spec, we have to return OK if asked volume is not mounted on asked path,
 	// so we look up the current device by volumeID and see is that device
@@ -392,6 +422,7 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 		return nil, err
 	}
 
+	ns.volFstype[req.VolumeId] = ""
 	return &csi.NodeUnstageVolumeResponse{}, nil
 }
 
