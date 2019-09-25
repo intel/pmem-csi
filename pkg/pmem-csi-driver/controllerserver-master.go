@@ -450,13 +450,25 @@ func (cs *masterController) GetCapacity(ctx context.Context, req *csi.GetCapacit
 		return nil, err
 	}
 
-	for _, node := range cs.rs.NodeClients() {
-		cap, err := cs.getNodeCapacity(ctx, *node, req)
+	if top := req.GetAccessibleTopology(); top != nil {
+		node, err := cs.rs.GetNodeController(top.Segments[PmemDriverTopologyKey])
 		if err != nil {
-			klog.Warningf("Error while fetching '%s' node capacity: %s", node.NodeID, err.Error())
-			continue
+			return nil, status.Errorf(codes.Internal, err.Error())
 		}
-		capacity += cap
+		cap, err := cs.getNodeCapacity(ctx, node, req)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to get node(%s) capacity: %s", node, err.Error())
+		}
+		capacity = cap
+	} else {
+		for _, node := range cs.rs.NodeClients() {
+			cap, err := cs.getNodeCapacity(ctx, *node, req)
+			if err != nil {
+				klog.Warningf("Error while fetching '%s' node capacity: %s", node.NodeID, err.Error())
+				continue
+			}
+			capacity += cap
+		}
 	}
 
 	return &csi.GetCapacityResponse{
