@@ -268,7 +268,13 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 	}
 
 	if err := cs.dm.DeleteDevice(req.VolumeId, eraseafter); err != nil {
-		return nil, status.Errorf(codes.Internal, "Failed to delete volume: %s", err.Error())
+		errcode := codes.Internal
+		// Check hard-coded string to match the "in use" condition in pmd-util.go:FlushDevice()
+		if err.Error() == "device is in use" {
+			// CSI spec requires to return FailedPrecondition if device is in use.
+			errcode = codes.FailedPrecondition
+		}
+		return nil, status.Errorf(errcode, "Failed to delete volume: %s", err.Error())
 	}
 	if cs.sm != nil {
 		if err := cs.sm.Delete(req.VolumeId); err != nil {

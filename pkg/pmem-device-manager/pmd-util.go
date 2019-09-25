@@ -45,7 +45,8 @@ func FlushDevice(dev PmemDeviceInfo, blocks uint64) error {
 		return err
 	}
 	if devOpen {
-		return fmt.Errorf("%s is in use", dev.Path)
+		// do not change this error string, it is checked in controllerserver-node.go:DeleteVolume
+		return fmt.Errorf("device is in use")
 	}
 	if blocks == 0 {
 		klog.V(5).Infof("Wiping entire device: %s", dev.Path)
