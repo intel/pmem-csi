@@ -241,6 +241,27 @@ pipeline {
             }
         }
 
+        stage('Update master branch') {
+            // This stage runs each time "devel" is rebuilt after a merge.
+            when {
+                environment name: 'BUILD_TARGET', value: 'devel'
+                environment name: 'JOB_BASE_NAME', value: 'pmem-csi'
+            }
+
+            steps{
+                sshagent(['9b2359bb-540b-4df3-a4b7-d304a426b2db']) {
+                    // All tests have passed on the "devel" branch, we can now fast-forward "master" to it.
+                    sh '''
+head=$(git rev-parse HEAD) &&
+git fetch origin master &&
+git checkout FETCH_HEAD &&
+git merge --ff-only $head &&
+git push origin HEAD:master
+'''
+                }
+            }
+        }
+
         stage('Push images') {
             when {
                 not { changeRequest() }
