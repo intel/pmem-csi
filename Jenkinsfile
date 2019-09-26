@@ -245,7 +245,7 @@ pipeline {
             // This stage runs each time "devel" is rebuilt after a merge.
             when {
                 environment name: 'BUILD_TARGET', value: 'devel'
-                environment name: 'JOB_BASE_NAME', value: 'pmem-csi/devel'
+                environment name: 'JOB_NAME', value: 'pmem-csi/devel'
             }
 
             steps{
