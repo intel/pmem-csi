@@ -12,6 +12,7 @@ pipeline {
           the control plane is unsupported.
         */
 
+        CLEAR_LINUX_VERSION_1_15 = "31070"
         /* 29890 broke networking
         (https://github.com/clearlinux/distribution/issues/904). In
         29880, Docker forgets containers after a system restart
@@ -175,6 +176,26 @@ pipeline {
             }
             steps {
                 TestInVM("direct", "testing", "${env.CLEAR_LINUX_VERSION_1_13}")
+            }
+        }
+
+        stage('testing 1.15 LVM') {
+            options {
+                timeout(time: 90, unit: "MINUTES")
+                retry(2)
+            }
+            steps {
+                TestInVM("lvm", "testing", "${env.CLEAR_LINUX_VERSION_1_15}")
+            }
+        }
+
+        stage('testing 1.15 direct') {
+            options {
+                timeout(time: 180, unit: "MINUTES")
+                retry(2)
+            }
+            steps {
+                TestInVM("direct", "testing", "${env.CLEAR_LINUX_VERSION_1_15}")
             }
         }
 
