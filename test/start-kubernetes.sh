@@ -4,9 +4,9 @@ set -o pipefail
 
 TEST_DIRECTORY=${TEST_DIRECTORY:-$(dirname $(readlink -f $0))}
 source ${TEST_CONFIG:-${TEST_DIRECTORY}/test-config.sh}
+TEST_DISTRO=${TEST_DISTRO:-clear}
 DEPLOYMENT_SUFFIX=${DEPLOYMENT_SUFFIX:-govm}
-CLOUD_USER=${CLOUD_USER:-clear}
-CLUSTER=${CLUSTER:-${CLOUD_USER}-${DEPLOYMENT_SUFFIX}}
+CLUSTER=${CLUSTER:-${TEST_DISTRO}-${DEPLOYMENT_SUFFIX}}
 DEPLOYMENT_ID=${DEPLOYMENT_ID:-pmem-csi-${CLUSTER}}
 GOVM_YAML=${GOVM_YAML:-$(mktemp --suffix $DEPLOYMENT_ID.yml)}
 REPO_DIRECTORY=${REPO_DIRECTORY:-$(dirname $TEST_DIRECTORY)}
@@ -23,7 +23,6 @@ CLOUD="${CLOUD:-true}"
 FLAVOR="${FLAVOR:-medium}"
 SSH_KEY="${SSH_KEY:-${RESOURCES_DIRECTORY}/id_rsa}"
 SSH_PUBLIC_KEY="${SSH_KEY}.pub"
-EFI="${EFI:-true}"
 KVM_CPU_OPTS="${KVM_CPU_OPTS:-\
  -m 2G,slots=${TEST_MEM_SLOTS:-2},maxmem=34G -smp 4\
  -machine pc,accel=kvm,nvdimm=on}"
@@ -32,36 +31,59 @@ EXTRA_QEMU_OPTS="${EXTRA_QWEMU_OPTS:-\
 mem-path=/data/nvdimm0,size=${TEST_PMEM_MEM_SIZE:-32768}M \
  -device nvdimm,id=nvdimm1,memdev=mem1,label-size=${TEST_PMEM_LABEL_SIZE:-2097152} \
  -machine pc,nvdimm}"
-CLOUD_USER=${CLOUD_USER:-clear}
-if [ "$TEST_CLEAR_LINUX_VERSION" ]; then
-    # We used to use cloud.img in the past and switched to cloudguest.img
-    # with Clear Linux 29920 because that version only listed cloudguest
-    # in "latest-images". Same content, just a different name.
-    # Using cloudguest.img seems more likely to work in the future.
-    if [ "$TEST_CLEAR_LINUX_VERSION" -ge 29920 ]; then
-        CLOUD_IMAGE="clear-$TEST_CLEAR_LINUX_VERSION-cloudguest.img.xz"
-    else
-        CLOUD_IMAGE="clear-$TEST_CLEAR_LINUX_VERSION-cloud.img.xz"
-    fi
-else
-    # Either cloud.img or cloudguest.img is fine, should have the same content.
-    : ${CLOUD_IMAGE:=$(\
-               curl -s https://download.clearlinux.org/image/latest-images |
-                   awk '/cloud.img|cloudguest.img/ {print $0}' |
-                   head -n1)}
-fi
-IMAGE_URL=${IMAGE_URL:-https://download.clearlinux.org/releases/${CLOUD_IMAGE//[!0-9]/}/clear}
+
+# Set distro-specific defaults.
+case ${TEST_DISTRO} in
+    clear)
+        CLOUD_USER=${CLOUD_USER:-clear}
+        EFI=${EFI:-true}
+        # Either TEST_DISTRO_VERSION or TEST_CLEAR_LINUX_VERSION (for backwards compatibility)
+        # can be set.
+        TEST_DISTRO_VERSION=${TEST_DISTRO_VERSION:-${TEST_CLEAR_LINUX_VERSION}}
+        if [ "$TEST_DISTRO_VERSION" ]; then
+            # We used to use cloud.img in the past and switched to cloudguest.img
+            # with Clear Linux 29920 because that version only listed cloudguest
+            # in "latest-images". Same content, just a different name.
+            # Using cloudguest.img seems more likely to work in the future.
+            if [ "$TEST_DISTRO_VERSION" -ge 29920 ]; then
+                CLOUD_IMAGE="clear-$TEST_DISTRO_VERSION-cloudguest.img.xz"
+            else
+                CLOUD_IMAGE="clear-$TEST_DISTRO_VERSION-cloud.img.xz"
+            fi
+        else
+            # Either cloud.img or cloudguest.img is fine, should have the same content.
+            CLOUD_IMAGE=${CLOUD_IMAGE:-$(\
+                       curl -s https://download.clearlinux.org/image/latest-images |
+                           awk '/cloud.img|cloudguest.img/ {print $0}' |
+                           head -n1)}
+        fi
+        IMAGE_URL=${IMAGE_URL:-https://download.clearlinux.org/releases/${CLOUD_IMAGE//[!0-9]/}/clear}
+        ;;
+    fedora)
+        CLOUD_USER=${CLOUD_USER:-fedora}
+        EFI=${EFI:-false}
+        TEST_DISTRO_VERSION=${TEST_DISTRO_VERSION:-30}
+        IMAGE_URL=${IMAGE_URL:-https://download.fedoraproject.org/pub/fedora/linux/releases/${TEST_DISTRO_VERSION}/Cloud/x86_64/images}
+        CLOUD_IMAGE=${CLOUD_IMAGE:-Fedora-Cloud-Base-${TEST_DISTRO_VERSION}-1.2.x86_64.raw.xz}
+        ;;
+esac
+
 SSH_TIMEOUT=60
 SSH_ARGS="-oIdentitiesOnly=yes -oStrictHostKeyChecking=no \
         -oUserKnownHostsFile=/dev/null -oLogLevel=error \
         -i ${SSH_KEY}"
 SSH_ARGS+=" -oServerAliveInterval=15" # required for disruptive testing, to detect quickly when the machine died
-: ${TEST_CREATE_REGISTRY:=false}
-: ${TEST_CHECK_SIGNED_FILES:=true}
+TEST_CREATE_REGISTRY=${TEST_CREATE_REGISTRY:-false}
+TEST_CHECK_SIGNED_FILES=${TEST_CHECK_SIGNED_FILES:-true}
 
 function die() {
     echo >&2 "ERROR: $@"
     exit 1
+}
+
+function download() {
+    echo >&2 "Downloading ${IMAGE_URL}/${CLOUD_IMAGE} image"
+    curl --fail --location --output "${CLOUD_IMAGE}" "${IMAGE_URL}/${CLOUD_IMAGE}" || die "failed to download ${IMAGE_URL}/${CLOUD_IMAGE}"
 }
 
 function download_image() (
@@ -71,13 +93,12 @@ function download_image() (
 
     cd $RESOURCES_DIRECTORY
     if [ -e "${CLOUD_IMAGE/.xz}" ]; then
-        echo >&2 "$CLOUD_IMAGE found, skipping download"
         CLOUD_IMAGE=${CLOUD_IMAGE/.xz}
+        echo >&2 "$CLOUD_IMAGE found, skipping download"
     else
-        case $CLOUD_USER in
+        case $TEST_DISTRO in
             clear)
-                echo >&2 "Downloading ${CLOUD_IMAGE} image"
-                curl -O "${IMAGE_URL}/${CLOUD_IMAGE}"
+                download
                 if $TEST_CHECK_SIGNED_FILES; then
                     curl -s -O "${IMAGE_URL}/${CLOUD_IMAGE}-SHA512SUMS" || die "failed to download ${IMAGE_URL}/${CLOUD_IMAGE}-SHA512SUMS"
                     curl -s -O "${IMAGE_URL}/${CLOUD_IMAGE}-SHA512SUMS.sig" || die "failed to download ${IMAGE_URL}/${CLOUD_IMAGE}-SHA512SUMS.sig"
@@ -100,11 +121,22 @@ EOF
                         exit 2
                     fi
                 fi
-                unxz ${CLOUD_IMAGE} || die "failed to unpack ${CLOUD_IMAGE}"
-                CLOUD_IMAGE=${CLOUD_IMAGE/.xz}
                 ;;
-            *) die "unsupported CLOUD_USER=${CLOUD_USER}";;
+            fedora)
+                download
+                # TODO: verify image - https://alt.fedoraproject.org/en/verify.html
+                ;;
+            *) die "unsupported TEST_DISTRO=${TEST_DISTRO}";;
         esac
+        unxz ${CLOUD_IMAGE} || die "failed to unpack ${CLOUD_IMAGE}"
+        CLOUD_IMAGE=${CLOUD_IMAGE/.xz}
+
+        # We need a qcow image, otherwise copy-on-write does not work
+        # (https://github.com/govm-project/govm/blob/08f276f574f9ad6cad29f7c8fde070a4eb542b06/startvm#L25-L29)
+        # and the different machines conflict with each other.
+        if ! file ${CLOUD_IMAGE} | grep -q "QEMU QCOW"; then
+            qemu-img convert -O qcow2 ${CLOUD_IMAGE} ${CLOUD_IMAGE}.tmp && mv ${CLOUD_IMAGE}.tmp ${CLOUD_IMAGE} || die "conversion to qcow2 format failed"
+        fi
     fi
 
     echo "$CLOUD_IMAGE"
@@ -246,7 +278,7 @@ function init_kubernetes_cluster() (
     workers_ip=""
     master_ip="$(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-master$") "IP"}}')" || die "failed to find master IP"
     join_token=""
-    setup_script="setup-${CLOUD_USER}-govm.sh"
+    setup_script="setup-${TEST_DISTRO}-govm.sh"
     install_k8s_script="setup-kubernetes.sh"
     KUBECONFIG=${WORKING_DIRECTORY}/kube.config
     echo "Installing dependencies on cloud images, this process may take some minutes"

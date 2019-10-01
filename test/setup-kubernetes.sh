@@ -52,11 +52,11 @@ nodeRegistration:
 	exit 1
 	;;
 esac
+
 # Needed for flannel (https://clearlinux.org/documentation/clear-linux/tutorials/kubernetes).
 kubeadm_config_cluster="$kubeadm_config_cluster
 networking:
   podSubnet: \"10.244.0.0/16\""
-
 
 if [ ! -z ${TEST_FEATURE_GATES} ]; then
     kubeadm_config_kubelet="$kubeadm_config_kubelet
@@ -105,7 +105,9 @@ kubectl get pods --all-namespaces
 ${TEST_CONFIGURE_POST_MASTER}
 
 # From https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/#pod-network
-kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/bc79dd1505b0c8681ece4de4c0d86c5cd2643275/Documentation/kube-flannel.yml
+# However, the commit currently listed there for 1.16 is broken. Current master fixes some issues
+# and works.
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/2140ac876ef134e0ed5af15c65e414cf26827915/Documentation/kube-flannel.yml
 
 # Install addon storage CRDs, needed if certain feature gates are enabled.
 # Only applicable to Kubernetes 1.13 and older. 1.14 will have them as builtin APIs.

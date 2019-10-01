@@ -831,14 +831,14 @@ to ensure that the cluster runs those rebuilt images.
 
 ### Running commands on test cluster nodes over ssh
 
-`make start` generates ssh wrapper scripts `_work/clear-govm/ssh.N` for each
+`make start` generates ssh wrapper scripts `_work/pmem-govm/ssh.N` for each
 test cluster node which are handy for running a single command or to
 start an interactive shell. Examples:
 
-`_work/clear-govm/ssh.0 kubectl get pods` runs a kubectl command on
+`_work/pmem-govm/ssh.0 kubectl get pods` runs a kubectl command on
 the master node.
 
-`_work/clear-govm/ssh.1` starts a shell on the first worker node.
+`_work/pmem-govm/ssh.1` starts a shell on the first worker node.
 
 ### Configuration options
 
@@ -849,7 +849,7 @@ environment variables of `make start` on a case-by-case basis or
 permanently by creating a file like `test/test-config.d/my-config.sh`.
 
 Multiple different clusters can be brought up in parallel by changing
-the default `clear-govm` cluster name via the `CLUSTER` env variable.
+the default `pmem-govm` cluster name via the `CLUSTER` env variable.
 
 For example, this invocation sets up a cluster using the non-default
 direct device mode:
@@ -872,7 +872,7 @@ of the test run. For example, to run just the E2E provisioning test
 (create PVC, write data in one pod, read it in another) in verbose mode:
 
 ``` sh
-$ KUBECONFIG=$(pwd)/_work/clear-govm/kube.config REPO_ROOT=$(pwd) ginkgo -v -focus=pmem-csi.*should.provision.storage.with.defaults ./test/e2e/
+$ KUBECONFIG=$(pwd)/_work/pmem-govm/kube.config REPO_ROOT=$(pwd) ginkgo -v -focus=pmem-csi.*should.provision.storage.with.defaults ./test/e2e/
 Nov 26 11:21:28.805: INFO: The --provider flag is not set.  Treating as a conformance test.  Some tests may not be run.
 Running Suite: PMEM E2E suite
 =============================
@@ -880,7 +880,7 @@ Random Seed: 1543227683 - Will randomize all specs
 Will run 1 of 61 specs
 
 Nov 26 11:21:28.812: INFO: checking config
-Nov 26 11:21:28.812: INFO: >>> kubeConfig: /nvme/gopath/src/github.com/intel/pmem-csi/_work/clear-govm/kube.config
+Nov 26 11:21:28.812: INFO: >>> kubeConfig: /nvme/gopath/src/github.com/intel/pmem-csi/_work/pmem-govm/kube.config
 Nov 26 11:21:28.817: INFO: Waiting up to 30m0s for all (but 0) nodes to be schedulable
 ...
 Ran 1 of 61 Specs in 58.465 seconds

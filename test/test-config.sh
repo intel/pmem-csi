@@ -99,6 +99,9 @@ fi
 # (https://github.com/clearlinux/distribution/issues/85).
 : ${TEST_CHECK_SIGNED_FILES:=true}
 
+# The operating system to install inside the nodes.
+: ${TEST_OS:=clear}
+
 # If set to a number, that version of Clear Linux is installed
 # instead of the latest one.
-: ${TEST_CLEAR_LINUX_VERSION:=}
+: ${TEST_DISTRO_VERSION:=}

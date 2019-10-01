@@ -6,7 +6,7 @@ set -o pipefail
 TEST_DIRECTORY=${TEST_DIRECTORY:-$(dirname $(readlink -f $0))}
 source ${TEST_CONFIG:-${TEST_DIRECTORY}/test-config.sh}
 
-CLUSTER=${CLUSTER:-clear-govm}
+CLUSTER=${CLUSTER:-pmem-govm}
 REPO_DIRECTORY="${REPO_DIRECTORY:-$(dirname $(dirname $(readlink -f $0)))}"
 WORK_DIRECTORY="${WORK_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
 KUBECTL="${KUBECTL:-${WORK_DIRECTORY}/ssh-${CLUSTER} kubectl}"
