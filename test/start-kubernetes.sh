@@ -55,7 +55,7 @@ SSH_TIMEOUT=60
 SSH_ARGS="-oIdentitiesOnly=yes -oStrictHostKeyChecking=no \
         -oUserKnownHostsFile=/dev/null -oLogLevel=error \
         -i ${SSH_KEY}"
-SSH_ARGS+=" -oServerAliveInterval=1" # required for disruptive testing, to detect quickly when the machine died
+SSH_ARGS+=" -oServerAliveInterval=15" # required for disruptive testing, to detect quickly when the machine died
 : ${TEST_CREATE_REGISTRY:=false}
 : ${TEST_CHECK_SIGNED_FILES:=true}
 
