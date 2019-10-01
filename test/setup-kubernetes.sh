@@ -6,7 +6,7 @@
 # used by it must be passed in explicitly via ssh.
 
 set -x
-set -o errexit
+set -o errexit # TODO: replace with explicit error checking and messages
 set -o pipefail
 
 : ${TEST_INIT_REGION:=true}
@@ -14,7 +14,7 @@ set -o pipefail
 
 function error_handler(){
         local line="${1}"
-        echo  "Running the ${BASH_COMMAND} on function ${FUNCNAME[1]} at line ${line}"
+        echo >&2 "ERROR: command '${BASH_COMMAND}' in function ${FUNCNAME[1]} at $0:${line} failed"
 }
 
 function create_local_registry(){
