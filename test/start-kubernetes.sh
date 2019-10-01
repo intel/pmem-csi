@@ -198,6 +198,30 @@ EOF
     done
 )
 
+# Wait for some pids to finish. Once the first one fails, the others
+# are killed. Slightly racy, because we also kill the process we already
+# waited for and whose pid thus might have been reused.
+function waitall() {
+    result=0
+    numpids=$#
+    while [ $numpids -gt 0 ]; do
+        if ! wait -n "$@"; then
+            if [ $result -eq 0 ]; then
+                result=1
+                # To increase the chance that the asynchronously logged output is shown first, wait a bit.
+                sleep 10
+                kill "$@" 2>/dev/null || true # We don't care about errors here, at least one process is gone.
+                echo >&2 "ERROR: some child process failed, killed the rest."
+            fi
+        fi
+        # We don't know which one terminated. We just decrement and
+        # keep on waiting for all pids.
+        numpids=$(($numpids - 1))
+    done
+
+    return $result
+}
+
 # Prints a single line of foo=<value of foo> assignments for
 # proxy variables and all variables starting with TEST_.
 function env_vars() (
@@ -215,6 +239,7 @@ function log_lines(){
         # those out, otherwise the line overwrites the prefix.
         echo "$(date +%H:%M:%S) $prefix: $line" | sed -e 's/\r//' | tee -a $logfile
     done
+    echo "$(date +%H:%M:%S) $prefix: END OF OUTPUT"
 }
 
 function init_kubernetes_cluster() (
@@ -226,6 +251,7 @@ function init_kubernetes_cluster() (
     KUBECONFIG=${WORKING_DIRECTORY}/kube.config
     echo "Installing dependencies on cloud images, this process may take some minutes"
     vm_id=0
+    pids=""
     for ip in $(print_ips); do
         vm_name=$(govm list -f '{{select (filterRegexp . "IP" "'${ip}'") "Name"}}') || die "failed to find VM for IP $ip"
         log_name=${WORKING_DIRECTORY}/${vm_name}.log
@@ -251,9 +277,10 @@ EOF
         # The local registry and the master node might be used as insecure registries, enabled that just in case.
         ENV_VARS+=" INSECURE_REGISTRIES='$TEST_INSECURE_REGISTRIES $TEST_LOCAL_REGISTRY pmem-csi-$CLUSTER-master:5000'"
         scp $SSH_ARGS ${TEST_DIRECTORY}/{$setup_script,$install_k8s_script} ${CLOUD_USER}@${ip}:. >/dev/null || die "failed to copy install scripts to $vm_name = $ip"
-        ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo env $ENV_VARS ./$setup_script && env $ENV_VARS ./$install_k8s_script" &> >(log_lines "$vm_name" "$log_name") &
+        ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo env $ENV_VARS ./$setup_script && env $ENV_VARS ./$install_k8s_script" </dev/null &> >(log_lines "$vm_name" "$log_name") &
+        pids+=" $!"
     done
-    wait || die "at least one of the nodes failed"
+    waitall $pids || die "at least one of the nodes failed"
     #get kubeconfig
     scp $SSH_ARGS ${CLOUD_USER}@${master_ip}:.kube/config $KUBECONFIG || die "failed to copy Kubernetes config file"
     export KUBECONFIG=${KUBECONFIG}
@@ -282,14 +309,16 @@ EOF
 
     #get kubernetes join token
     join_token=$(ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} "$ENV_VARS kubeadm token create --print-join-command") || die "could not get kubeadm join token"
+    pids=""
     for ip in ${workers_ip}; do
 
         vm_name=$(govm list -f '{{select (filterRegexp . "IP" "'${ip}'") "Name"}}') || die "could not find VM name for $ip"
         log_name=${WORKING_DIRECTORY}/${vm_name}.log
         ( ssh $SSH_ARGS ${CLOUD_USER}@${ip} "$ENV_VARS sudo $join_token" &&
-          ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} "kubectl label --overwrite node $vm_name storage=pmem" ) &> >(log_lines "$vm_name" "$log_name") &
+          ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} "kubectl label --overwrite node $vm_name storage=pmem" ) </dev/null &> >(log_lines "$vm_name" "$log_name") &
+        pids+=" $!"
     done
-    wait || die "at least one worker failed to join the cluster"
+    waitall $pids || die "at least one worker failed to join the cluster"
 )
 
 function init_workdir() (
