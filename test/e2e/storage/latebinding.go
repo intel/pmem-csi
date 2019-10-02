@@ -30,6 +30,7 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
+	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 )
 
 // TestDynamicLateBindingProvisioning is a variant of k8s.io/kubernetes/test/e2e/storage/testsuites/provisioning.go
@@ -104,12 +105,12 @@ func TestDynamicLateBindingProvisioning(client clientset.Interface, claim *v1.Pe
 func PVWriteReadSingleNodeCheck(client clientset.Interface, claim *v1.PersistentVolumeClaim, id string) {
 	By(fmt.Sprintf("%s: checking the created volume is writable", id))
 	command := "echo 'hello world' > /mnt/test/data || (mount | grep 'on /mnt/test'; false)"
-	pod := testsuites.StartInPodWithVolume(client, claim.Namespace, claim.Name, "pvc-volume-tester-writer-"+id, command, testsuites.NodeSelection{})
+	pod := testsuites.StartInPodWithVolume(client, claim.Namespace, claim.Name, "pvc-volume-tester-writer-"+id, command, e2epod.NodeSelection{})
 	defer func() {
 		// pod might be nil now.
 		testsuites.StopPod(client, pod)
 	}()
-	framework.ExpectNoError(framework.WaitForPodSuccessInNamespaceSlow(client, pod.Name, pod.Namespace))
+	framework.ExpectNoError(e2epod.WaitForPodSuccessInNamespaceSlow(client, pod.Name, pod.Namespace))
 	runningPod, err := client.CoreV1().Pods(pod.Namespace).Get(pod.Name, metav1.GetOptions{})
 	Expect(err).NotTo(HaveOccurred(), "get pod %s", id)
 	actualNodeName := runningPod.Spec.NodeName
@@ -118,5 +119,5 @@ func PVWriteReadSingleNodeCheck(client clientset.Interface, claim *v1.Persistent
 
 	By(fmt.Sprintf("%s: checking the created volume is readable and retains data on the same node %q", id, actualNodeName))
 	command = "grep 'hello world' /mnt/test/data"
-	testsuites.RunInPodWithVolume(client, claim.Namespace, claim.Name, "pvc-volume-tester-reader-"+id, command, testsuites.NodeSelection{Name: actualNodeName})
+	testsuites.RunInPodWithVolume(client, claim.Namespace, claim.Name, "pvc-volume-tester-reader-"+id, command, e2epod.NodeSelection{Name: actualNodeName})
 }

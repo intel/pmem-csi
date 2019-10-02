@@ -21,8 +21,10 @@ import (
 	"os"
 	"testing"
 
+	"k8s.io/component-base/logs"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/test/e2e/framework"
+	"k8s.io/kubernetes/test/e2e/framework/config"
 	"k8s.io/kubernetes/test/e2e/framework/testfiles"
 
 	. "github.com/onsi/ginkgo"
@@ -33,13 +35,16 @@ import (
 
 func TestMain(m *testing.M) {
 	klog.SetOutput(GinkgoWriter)
-	klog.InitFlags(flag.CommandLine)
 
+	logs.InitLogs()
+	config.CopyFlags(config.Flags, flag.CommandLine)
+	framework.RegisterCommonFlags(flag.CommandLine)
+	framework.RegisterClusterFlags(flag.CommandLine)
 	// Skip slow or distruptive tests by default.
 	flag.Set("ginkgo.skip", `\[Slow|Disruptive\]`)
+	flag.Parse()
 
 	// Register framework flags, then handle flags.
-	framework.HandleFlags()
 	framework.AfterReadingAllFlags(&framework.TestContext)
 
 	// We need extra files at runtime.
