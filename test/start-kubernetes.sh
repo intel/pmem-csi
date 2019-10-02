@@ -133,9 +133,11 @@ EOF
 
         # We need a qcow image, otherwise copy-on-write does not work
         # (https://github.com/govm-project/govm/blob/08f276f574f9ad6cad29f7c8fde070a4eb542b06/startvm#L25-L29)
-        # and the different machines conflict with each other.
+        # and the different machines conflict with each other. We cannot call qemu-img directly (might not be
+        # installed), but we can use docker and the https://hub.docker.com/r/govm/govm image because we depend
+        # on both already.
         if ! file ${CLOUD_IMAGE} | grep -q "QEMU QCOW"; then
-            qemu-img convert -O qcow2 ${CLOUD_IMAGE} ${CLOUD_IMAGE}.tmp && mv ${CLOUD_IMAGE}.tmp ${CLOUD_IMAGE} || die "conversion to qcow2 format failed"
+            docker run --rm --volume `pwd`:/resources --entrypoint /usr/bin/qemu-img govm/govm -- convert -O qcow2 /resources/${CLOUD_IMAGE} /resources/${CLOUD_IMAGE}.tmp && mv ${CLOUD_IMAGE}.tmp ${CLOUD_IMAGE} || die "conversion to qcow2 format failed"
         fi
     fi
 
