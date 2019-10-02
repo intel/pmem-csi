@@ -9,7 +9,7 @@ spec:
   ports:
   - port: 10001 # port inside the pod where controller-socat-path.yaml forwards the csi.sock
 ---
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: pmem-csi-node-testing

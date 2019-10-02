@@ -85,7 +85,7 @@ spec:
             path: pmem-csi-registry.key
 ---
 kind: DaemonSet
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 metadata:
   name: pmem-csi-node
 spec:
