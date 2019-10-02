@@ -158,6 +158,7 @@ pipeline {
         }
 
         stage('testing 1.14 LVM') {
+            when { not { changeRequest() } }
             options {
                 timeout(time: 90, unit: "MINUTES")
                 retry(2)
@@ -168,6 +169,7 @@ pipeline {
         }
 
         stage('testing 1.14 direct') {
+            when { not { changeRequest() } }
             options {
                 timeout(time: 180, unit: "MINUTES")
                 retry(2)
