@@ -49,38 +49,49 @@
 # see https://github.com/kubernetes/kubernetes/issues/72638.
 [[constraint]]
   name = "k8s.io/kubernetes"
-  version = "1.14.0"
+  version = "1.16.0"
 
 [[override]]
   name = "k8s.io/apimachinery"
-  version = "kubernetes-1.14.0"
+  version = "kubernetes-1.16.0"
 [[override]]
   name = "k8s.io/api"
-  version = "kubernetes-1.14.0"
+  version = "kubernetes-1.16.0"
 [[override]]
   name = "k8s.io/apiserver"
-  version = "kubernetes-1.14.0"
+  version = "kubernetes-1.16.0"
 [[override]]
   name = "k8s.io/apiextensions-apiserver"
-  version = "kubernetes-1.14.0"
+  version = "kubernetes-1.16.0"
 [[override]]
   name = "k8s.io/cli-runtime"
-  version = "kubernetes-1.14.0"
+  version = "kubernetes-1.16.0"
 [[override]]
   name = "k8s.io/client-go"
-  version = "kubernetes-1.14.0"
+  version = "kubernetes-1.16.0"
 [[override]]
   name = "k8s.io/cloud-provider"
-  version = "kubernetes-1.14.0"
+  version = "kubernetes-1.16.0"
 [[override]]
   name = "k8s.io/cluster-bootstrap"
-  version = "kubernetes-1.14.0"
+  version = "kubernetes-1.16.0"
 [[override]]
   name = "k8s.io/csi-api"
-  version = "kubernetes-1.14.0"
+  version = "kubernetes-1.16.0"
 [[override]]
   name = "k8s.io/kube-aggregator"
-  version = "kubernetes-1.14.0"
+  version = "kubernetes-1.16.0"
+[[override]]
+  name = "k8s.io/component-base"
+  version = "kubernetes-1.16.0"
+[[override]]
+  name = "k8s.io/csi-translation-lib"
+  version = "kubernetes-1.16.0"
+# There is a api breakage in latest(v1.0.0) prometheus release
+# vendor/k8s.io/component-base/metrics/legacyregistry/registry.go:44:9: undefined: prometheus.InstrumentHandler
+[[override]]
+  name = "github.com/prometheus/client_golang"
+  version = "0.9.2"
 
 # Doesn't do proper releases.
 [[override]]
@@ -92,11 +103,21 @@
   name = "k8s.io/utils"
   branch = "master"
 
+# Latest etcd package name has moved to "go.etcd.io/etcd"
+# But apiserver v1.16 is still using github.com/coreos/etcd/
+# hence lock to appropriate v3.3.15.
 [[override]]
-  # kubernetes/pkg/util/parsers/parsers.go needs the new reference.ParseNormalizedNamed
-  # API call, which isn't yet in any stable release.
-  name = "github.com/docker/distribution"
-  branch = "master"
+  name = "github.com/coreos/etcd"
+  version = "=3.3.15"
+
+# In commit ec11136828c9558db61de95daec25475549dbe7e
+# systemd.Manager interface made LegacyManger, but kubelet
+# is depend on this interface.
+# Hence lock to best known revision
+# https://github.com/kubernetes/kubernetes/blob/2bd9643cee5b3b3a5ecbd3af49d09018f0773c77/go.mod#L102
+[[override]]
+  name = "github.com/opencontainers/runc"
+  revision = "6cc515888830787a93d82138821f0309ad970640"
 
 # This prevents dep from pulling an empty repo for gopkg.in/fsnotify.v1,
 # something that it does not recover from.
