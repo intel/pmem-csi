@@ -8,7 +8,7 @@ import (
 
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 	"k8s.io/klog"
-	"k8s.io/kubernetes/pkg/util/mount"
+	"k8s.io/kubernetes/pkg/volume/util/hostutil"
 )
 
 const (
@@ -40,11 +40,11 @@ func FlushDevice(dev PmemDeviceInfo, blocks uint64) error {
 		klog.Errorf("FlushDevice: %s is not device", dev.Path)
 		return fmt.Errorf("%s is not device", dev.Path)
 	}
-	devOpen, err := mount.New("").DeviceOpened(dev.Path)
+	devOpen, err := hostutil.NewHostUtil().DeviceOpened(dev.Path)
 	if err != nil {
 		return err
 	}
-	if devOpen == true {
+	if devOpen {
 		return fmt.Errorf("%s is in use", dev.Path)
 	}
 	if blocks == 0 {
