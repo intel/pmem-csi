@@ -9,7 +9,7 @@
   value:
   - name: pmem-ns-init
     imagePullPolicy: Always
-    image: intel/pmem-csi-driver:v0.5.7
+    image: intel/pmem-csi-driver:v0.5.8
     command: ["/usr/local/bin/pmem-ns-init"]
     args: [ "-v=3" ]
     env:
@@ -23,7 +23,7 @@
       mountPath: /sys
   - name: pmem-vgm
     imagePullPolicy: Always
-    image: intel/pmem-csi-driver:v0.5.7
+    image: intel/pmem-csi-driver:v0.5.8
     command: ["/usr/local/bin/pmem-vgm"]
     args: [ "-v=3" ]
     env:
