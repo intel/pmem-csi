@@ -105,3 +105,9 @@ fi
 # If set to a number, that version of Clear Linux is installed
 # instead of the latest one.
 : ${TEST_DISTRO_VERSION:=}
+
+# If set to a <major>.<minor> number, that version of Kubernetes
+# is installed instead of the latest one. Ignored when
+# using Clear Linux as OS because with Clear Linux we have
+# to use the Kubernetes version that ships with it.
+: ${TEST_KUBERNETES_VERSION:=1.16}

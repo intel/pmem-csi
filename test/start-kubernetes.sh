@@ -348,8 +348,8 @@ EOF
 
         vm_name=$(govm list -f '{{select (filterRegexp . "IP" "'${ip}'") "Name"}}') || die "could not find VM name for $ip"
         log_name=${WORKING_DIRECTORY}/${vm_name}.log
-        ( ssh $SSH_ARGS ${CLOUD_USER}@${ip} "$ENV_VARS sudo $join_token" &&
-          ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} "kubectl label --overwrite node $vm_name storage=pmem" ) </dev/null &> >(log_lines "$vm_name" "$log_name") &
+        ( ssh $SSH_ARGS ${CLOUD_USER}@${ip} "set -x; $ENV_VARS sudo ${join_token/kubeadm/kubeadm --ignore-preflight-errors=SystemVerification}" &&
+          ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} "set -x; kubectl label --overwrite node $vm_name storage=pmem" ) </dev/null &> >(log_lines "$vm_name" "$log_name") &
         pids+=" $!"
     done
     waitall $pids || die "at least one worker failed to join the cluster"

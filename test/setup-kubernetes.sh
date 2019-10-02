@@ -82,6 +82,13 @@ $kubeadm_config_kubelet
 $kubeadm_config_cluster
 EOF
 
+# We install old Kubernetes releases on current distros and must
+# disable the kernel preflight check for that to work, because those
+# old releases do not necessarily have a recent kernel in their
+# whitelist (for example, 1.13.9 fails on Linux
+# 5.0.9-301.fc30.x86_64).
+kubeadm_args="$kubeadm_args --ignore-preflight-errors=SystemVerification"
+
 kubeadm_args_init="$kubeadm_args_init --config=$kubeadm_config_file"
 sudo kubeadm init $kubeadm_args $kubeadm_args_init
 mkdir -p $HOME/.kube
