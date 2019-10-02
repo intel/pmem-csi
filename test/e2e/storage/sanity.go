@@ -44,6 +44,8 @@ import (
 	clientexec "k8s.io/client-go/util/exec"
 	"k8s.io/kubernetes/test/e2e/framework"
 	testutils "k8s.io/kubernetes/test/utils"
+	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
+	e2essh "k8s.io/kubernetes/test/e2e/framework/ssh"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -81,7 +83,7 @@ var _ = Describe("sanity", func() {
 			framework.Skipf("driver deployed in production mode")
 		}
 
-		hosts, err := framework.NodeSSHHosts(cs)
+		hosts, err := e2essh.NodeSSHHosts(cs)
 		framework.ExpectNoError(err, "failed to find external/internal IPs for every node")
 		if len(hosts) <= 1 {
 			framework.Failf("not enough nodes with external IP")
@@ -970,7 +972,7 @@ func WaitForPodsWithLabelRunningReady(c clientset.Interface, ns string, label la
 	var current int
 	err = wait.Poll(2*time.Second, timeout,
 		func() (bool, error) {
-			pods, err = framework.WaitForPodsWithLabel(c, ns, label)
+			pods, err = e2epod.WaitForPodsWithLabel(c, ns, label)
 			if err != nil {
 				framework.Logf("Failed to list pods: %v", err)
 				if testutils.IsRetryableAPIError(err) {
