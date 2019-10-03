@@ -55,14 +55,13 @@ SSH_TIMEOUT=60
 SSH_ARGS="-oIdentitiesOnly=yes -oStrictHostKeyChecking=no \
         -oUserKnownHostsFile=/dev/null -oLogLevel=error \
         -i ${SSH_KEY}"
-SSH_ARGS+=" -oServerAliveInterval=1" # required for disruptive testing, to detect quickly when the machine died
+SSH_ARGS+=" -oServerAliveInterval=15" # required for disruptive testing, to detect quickly when the machine died
 : ${TEST_CREATE_REGISTRY:=false}
 : ${TEST_CHECK_SIGNED_FILES:=true}
 
-function error_handler(){
-    local line="${1}"
-    echo  "Error unning the ${BASH_COMMAND} on function ${FUNCNAME[1]} at line ${line}"
-    delete_vms
+function die() {
+    echo >&2 "ERROR: $@"
+    exit 1
 }
 
 function download_image() (
@@ -70,7 +69,7 @@ function download_image() (
     # process downloads the shared image
     flock -x -w $LOCKDELAY 200
 
-    pushd $RESOURCES_DIRECTORY &>/dev/null
+    cd $RESOURCES_DIRECTORY
     if [ -e "${CLOUD_IMAGE/.xz}" ]; then
         echo >&2 "$CLOUD_IMAGE found, skipping download"
         CLOUD_IMAGE=${CLOUD_IMAGE/.xz}
@@ -78,11 +77,11 @@ function download_image() (
         case $CLOUD_USER in
             clear)
                 echo >&2 "Downloading ${CLOUD_IMAGE} image"
-                curl -O ${IMAGE_URL}/${CLOUD_IMAGE}
+                curl -O "${IMAGE_URL}/${CLOUD_IMAGE}"
                 if $TEST_CHECK_SIGNED_FILES; then
-                    curl -s -O ${IMAGE_URL}/${CLOUD_IMAGE}-SHA512SUMS
-                    curl -s -O ${IMAGE_URL}/${CLOUD_IMAGE}-SHA512SUMS.sig
-                    curl -s -O ${IMAGE_URL}/ClearLinuxRoot.pem
+                    curl -s -O "${IMAGE_URL}/${CLOUD_IMAGE}-SHA512SUMS" || die "failed to download ${IMAGE_URL}/${CLOUD_IMAGE}-SHA512SUMS"
+                    curl -s -O "${IMAGE_URL}/${CLOUD_IMAGE}-SHA512SUMS.sig" || die "failed to download ${IMAGE_URL}/${CLOUD_IMAGE}-SHA512SUMS.sig"
+                    curl -s -O "${IMAGE_URL}/ClearLinuxRoot.pem" || die "failed to download ${IMAGE_URL}/ClearLinuxRoot.pem"
                     if ! openssl smime -verify \
                          -in "${CLOUD_IMAGE}-SHA512SUMS.sig" \
                          -inform DER \
@@ -101,45 +100,24 @@ EOF
                         exit 2
                     fi
                 fi
-                unxz ${CLOUD_IMAGE}
+                unxz ${CLOUD_IMAGE} || die "failed to unpack ${CLOUD_IMAGE}"
                 CLOUD_IMAGE=${CLOUD_IMAGE/.xz}
                 ;;
-            ubuntu)
-                base_url="https://cloud-images.ubuntu.com/disco/current/"
-                sha_file="SHA256SUMS"
-                curl -s -O ${base_url}/${CLOUD_IMAGE}.xz
-                curl -s -O ${base_url}/${sha_file}
-                if sha256sum $sha_file ${CLOUD_IMAGE}.xz; then
-                    unxz ${CLOUD_IMAGE}.xz
-                    CLOUD_IMAGE=${CLOUD_IMAGE/.xz}
-                fi
-                ;;
-            centos)
-                base_url="https://cloud.centos.org/centos/7/images/"
-                sha_file="sha256sum.txt"
-                curl -s -O ${base_url}/${CLOUD_IMAGE}.xz
-                curl -s -O ${base_url}/${sha_file}
-                if sha256sum $sha_file ${CLOUD_IMAGE}.xz; then
-                    unxz ${CLOUD_IMAGE}.xz
-                    CLOUD_IMAGE=${CLOUD_IMAGE/.xz}
-                fi
-                ;;
+            *) die "unsupported CLOUD_USER=${CLOUD_USER}";;
         esac
     fi
-    popd &>/dev/null
 
     echo "$CLOUD_IMAGE"
 ) 200>$LOCKFILE
 
-function create_govm_yaml(){
-    trap 'error_handler ${LINENO}' ERR
-    cat <<EOF > $GOVM_YAML
+function print_govm_yaml() (
+    cat  <<EOF
 ---
 vms:
 EOF
 
     for node in ${NODES[@]}; do
-        cat <<EOF >>$GOVM_YAML
+        cat <<EOF
   - name: ${node}
     image: ${RESOURCES_DIRECTORY}/${CLOUD_IMAGE}
     cloud: ${CLOUD}
@@ -156,25 +134,31 @@ EOF
         ${EXTRA_QEMU_OPTS}
 EOF
     done
-}
+)
 
-function create_vms(){
-    trap 'error_handler ${LINENO}' ERR
+function print_ips() (
+    govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-(master|worker[[:digit:]]+)$") "IP"}}' | tac
+)
+
+function create_vms() (
     STOP_VMS_SCRIPT="${WORKING_DIRECTORY}/stop.sh"
     RESTART_VMS_SCRIPT="${WORKING_DIRECTORY}/restart.sh"
-    create_govm_yaml
-    govm compose -f ${GOVM_YAML}
-    IPS=$(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-(master|worker[[:digit:]]+)$") "IP"}}' | tac)
+    print_govm_yaml >$GOVM_YAML || die "failed to create $GOVM_YAML"
+    govm compose -f ${GOVM_YAML} || die "govm failed"
+    IPS=$(print_ips)
 
     #Create scripts to delete virtual machines
-    echo "#!/bin/bash -e" > $STOP_VMS_SCRIPT
-    govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-(master|worker[[:digit:]]+)$") "Name"}}' \
-        | xargs -L1 echo govm remove >> $STOP_VMS_SCRIPT
-    echo "rm -rf ${WORKING_DIRECTORY}" >> $STOP_VMS_SCRIPT
-    chmod +x $STOP_VMS_SCRIPT
+    (
+        machines=$(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-(master|worker[[:digit:]]+)$") "Name"}}') &&
+        cat <<EOF
+#!/bin/bash -e
+$(for i in $machines; do echo govm remove $i; done)
+rm -rf ${WORKING_DIRECTORY}
+EOF
+    ) > $STOP_VMS_SCRIPT && chmod +x $STOP_VMS_SCRIPT || die "failed to create $STOP_VMS_SCRIPT"
 
     #Create script to restart virtual machines
-    cat <<EOF >$RESTART_VMS_SCRIPT
+    ( cat <<EOF
 #!/bin/bash
 num_nodes=$(echo ${IPS} | wc -w)
 echo "Rebooting \$num_nodes virtual machines"
@@ -200,7 +184,7 @@ while [ \$(${WORKING_DIRECTORY}/ssh-${CLUSTER} "kubectl get nodes  -o go-templat
     sleep 3
 done
 EOF
-    chmod +x $RESTART_VMS_SCRIPT
+      ) >$RESTART_VMS_SCRIPT && chmod +x $RESTART_VMS_SCRIPT || die "failed to create $RESTART_VMS_SCRIPT"
     #Wait for the ssh connectivity in the vms
     for ip in ${IPS}; do
         SECONDS=0
@@ -208,12 +192,34 @@ EOF
         echo "Waiting for ssh connectivity on vm with ip $ip"
         while ! ssh $SSH_ARGS ${CLOUD_USER}@${ip} exit 2>/dev/null; do
             if [ "$SECONDS" -gt "$SSH_TIMEOUT" ]; then
-                echo "Timeout accessing through ssh"
-                delete_vms
-                exit 1
+                die "timeout accessing ${ip} through ssh"
             fi
         done
     done
+)
+
+# Wait for some pids to finish. Once the first one fails, the others
+# are killed. Slightly racy, because we also kill the process we already
+# waited for and whose pid thus might have been reused.
+function waitall() {
+    result=0
+    numpids=$#
+    while [ $numpids -gt 0 ]; do
+        if ! wait -n "$@"; then
+            if [ $result -eq 0 ]; then
+                result=1
+                # To increase the chance that the asynchronously logged output is shown first, wait a bit.
+                sleep 10
+                kill "$@" 2>/dev/null || true # We don't care about errors here, at least one process is gone.
+                echo >&2 "ERROR: some child process failed, killed the rest."
+            fi
+        fi
+        # We don't know which one terminated. We just decrement and
+        # keep on waiting for all pids.
+        numpids=$(($numpids - 1))
+    done
+
+    return $result
 }
 
 # Prints a single line of foo=<value of foo> assignments for
@@ -233,48 +239,50 @@ function log_lines(){
         # those out, otherwise the line overwrites the prefix.
         echo "$(date +%H:%M:%S) $prefix: $line" | sed -e 's/\r//' | tee -a $logfile
     done
+    echo "$(date +%H:%M:%S) $prefix: END OF OUTPUT"
 }
 
-function init_kubernetes_cluster(){
-    trap 'error_handler ${LINENO}' ERR
+function init_kubernetes_cluster() (
     workers_ip=""
-    master_ip="$(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-master$") "IP"}}')"
+    master_ip="$(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-master$") "IP"}}')" || die "failed to find master IP"
     join_token=""
     setup_script="setup-${CLOUD_USER}-govm.sh"
     install_k8s_script="setup-kubernetes.sh"
     KUBECONFIG=${WORKING_DIRECTORY}/kube.config
     echo "Installing dependencies on cloud images, this process may take some minutes"
     vm_id=0
-    for ip in ${IPS}; do
-        vm_name=$(govm list -f '{{select (filterRegexp . "IP" "'${ip}'") "Name"}}')
+    pids=""
+    for ip in $(print_ips); do
+        vm_name=$(govm list -f '{{select (filterRegexp . "IP" "'${ip}'") "Name"}}') || die "failed to find VM for IP $ip"
         log_name=${WORKING_DIRECTORY}/${vm_name}.log
         ssh_script=${WORKING_DIRECTORY}/ssh.${vm_id}
         ((vm_id=vm_id+1))
         if [[ "$vm_name" = *"worker"* ]]; then
             workers_ip+="$ip "
         else
-            cat <<EOF >${WORKING_DIRECTORY}/ssh-${CLUSTER}
+            ( cat <<EOF
 #!/bin/sh
 
 exec ssh $SSH_ARGS ${CLOUD_USER}@${ip} "\$@"
 EOF
-            chmod +x ${WORKING_DIRECTORY}/ssh-${CLUSTER}
+            ) >${WORKING_DIRECTORY}/ssh-${CLUSTER} && chmod +x ${WORKING_DIRECTORY}/ssh-${CLUSTER} || die "failed to create ${WORKING_DIRECTORY}/ssh-${CLUSTER}"
         fi
+        ( cat <<EOF
+#!/bin/sh
+
+exec ssh $SSH_ARGS ${CLOUD_USER}@${ip} "\$@"
+EOF
+        ) >$ssh_script && chmod +x $ssh_script || die "failed to create $ssh_script"
         ENV_VARS="env$(env_vars) HOSTNAME='$vm_name' IPADDR='$ip'"
         # The local registry and the master node might be used as insecure registries, enabled that just in case.
         ENV_VARS+=" INSECURE_REGISTRIES='$TEST_INSECURE_REGISTRIES $TEST_LOCAL_REGISTRY pmem-csi-$CLUSTER-master:5000'"
-        scp $SSH_ARGS ${TEST_DIRECTORY}/{$setup_script,$install_k8s_script} ${CLOUD_USER}@${ip}:. >/dev/null
-        ssh $SSH_ARGS ${CLOUD_USER}@${ip} "$ENV_VARS ./$setup_script && $ENV_VARS ./$install_k8s_script" &> >(log_lines "$vm_name" "$log_name") &
-        cat <<EOF >$ssh_script
-#!/bin/sh
-
-exec ssh $SSH_ARGS ${CLOUD_USER}@${ip} "\$@"
-EOF
-        chmod +x $ssh_script
+        scp $SSH_ARGS ${TEST_DIRECTORY}/{$setup_script,$install_k8s_script} ${CLOUD_USER}@${ip}:. >/dev/null || die "failed to copy install scripts to $vm_name = $ip"
+        ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo env $ENV_VARS ./$setup_script && env $ENV_VARS ./$install_k8s_script" </dev/null &> >(log_lines "$vm_name" "$log_name") &
+        pids+=" $!"
     done
-    wait
+    waitall $pids || die "at least one of the nodes failed"
     #get kubeconfig
-    scp $SSH_ARGS ${CLOUD_USER}@${master_ip}:.kube/config $KUBECONFIG
+    scp $SSH_ARGS ${CLOUD_USER}@${master_ip}:.kube/config $KUBECONFIG || die "failed to copy Kubernetes config file"
     export KUBECONFIG=${KUBECONFIG}
     # Copy images to local registry in master vm?
     if $TEST_CREATE_REGISTRY; then
@@ -283,59 +291,48 @@ EOF
             # We need to re-tag it before pushing it to the localhost:5000 registry on the master node.
             remoteimage="$(echo "$image" | sed -e 's;^[^/]*/;localhost:5000/;')"
             echo "Copying $image to master node"
-            docker save "$image" | ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} sudo docker load
+            docker save "$image" | ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} sudo docker load || die "failed to copy $image"
             echo Load $image into registry
-            ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} sudo docker tag "$image" "$remoteimage"
-            ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} sudo docker push "$remoteimage"
+            ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} sudo docker tag "$image" "$remoteimage" || die "failed to tag $image as $remoteimage"
+            ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} sudo docker push "$remoteimage" || die "failed to push $remoteimage"
         done
 
         # TEST_PMEM_REGISTRY in test-config.sh uses this machine name as registry,
         # so we need to ensure that the name can be resolved.
         for ip in ${workers_ip}; do
-            ssh $SSH_ARGS ${CLOUD_USER}@${ip} <<EOF
+            ( ssh $SSH_ARGS ${CLOUD_USER}@${ip} <<EOF
 sudo sh -c "echo ${master_ip} pmem-csi-${CLUSTER}-master >>/etc/hosts"
 EOF
+            ) || die "failed to reconfigure /etc/hosts on $workers_ip"
         done
     fi
 
     #get kubernetes join token
-    join_token=$(ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} "$ENV_VARS kubeadm token create --print-join-command")
+    join_token=$(ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} "$ENV_VARS kubeadm token create --print-join-command") || die "could not get kubeadm join token"
+    pids=""
     for ip in ${workers_ip}; do
 
-        vm_name=$(govm list -f '{{select (filterRegexp . "IP" "'${ip}'") "Name"}}')
+        vm_name=$(govm list -f '{{select (filterRegexp . "IP" "'${ip}'") "Name"}}') || die "could not find VM name for $ip"
         log_name=${WORKING_DIRECTORY}/${vm_name}.log
-        (
-            ssh $SSH_ARGS ${CLOUD_USER}@${ip} "$ENV_VARS sudo $join_token" &> >(log_lines "$vm_name" "$log_name")
-            ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} "kubectl label --overwrite node $vm_name storage=pmem" &> >(log_lines "$vm_name" "$log_name")
-        ) &
+        ( ssh $SSH_ARGS ${CLOUD_USER}@${ip} "$ENV_VARS sudo $join_token" &&
+          ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} "kubectl label --overwrite node $vm_name storage=pmem" ) </dev/null &> >(log_lines "$vm_name" "$log_name") &
+        pids+=" $!"
     done
-    wait
-}
+    waitall $pids || die "at least one worker failed to join the cluster"
+)
 
-function delete_vms(){
-    trap 'error_handler ${LINENO}' ERR
-    echo "Cleanning up environment"
-    govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-(master|worker[[:digit:]]+)^") "Name"}}' \
-        | xargs -L1 govm remove
-}
-
-function init_workdir(){
-    if [ ! -d "$WORKING_DIRECTORY" ]; then
-        mkdir -p $WORKING_DIRECTORY
-    fi
-    if [ ! -d "$RESOURCES_DIRECTORY" ]; then
-        mkdir -p $RESOURCES_DIRECTORY
-    fi
+function init_workdir() (
+    mkdir -p $WORKING_DIRECTORY || die "failed to create $WORKING_DIRECTORY"
+    mkdir -p $RESOURCES_DIRECTORY || die "failed to create $RESOURCES_DIRECTORY"
     (
         flock -x -w $LOCKDELAY 200
         if [ ! -e  "$SSH_KEY" ]; then
-            ssh-keygen -N '' -f ${SSH_KEY} &>/dev/null
+            ssh-keygen -N '' -f ${SSH_KEY} &>/dev/null || die "failed to create ${SSH_KEY}"
         fi
     ) 200>$LOCKFILE
-    pushd $WORKING_DIRECTORY >/dev/null
-}
+)
 
-function check_status(){
+function check_status() { # intentionally a composite command, so "exit" will exit the main script
     deployments=$(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-master$") "Name"}}')
     if [ ! -z "$deployments" ]; then
         echo "Kubernetes cluster ${CLUSTER} is already running, using it unchanged."
@@ -343,8 +340,30 @@ function check_status(){
     fi
 }
 
-check_status
-init_workdir
-CLOUD_IMAGE=$(download_image)
-create_vms
-init_kubernetes_cluster
+FAILED=true
+function cleanup() (
+    if $FAILED; then
+        set +xe
+        echo "Cluster creation failed."
+        echo "govm status:"
+        govm list
+        echo "Docker status:"
+        docker ps
+        for vm in $(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-(master|worker[[:digit:]]+)$") "Name"}}'); do
+            govm remove "$vm"
+        done
+        rm -rf $WORKING_DIRECTORY
+    fi
+)
+
+check_status # exits if nothing to do
+trap cleanup EXIT
+
+if init_workdir &&
+   CLOUD_IMAGE=$(download_image) &&
+   create_vms &&
+   init_kubernetes_cluster; then
+    FAILED=false
+else
+    exit 1
+fi

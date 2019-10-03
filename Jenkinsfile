@@ -12,6 +12,7 @@ pipeline {
           the control plane is unsupported.
         */
 
+        CLEAR_LINUX_VERSION_1_15 = "31070"
         /* 29890 broke networking
         (https://github.com/clearlinux/distribution/issues/904). In
         29880, Docker forgets containers after a system restart
@@ -136,7 +137,28 @@ pipeline {
             }
         }
 
+        stage('testing 1.15 LVM') {
+            options {
+                timeout(time: 90, unit: "MINUTES")
+                retry(2)
+            }
+            steps {
+                TestInVM("lvm", "testing", "${env.CLEAR_LINUX_VERSION_1_15}")
+            }
+        }
+
+        stage('testing 1.15 direct') {
+            options {
+                timeout(time: 180, unit: "MINUTES")
+                retry(2)
+            }
+            steps {
+                TestInVM("direct", "testing", "${env.CLEAR_LINUX_VERSION_1_15}")
+            }
+        }
+
         stage('testing 1.14 LVM') {
+            when { not { changeRequest() } }
             options {
                 timeout(time: 90, unit: "MINUTES")
                 retry(2)
@@ -147,6 +169,7 @@ pipeline {
         }
 
         stage('testing 1.14 direct') {
+            when { not { changeRequest() } }
             options {
                 timeout(time: 180, unit: "MINUTES")
                 retry(2)
@@ -182,6 +205,28 @@ pipeline {
           In production we can only run E2E testing, no sanity testing.
           Therefore it is faster.
         */
+
+        stage('production 1.15 LVM') {
+            when { not { changeRequest() } }
+            options {
+                timeout(time: 30, unit: "MINUTES")
+                retry(2)
+            }
+            steps {
+                TestInVM("lvm", "production", "${env.CLEAR_LINUX_VERSION_1_15}")
+            }
+        }
+
+        stage('production 1.15 direct') {
+            when { not { changeRequest() } }
+            options {
+                timeout(time: 30, unit: "MINUTES")
+                retry(2)
+            }
+            steps {
+                TestInVM("direct", "production", "${env.CLEAR_LINUX_VERSION_1_15}")
+            }
+        }
 
         stage('production 1.14 LVM') {
             when { not { changeRequest() } }
