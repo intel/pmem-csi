@@ -143,7 +143,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("lvm", "testing", "${env.CLEAR_LINUX_VERSION_1_15}")
+                TestInVM("lvm", "testing", "clear", "${env.CLEAR_LINUX_VERSION_1_15}", "")
             }
         }
 
@@ -153,7 +153,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("direct", "testing", "${env.CLEAR_LINUX_VERSION_1_15}")
+                TestInVM("direct", "testing", "clear", "${env.CLEAR_LINUX_VERSION_1_15}", "")
             }
         }
 
@@ -164,7 +164,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("lvm", "testing", "${env.CLEAR_LINUX_VERSION_1_14}")
+                TestInVM("lvm", "testing", "fedora", "", "1.14")
             }
         }
 
@@ -175,7 +175,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("direct", "testing", "${env.CLEAR_LINUX_VERSION_1_14}")
+                TestInVM("direct", "testing", "fedora", "", "1.14")
             }
         }
 
@@ -186,7 +186,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("lvm", "testing", "${env.CLEAR_LINUX_VERSION_1_13}")
+                TestInVM("lvm", "testing", "fedora", "", "1.13")
             }
         }
 
@@ -197,7 +197,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("direct", "testing", "${env.CLEAR_LINUX_VERSION_1_13}")
+                TestInVM("direct", "testing", "fedora", "", "1.13")
             }
         }
 
@@ -213,7 +213,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("lvm", "production", "${env.CLEAR_LINUX_VERSION_1_15}")
+                TestInVM("lvm", "production", "fedora", "", "1.15")
             }
         }
 
@@ -224,7 +224,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("direct", "production", "${env.CLEAR_LINUX_VERSION_1_15}")
+                TestInVM("direct", "production", "fedora", "", "1.15")
             }
         }
 
@@ -235,7 +235,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("lvm", "production", "${env.CLEAR_LINUX_VERSION_1_14}")
+                TestInVM("lvm", "production", "fedora", "", "1.14")
             }
         }
 
@@ -246,7 +246,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("direct", "production", "${env.CLEAR_LINUX_VERSION_1_14}")
+                TestInVM("direct", "production", "fedora", "", "1.14")
             }
         }
 
@@ -257,7 +257,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("lvm", "production", "${env.CLEAR_LINUX_VERSION_1_13}")
+                TestInVM("lvm", "production", "fedora", "", "1.13")
             }
         }
 
@@ -268,7 +268,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("direct", "production", "${env.CLEAR_LINUX_VERSION_1_13}")
+                TestInVM("direct", "production", "fedora", "", "1.13")
             }
         }
 
@@ -356,7 +356,7 @@ String DockerBuildArgs() {
     "
 }
 
-void TestInVM(deviceMode, deploymentMode, clearVersion) {
+void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersion) {
     try {
         /*
         We have to run "make start" in the current directory
@@ -380,7 +380,9 @@ void TestInVM(deviceMode, deploymentMode, clearVersion) {
                   -e TEST_DEPLOYMENTMODE=${deploymentMode} \
                   -e TEST_CREATE_REGISTRY=true \
                   -e TEST_CHECK_SIGNED_FILES=false \
-                  -e TEST_CLEAR_LINUX_VERSION=${clearVersion} \
+                  -e TEST_DISTRO=${distro} \
+                  -e TEST_DISTRO_VERSION=${distroVersion} \
+                  -e TEST_KUBERNETES_VERSION=${kubernetesVersion} \
                   ${DockerBuildArgs()} \
                   -v `pwd`:`pwd` \
                   -w `pwd` \
