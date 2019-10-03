@@ -137,23 +137,23 @@ pipeline {
             }
         }
 
-        stage('testing 1.15 LVM') {
+        stage('testing 1.16 LVM') {
             options {
                 timeout(time: 90, unit: "MINUTES")
                 retry(2)
             }
             steps {
-                TestInVM("lvm", "testing", "clear", "${env.CLEAR_LINUX_VERSION_1_15}", "")
+                TestInVM("lvm", "testing", "fedora", "", "1.16")
             }
         }
 
-        stage('testing 1.15 direct') {
+        stage('testing 1.16 direct') {
             options {
                 timeout(time: 180, unit: "MINUTES")
                 retry(2)
             }
             steps {
-                TestInVM("direct", "testing", "clear", "${env.CLEAR_LINUX_VERSION_1_15}", "")
+                TestInVM("direct", "testing", "fedora", "", "1.16")
             }
         }
 
@@ -205,6 +205,16 @@ pipeline {
           In production we can only run E2E testing, no sanity testing.
           Therefore it is faster.
         */
+
+        stage('production 1.15, Clear Linux') {
+            options {
+                timeout(time: 90, unit: "MINUTES")
+                retry(2)
+            }
+            steps {
+                TestInVM("lvm", "production", "clear", "${env.CLEAR_LINUX_VERSION_1_15}", "")
+            }
+        }
 
         stage('production 1.15 LVM') {
             when { not { changeRequest() } }
