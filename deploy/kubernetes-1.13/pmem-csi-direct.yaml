@@ -193,7 +193,7 @@ spec:
             path: pmem-csi-registry.key
           secretName: pmem-csi-registry-secrets
 ---
-apiVersion: apps/v1beta2
+apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: pmem-csi-node

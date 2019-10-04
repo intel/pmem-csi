@@ -99,6 +99,15 @@ fi
 # (https://github.com/clearlinux/distribution/issues/85).
 : ${TEST_CHECK_SIGNED_FILES:=true}
 
+# The operating system to install inside the nodes.
+: ${TEST_OS:=clear}
+
 # If set to a number, that version of Clear Linux is installed
 # instead of the latest one.
-: ${TEST_CLEAR_LINUX_VERSION:=}
+: ${TEST_DISTRO_VERSION:=}
+
+# If set to a <major>.<minor> number, that version of Kubernetes
+# is installed instead of the latest one. Ignored when
+# using Clear Linux as OS because with Clear Linux we have
+# to use the Kubernetes version that ships with it.
+: ${TEST_KUBERNETES_VERSION:=1.16}

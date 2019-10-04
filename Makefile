@@ -108,8 +108,8 @@ clean:
 # All of the commands operate on a cluster stored in _work/$(CLUSTER),
 # which defaults to _work/clear-govm. This can be changed with
 # make variables, for example:
-#   CLUSTER=clear-govm-crio TEST_CRI=crio make start
-export CLUSTER ?= clear-govm
+#   CLUSTER=pmem-govm-crio TEST_CRI=crio make start
+export CLUSTER ?= pmem-govm
 include test/start-stop.make
 include test/test.make
 
