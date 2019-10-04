@@ -24,7 +24,7 @@ FLAVOR="${FLAVOR:-medium}"
 SSH_KEY="${SSH_KEY:-${RESOURCES_DIRECTORY}/id_rsa}"
 SSH_PUBLIC_KEY="${SSH_KEY}.pub"
 KVM_CPU_OPTS="${KVM_CPU_OPTS:-\
- -m 2G,slots=${TEST_MEM_SLOTS:-2},maxmem=34G -smp 4\
+ -m 4G,slots=${TEST_MEM_SLOTS:-2},maxmem=36G -smp 4\
  -machine pc,accel=kvm,nvdimm=on}"
 EXTRA_QEMU_OPTS="${EXTRA_QWEMU_OPTS:-\
  -object memory-backend-file,id=mem1,share=${TEST_PMEM_SHARE:-on},\
