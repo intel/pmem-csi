@@ -50,6 +50,14 @@ pipeline {
             steps {
                 sh 'docker version'
                 sh 'git version'
+                sh 'free || true'
+                sh 'command -v top >/dev/null 2>&1 || \
+                    if command -v apt-get >/dev/null 2>&1; then \
+                        sudo apt-get install procps; \
+                    else \
+                        sudo yum -y install procps; \
+                    fi'
+                sh 'head -n 30 /proc/cpuinfo; echo ...; tail -n 30 /proc/cpuinfo'
                 sh "git remote set-url origin git@github.com:intel/pmem-csi.git"
                 sh "git config user.name 'Intel Kubernetes CI/CD Bot'"
                 sh "git config user.email 'k8s-bot@intel.com'"
@@ -382,6 +390,8 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
         https://github.com/intel/pmem-CSI/pull/309#issuecomment-504659383)
         */
         sh " \
+           sudo journalctl -f & \
+           ( set +x; while true; do sleep 30; top -b -n 1 -w 120 | head -n 20; done ) & \
            docker run --rm \
                   -e CLUSTER=clear \
                   -e GOVM_YAML=`pwd`/_work/clear/deployment.yaml \
@@ -397,8 +407,22 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                   -v `pwd`:`pwd` \
                   -w `pwd` \
                   ${env.BUILD_IMAGE} \
-                  bash -c 'swupd bundle-add openssh-server && \
+                  bash -c 'set -x; \
+                           swupd bundle-add openssh-server && \
                            make start && cd ${env.PMEM_PATH} && \
+                           _work/clear/ssh.0 kubectl get pods --all-namespaces -o wide && \
+                           for pod in etcd kube-apiserver kube-controller-manager kube-scheduler; do \
+                               _work/clear/ssh.0 kubectl logs -f -n kube-system \$pod-pmem-csi-clear-master | sed -e \"s/^/\$pod: /\" & \
+                           done && \
+                           for ssh in \$(ls _work/clear/ssh.[0-9]); do \
+                               hostname=\$(\$ssh hostname) && \
+                               ( set +x; \
+                                 while true; do \$ssh journalctl -f; done & \
+                                 while true; do \
+                                     sleep 30; \
+                                     \$ssh top -b -n 1 -w 120 2>&1 | head -n 20; \
+                                 done ) | sed -e \"s/^/\$hostname: /\" & \
+                           done && \
                            make test_e2e' \
            "
     } finally {
