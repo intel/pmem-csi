@@ -95,7 +95,7 @@ func NewNodeControllerServer(nodeID string, dm pmdmanager.PmemDeviceManager, sm 
 		err = sm.GetAll(v, func(id string) bool {
 			// See if the device data stored at StateManager is still valid
 			for _, devInfo := range devices {
-				if devInfo.Name == id {
+				if devInfo.VolumeId == id {
 					ncs.pmemVolumes[id] = v.Copy()
 					return true
 				}

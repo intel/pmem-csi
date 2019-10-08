@@ -89,17 +89,17 @@ func (pmem *pmemNdctl) GetCapacity() (map[string]uint64, error) {
 	return Capacity, nil
 }
 
-func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) error {
+func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64, nsmode string) error {
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
-	// Check that such name does not exist. In certain error states, for example when
+	// Check that such volume does not exist. In certain error states, for example when
 	// namespace creation works but device zeroing fails (missing /dev/pmemX.Y in container),
 	// this function is asked to create new devices repeatedly, forcing running out of space.
 	// Avoid device filling with garbage entries by returning error.
 	// Overall, no point having more than one namespace with same name.
-	_, err := pmem.getDevice(name)
+	_, err := pmem.getDevice(volumeId)
 	if err == nil {
-		klog.V(4).Infof("Device with name: %s already exists, refuse to create another", name)
+		klog.V(4).Infof("Device with name: %s already exists, refuse to create another", volumeId)
 		return fmt.Errorf("CreateDevice: Failed: namespace with that name exists")
 	}
 	// libndctl needs to store meta data and will use some of the allocated
@@ -111,7 +111,7 @@ func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) err
 	size += ndctlAlign
 	klog.V(4).Infof("Compensate for libndctl creating one alignment step smaller: increase size to %d", size)
 	ns, err := pmem.ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
-		Name:  name,
+		Name:  volumeId,
 		Size:  size,
 		Align: ndctlAlign,
 		Mode:  ndctl.NamespaceMode(nsmode),
@@ -122,7 +122,7 @@ func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) err
 	data, _ := ns.MarshalJSON() //nolint: gosec
 	klog.V(3).Infof("Namespace created: %s", data)
 	// clear start of device to avoid old data being recognized as file system
-	device, err := pmem.getDevice(name)
+	device, err := pmem.getDevice(volumeId)
 	if err != nil {
 		return err
 	}
@@ -134,11 +134,11 @@ func (pmem *pmemNdctl) CreateDevice(name string, size uint64, nsmode string) err
 	return nil
 }
 
-func (pmem *pmemNdctl) DeleteDevice(name string, flush bool) error {
+func (pmem *pmemNdctl) DeleteDevice(volumeId string, flush bool) error {
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
 
-	device, err := pmem.getDevice(name)
+	device, err := pmem.getDevice(volumeId)
 	if err != nil {
 		return err
 	}
@@ -146,25 +146,25 @@ func (pmem *pmemNdctl) DeleteDevice(name string, flush bool) error {
 	if err != nil {
 		return err
 	}
-	return pmem.ctx.DestroyNamespaceByName(name)
+	return pmem.ctx.DestroyNamespaceByName(volumeId)
 }
 
-func (pmem *pmemNdctl) FlushDeviceData(name string) error {
+func (pmem *pmemNdctl) FlushDeviceData(volumeId string) error {
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
 
-	device, err := pmem.getDevice(name)
+	device, err := pmem.getDevice(volumeId)
 	if err != nil {
 		return err
 	}
 	return ClearDevice(device, true)
 }
 
-func (pmem *pmemNdctl) GetDevice(name string) (PmemDeviceInfo, error) {
+func (pmem *pmemNdctl) GetDevice(volumeId string) (PmemDeviceInfo, error) {
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
 
-	return pmem.getDevice(name)
+	return pmem.getDevice(volumeId)
 }
 
 func (pmem *pmemNdctl) ListDevices() ([]PmemDeviceInfo, error) {
@@ -178,8 +178,8 @@ func (pmem *pmemNdctl) ListDevices() ([]PmemDeviceInfo, error) {
 	return devices, nil
 }
 
-func (pmem *pmemNdctl) getDevice(name string) (PmemDeviceInfo, error) {
-	ns, err := pmem.ctx.GetNamespaceByName(name)
+func (pmem *pmemNdctl) getDevice(volumeId string) (PmemDeviceInfo, error) {
+	ns, err := pmem.ctx.GetNamespaceByName(volumeId)
 	if err != nil {
 		return PmemDeviceInfo{}, err
 	}
@@ -189,8 +189,8 @@ func (pmem *pmemNdctl) getDevice(name string) (PmemDeviceInfo, error) {
 
 func namespaceToPmemInfo(ns *ndctl.Namespace) PmemDeviceInfo {
 	return PmemDeviceInfo{
-		Name: ns.Name(),
-		Path: "/dev/" + ns.BlockDeviceName(),
-		Size: ns.Size(),
+		VolumeId: ns.Name(),
+		Path:     "/dev/" + ns.BlockDeviceName(),
+		Size:     ns.Size(),
 	}
 }

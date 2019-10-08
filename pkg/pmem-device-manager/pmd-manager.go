@@ -2,8 +2,8 @@ package pmdmanager
 
 //PmemDeviceInfo represents a block device
 type PmemDeviceInfo struct {
-	//Name name of the block device
-	Name string
+	//VolumeId is name of the block device
+	VolumeId string
 	//Path actual device path
 	Path string
 	//Size size allocated for block device
