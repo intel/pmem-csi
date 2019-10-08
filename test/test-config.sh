@@ -77,6 +77,9 @@ fi
 : ${TEST_PMEM_SHARE:=on}
 : ${TEST_PMEM_LABEL_SIZE:=2097152}
 
+# Number of CPUS in QEMU VM. Must be at least 2 for Kubernetes.
+: ${TEST_NUM_CPUS:=4}
+
 # Kubernetes feature gates to enable/disable
 # featurename=true,feature=false
 : ${TEST_FEATURE_GATES:=CSINodeInfo=true,CSIDriverRegistry=true}

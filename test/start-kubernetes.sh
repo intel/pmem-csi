@@ -20,16 +20,16 @@ NODES=( $DEPLOYMENT_ID-master
         $DEPLOYMENT_ID-worker2
         $DEPLOYMENT_ID-worker3)
 CLOUD="${CLOUD:-true}"
-FLAVOR="${FLAVOR:-medium}"
+FLAVOR="${FLAVOR:-medium}" # actual memory size and CPUs selected below
 SSH_KEY="${SSH_KEY:-${RESOURCES_DIRECTORY}/id_rsa}"
 SSH_PUBLIC_KEY="${SSH_KEY}.pub"
 KVM_CPU_OPTS="${KVM_CPU_OPTS:-\
- -m 4G,slots=${TEST_MEM_SLOTS:-2},maxmem=36G -smp 4\
+ -m ${TEST_NORMAL_MEM_SIZE}M,slots=${TEST_MEM_SLOTS},maxmem=$((${TEST_NORMAL_MEM_SIZE} + ${TEST_PMEM_MEM_SIZE}))M -smp ${TEST_NUM_CPUS} \
  -machine pc,accel=kvm,nvdimm=on}"
 EXTRA_QEMU_OPTS="${EXTRA_QWEMU_OPTS:-\
- -object memory-backend-file,id=mem1,share=${TEST_PMEM_SHARE:-on},\
-mem-path=/data/nvdimm0,size=${TEST_PMEM_MEM_SIZE:-32768}M \
- -device nvdimm,id=nvdimm1,memdev=mem1,label-size=${TEST_PMEM_LABEL_SIZE:-2097152} \
+ -object memory-backend-file,id=mem1,share=${TEST_PMEM_SHARE},\
+mem-path=/data/nvdimm0,size=${TEST_PMEM_MEM_SIZE}M \
+ -device nvdimm,id=nvdimm1,memdev=mem1,label-size=${TEST_PMEM_LABEL_SIZE} \
  -machine pc,nvdimm}"
 
 # Set distro-specific defaults.
