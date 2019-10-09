@@ -294,6 +294,61 @@ var _ = Describe("sanity", func() {
 			}, "3m", "5s").Should(Equal(capacity.AvailableCapacity), "total capacity after controller restart")
 		})
 
+		It("should return right capacity", func() {
+			resp, err := ncc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
+			Expect(err).Should(BeNil(), "Failed to get node initial capacity")
+			nodeCapacity := resp.AvailableCapacity
+			i := 0
+			volSize := int64(1) * 1024 * 1024 * 1024
+
+			// Keep creating volumes till there is change in node capacity
+			Eventually(func() bool {
+				volName := fmt.Sprintf("get-capacity-check-%d", i)
+				i++
+				By(fmt.Sprintf("creating volume '%s' on node '%s'", volName, nodeID))
+				req := &csi.CreateVolumeRequest{
+					Name: volName,
+					VolumeCapabilities: []*csi.VolumeCapability{
+						{
+							AccessType: &csi.VolumeCapability_Mount{
+								Mount: &csi.VolumeCapability_MountVolume{},
+							},
+							AccessMode: &csi.VolumeCapability_AccessMode{
+								Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+							},
+						},
+					},
+					CapacityRange: &csi.CapacityRange{
+						RequiredBytes: volSize,
+					},
+				}
+				volResp, err := ncc.CreateVolume(context.Background(), req)
+				Expect(err).Should(BeNil(), "Failed to create volume on node")
+				cl.MaybeRegisterVolume(volName, volResp, err)
+
+				resp, err := ncc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
+				Expect(err).Should(BeNil(), "Failed to get node capacity after volume creation")
+
+				// find if change in capacity
+				ret := nodeCapacity != resp.AvailableCapacity
+				// capture the new capacity
+				nodeCapacity = resp.AvailableCapacity
+
+				return ret
+			})
+
+			By("Getting controller capacity")
+			resp, err = cc.GetCapacity(context.Background(), &csi.GetCapacityRequest{
+				AccessibleTopology: &csi.Topology{
+					Segments: map[string]string{
+						"pmem-csi.intel.com/node": nodeID,
+					},
+				},
+			})
+			Expect(err).Should(BeNil(), "Failed to get capacity of controller")
+			Expect(resp.AvailableCapacity).To(Equal(nodeCapacity), "capacity mismatch")
+		})
+
 		var (
 			numWorkers = flag.Int("pmem.sanity.workers", 10, "number of worker creating volumes in parallel and thus also the maximum number of volumes at any time")
 			numVolumes = flag.Int("pmem.sanity.volumes",
