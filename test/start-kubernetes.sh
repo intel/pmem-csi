@@ -82,8 +82,15 @@ function die() {
 }
 
 function download() {
+    # Sometimes we just have a temporary connection issue or bad mirror, try repeatedly.
     echo >&2 "Downloading ${IMAGE_URL}/${CLOUD_IMAGE} image"
-    curl --fail --location --output "${CLOUD_IMAGE}" "${IMAGE_URL}/${CLOUD_IMAGE}" || die "failed to download ${IMAGE_URL}/${CLOUD_IMAGE}"
+    local cnt=0
+    while ! curl --fail --location --output "${CLOUD_IMAGE}" "${IMAGE_URL}/${CLOUD_IMAGE}"; do
+        if [ $cnt -ge 5 ]; then
+            die "Download failed repeatedly, giving up."
+        fi
+        cnt=$(($cnt + 1))
+    done
 }
 
 function download_image() (
