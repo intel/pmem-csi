@@ -60,6 +60,10 @@ func NewPmemDeviceManagerLVM() (PmemDeviceManager, error) {
 	}
 	ctx.Free()
 
+	return NewPmemDeviceManagerLVMForVGs(volumeGroups)
+}
+
+func NewPmemDeviceManagerLVMForVGs(volumeGroups []string) (PmemDeviceManager, error) {
 	devices, err := listDevices(volumeGroups...)
 	if err != nil {
 		return nil, err

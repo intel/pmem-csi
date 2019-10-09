@@ -145,7 +145,7 @@ test_e2e: start
 .PHONY: run_tests
 test: run_tests
 RUN_TESTS = TEST_WORK=$(abspath _work) \
-	$(TEST_CMD) $(shell $(GO) list $(TEST_ARGS) | sed -e 's;$(IMPORT_PATH);.;')
+	$(TEST_CMD) $(shell $(GO) list $(TEST_ARGS) | grep -v pmem-device-manager | sed -e 's;$(IMPORT_PATH);.;')
 run_tests: _work/pmem-ca/.ca-stamp _work/evil-ca/.ca-stamp check-go-version-$(GO_BINARY)
 	$(RUN_TESTS)
 

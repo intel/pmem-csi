@@ -55,6 +55,7 @@ golang.org/x/time;golang time;BSD 3-clause "New" or "Revised" License
 google.golang.org/appengine;Golang appengine;Apache License 2.0
 google.golang.org/genproto;Google go-genproto;Apache License 2.0
 google.golang.org/grpc;grpc grpc-go;Apache License 2.0
+gopkg.in/freddierice/go-losetup.v1; Go losetup; MIT License
 gopkg.in/fsnotify.v1;fsnotify;BSD 3-clause "New" or "Revised" License
 gopkg.in/inf.v0;go-inf;BSD 3-clause "New" or "Revised" License
 gopkg.in/square/go-jose.v2;go-jose;Apache License 2.0
