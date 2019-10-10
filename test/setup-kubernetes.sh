@@ -70,6 +70,21 @@ apiServer:
     feature-gates: ${TEST_FEATURE_GATES}"
 fi
 
+if [ -e /dev/vdc ]; then
+    # We have an extra volume specifically for etcd (see TEST_ETCD_VOLUME_SIZE).
+    sudo mkdir -p /mnt/etcd-volume
+    sudo mkfs.ext4 /dev/vdc
+    sudo mount /dev/vdc /mnt/etcd-volume
+    # etcd wants an empty directory, giving it the volume fails due to "lost+found".
+    sudo mkdir /mnt/etcd-volume/etcd
+    sudo chmod a+rwx /mnt/etcd-volume/etcd
+    kubeadm_config_cluster="$kubeadm_config_cluster
+etcd:
+  local:
+    dataDir: /mnt/etcd-volume/etcd
+"
+fi
+
 # TODO: it is possible to set up each node in parallel, see
 # https://kubernetes.io/docs/reference/setup-tools/kubeadm/kubeadm-init/#automating-kubeadm
 

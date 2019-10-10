@@ -386,13 +386,18 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
         GOPATH. Once we can build outside of the GOPATH, we can
         simplify that to build inside one directory.
 
+        For mounting an etcd tmpfs inside the container such that Docker
+        on the host and thus QEMU can access it, privileges (for mount)
+        and shared mount propagation are needed.
+
         TODO: test in parallel (on different nodes? single node didn't work,
         https://github.com/intel/pmem-CSI/pull/309#issuecomment-504659383)
         */
         sh " \
            sudo journalctl -f & \
-           ( set +x; while true; do sleep 30; top -b -n 1 -w 120 | head -n 20; done ) & \
+           ( set +x; while true; do sleep 30; top -b -n 1 -w 120 | head -n 20; df -h; done ) & \
            docker run --rm \
+                  --privileged=true \
                   -e CLUSTER=clear \
                   -e GOVM_YAML=`pwd`/_work/clear/deployment.yaml \
                   -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
@@ -403,8 +408,9 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                   -e TEST_DISTRO=${distro} \
                   -e TEST_DISTRO_VERSION=${distroVersion} \
                   -e TEST_KUBERNETES_VERSION=${kubernetesVersion} \
+                  -e TEST_ETCD_VOLUME_SIZE=1073741824 \
                   ${DockerBuildArgs()} \
-                  -v `pwd`:`pwd` \
+                  --volume `pwd`:`pwd`:rshared \
                   -w `pwd` \
                   ${env.BUILD_IMAGE} \
                   bash -c 'set -x; \
@@ -428,6 +434,6 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
     } finally {
         // Always shut down the cluster to free up resources. As in "make start", we have to expose
         // the path as used on the host also inside the containner, but we don't need to be in it.
-        sh "docker run --rm -e CLUSTER=clear ${DockerBuildArgs()} -v `pwd`:`pwd` ${env.BUILD_IMAGE} make stop"
+        sh "docker run --rm --privileged=true -e CLUSTER=clear ${DockerBuildArgs()} -v `pwd`:`pwd`:rshared ${env.BUILD_IMAGE} make stop"
     }
 }
