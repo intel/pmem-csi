@@ -78,7 +78,7 @@ fi
 : ${TEST_PMEM_LABEL_SIZE:=2097152}
 
 # Number of CPUS in QEMU VM. Must be at least 2 for Kubernetes.
-: ${TEST_NUM_CPUS:=4}
+: ${TEST_NUM_CPUS:=2}
 
 # The etcd instance running on the master node can be configured to
 # store its data in a tmpfs volume that gets created on the build
