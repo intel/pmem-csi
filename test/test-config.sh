@@ -77,6 +77,18 @@ fi
 : ${TEST_PMEM_SHARE:=on}
 : ${TEST_PMEM_LABEL_SIZE:=2097152}
 
+# Number of CPUS in QEMU VM. Must be at least 2 for Kubernetes.
+: ${TEST_NUM_CPUS:=2}
+
+# The etcd instance running on the master node can be configured to
+# store its data in a tmpfs volume that gets created on the build
+# host. This is useful when the _work directory is on a slow disk
+# because that can lead to slow performance and failures
+# (https://github.com/kubernetes/kubernetes/issues/70082).
+#
+# This is the size of that volume in bytes, zero disables this feature.
+: ${TEST_ETCD_VOLUME_SIZE:=0}
+
 # Kubernetes feature gates to enable/disable
 # featurename=true,feature=false
 : ${TEST_FEATURE_GATES:=CSINodeInfo=true,CSIDriverRegistry=true}

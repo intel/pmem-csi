@@ -20,17 +20,27 @@ NODES=( $DEPLOYMENT_ID-master
         $DEPLOYMENT_ID-worker2
         $DEPLOYMENT_ID-worker3)
 CLOUD="${CLOUD:-true}"
-FLAVOR="${FLAVOR:-medium}"
+FLAVOR="${FLAVOR:-medium}" # actual memory size and CPUs selected below
 SSH_KEY="${SSH_KEY:-${RESOURCES_DIRECTORY}/id_rsa}"
 SSH_PUBLIC_KEY="${SSH_KEY}.pub"
 KVM_CPU_OPTS="${KVM_CPU_OPTS:-\
- -m 4G,slots=${TEST_MEM_SLOTS:-2},maxmem=36G -smp 4\
+ -m ${TEST_NORMAL_MEM_SIZE}M,slots=${TEST_MEM_SLOTS},maxmem=$((${TEST_NORMAL_MEM_SIZE} + ${TEST_PMEM_MEM_SIZE}))M -smp ${TEST_NUM_CPUS} \
  -machine pc,accel=kvm,nvdimm=on}"
 EXTRA_QEMU_OPTS="${EXTRA_QWEMU_OPTS:-\
- -object memory-backend-file,id=mem1,share=${TEST_PMEM_SHARE:-on},\
-mem-path=/data/nvdimm0,size=${TEST_PMEM_MEM_SIZE:-32768}M \
- -device nvdimm,id=nvdimm1,memdev=mem1,label-size=${TEST_PMEM_LABEL_SIZE:-2097152} \
+ -object memory-backend-file,id=mem1,share=${TEST_PMEM_SHARE},\
+mem-path=/data/nvdimm0,size=${TEST_PMEM_MEM_SIZE}M \
+ -device nvdimm,id=nvdimm1,memdev=mem1,label-size=${TEST_PMEM_LABEL_SIZE} \
  -machine pc,nvdimm}"
+EXTRA_MASTER_ETCD_VOLUME=
+
+
+# We might already be running as root, for example inside the
+# CI's build container.
+if [ $(id -u) -eq 0 ]; then
+    SUDO=env
+else
+    SUDO=sudo
+fi
 
 # Set distro-specific defaults.
 case ${TEST_DISTRO} in
@@ -82,8 +92,15 @@ function die() {
 }
 
 function download() {
+    # Sometimes we just have a temporary connection issue or bad mirror, try repeatedly.
     echo >&2 "Downloading ${IMAGE_URL}/${CLOUD_IMAGE} image"
-    curl --fail --location --output "${CLOUD_IMAGE}" "${IMAGE_URL}/${CLOUD_IMAGE}" || die "failed to download ${IMAGE_URL}/${CLOUD_IMAGE}"
+    local cnt=0
+    while ! curl --fail --location --output "${CLOUD_IMAGE}" "${IMAGE_URL}/${CLOUD_IMAGE}"; do
+        if [ $cnt -ge 5 ]; then
+            die "Download failed repeatedly, giving up."
+        fi
+        cnt=$(($cnt + 1))
+    done
 }
 
 function download_image() (
@@ -144,6 +161,25 @@ EOF
     echo "$CLOUD_IMAGE"
 ) 200>$LOCKFILE
 
+
+# Create a tmpfs volume for etcd. It will become /dev/vdc inside
+# the master VMs where it will be used by setup-kubernetes.sh.
+# The file must be in the "data" directory used for master,
+# because that directory is available inside the Docker
+# container where QEMU runs.
+function setup_etcd_volume() (
+    if [ "${TEST_ETCD_VOLUME_SIZE}" -gt 0 ]; then
+        etcd_volume_path="${WORKING_DIRECTORY}/data/pmem-csi-${CLUSTER}-master/etcd-volume"
+        # Unmount old volume, in case that the size changed and to get rid of old data.
+        $SUDO umount --lazy "${etcd_volume_path}" >/dev/null 2>&1|| true
+        mkdir -p "${etcd_volume_path}"
+        $SUDO mount -osize="${TEST_ETCD_VOLUME_SIZE}" -t tmpfs none "${etcd_volume_path}" || die "failed to mount tmpfs with size ${TEST_ETCD_VOLUME_SIZE} on ${etcd_volume_path}"
+        etcd_volume_disk="${etcd_volume_path}/disk"
+        $SUDO truncate --size="${TEST_ETCD_VOLUME_SIZE}" "${etcd_volume_disk}" || die "failed to enlarge disk file ${etcd_volume_disk} to size ${TEST_ETCD_VOLUME_SIZE}"
+        echo "${etcd_volume_path}"
+    fi
+)
+
 function print_govm_yaml() (
     cat  <<EOF
 ---
@@ -165,7 +201,7 @@ EOF
         ${KVM_CPU_OPTS}
       - |
         EXTRA_QEMU_OPTS=
-        ${EXTRA_QEMU_OPTS}
+        ${EXTRA_QEMU_OPTS} $(if [[ "$node" =~ -master$ ]] && [ "$EXTRA_MASTER_ETCD_VOLUME" ]; then echo "-drive file=/data/$(basename "$EXTRA_MASTER_ETCD_VOLUME")/disk,if=virtio,format=raw"; fi )
 EOF
     done
 )
@@ -187,7 +223,16 @@ function create_vms() (
         cat <<EOF
 #!/bin/bash -e
 $(for i in $machines; do echo govm remove $i; done)
-rm -rf ${WORKING_DIRECTORY}
+if [ '${EXTRA_MASTER_ETCD_VOLUME}' ] && mount | grep -q '${EXTRA_MASTER_ETCD_VOLUME}'; then
+    # Somehow the volume was still busy in the CI (mount propagation too slow?).
+    # --lazy was meant to force removal of the mount point from the
+    # filesystem, but ...
+    $SUDO umount --lazy '${EXTRA_MASTER_ETCD_VOLUME}'
+    # ... "rm -rf" still failed with "etcd-volume busy". We simply ignore that.
+    rm -rf ${WORKING_DIRECTORY} || true
+else
+    rm -rf ${WORKING_DIRECTORY}
+fi
 EOF
     ) > $STOP_VMS_SCRIPT && chmod +x $STOP_VMS_SCRIPT || die "failed to create $STOP_VMS_SCRIPT"
 
@@ -386,6 +431,9 @@ function cleanup() (
         for vm in $(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-(master|worker[[:digit:]]+)$") "Name"}}'); do
             govm remove "$vm"
         done
+        if [ "${EXTRA_MASTER_ETCD_VOLUME}" ] && mount | grep -q "${EXTRA_MASTER_ETCD_VOLUME}"; then
+            $SUDO umount --lazy "${EXTRA_MASTER_ETCD_VOLUME}"
+        fi
         rm -rf $WORKING_DIRECTORY
     fi
 )
@@ -394,6 +442,7 @@ check_status # exits if nothing to do
 trap cleanup EXIT
 
 if init_workdir &&
+   EXTRA_MASTER_ETCD_VOLUME=$(setup_etcd_volume) &&
    CLOUD_IMAGE=$(download_image) &&
    create_vms &&
    init_kubernetes_cluster; then

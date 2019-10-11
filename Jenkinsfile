@@ -50,6 +50,14 @@ pipeline {
             steps {
                 sh 'docker version'
                 sh 'git version'
+                sh 'free || true'
+                sh 'command -v top >/dev/null 2>&1 || \
+                    if command -v apt-get >/dev/null 2>&1; then \
+                        sudo apt-get install procps; \
+                    else \
+                        sudo yum -y install procps; \
+                    fi'
+                sh 'head -n 30 /proc/cpuinfo; echo ...; tail -n 30 /proc/cpuinfo'
                 sh "git remote set-url origin git@github.com:intel/pmem-csi.git"
                 sh "git config user.name 'Intel Kubernetes CI/CD Bot'"
                 sh "git config user.email 'k8s-bot@intel.com'"
@@ -378,11 +386,18 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
         GOPATH. Once we can build outside of the GOPATH, we can
         simplify that to build inside one directory.
 
+        For mounting an etcd tmpfs inside the container such that Docker
+        on the host and thus QEMU can access it, privileges (for mount)
+        and shared mount propagation are needed.
+
         TODO: test in parallel (on different nodes? single node didn't work,
         https://github.com/intel/pmem-CSI/pull/309#issuecomment-504659383)
         */
         sh " \
+           sudo journalctl -f & \
+           ( set +x; while true; do sleep 30; top -b -n 1 -w 120 | head -n 20; df -h; done ) & \
            docker run --rm \
+                  --privileged=true \
                   -e CLUSTER=clear \
                   -e GOVM_YAML=`pwd`/_work/clear/deployment.yaml \
                   -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
@@ -393,17 +408,32 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                   -e TEST_DISTRO=${distro} \
                   -e TEST_DISTRO_VERSION=${distroVersion} \
                   -e TEST_KUBERNETES_VERSION=${kubernetesVersion} \
+                  -e TEST_ETCD_VOLUME_SIZE=1073741824 \
                   ${DockerBuildArgs()} \
-                  -v `pwd`:`pwd` \
+                  --volume `pwd`:`pwd`:rshared \
                   -w `pwd` \
                   ${env.BUILD_IMAGE} \
-                  bash -c 'swupd bundle-add openssh-server && \
+                  bash -c 'set -x; \
+                           swupd bundle-add openssh-server && \
                            make start && cd ${env.PMEM_PATH} && \
+                           _work/clear/ssh.0 kubectl get pods --all-namespaces -o wide && \
+                           for pod in etcd kube-apiserver kube-controller-manager kube-scheduler; do \
+                               _work/clear/ssh.0 kubectl logs -f -n kube-system \$pod-pmem-csi-clear-master | sed -e \"s/^/\$pod: /\" & \
+                           done && \
+                           for ssh in \$(ls _work/clear/ssh.[0-9]); do \
+                               hostname=\$(\$ssh hostname) && \
+                               ( set +x; \
+                                 while true; do \$ssh journalctl -f; done & \
+                                 while true; do \
+                                     sleep 30; \
+                                     \$ssh top -b -n 1 -w 120 2>&1 | head -n 20; \
+                                 done ) | sed -e \"s/^/\$hostname: /\" & \
+                           done && \
                            make test_e2e' \
            "
     } finally {
         // Always shut down the cluster to free up resources. As in "make start", we have to expose
         // the path as used on the host also inside the containner, but we don't need to be in it.
-        sh "docker run --rm -e CLUSTER=clear ${DockerBuildArgs()} -v `pwd`:`pwd` ${env.BUILD_IMAGE} make stop"
+        sh "docker run --rm --privileged=true -e CLUSTER=clear ${DockerBuildArgs()} -v `pwd`:`pwd`:rshared ${env.BUILD_IMAGE} make stop"
     }
 }

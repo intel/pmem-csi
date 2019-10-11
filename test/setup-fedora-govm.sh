@@ -63,7 +63,23 @@ case ${TEST_KUBERNETES_VERSION} in
 esac
 packages+=" --disableexcludes=kubernetes"
 
-yum install -y $packages
+# Sometimes we hit a bad mirror and get "Failed to synchronize cache for repo ...".
+# https://unix.stackexchange.com/questions/487635/fedora-29-failed-to-synchronize-cache-for-repo-fedora-modular
+# suggests to try again after a `dnf update --refresh`, so that's what we do here for
+# a maximum of 5 attempts.
+cnt=0
+while ! yum install -y $packages; do
+    if [ $cnt -ge 5 ]; then
+        echo "yum install failed repeatedly, giving up"
+        exit 1
+    fi
+    cnt=$(($cnt + 1))
+    # If it works, proceed immediately. If it fails, sleep and try again without aborting on an error.
+    if ! dnf update --refresh; then
+        sleep 20
+        dnf update --refresh || true
+    fi
+done
 
 # Upstream kubelet looks in /opt/cni/bin, actual files are in
 # /usr/libexec/cni from
