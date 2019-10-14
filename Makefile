@@ -91,8 +91,20 @@ push-images: push-image push-test-image
 build-image build-test-image: build%-image:
 	docker build --pull --build-arg CACHEBUST=$(BUILD_IMAGE_ID) --build-arg BIN_SUFFIX=$(findstring -test,$*) $(BUILD_ARGS) -t $(IMAGE_TAG) -f ./Dockerfile . --label revision=$(VERSION)
 PUSH_IMAGE_DEP = build%-image
-push-image push-test-image: push%-image: $(PUSH_IMAGE_DEP)
-	docker push $(IMAGE_TAG)
+# "docker push" has been seen to fail temporarily with "error creating overlay mount to /var/lib/docker/overlay2/xxx/merged: device or resource busy".
+# Here we simply try three times before giving up.
+push-image push-test-image: push%-image: # $(PUSH_IMAGE_DEP)
+	@ i=0; while true; do \
+		if (set -x; docker push $(IMAGE_TAG)); then \
+			exit 0; \
+		elif [ $$i -ge 2 ]; then \
+			echo "'docker push' failed repeatedly, giving up"; \
+			exit; \
+		else \
+			echo "attempt #$$i: 'docker push' failed, will try again"; \
+			i=$$(($$i + 1)); \
+		fi; \
+	done
 
 .PHONY: print-image-version
 print-image-version:
