@@ -420,6 +420,7 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                            for pod in etcd kube-apiserver kube-controller-manager kube-scheduler; do \
                                _work/clear/ssh.0 kubectl logs -f -n kube-system \$pod-pmem-csi-clear-master | sed -e \"s/^/\$pod: /\" & \
                            done && \
+                           _work/clear/ssh.0 tar -C / -cf - usr/bin/kubectl | tar -C /usr/local/bin --strip-components=2 -xf - && \
                            for ssh in \$(ls _work/clear/ssh.[0-9]); do \
                                hostname=\$(\$ssh hostname) && \
                                ( set +x; \
