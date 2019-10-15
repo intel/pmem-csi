@@ -373,7 +373,19 @@ EOF
             docker save "$image" | ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} sudo docker load || die "failed to copy $image"
             echo Load $image into registry
             ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} sudo docker tag "$image" "$remoteimage" || die "failed to tag $image as $remoteimage"
-            ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} sudo docker push "$remoteimage" || die "failed to push $remoteimage"
+            # "docker push" has been seen to fail temporarily with "error creating overlay mount to /var/lib/docker/overlay2/xxx/merged: device or resource busy".
+            # Here we simply try three times before giving up.
+	    local i=0
+            while true; do
+		if (set -x; ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} sudo docker push "$remoteimage"); then
+		    break
+		elif [ $i -ge 2 ]; then
+		    die "'docker push' failed repeatedly, giving up"
+		else
+		    echo "attempt #$i: 'docker push' failed, will try again"
+		    i=$(($i + 1))
+		fi
+	    done
         done
 
         # TEST_PMEM_REGISTRY in test-config.sh uses this machine name as registry,
