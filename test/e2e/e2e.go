@@ -29,6 +29,8 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/pkg/version"
 	"k8s.io/kubernetes/test/e2e/framework"
+	"k8s.io/kubernetes/test/e2e/framework/ginkgowrapper"
+	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"k8s.io/kubernetes/test/e2e/framework/podlogs"
 )
 
@@ -83,7 +85,7 @@ var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 	// #41007. To avoid those pods preventing the whole test runs (and just
 	// wasting the whole run), we allow for some not-ready pods (with the
 	// number equal to the number of allowed not-ready nodes).
-	if err := framework.WaitForPodsRunningReady(c, metav1.NamespaceSystem, int32(framework.TestContext.MinStartupPods), int32(framework.TestContext.AllowedNotReadyNodes), podStartupTimeout, map[string]string{}); err != nil {
+	if err := e2epod.WaitForPodsRunningReady(c, metav1.NamespaceSystem, int32(framework.TestContext.MinStartupPods), int32(framework.TestContext.AllowedNotReadyNodes), podStartupTimeout, map[string]string{}); err != nil {
 		framework.DumpAllNamespaceInfo(c, metav1.NamespaceSystem)
 		framework.LogFailedContainers(c, metav1.NamespaceSystem, framework.Logf)
 		framework.Failf("Error waiting for all pods to be running and ready: %v", err)
@@ -144,9 +146,7 @@ var _ = ginkgo.SynchronizedAfterSuite(func() {
 // E2E tests using the Ginkgo runner.
 // This function is called on each Ginkgo node in parallel mode.
 func RunE2ETests(t *testing.T) {
-	// TODO: with "ginkgo ./test/e2e" we shouldn't get verbose output, but somehow we do.
-	// TODO: use ginkgowrapper.Fail again after upstreaming our enhancements in wrapper.go
-	gomega.RegisterFailHandler(FailWrapper)
+	gomega.RegisterFailHandler(ginkgowrapper.Fail)
 	ginkgo.RunSpecs(t, "PMEM E2E suite")
 }
 

@@ -24,7 +24,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -64,7 +64,7 @@ var _ = Describe("PMEM Volumes", func() {
 					Name:        "pmem-csi",
 					MaxFileSize: testpatterns.FileSizeMedium,
 					SupportedFsType: sets.NewString(
-						"", // Default fsType
+						"ext4", "xfs",
 					),
 					Capabilities: map[testsuites.Capability]bool{
 						testsuites.CapPersistence: true,
@@ -72,14 +72,14 @@ var _ = Describe("PMEM Volumes", func() {
 						testsuites.CapExec:        true,
 					},
 				},
-				scManifest: "deploy/kubernetes-1.13/pmem-storageclass-ext4.yaml",
-				// Renaming of the driver *not* enabled. It doesn't support
-				// that because there is only one instance of the registry
-				// and on each node the driver assumes that it has exclusive
-				// control of the PMEM. As a result, tests have to be run
-				// sequentially becaust each test creates and removes
-				// the driver deployment.
-				claimSize: "1Mi",
+				scManifest: map[string]string{
+					"ext4": "deploy/kubernetes-1.13/pmem-storageclass-ext4.yaml",
+					"xfs":  "deploy/kubernetes-1.13/pmem-storageclass-xfs.yaml",
+				},
+				// We use 16Mi size volumes because this is the minimum size supported
+				// by xfs filesystem's allocation group
+				// Ref: http://man7.org/linux/man-pages/man8/mkfs.xfs.8.html
+				claimSize: "16Mi",
 			}
 		},
 	}
@@ -93,7 +93,7 @@ var _ = Describe("PMEM Volumes", func() {
 		// testsuites.InitSubPathTestSuite,
 		// testsuites.InitVolumeIOTestSuite,
 		// testsuites.InitVolumeModeTestSuite,
-		// testsuites.InitVolumesTestSuite,
+		testsuites.InitVolumesTestSuite,
 	}
 
 	for _, initDriver := range csiTestDrivers {
@@ -199,7 +199,7 @@ type manifestDriver struct {
 	driverInfo   testsuites.DriverInfo
 	patchOptions utils.PatchCSIOptions
 	manifests    []string
-	scManifest   string
+	scManifest   map[string]string
 	claimSize    string
 	cleanup      func()
 }
@@ -217,16 +217,19 @@ func (m *manifestDriver) SkipUnsupportedTest(testpatterns.TestPattern) {
 func (m *manifestDriver) GetDynamicProvisionStorageClass(config *testsuites.PerTestConfig, fsType string) *storagev1.StorageClass {
 	f := config.Framework
 
-	items, err := f.LoadFromManifests(m.scManifest)
+	scManifest, ok := m.scManifest[fsType]
+	Expect(ok).To(BeTrue(), "Unsupported filesystem type %s", fsType)
+
+	items, err := f.LoadFromManifests(scManifest)
 	Expect(err).NotTo(HaveOccurred())
-	Expect(len(items)).To(Equal(1), "exactly one item from %s", m.scManifest)
+	Expect(len(items)).To(Equal(1), "exactly one item from %s", scManifest)
 
 	err = f.PatchItems(items...)
 	Expect(err).NotTo(HaveOccurred())
 	err = utils.PatchCSIDeployment(f, m.finalPatchOptions(f), items[0])
 
 	sc, ok := items[0].(*storagev1.StorageClass)
-	Expect(ok).To(BeTrue(), "storage class from %s", m.scManifest)
+	Expect(ok).To(BeTrue(), "storage class from %s", scManifest)
 	return sc
 }
 

@@ -21,8 +21,10 @@ import (
 	"os"
 	"testing"
 
+	"k8s.io/component-base/logs"
 	"k8s.io/klog"
 	"k8s.io/kubernetes/test/e2e/framework"
+	"k8s.io/kubernetes/test/e2e/framework/config"
 	"k8s.io/kubernetes/test/e2e/framework/testfiles"
 
 	. "github.com/onsi/ginkgo"
@@ -31,15 +33,18 @@ import (
 	_ "github.com/intel/pmem-csi/test/e2e/storage"
 )
 
-func init() {
+func TestMain(m *testing.M) {
 	klog.SetOutput(GinkgoWriter)
-	klog.InitFlags(flag.CommandLine)
 
+	logs.InitLogs()
+	config.CopyFlags(config.Flags, flag.CommandLine)
+	framework.RegisterCommonFlags(flag.CommandLine)
+	framework.RegisterClusterFlags(flag.CommandLine)
 	// Skip slow or distruptive tests by default.
 	flag.Set("ginkgo.skip", `\[Slow|Disruptive\]`)
+	flag.Parse()
 
 	// Register framework flags, then handle flags.
-	framework.HandleFlags()
 	framework.AfterReadingAllFlags(&framework.TestContext)
 
 	// We need extra files at runtime.
@@ -47,6 +52,9 @@ func init() {
 	if repoRoot != "" {
 		testfiles.AddFileSource(RootFileSource{Root: repoRoot})
 	}
+
+	// Now run the test suite.
+	os.Exit(m.Run())
 }
 
 func TestE2E(t *testing.T) {
