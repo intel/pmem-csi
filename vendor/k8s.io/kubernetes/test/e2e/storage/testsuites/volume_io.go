@@ -249,7 +249,7 @@ func writeToFile(f *framework.Framework, pod *v1.Pod, fpath, ddInput string, fsi
 // Verify that the test file is the expected size and contains the expected content.
 func verifyFile(f *framework.Framework, pod *v1.Pod, fpath string, expectSize int64, ddInput string) error {
 	ginkgo.By("verifying file size")
-	rtnstr, err := utils.PodExec(pod, fmt.Sprintf("stat -c %%s %s", fpath))
+	rtnstr, err := utils.PodExec(f, pod, fmt.Sprintf("stat -c %%s %s", fpath))
 	if err != nil || rtnstr == "" {
 		return fmt.Errorf("unable to get file size via `stat %s`: %v", fpath, err)
 	}
@@ -281,7 +281,7 @@ func verifyFile(f *framework.Framework, pod *v1.Pod, fpath string, expectSize in
 }
 
 // Delete `fpath` to save some disk space on host. Delete errors are logged but ignored.
-func deleteFile(pod *v1.Pod, fpath string) {
+func deleteFile(f *framework.Framework, pod *v1.Pod, fpath string) {
 	ginkgo.By(fmt.Sprintf("deleting test file %s...", fpath))
 	_, err := utils.PodExec(f, pod, fmt.Sprintf("rm -f %s", fpath))
 	if err != nil {
@@ -314,7 +314,7 @@ func testVolumeIO(f *framework.Framework, cs clientset.Interface, config volume.
 		return fmt.Errorf("failed to create client pod %q: %v", clientPod.Name, err)
 	}
 	defer func() {
-		deleteFile(clientPod, ddInput)
+		deleteFile(f, clientPod, ddInput)
 		ginkgo.By(fmt.Sprintf("deleting client pod %q...", clientPod.Name))
 		e := e2epod.DeletePodWithWait(cs, clientPod)
 		if e != nil {

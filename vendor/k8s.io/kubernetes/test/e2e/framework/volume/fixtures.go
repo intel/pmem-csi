@@ -500,7 +500,7 @@ func runVolumeTesterPod(client clientset.Interface, config TestConfig, podSuffix
 	return clientPod, nil
 }
 
-func testVolumeContent(client clientset.Interface, pod *v1.Pod, fsGroup *int64, fsType string, tests []Test) {
+func testVolumeContent(f *framework.Framework, client clientset.Interface, pod *v1.Pod, fsGroup *int64, fsType string, tests []Test) {
 	ginkgo.By("Checking that text file contents are perfect.")
 	for i, test := range tests {
 		if test.Mode == v1.PersistentVolumeBlock {
@@ -511,7 +511,7 @@ func testVolumeContent(client clientset.Interface, pod *v1.Pod, fsGroup *int64, 
 			framework.ExpectNoError(err, "failed: finding the contents of the block device %s.", deviceName)
 
 			// Check that it's a real block device
-			utils.CheckVolumeModeOfPath(pod, test.Mode, deviceName)
+			utils.CheckVolumeModeOfPath(f, pod, test.Mode, deviceName)
 		} else {
 			// Filesystem: check content
 			fileName := fmt.Sprintf("/opt/%d/%s", i, test.File)
@@ -521,7 +521,7 @@ func testVolumeContent(client clientset.Interface, pod *v1.Pod, fsGroup *int64, 
 
 			// Check that a directory has been mounted
 			dirName := filepath.Dir(fileName)
-			utils.CheckVolumeModeOfPath(pod, test.Mode, dirName)
+			utils.CheckVolumeModeOfPath(f, pod, test.Mode, dirName)
 
 			if !framework.NodeOSDistroIs("windows") {
 				// Filesystem: check fsgroup
@@ -546,20 +546,20 @@ func testVolumeContent(client clientset.Interface, pod *v1.Pod, fsGroup *int64, 
 // and check that the pod sees expected data, e.g. from the server pod.
 // Multiple Tests can be specified to mount multiple volumes to a single
 // pod.
-func TestVolumeClient(client clientset.Interface, config TestConfig, fsGroup *int64, fsType string, tests []Test) {
+func TestVolumeClient(f *framework.Framework, client clientset.Interface, config TestConfig, fsGroup *int64, fsType string, tests []Test) {
 	clientPod, err := runVolumeTesterPod(client, config, "client", fsGroup, tests)
 	if err != nil {
 		framework.Failf("Failed to create client pod: %v", err)
 
 	}
 	framework.ExpectNoError(e2epod.WaitForPodRunningInNamespace(client, clientPod))
-	testVolumeContent(client, clientPod, fsGroup, fsType, tests)
+	testVolumeContent(f, client, clientPod, fsGroup, fsType, tests)
 }
 
 // InjectContent inserts index.html with given content into given volume. It does so by
 // starting and auxiliary pod which writes the file there.
 // The volume must be writable.
-func InjectContent(client clientset.Interface, config TestConfig, fsGroup *int64, fsType string, tests []Test) {
+func InjectContent(f *framework.Framework, client clientset.Interface, config TestConfig, fsGroup *int64, fsType string, tests []Test) {
 	injectorPod, err := runVolumeTesterPod(client, config, "injector", fsGroup, tests)
 	if err != nil {
 		framework.Failf("Failed to create injector pod: %v", err)
@@ -589,7 +589,7 @@ func InjectContent(client clientset.Interface, config TestConfig, fsGroup *int64
 
 	// Check that the data have been really written in this pod.
 	// This tests non-persistent volume types
-	testVolumeContent(client, injectorPod, fsGroup, fsType, tests)
+	testVolumeContent(f, client, injectorPod, fsGroup, fsType, tests)
 }
 
 // CreateGCEVolume creates PersistentVolumeSource for GCEVolume.
