@@ -1,4 +1,7 @@
 pipeline {
+    options {
+        timestamps()
+    }
     agent {
         label "pmem-csi"
     }
