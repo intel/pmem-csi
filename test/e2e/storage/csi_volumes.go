@@ -64,7 +64,7 @@ var _ = Describe("PMEM Volumes", func() {
 					Name:        "pmem-csi",
 					MaxFileSize: testpatterns.FileSizeMedium,
 					SupportedFsType: sets.NewString(
-						"ext4", "xfs",
+						"", "ext4", "xfs",
 					),
 					Capabilities: map[testsuites.Capability]bool{
 						testsuites.CapPersistence: true,
@@ -74,6 +74,7 @@ var _ = Describe("PMEM Volumes", func() {
 					},
 				},
 				scManifest: map[string]string{
+					"":     "deploy/kubernetes-1.13/pmem-storageclass-ext4.yaml",
 					"ext4": "deploy/kubernetes-1.13/pmem-storageclass-ext4.yaml",
 					"xfs":  "deploy/kubernetes-1.13/pmem-storageclass-xfs.yaml",
 				},
