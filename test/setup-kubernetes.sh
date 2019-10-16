@@ -85,6 +85,13 @@ etcd:
 "
 fi
 
+# Use a fixed version of Kubernetes for reproducability. The version gets
+# chosen when installing kubeadm. Here we use exactly that version.
+k8sversion=$(kubeadm version | sed -e 's/.*GitVersion:"*\([^ ",]*\).*/\1/')
+kubeadm_config_cluster="$kubeadm_config_cluster
+kubernetesVersion: $k8sversion
+"
+
 # TODO: it is possible to set up each node in parallel, see
 # https://kubernetes.io/docs/reference/setup-tools/kubeadm/kubeadm-init/#automating-kubeadm
 
