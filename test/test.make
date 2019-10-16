@@ -91,12 +91,19 @@ RUNTIME_DEPS += sed \
 RUNTIME_DEPS += LC_ALL=C LANG=C sort -u
 
 # E2E tests which are known to be unsuitable (space separated list of regular expressions).
-TEST_E22_SKIP = no-such-test
+TEST_E2E_SKIP = no-such-test
 
 # The test's check whether a driver supports multiple nodes is incomplete and does
 # not work for the topology-based single-node access in PMEM-CSI:
 # https://github.com/kubernetes/kubernetes/blob/25ffbe633810609743944edd42d164cd7990071c/test/e2e/storage/testsuites/provisioning.go#L175-L181
-TEST_E22_SKIP += should.access.volume.from.different.nodes
+TEST_E2E_SKIP += should.access.volume.from.different.nodes
+
+# E2E tests which are to be executed (space separated list of regular expressions, default is all that aren't skipped).
+TEST_E2E_FOCUS =
+
+# E2E Junit output directory (default empty = none). junit_<ginkgo node>.xml files will be written there,
+# i.e. usually just junit_01.xml.
+TEST_E2E_REPORT_DIR=
 
 empty:=
 space:= $(empty) $(empty)
@@ -111,7 +118,10 @@ RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 	CLUSTER=$(CLUSTER) \
 	TEST_DEPLOYMENTMODE=$(shell source test/test-config.sh; echo $$TEST_DEPLOYMENTMODE) \
 	TEST_DEVICEMODE=$(shell source test/test-config.sh; echo $$TEST_DEVICEMODE) \
-	go test -count=1 -timeout 0 -v ./test/e2e -ginkgo.skip='$(subst $(space),|,$(TEST_E22_SKIP))'
+	go test -count=1 -timeout 0 -v ./test/e2e \
+                -ginkgo.skip='$(subst $(space),|,$(TEST_E2E_SKIP))' \
+                -ginkgo.focus='$(subst $(space),|,$(TEST_E2E_FOCUS))' \
+                -report-dir=$(TEST_E2E_REPORT_DIR)
 test_e2e: start
 	$(RUN_E2E)
 

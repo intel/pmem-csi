@@ -18,11 +18,16 @@ package e2e
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/config"
+	"github.com/onsi/ginkgo/reporters"
 	"github.com/onsi/gomega"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -51,6 +56,12 @@ var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 	c, err := framework.LoadClientset()
 	if err != nil {
 		framework.Failf("Error loading client: %v", err)
+	}
+
+	if framework.TestContext.ReportDir != "" {
+		if err := os.MkdirAll(framework.TestContext.ReportDir, 0755); err != nil {
+			framework.Failf("Failed creating report directory: %v", err)
+		}
 	}
 
 	// Delete any namespaces except those created by the system. This ensures no
@@ -147,7 +158,13 @@ var _ = ginkgo.SynchronizedAfterSuite(func() {
 // This function is called on each Ginkgo node in parallel mode.
 func RunE2ETests(t *testing.T) {
 	gomega.RegisterFailHandler(ginkgowrapper.Fail)
-	ginkgo.RunSpecs(t, "PMEM E2E suite")
+
+	// Run tests through the Ginkgo runner with output to console + JUnit for Jenkins
+	var r []ginkgo.Reporter
+	if framework.TestContext.ReportDir != "" {
+		r = append(r, reporters.NewJUnitReporter(path.Join(framework.TestContext.ReportDir, fmt.Sprintf("junit_%v%02d.xml", framework.TestContext.ReportPrefix, config.GinkgoConfig.ParallelNode))))
+	}
+	ginkgo.RunSpecsWithDefaultAndCustomReporters(t, "PMEM E2E suite", r)
 }
 
 // WaitForPMEMDriver ensures that the PMEM-CSI driver is ready for use.

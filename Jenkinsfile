@@ -349,6 +349,12 @@ git push origin HEAD:master
             }
         }
     }
+
+    post {
+        always {
+            junit 'build/reports/**/*.xml'
+        }
+    }
 }
 
 /*
@@ -394,6 +400,7 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
         https://github.com/intel/pmem-CSI/pull/309#issuecomment-504659383)
         */
         sh " \
+           mkdir -p build/reports && \
            sudo journalctl -f & \
            ( set +x; while true; do sleep 30; top -b -n 1 -w 120 | head -n 20; df -h; done ) & \
            docker run --rm \
@@ -414,6 +421,7 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                   -w `pwd` \
                   ${env.BUILD_IMAGE} \
                   bash -c 'set -x; \
+                           testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}-${deviceMode}-${deploymentMode}' | sed -e s/--*/-/g | tr . _ ) && \
                            swupd bundle-add openssh-server && \
                            make start && cd ${env.PMEM_PATH} && \
                            _work/clear/ssh.0 kubectl get pods --all-namespaces -o wide && \
@@ -430,9 +438,20 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                                      \$ssh top -b -n 1 -w 120 2>&1 | head -n 20; \
                                  done ) | sed -e \"s/^/\$hostname: /\" & \
                            done && \
-                           make test_e2e' \
+                           make test_e2e TEST_E2E_REPORT_DIR=`pwd`/build/reports.tmp/\$testrun' \
            "
     } finally {
+        // Each test run produces junit_*.xml files with testsuite name="PMEM E2E suite".
+        // To make test names unique in the Jenkins UI, we rename that test suite per run
+        // and place files where the 'junit' step above expects them.
+        sh "set -x; \
+            for i in build/reports.tmp/*/*.xml; do \
+                if [ -f \$i ]; then \
+                    testrun=\$(basename \$(dirname \$i)); \
+                    sed -e \"s/PMEM E2E suite/\$testrun/\" \$i >build/reports/\$testrun.xml; \
+               fi; \
+           done"
+
         // Always shut down the cluster to free up resources. As in "make start", we have to expose
         // the path as used on the host also inside the containner, but we don't need to be in it.
         sh "docker run --rm --privileged=true -e CLUSTER=clear ${DockerBuildArgs()} -v `pwd`:`pwd`:rshared ${env.BUILD_IMAGE} make stop"
