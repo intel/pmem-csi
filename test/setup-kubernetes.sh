@@ -32,6 +32,8 @@ kubeadm_config_cluster="apiVersion: kubeadm.k8s.io/v1beta1
 kind: ClusterConfiguration"
 kubeadm_config_kubelet="apiVersion: kubelet.config.k8s.io/v1beta1
 kind: KubeletConfiguration"
+kubeadm_config_proxy="apiVersion: kubeproxy.config.k8s.io/v1alpha1
+kind: KubeProxyConfiguration"
 kubeadm_config_file="/tmp/kubeadm-config.yaml"
 
 case $TEST_CRI in
@@ -58,14 +60,28 @@ kubeadm_config_cluster="$kubeadm_config_cluster
 networking:
   podSubnet: \"10.244.0.0/16\""
 
+list_gates () (
+    IFS=","
+    for f in ${TEST_FEATURE_GATES}; do
+        echo "  $f" | sed 's/=/: /g'
+    done
+)
+
 if [ ! -z ${TEST_FEATURE_GATES} ]; then
     kubeadm_config_kubelet="$kubeadm_config_kubelet
 featureGates:
-$(IFS=","; for f in ${TEST_FEATURE_GATES};do
-echo "  $f" | sed 's/=/: /g'
-done)"
+$(list_gates)"
+    kubeadm_config_proxy="$kubeadm_config_proxy
+featureGates:
+$(list_gates)"
     kubeadm_config_cluster="$kubeadm_config_cluster
 apiServer:
+  extraArgs:
+    feature-gates: ${TEST_FEATURE_GATES}
+controllerManager:
+  extraArgs:
+    feature-gates: ${TEST_FEATURE_GATES}
+scheduler:
   extraArgs:
     feature-gates: ${TEST_FEATURE_GATES}"
 fi
@@ -85,6 +101,13 @@ etcd:
 "
 fi
 
+# Use a fixed version of Kubernetes for reproducability. The version gets
+# chosen when installing kubeadm. Here we use exactly that version.
+k8sversion=$(kubeadm version | sed -e 's/.*GitVersion:"*\([^ ",]*\).*/\1/')
+kubeadm_config_cluster="$kubeadm_config_cluster
+kubernetesVersion: $k8sversion
+"
+
 # TODO: it is possible to set up each node in parallel, see
 # https://kubernetes.io/docs/reference/setup-tools/kubeadm/kubeadm-init/#automating-kubeadm
 
@@ -95,7 +118,12 @@ $kubeadm_config_init
 $kubeadm_config_kubelet
 ---
 $kubeadm_config_cluster
+---
+$kubeadm_config_proxy
 EOF
+
+echo "kubeadm config:"
+cat ${kubeadm_config_file}
 
 # We install old Kubernetes releases on current distros and must
 # disable the kernel preflight check for that to work, because those
