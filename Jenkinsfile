@@ -421,7 +421,7 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                   -w `pwd` \
                   ${env.BUILD_IMAGE} \
                   bash -c 'set -x; \
-                           testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}-${deviceMode}-${deploymentMode}' | sed -e s/--*/-/g | tr . _ ) && \
+                           testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}-${deviceMode}-${deploymentMode}' | sed -e s/--*/-/g | tr . _ ). && \
                            swupd bundle-add openssh-server && \
                            make start && cd ${env.PMEM_PATH} && \
                            _work/clear/ssh.0 kubectl get pods --all-namespaces -o wide && \
