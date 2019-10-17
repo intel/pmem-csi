@@ -93,7 +93,7 @@ build-image build-test-image: build%-image:
 PUSH_IMAGE_DEP = build%-image
 # "docker push" has been seen to fail temporarily with "error creating overlay mount to /var/lib/docker/overlay2/xxx/merged: device or resource busy".
 # Here we simply try three times before giving up.
-push-image push-test-image: push%-image: # $(PUSH_IMAGE_DEP)
+push-image push-test-image: push%-image: $(PUSH_IMAGE_DEP)
 	@ i=0; while true; do \
 		if (set -x; docker push $(IMAGE_TAG)); then \
 			exit 0; \
