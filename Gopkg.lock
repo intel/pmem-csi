@@ -252,15 +252,15 @@
   version = "v0.6.1"
 
 [[projects]]
-  digest = "1:652c938b1510b21f775fcea8cadd523a9f7706f117e08338e9efdba7edd6662f"
+  digest = "1:e2ec36588cab12eed6abce39593398f5d37e53746801d6ebf793a608e3345a69"
   name = "github.com/kubernetes-csi/csi-test"
   packages = [
     "pkg/sanity",
     "utils",
   ]
   pruneopts = "UT"
-  revision = "82b05190c167c52bb6d5aaf2e1d7c833fa539783"
-  version = "v2.2.0"
+  revision = "6931aedb3df0224d9d2e463316315cdcffaf6192"
+  version = "v2.3.0"
 
 [[projects]]
   digest = "1:ff5ebae34cfbf047d505ee150de27e60570e8c394b3b8fdbb720ff6ac71985fc"
@@ -1268,6 +1268,8 @@
     "github.com/kubernetes-csi/csi-test/pkg/sanity",
     "github.com/kubernetes-csi/csi-test/utils",
     "github.com/onsi/ginkgo",
+    "github.com/onsi/ginkgo/config",
+    "github.com/onsi/ginkgo/reporters",
     "github.com/onsi/gomega",
     "github.com/pkg/errors",
     "golang.org/x/net/context",
@@ -1299,6 +1301,7 @@
     "k8s.io/kubernetes/pkg/volume/util/hostutil",
     "k8s.io/kubernetes/test/e2e/framework",
     "k8s.io/kubernetes/test/e2e/framework/config",
+    "k8s.io/kubernetes/test/e2e/framework/ginkgowrapper",
     "k8s.io/kubernetes/test/e2e/framework/pod",
     "k8s.io/kubernetes/test/e2e/framework/podlogs",
     "k8s.io/kubernetes/test/e2e/framework/ssh",
