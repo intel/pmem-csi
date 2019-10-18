@@ -127,6 +127,16 @@ type Config struct {
 	// it will be set to a DefaultIDGenerator instance when
 	// passing the config to Test or GinkgoTest.
 	IDGen IDGenerator
+
+	// Repeat count for Volume operations to test idempotency requirements.
+	// csi-test/pkg/sanity/node.go:runControllerTest() optionally runs
+	// added variant set of tests which repeats those Volume operations
+	// that are required to be idempotent, based on this count value.
+	// -1 : Skip idempotency test
+	//  0 : Use default value, 10 repetitions
+	//  n : repeat n times
+	// Note that missing explicit value leads to default repetition count.
+	IdempotentCount int
 }
 
 // SanityContext holds the variables that each test can depend on. It
