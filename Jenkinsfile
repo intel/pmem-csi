@@ -187,28 +187,6 @@ pipeline {
             }
         }
 
-        stage('testing 1.13 LVM') {
-            when { not { changeRequest() } }
-            options {
-                timeout(time: 90, unit: "MINUTES")
-                retry(2)
-            }
-            steps {
-                TestInVM("lvm", "testing", "fedora", "", "1.13")
-            }
-        }
-
-        stage('testing 1.13 direct') {
-            when { not { changeRequest() } }
-            options {
-                timeout(time: 180, unit: "MINUTES")
-                retry(2)
-            }
-            steps {
-                TestInVM("direct", "testing", "fedora", "", "1.13")
-            }
-        }
-
         /*
           In production we can only run E2E testing, no sanity testing.
           Therefore it is faster.
@@ -265,28 +243,6 @@ pipeline {
             }
             steps {
                 TestInVM("direct", "production", "fedora", "", "1.14")
-            }
-        }
-
-        stage('production 1.13 LVM') {
-            when { not { changeRequest() } }
-            options {
-                timeout(time: 30, unit: "MINUTES")
-                retry(2)
-            }
-            steps {
-                TestInVM("lvm", "production", "fedora", "", "1.13")
-            }
-        }
-
-        stage('production 1.13 direct') {
-            when { not { changeRequest() } }
-            options {
-                timeout(time: 30, unit: "MINUTES")
-                retry(2)
-            }
-            steps {
-                TestInVM("direct", "production", "fedora", "", "1.13")
             }
         }
 

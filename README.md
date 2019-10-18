@@ -373,7 +373,7 @@ of PMEM volumes each volume on different node. The number of PMEM
 volumes to create can be specified by `cacheSize` StorageClass
 parameter. Applications which claim a `cache` volume can use
 `ReadWriteMany` in its `accessModes` list. Check with provided [cache
-StorageClass](deploy/kubernetes-1.13/pmem-storageclass-cache.yaml)
+StorageClass](deploy/common/pmem-storageclass-cache.yaml)
 example. This
 [diagram](/docs/images/sequence/pmem-csi-cache-sequence-diagram.png)
 illustrates how a cache volume gets provisioned in Kubernetes using
@@ -393,10 +393,6 @@ application](deploy/common/pmem-app-cache.yaml) example.
   As a result, Kubernetes might select a node that does not have enough free PMEM space. In this case,
   volume creation fails and the pod is stuck until enough free space becomes
   available.
-* Late binding only works reliably on Kubernetes >=1.14. The external-provisioner v1.0.1
-  for Kubernetes 1.13 lacks the `--strict-topology` flag and might allow the PMEM-CSI
-  driver to allocate the volume on a node that is not the one where the pod is about
-  to start. When that happens, the pod is permanently stuck.
 * A node is only chosen the first time a pod starts. After that it will always restart
   on that node, because that is where the persistent volume was created.
 
@@ -508,14 +504,27 @@ ls: cannot access '/dev/pmem*': No such file or directory
 ## Supported Kubernetes versions
 
 PMEM-CSI driver implements CSI specification version 1.0.0, which only
-supported by Kubernetes versions >= v1.13. The driver deployment in
-Kubernetes cluster has been verified on:
+supported by Kubernetes versions >= v1.13. The following table
+summarizes the status of support for PMEM-CSI on different Kubernetes
+versions:
 
-| Branch            | Kubernetes branch/version      | Required alpha feature gates   |
-|-------------------|--------------------------------|------------------------------- |
-| devel             | Kubernetes 1.13                | CSINodeInfo, CSIDriverRegistry |
-| devel             | Kubernetes 1.14                |                                |
-| devel             | Kubernetes 1.15                |                                |
+
+| Kubernetes version | Required alpha feature gates   | Support status
+|--------------------+--------------------------------+ ------------------------
+| 1.13               | CSINodeInfo, CSIDriverRegistry | unsupported <sup>1</sup>
+| 1.14               |                                |
+| 1.15               |                                |
+| 1.16               |                                |
+
+<sup>1</sup> Several relevant features are only available in alpha
+quality in Kubernetes 1.13 and the combination of skip attach and
+block volumes is completely broken, with [the
+fix](https://github.com/kubernetes/kubernetes/pull/79920) only being
+available in later versions. The external-provisioner v1.0.1 for
+Kubernetes 1.13 lacks the `--strict-topology` flag and therefore late
+binding is unreliable. It's also a release that is not supported
+officially by upstream anymore.
+
 
 ## Setup
 
@@ -558,19 +567,6 @@ on the Kubernetes version.
 
 ```sh
     $ kubectl label node <your node> storage=pmem
-```
-
-- **Install add-on storage CRDs if using Kubernetes 1.13**
-
-If you are not using the test cluster described in
-[Starting and stopping a test cluster](#starting-and-stopping-a-test-cluster)
-where CRDs are installed automatically, you must install those manually.
-Kubernetes 1.14 and higher have those APIs built in and thus don't need
-these CRDs.
-
-```sh
-   $ kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/release-1.13/cluster/addons/storage-crds/csidriver.yaml
-   $ kubectl create -f https://raw.githubusercontent.com/kubernetes/kubernetes/release-1.13/cluster/addons/storage-crds/csinodeinfo.yaml
 ```
 
 - **Set up certificates**
