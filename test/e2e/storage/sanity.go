@@ -60,6 +60,7 @@ var _ = Describe("sanity", func() {
 	workerSocatAddresses := []string{}
 	config := sanity.Config{
 		TestVolumeSize: 1 * 1024 * 1024,
+		IdempotentCount: 4,
 		// The actual directories will be created as unique
 		// temp directories inside these directories.
 		// We intentionally do not use the real /var/lib/kubelet/pods as
