@@ -1,7 +1,0 @@
-apiVersion: csi.storage.k8s.io/v1alpha1
-kind: CSIDriver
-metadata:
-  name: pmem-csi.intel.com
-spec:
-  attachRequired: false
-  podInfoOnMountVersion: v1
