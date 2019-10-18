@@ -73,8 +73,8 @@ var _ = Describe("PMEM Volumes", func() {
 					},
 				},
 				scManifest: map[string]string{
-					"ext4": "deploy/kubernetes-1.13/pmem-storageclass-ext4.yaml",
-					"xfs":  "deploy/kubernetes-1.13/pmem-storageclass-xfs.yaml",
+					"ext4": "deploy/common/pmem-storageclass-ext4.yaml",
+					"xfs":  "deploy/common/pmem-storageclass-xfs.yaml",
 				},
 				// We use 16Mi size volumes because this is the minimum size supported
 				// by xfs filesystem's allocation group
