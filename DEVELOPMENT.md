@@ -37,7 +37,8 @@ Coding style
 ------------
 
 The normal Go style guide applies. It is enforced by `make test`, which calls `gofmt`. `gofmt` should be
-from Go >= v1.11.4, older version (like v1.10) format the code slightly differently.
+from Go >= v1.11.4, older versions (like v1.10) format the code slightly differently.
+Running `go test` requires go 1.12 or newer.
 
 
 Input validation
