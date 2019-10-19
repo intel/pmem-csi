@@ -64,15 +64,17 @@ var _ = Describe("PMEM Volumes", func() {
 					Name:        "pmem-csi",
 					MaxFileSize: testpatterns.FileSizeMedium,
 					SupportedFsType: sets.NewString(
-						"ext4", "xfs",
+						"", "ext4", "xfs",
 					),
 					Capabilities: map[testsuites.Capability]bool{
 						testsuites.CapPersistence: true,
 						testsuites.CapFsGroup:     true,
 						testsuites.CapExec:        true,
+						testsuites.CapBlock:       true,
 					},
 				},
 				scManifest: map[string]string{
+					"":     "deploy/common/pmem-storageclass-ext4.yaml",
 					"ext4": "deploy/common/pmem-storageclass-ext4.yaml",
 					"xfs":  "deploy/common/pmem-storageclass-xfs.yaml",
 				},
@@ -92,7 +94,7 @@ var _ = Describe("PMEM Volumes", func() {
 		// testsuites.InitSnapshottableTestSuite,
 		// testsuites.InitSubPathTestSuite,
 		// testsuites.InitVolumeIOTestSuite,
-		// testsuites.InitVolumeModeTestSuite,
+		testsuites.InitVolumeModeTestSuite,
 		testsuites.InitVolumesTestSuite,
 	}
 
