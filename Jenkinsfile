@@ -8,6 +8,27 @@ pipeline {
 
     environment {
         /*
+          Change this into "true" to enable capturing the journalctl
+          output of the build host and each VM, either by editing the
+          Jenkinsfile in a PR or by logging into Jenkins and editing
+          the pipeline before running it again.
+        */
+        LOGGING_JOURNALCTL = "false"
+
+        /*
+          Delay in seconds between dumping system statistics.
+        */
+        LOGGING_SAMPLING_DELAY = "60"
+
+        /*
+          Pod names in the kube-system namespace for which
+          log output is to be captured. Empty by default,
+          valid values:
+          etcd kube-apiserver kube-controller-manager kube-scheduler
+        */
+        LOGGING_PODS = ""
+
+        /*
           For each major Kubernetes release we need one version of Clear Linux
           which had that release. Installing different Kubernetes releases
           on the latest Clear Linux is not supported because we always
@@ -360,8 +381,8 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
         */
         sh " \
            mkdir -p build/reports && \
-           sudo journalctl -f & \
-           ( set +x; while true; do sleep 30; top -b -n 1 -w 120 | head -n 20; df -h; done ) & \
+           if ${env.LOGGING_JOURNALCTL}; then sudo journalctl -f; fi & \
+           ( set +x; while true; do sleep ${env.LOGGING_SAMPLING_DELAY}; top -b -n 1 -w 120 | head -n 20; df -h; done ) & \
            docker run --rm \
                   --privileged=true \
                   -e CLUSTER=clear \
@@ -384,16 +405,16 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                            swupd bundle-add openssh-server && \
                            make start && cd ${env.PMEM_PATH} && \
                            _work/clear/ssh.0 kubectl get pods --all-namespaces -o wide && \
-                           for pod in etcd kube-apiserver kube-controller-manager kube-scheduler; do \
+                           for pod in ${env.LOGGING_PODS}; do \
                                _work/clear/ssh.0 kubectl logs -f -n kube-system \$pod-pmem-csi-clear-master | sed -e \"s/^/\$pod: /\" & \
                            done && \
                            _work/clear/ssh.0 tar -C / -cf - usr/bin/kubectl | tar -C /usr/local/bin --strip-components=2 -xf - && \
                            for ssh in \$(ls _work/clear/ssh.[0-9]); do \
                                hostname=\$(\$ssh hostname) && \
                                ( set +x; \
-                                 while true; do \$ssh journalctl -f; done & \
+                                 if ${env.LOGGING_JOURNALCTL}; then while true; do \$ssh journalctl -f; done; fi & \
                                  while true; do \
-                                     sleep 30; \
+                                     sleep ${env.LOGGING_SAMPLING_DELAY}; \
                                      \$ssh top -b -n 1 -w 120 2>&1 | head -n 20; \
                                  done ) | sed -e \"s/^/\$hostname: /\" & \
                            done && \
