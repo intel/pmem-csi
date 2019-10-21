@@ -401,7 +401,7 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                   -w `pwd` \
                   ${env.BUILD_IMAGE} \
                   bash -c 'set -x; \
-                           testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}-${deviceMode}-${deploymentMode}' | sed -e s/--*/-/g | tr . _ ). && \
+                           testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}-${deviceMode}-${deploymentMode}' | sed -e s/--*/-/g | tr . _ ) && \
                            swupd bundle-add openssh-server && \
                            make start && cd ${env.PMEM_PATH} && \
                            _work/clear/ssh.0 kubectl get pods --all-namespaces -o wide && \
@@ -422,15 +422,17 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
            "
     } finally {
         // Each test run produces junit_*.xml files with testsuite name="PMEM E2E suite".
-        // To make test names unique in the Jenkins UI, we rename that test suite per run
+        // To make test names unique in the Jenkins UI, we rename that test suite per run,
+        // mangle the <testcase name="..." classname="..."> such that
+        // Jenkins shows them group as <testrun>/[sanity|E2E]/<test case>,
         // and place files where the 'junit' step above expects them.
-        sh "set -x; \
-            for i in build/reports.tmp/*/*.xml; do \
-                if [ -f \$i ]; then \
-                    testrun=\$(basename \$(dirname \$i)); \
-                    sed -e \"s/PMEM E2E suite/\$testrun/\" \$i >build/reports/\$testrun.xml; \
-               fi; \
-           done"
+        sh '''set -x
+            for i in build/reports.tmp/*/*.xml; do
+                if [ -f $i ]; then
+                    testrun=$(basename $(dirname $i))
+                    sed -e "s/PMEM E2E suite/$testrun/" -e 's/testcase name="\\([^ ]*\\) *\\(.*\\)" classname="\\([^"]*\\)"/testcase classname="\\3.\\1" name="\\2"/' $i >build/reports/$testrun.xml
+               fi
+           done'''
 
         // Always shut down the cluster to free up resources. As in "make start", we have to expose
         // the path as used on the host also inside the containner, but we don't need to be in it.
