@@ -54,7 +54,7 @@ func csiTunePattern(patterns []testpatterns.TestPattern) []testpatterns.TestPatt
 	return tunedPatterns
 }
 
-var _ = Describe("PMEM Volumes", func() {
+var _ = Describe("E2E", func() {
 	// List of testDrivers to be executed in below loop
 	var csiTestDrivers = []func() testsuites.TestDriver{
 		// pmem-csi
