@@ -302,19 +302,19 @@ designing and deploying applications that are to use *local storage*.
 Below are the volume persistency models considered for implementation
 in PMEM-CSI to serve different application use cases:
 
-* Persistent volumes
+* Persistent volumes  
 A volume gets created independently of the application, on some node
 where there is enough free space. Applications using such a volume are
 then forced to run on that node and cannot run when the node is
 down. Data is retained until the volume gets deleted.
 
-* Ephemeral volumes
+* Ephemeral volumes  
 Each time an application starts to run on a node, a new volume is
 created for it on that node. When the application stops, the volume is
 deleted. The volume cannot be shared with other applications. Data on
 this volume is retained only while the application runs.
 
-* Cache volumes
+* Cache volumes  
 Volumes are pre-created on a certain set of nodes, each with its own
 local data. Applications are started on those nodes and then get to
 use the volume on their node. Data persists across application
@@ -520,7 +520,6 @@ PMEM-CSI driver implements CSI specification version 1.0.0, which only
 supported by Kubernetes versions >= v1.13. The following table
 summarizes the status of support for PMEM-CSI on different Kubernetes
 versions:
-
 
 | Kubernetes version | Required alpha feature gates   | Support status
 |--------------------|--------------------------------|----------------
