@@ -95,7 +95,7 @@ func NewNodeControllerServer(nodeID string, dm pmdmanager.PmemDeviceManager, sm 
 		err = sm.GetAll(v, func(id string) bool {
 			// See if the device data stored at StateManager is still valid
 			for _, devInfo := range devices {
-				if devInfo.Name == id {
+				if devInfo.VolumeId == id {
 					ncs.pmemVolumes[id] = v.Copy()
 					return true
 				}
@@ -206,7 +206,12 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 				}
 			}(volumeID)
 		}
-
+		if asked <= 0 {
+			// Allocating volumes of zero size isn't supported.
+			// We use some arbitrary small minimum size instead.
+			// It will get rounded up by below layer to meet the alignment.
+			asked = 1
+		}
 		if err := cs.dm.CreateDevice(volumeID, uint64(asked), nsmode); err != nil {
 			return nil, status.Errorf(codes.Internal, "Node CreateVolume: failed to create volume: %s", err.Error())
 		}
