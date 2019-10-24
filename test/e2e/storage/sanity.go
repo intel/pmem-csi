@@ -542,9 +542,10 @@ var _ = Describe("sanity", func() {
 
 				i := strings.Split(nodeID, "worker")[1]
 
+				sshcmd := fmt.Sprintf("%s/_work/%s/ssh.%s", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"), i)
 				// write some data to mounted volume
-				ssh := exec.Command(fmt.Sprintf("%s/_work/%s/ssh.%s", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"), i))
-				ssh.Stdin = bytes.NewBufferString(`sudo sh -c 'echo -n "hello" > ` + v.getTargetPath() + "/target/test-file" + `'`)
+				cmd := "sudo sh -c 'echo -n hello > " + v.getTargetPath() + "/target/test-file'"
+				ssh := exec.Command(sshcmd, cmd)
 				out, err := ssh.CombinedOutput()
 				framework.ExpectNoError(err, "write failure:\n%s", string(out))
 
@@ -555,8 +556,8 @@ var _ = Describe("sanity", func() {
 				v.publish(volName, vol)
 
 				// ensure the data retained
-				ssh = exec.Command(fmt.Sprintf("%s/_work/%s/ssh.%s", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"), i))
-				ssh.Stdin = bytes.NewBufferString(`sudo sh -c 'cat ` + v.getTargetPath() + "/target/test-file" + `'`)
+				cmd = "sudo cat " + v.getTargetPath() + "/target/test-file"
+				ssh = exec.Command(sshcmd, cmd)
 				out, err = ssh.CombinedOutput()
 				framework.ExpectNoError(err, "read failure:\n%s", string(out))
 				Expect(string(out)).To(Equal("hello"), "read failure")
