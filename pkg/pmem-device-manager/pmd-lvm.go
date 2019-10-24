@@ -2,14 +2,12 @@ package pmdmanager
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
-	"github.com/pkg/errors"
 	"k8s.io/klog"
 )
 
@@ -43,7 +41,7 @@ func NewPmemDeviceManagerLVM() (PmemDeviceManager, error) {
 
 	ctx, err := ndctl.NewContext()
 	if err != nil {
-		return nil, fmt.Errorf("Failed to initialize pmem context: %s", err.Error())
+		return nil, err
 	}
 	volumeGroups := []string{}
 	for _, bus := range ctx.GetBuses() {
@@ -88,7 +86,7 @@ func (lvm *pmemLvm) GetCapacity() (map[string]uint64, error) {
 // nsmode is expected to be either "fsdax" or "sector"
 func (lvm *pmemLvm) CreateDevice(volumeId string, size uint64, nsmode string) error {
 	if nsmode != string(ndctl.FsdaxMode) && nsmode != string(ndctl.SectorMode) {
-		return fmt.Errorf("Unknown nsmode(%v)", nsmode)
+		return fmt.Errorf("unknown namespace mode %q: %w", nsmode, ErrInvalid)
 	}
 	lvmMutex.Lock()
 	defer lvmMutex.Unlock()
@@ -97,9 +95,8 @@ func (lvm *pmemLvm) CreateDevice(volumeId string, size uint64, nsmode string) er
 	// this function is asked to create new devices repeatedly, forcing running out of space.
 	// Avoid device filling with garbage entries by returning error.
 	// Overall, no point having more than one namespace with same volumeId.
-	_, err := lvm.getDevice(volumeId)
-	if err == nil {
-		return fmt.Errorf("CreateDevice: Failed: volume with that name '%s' exists", volumeId)
+	if _, err := lvm.getDevice(volumeId); err == nil {
+		return ErrDeviceExists
 	}
 	vgs, err := getVolumeGroups(lvm.volumeGroups, nsmode)
 	if err != nil {
@@ -131,13 +128,11 @@ func (lvm *pmemLvm) CreateDevice(volumeId string, size uint64, nsmode string) er
 				if err != nil {
 					return err
 				}
-				err = waitDeviceAppears(device)
-				if err != nil {
+				if err := waitDeviceAppears(device); err != nil {
 					return err
 				}
-				err = clearDevice(device, false)
-				if err != nil {
-					return err
+				if err := clearDevice(device, false); err != nil {
+					return fmt.Errorf("clear device %q: %v", volumeId, err)
 				}
 
 				lvm.devices[device.VolumeId] = device
@@ -146,7 +141,7 @@ func (lvm *pmemLvm) CreateDevice(volumeId string, size uint64, nsmode string) er
 			}
 		}
 	}
-	return fmt.Errorf("No region is having enough space required(%v)", size)
+	return ErrNotEnoughSpace
 }
 
 func (lvm *pmemLvm) DeleteDevice(volumeId string, flush bool) error {
@@ -195,7 +190,7 @@ func (lvm *pmemLvm) getDevice(volumeId string) (*PmemDeviceInfo, error) {
 		return dev, nil
 	}
 
-	return nil, errors.Wrapf(os.ErrNotExist, "no device found with id '%s'", volumeId)
+	return nil, ErrDeviceNotFound
 }
 
 func getUncachedDevice(volumeId string, volumeGroup string) (*PmemDeviceInfo, error) {
@@ -207,7 +202,8 @@ func getUncachedDevice(volumeId string, volumeGroup string) (*PmemDeviceInfo, er
 	if dev, ok := devices[volumeId]; ok {
 		return dev, nil
 	}
-	return nil, errors.Wrapf(os.ErrNotExist, "no device found with id '%s' in group '%s'", volumeId, volumeGroup)
+
+	return nil, ErrDeviceNotFound
 }
 
 // listDevices Lists available logical devices in given volume groups
@@ -215,9 +211,9 @@ func listDevices(volumeGroups ...string) (map[string]*PmemDeviceInfo, error) {
 	args := append(lvsArgs, volumeGroups...)
 	output, err := pmemexec.RunCommand("lvs", args...)
 	if err != nil {
-		return nil, fmt.Errorf("list volumes failed : %s(lvs output: %s)", err.Error(), output)
+		return nil, fmt.Errorf("lvs failure : %v", err)
 	}
-	return parseLVSOuput(output)
+	return parseLVSOutput(output)
 }
 
 func vgName(bus *ndctl.Bus, region *ndctl.Region, nsmode ndctl.NamespaceMode) string {
@@ -225,9 +221,9 @@ func vgName(bus *ndctl.Bus, region *ndctl.Region, nsmode ndctl.NamespaceMode) st
 }
 
 //lvs options "lv_name,lv_path,lv_size,lv_free"
-func parseLVSOuput(output string) (map[string]*PmemDeviceInfo, error) {
+func parseLVSOutput(output string) (map[string]*PmemDeviceInfo, error) {
 	devices := map[string]*PmemDeviceInfo{}
-	lines := strings.Split(string(output), "\n")
+	lines := strings.Split(output, "\n")
 	for _, line := range lines {
 		fields := strings.Fields(strings.TrimSpace(line))
 		if len(fields) != 3 {
@@ -269,12 +265,12 @@ func getVolumeGroups(groups []string, wantedTag string) ([]vgInfo, error) {
 	args := append(vgsArgs, groups...)
 	output, err := pmemexec.RunCommand("vgs", args...)
 	if err != nil {
-		return vgs, fmt.Errorf("vgs failure: %s", err.Error())
+		return vgs, fmt.Errorf("vgs failure: %v", err)
 	}
 	for _, line := range strings.SplitN(output, "\n", len(groups)) {
 		fields := strings.Fields(strings.TrimSpace(line))
 		if len(fields) != 4 {
-			return vgs, fmt.Errorf("Failed to parse vgs output line: %s", line)
+			return vgs, fmt.Errorf("failed to parse vgs output: %q", line)
 		}
 		tag := fields[3]
 		if tag == wantedTag {

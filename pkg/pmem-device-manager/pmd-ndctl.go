@@ -1,6 +1,7 @@
 package pmdmanager
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
@@ -34,20 +35,19 @@ func NewPmemDeviceManagerNdctl() (PmemDeviceManager, error) {
 
 	ctx, err := ndctl.NewContext()
 	if err != nil {
-		return nil, fmt.Errorf("Failed to initialize pmem context: %s", err.Error())
+		return nil, err
 	}
 	// Check is /sys writable. If not then there is no point starting
-	mounter := mount.New("")
-	mounts, err := mounter.List()
-	for i := range mounts {
+	mounts, _ := mount.New("").List()
+	for _, mnt := range mounts {
 		klog.V(5).Infof("NewPmemDeviceManagerNdctl: Check mounts: device=%s path=%s opts=%s",
-			mounts[i].Device, mounts[i].Path, mounts[i].Opts)
-		if mounts[i].Device == "sysfs" && mounts[i].Path == "/sys" {
-			for _, opt := range mounts[i].Opts {
+			mnt.Device, mnt.Path, mnt.Opts)
+		if mnt.Device == "sysfs" && mnt.Path == "/sys" {
+			for _, opt := range mnt.Opts {
 				if opt == "rw" {
 					klog.V(4).Infof("NewPmemDeviceManagerNdctl: /sys mounted read-write, good")
 				} else if opt == "ro" {
-					return nil, fmt.Errorf("FATAL: /sys mounted read-only, can not operate\n")
+					return nil, fmt.Errorf("FATAL: /sys mounted read-only, can not operate")
 				}
 			}
 			break
@@ -97,10 +97,8 @@ func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64, nsmode string)
 	// this function is asked to create new devices repeatedly, forcing running out of space.
 	// Avoid device filling with garbage entries by returning error.
 	// Overall, no point having more than one namespace with same name.
-	_, err := pmem.getDevice(volumeId)
-	if err == nil {
-		klog.V(4).Infof("Device with name: %s already exists, refuse to create another", volumeId)
-		return fmt.Errorf("CreateDevice: Failed: namespace with that name exists")
+	if _, err := pmem.getDevice(volumeId); err == nil {
+		return ErrDeviceExists
 	}
 	// libndctl needs to store meta data and will use some of the allocated
 	// space for that (https://github.com/pmem/ndctl/issues/79).
@@ -126,9 +124,8 @@ func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64, nsmode string)
 	if err != nil {
 		return err
 	}
-	err = clearDevice(device, false)
-	if err != nil {
-		return err
+	if err := clearDevice(device, false); err != nil {
+		return fmt.Errorf("clear device %q: %v", volumeId, err)
 	}
 
 	return nil
@@ -142,8 +139,7 @@ func (pmem *pmemNdctl) DeleteDevice(volumeId string, flush bool) error {
 	if err != nil {
 		return err
 	}
-	err = clearDevice(device, flush)
-	if err != nil {
+	if err := clearDevice(device, flush); err != nil {
 		return err
 	}
 	return pmem.ctx.DestroyNamespaceByName(volumeId)
@@ -170,7 +166,10 @@ func (pmem *pmemNdctl) ListDevices() ([]*PmemDeviceInfo, error) {
 func (pmem *pmemNdctl) getDevice(volumeId string) (*PmemDeviceInfo, error) {
 	ns, err := pmem.ctx.GetNamespaceByName(volumeId)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, ndctl.ErrNotExist) {
+			return nil, ErrDeviceNotFound
+		}
+		return nil, fmt.Errorf("error getting device %q: %v", volumeId, err)
 	}
 
 	return namespaceToPmemInfo(ns), nil
