@@ -51,10 +51,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var (
-	cleanup func()
-)
-
 // Run the csi-test sanity tests against a pmem-csi driver
 var _ = Describe("sanity", func() {
 	workerSocatAddresses := []string{}
@@ -72,6 +68,8 @@ var _ = Describe("sanity", func() {
 	f := framework.NewDefaultFramework("pmem")
 	f.SkipNamespaceCreation = true // We don't need a per-test namespace and skipping it makes the tests run faster.
 	var execOnTestNode func(args ...string) string
+	var cleanup func()
+	var prevVol map[string][]string
 
 	BeforeEach(func() {
 		cs := f.ClientSet
@@ -163,9 +161,13 @@ var _ = Describe("sanity", func() {
 		config.CreateStagingDir = mkdir
 		config.RemoveTargetPath = rmdir
 		config.RemoveStagingPath = rmdir
+		// Register list of volumes before test, using out-of-band host commands (i.e. not CSI API).
+		prevVol = GetHostVolumes()
 	})
 
 	AfterEach(func() {
+		// Check list of volumes after test to detect left-overs
+		CheckForLeftoverVolumes(prevVol)
 		if cleanup != nil {
 			cleanup()
 		}
@@ -994,4 +996,45 @@ func WaitForPodsWithLabelRunningReady(c clientset.Interface, ns string, label la
 			return true, nil
 		})
 	return pods, err
+}
+
+// Register list of volumes before test, using out-of-band host commands (i.e. not CSI API).
+func GetHostVolumes() map[string][]string {
+	var cmd string
+	var hdr string
+	switch os.Getenv("TEST_DEVICEMODE") {
+	case "lvm":
+		// lvs adds many space (0x20) chars at end, we could squeeze
+		// repetitions using tr here, but TrimSpace() below strips those away
+		cmd = "sudo lvs --foreign --noheadings"
+		hdr = "LVM Volumes"
+	case "direct":
+		// ndctl produces multiline block. We want one line per namespace.
+		// Remove double quotes, delete lines dev:xyz and blockdev:xyz as these elems may change after reboot,
+		// remove newlines, then insert one at the end, clean some more.
+		cmd = "sudo ndctl list |tr -d '\"' |grep -v '^    dev:' |grep	-v '^    blockdev:' |tr -d '\n' |tr ']' '\n' |tr -d '[{}' |tr -d ' '"
+		hdr = "Namespaces"
+	}
+	result := make(map[string][]string)
+	// Instead of trying to find out number of hosts, we trust the set of
+	// ssh.N helper scripts matches running hosts, which should be the case in
+	// correctly running tester system. We run ssh.N commands until a ssh.N
+	// script appears to be "no such file".
+	for worker := 1; ; worker++ {
+		sshcmd := fmt.Sprintf("%s/_work/%s/ssh.%d", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"), worker)
+		ssh := exec.Command(sshcmd, cmd)
+		out, err := ssh.CombinedOutput()
+		if err != nil && os.IsNotExist(err) {
+			break
+		}
+		buf := fmt.Sprintf("%s on Node %d", hdr, worker)
+		result[buf] = strings.Split(strings.TrimSpace(string(out)), "\n")
+	}
+	return result
+}
+
+// CheckForLeftovers lists volumes again after test, diff means leftovers.
+func CheckForLeftoverVolumes(volBefore map[string][]string) {
+	volNow := GetHostVolumes()
+	Expect(volNow).To(Equal(volBefore), "same volumes before and after the test")
 }
