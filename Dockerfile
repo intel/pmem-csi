@@ -15,7 +15,7 @@ FROM ${CLEAR_LINUX_BASE} AS build
 ARG CLEAR_LINUX_BASE
 ARG SWUPD_UPDATE_ARG
 
-ARG NDCTL_VERSION="66"
+ARG NDCTL_VERSION="67"
 ARG NDCTL_CONFIGFLAGS="--disable-docs --without-systemd --without-bash"
 ARG NDCTL_BUILD_DEPS="os-core-dev devpkg-util-linux devpkg-kmod devpkg-json-c"
 ARG GO_VERSION="1.12.9"
