@@ -48,7 +48,8 @@ pipeline {
         /* last version before the 1.14 update in 28630 */
         CLEAR_LINUX_VERSION_1_13 = "28620"
 
-        PMEM_PATH = "/go/src/github.com/intel/pmem-csi"
+        // path for placing the source to build outside of GOROOT
+        PMEM_PATH = "/src/pmem-csi"
         REGISTRY_NAME = "cloud-native-image-registry.westus.cloudapp.azure.com"
 
         // Per-branch build environment, marked as "do not promote to public registry".
