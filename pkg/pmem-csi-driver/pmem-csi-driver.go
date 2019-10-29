@@ -191,7 +191,7 @@ func (pmemd *pmemDriver) Run() error {
 			return err
 		}
 		cs := NewNodeControllerServer(pmemd.cfg.NodeID, dm, sm)
-		ns := NewNodeServer(pmemd.cfg.NodeID, dm)
+		ns := NewNodeServer(cs)
 
 		if pmemd.cfg.Endpoint != pmemd.cfg.ControllerEndpoint {
 			if err := s.Start(pmemd.cfg.ControllerEndpoint, pmemd.serverTLSConfig, cs); err != nil {

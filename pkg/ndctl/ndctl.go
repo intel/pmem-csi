@@ -9,6 +9,8 @@ import "C"
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/pkg/errors"
 	"k8s.io/klog"
 )
@@ -104,7 +106,7 @@ func (ctx *Context) GetNamespaceByName(name string) (*Namespace, error) {
 			}
 		}
 	}
-	return nil, fmt.Errorf("Not found")
+	return nil, errors.Wrapf(os.ErrNotExist, "namespace '%s' not found", name)
 }
 
 //GetActiveNamespaces returns list of all active namespaces in all regions

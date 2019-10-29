@@ -38,9 +38,9 @@ const (
 	pmemParameterKeyPersistencyModel = "persistencyModel"
 	pmemParameterKeyCacheSize        = "cacheSize"
 
-	pmemPersistencyModelNone  PmemPersistencyModel = "none"
-	pmemPersistencyModelCache PmemPersistencyModel = "cache"
-	//pmemPersistencyModelEphemeral PmemPersistencyModel = "ephemeral"
+	pmemPersistencyModelNone      PmemPersistencyModel = "none"
+	pmemPersistencyModelCache     PmemPersistencyModel = "cache"
+	pmemPersistencyModelEphemeral PmemPersistencyModel = "ephemeral"
 )
 
 type PmemPersistencyModel string
@@ -55,6 +55,8 @@ type pmemVolume struct {
 	// ID of nodes where the volume provisioned/attached
 	// It would be one if simple volume, else would be more than one for "cached" volume
 	nodeIDs map[string]VolumeStatus
+	// isEphemeral holds true for ephemeral volumes
+	isEphemeral bool
 }
 
 type masterController struct {
@@ -138,6 +140,7 @@ func (cs *masterController) OnNodeDeleted(ctx context.Context, node *registryser
 func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
 	var vol *pmemVolume
 	chosenNodes := map[string]VolumeStatus{}
+	ephemeral := false
 
 	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
 		klog.Errorf("invalid create volume req: %v", req)
@@ -188,6 +191,8 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 							cacheCount = c
 						}
 					}
+				} else if volumeType == pmemPersistencyModelEphemeral {
+					ephemeral = true
 				}
 			}
 		}
@@ -245,10 +250,11 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 		klog.V(3).Infof("Chosen nodes: %v", chosenNodes)
 
 		vol = &pmemVolume{
-			id:      volumeID,
-			name:    req.Name,
-			size:    asked,
-			nodeIDs: chosenNodes,
+			id:          volumeID,
+			name:        req.Name,
+			size:        asked,
+			nodeIDs:     chosenNodes,
+			isEphemeral: ephemeral,
 		}
 		cs.mutex.Lock()
 		defer cs.mutex.Unlock()
@@ -364,7 +370,10 @@ func (cs *masterController) ListVolumes(ctx context.Context, req *csi.ListVolume
 	// Copy from map into array for pagination.
 	vols := make([]*pmemVolume, 0, len(cs.pmemVolumes))
 	for _, vol := range cs.pmemVolumes {
-		vols = append(vols, vol)
+		// ListVolumes shall only return persistent volumes
+		if !vol.isEphemeral {
+			vols = append(vols, vol)
+		}
 	}
 
 	// Code originally copied from https://github.com/kubernetes-csi/csi-test/blob/f14e3d32125274e0c3a3a5df380e1f89ff7c132b/mock/service/controller.go#L309-L365

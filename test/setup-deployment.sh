@@ -59,3 +59,11 @@ To try out the pmem-csi driver persistent volumes with late binding:
    cat deploy/kubernetes-${KUBERNETES_VERSION}/pmem-app-late-binding.yaml | ${KUBECTL} create -f -
 EOF
 fi
+
+if [ -e ${DEPLOYMENT_DIRECTORY}/pmem-app-ephemeral.yaml ]; then
+    cat <<EOF
+
+To try out the pmem-csi driver ephemeral volumes:
+   cat deploy/kubernetes-${KUBERNETES_VERSION}/pmem-app-ephemeral.yaml | ${KUBECTL} create -f -
+EOF
+fi

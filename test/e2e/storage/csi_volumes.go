@@ -40,20 +40,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func csiTunePattern(patterns []testpatterns.TestPattern) []testpatterns.TestPattern {
-	tunedPatterns := []testpatterns.TestPattern{}
-
-	for _, pattern := range patterns {
-		// Skip inline volume and pre-provsioned PV tests for csi drivers
-		if pattern.VolType == testpatterns.InlineVolume || pattern.VolType == testpatterns.PreprovisionedPV {
-			continue
-		}
-		tunedPatterns = append(tunedPatterns, pattern)
-	}
-
-	return tunedPatterns
-}
-
 var _ = Describe("E2E", func() {
 	// List of testDrivers to be executed in below loop
 	var csiTestDrivers = []func() testsuites.TestDriver{
@@ -81,7 +67,8 @@ var _ = Describe("E2E", func() {
 				// We use 16Mi size volumes because this is the minimum size supported
 				// by xfs filesystem's allocation group
 				// Ref: http://man7.org/linux/man-pages/man8/mkfs.xfs.8.html
-				claimSize: "16Mi",
+				claimSize:     "16Mi",
+				csiDriverName: "pmem-csi.intel.com",
 			}
 		},
 	}
@@ -96,6 +83,7 @@ var _ = Describe("E2E", func() {
 		// testsuites.InitVolumeIOTestSuite,
 		testsuites.InitVolumeModeTestSuite,
 		testsuites.InitVolumesTestSuite,
+		testsuites.InitEphemeralTestSuite,
 	}
 
 	for _, initDriver := range csiTestDrivers {
@@ -198,12 +186,13 @@ var _ = Describe("E2E", func() {
 })
 
 type manifestDriver struct {
-	driverInfo   testsuites.DriverInfo
-	patchOptions utils.PatchCSIOptions
-	manifests    []string
-	scManifest   map[string]string
-	claimSize    string
-	cleanup      func()
+	driverInfo    testsuites.DriverInfo
+	csiDriverName string
+	patchOptions  utils.PatchCSIOptions
+	manifests     []string
+	scManifest    map[string]string
+	claimSize     string
+	cleanup       func()
 }
 
 var _ testsuites.TestDriver = &manifestDriver{}
@@ -265,4 +254,18 @@ func (m *manifestDriver) finalPatchOptions(f *framework.Framework) utils.PatchCS
 		o.NewDriverName += f.UniqueName
 	}
 	return o
+}
+
+func (m *manifestDriver) GetVolume(config *testsuites.PerTestConfig, volumeNumber int) (map[string]string, bool, bool) {
+	attributes := map[string]string{"size": m.claimSize, "nsmode": "fsdax"}
+	shared := false
+	readOnly := false
+
+	return attributes, shared, readOnly
+}
+
+func (m *manifestDriver) GetCSIDriverName(config *testsuites.PerTestConfig) string {
+	// Return real driver name.
+	// We can't use m.driverInfo.Name as its not the real driver name
+	return m.csiDriverName
 }

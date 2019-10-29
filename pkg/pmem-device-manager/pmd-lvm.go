@@ -2,12 +2,14 @@ package pmdmanager
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
+	"github.com/pkg/errors"
 	"k8s.io/klog"
 )
 
@@ -18,7 +20,7 @@ const (
 
 type pmemLvm struct {
 	volumeGroups []string
-	devices      map[string]PmemDeviceInfo
+	devices      map[string]*PmemDeviceInfo
 }
 
 var _ PmemDeviceManager = &pmemLvm{}
@@ -181,11 +183,11 @@ func (lvm *pmemLvm) FlushDeviceData(volumeId string) error {
 	return ClearDevice(device, true)
 }
 
-func (lvm *pmemLvm) ListDevices() ([]PmemDeviceInfo, error) {
+func (lvm *pmemLvm) ListDevices() ([]*PmemDeviceInfo, error) {
 	lvmMutex.Lock()
 	defer lvmMutex.Unlock()
 
-	devices := []PmemDeviceInfo{}
+	devices := []*PmemDeviceInfo{}
 	for _, dev := range lvm.devices {
 		devices = append(devices, dev)
 	}
@@ -193,35 +195,35 @@ func (lvm *pmemLvm) ListDevices() ([]PmemDeviceInfo, error) {
 	return devices, nil
 }
 
-func (lvm *pmemLvm) GetDevice(volumeId string) (PmemDeviceInfo, error) {
+func (lvm *pmemLvm) GetDevice(volumeId string) (*PmemDeviceInfo, error) {
 	lvmMutex.Lock()
 	defer lvmMutex.Unlock()
 
 	return lvm.getDevice(volumeId)
 }
 
-func (lvm *pmemLvm) getDevice(volumeId string) (PmemDeviceInfo, error) {
+func (lvm *pmemLvm) getDevice(volumeId string) (*PmemDeviceInfo, error) {
 	if dev, ok := lvm.devices[volumeId]; ok {
 		return dev, nil
 	}
 
-	return PmemDeviceInfo{}, fmt.Errorf("Device not found with name %s", volumeId)
+	return nil, errors.Wrapf(os.ErrNotExist, "no device found with id '%s'", volumeId)
 }
 
-func getUncachedDevice(volumeId string, volumeGroup string) (PmemDeviceInfo, error) {
+func getUncachedDevice(volumeId string, volumeGroup string) (*PmemDeviceInfo, error) {
 	devices, err := listDevices(volumeGroup)
 	if err != nil {
-		return PmemDeviceInfo{}, err
+		return nil, err
 	}
 
 	if dev, ok := devices[volumeId]; ok {
 		return dev, nil
 	}
-	return PmemDeviceInfo{}, fmt.Errorf("Device not found with name %s", volumeId)
+	return nil, errors.Wrapf(os.ErrNotExist, "no device found with id '%s' in group '%s'", volumeId, volumeGroup)
 }
 
 // listDevices Lists available logical devices in given volume groups
-func listDevices(volumeGroups ...string) (map[string]PmemDeviceInfo, error) {
+func listDevices(volumeGroups ...string) (map[string]*PmemDeviceInfo, error) {
 	args := append(lvsArgs, volumeGroups...)
 	output, err := pmemexec.RunCommand("lvs", args...)
 	if err != nil {
@@ -235,8 +237,8 @@ func vgName(bus *ndctl.Bus, region *ndctl.Region, nsmode ndctl.NamespaceMode) st
 }
 
 //lvs options "lv_name,lv_path,lv_size,lv_free"
-func parseLVSOuput(output string) (map[string]PmemDeviceInfo, error) {
-	devices := map[string]PmemDeviceInfo{}
+func parseLVSOuput(output string) (map[string]*PmemDeviceInfo, error) {
+	devices := map[string]*PmemDeviceInfo{}
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
 		fields := strings.Fields(strings.TrimSpace(line))
@@ -244,7 +246,7 @@ func parseLVSOuput(output string) (map[string]PmemDeviceInfo, error) {
 			continue
 		}
 
-		dev := PmemDeviceInfo{}
+		dev := &PmemDeviceInfo{}
 		dev.VolumeId = fields[0]
 		dev.Path = fields[1]
 		dev.Size, _ = strconv.ParseUint(fields[2], 10, 64)

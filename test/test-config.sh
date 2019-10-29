@@ -91,7 +91,7 @@ fi
 
 # Kubernetes feature gates to enable/disable
 # featurename=true,feature=false
-: ${TEST_FEATURE_GATES:=CSINodeInfo=true,CSIDriverRegistry=true,CSIBlockVolume=true}
+: ${TEST_FEATURE_GATES:=CSINodeInfo=true,CSIDriverRegistry=true,CSIBlockVolume=true,CSIInlineVolume=true}
 
 # DeviceMode to be used during testing.
 # Allowed values: lvm, direct

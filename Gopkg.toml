@@ -52,6 +52,10 @@
   source = "github.com/avalluri/kubernetes"
   branch = "automated-cherry-pick-of-#83609-upstream-release-1.16"
 
+[[constraint]]
+  name = "github.com/docker/go-units"
+  version = "0.4.0"
+
 [[override]]
   name = "k8s.io/apimachinery"
   version = "kubernetes-1.16.0"

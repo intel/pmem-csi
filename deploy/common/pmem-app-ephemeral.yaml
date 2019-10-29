@@ -1,0 +1,23 @@
+# This is an example Pod definition to demonstrates
+# how to use inline PMEM csi volumes.
+kind: Pod
+apiVersion: v1
+metadata:
+  name: my-csi-app-inline-volume
+spec:
+  containers:
+    - name: my-frontend
+      image: busybox
+      command: [ "sleep", "100000" ]
+      volumeMounts:
+      - mountPath: "/data"
+        name: my-csi-volume
+  volumes:
+  - name: my-csi-volume
+    csi:
+      driver: pmem-csi.intel.com
+      fsType: "xfs"
+      volumeAttributes:
+        size: "2Gi"
+        nsmode: "fsdax"
+
