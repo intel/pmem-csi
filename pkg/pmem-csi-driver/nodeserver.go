@@ -307,8 +307,35 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
+	// Check does devicepath already contain a filesystem?
+	existingFsType, err := determineFilesystemType(device.Path)
+	if err != nil {
+		klog.Errorf("NodeStageVolume: determineFilesystemType failed: %v", err)
+		return nil, err
+	}
+	if existingFsType != "" && existingFsType != requestedFsType {
+		klog.Errorf("NodeStageVolume: File system with different type %v exists on %s",
+			existingFsType, device.Path)
+		return nil, status.Error(codes.AlreadyExists, "File system with different type exists")
+	}
+	// Check is something already mounted to stagingtargetPath
+	mounter := mount.New("")
+	mountedDev, _, err := mount.GetDeviceNameFromMount(mounter, stagingtargetPath)
+	if err != nil {
+		klog.Errorf("NodeStageVolume: Error getting device name for mount")
+		return nil, err
+	}
+	if mountedDev == device.Path {
+		klog.V(4).Infof("NodeStageVolume: Device %s already mounted to path %s", mountedDev, stagingtargetPath)
+		// Check are the capabilities compatible.
+		if existingFsType == requestedFsType {
+			// If fstype compatible, return OK.
+			klog.V(4).Infof("NodeStageVolume: Device:%s fsType:%s matches", mountedDev, requestedFsType)
+			return &csi.NodeStageVolumeResponse{}, nil
+		}
+	}
 	if err = ns.provisionDevice(device, req.GetVolumeCapability().GetMount().GetFsType()); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, err
 	}
 
 	mountOptions := []string{}
@@ -442,46 +469,26 @@ func (ns *nodeServer) createEphemeralDevice(ctx context.Context, req *csi.NodePu
 // provisionDevice initializes the device with requested filesystem
 // and mounts at given targetPath.
 func (ns *nodeServer) provisionDevice(device *pmdmanager.PmemDeviceInfo, fsType string) error {
-	//targetPath string, mountOptions []string)
+	// Empty FsType means "unspecified" and we pick default
 	if fsType == "" {
-		// Default to ext4 filesystem
 		fsType = defaultFilesystem
 	}
 
-	// Check does devicepath already contain a filesystem?
-	existingFsType, err := determineFilesystemType(device.Path)
-	if err != nil {
-		return err
-	}
-
-	// what to do if existing file system is detected and is different from request;
-	// forced re-format would lead to loss of previous data, so we refuse.
-	if existingFsType != "" {
-		// Is existing filesystem type same as requested?
-		if existingFsType == fsType {
-			klog.V(4).Infof("Skip mkfs as %v file system already exists on %v", existingFsType, device.Path)
-		} else {
-			return fmt.Errorf("File system with different type(%s) exists, whereas requested type is '%s'", existingFsType, fsType)
-		}
+	cmd := ""
+	var args []string
+	// hard-code block size to 4k to avoid smaller values and trouble to dax mount option
+	if fsType == "ext4" {
+		cmd = "mkfs.ext4"
+		args = []string{"-b 4096", "-F", device.Path}
+	} else if fsType == "xfs" {
+		cmd = "mkfs.xfs"
+		args = []string{"-b", "size=4096", "-f", device.Path}
 	} else {
-		// no existing file system, make fs
-		// Empty FsType means "unspecified" and we pick default, currently hard-codes to ext4
-		cmd := ""
-		var args []string
-		// hard-code block size to 4k to avoid smaller values and trouble to dax mount option
-		if fsType == "ext4" {
-			cmd = "mkfs.ext4"
-			args = []string{"-b 4096", "-F", device.Path}
-		} else if fsType == "xfs" {
-			cmd = "mkfs.xfs"
-			args = []string{"-b", "size=4096", "-f", device.Path}
-		} else {
-			return fmt.Errorf("Unsupported filesystem '%s'. Supported filesystems types: 'xfs', 'ext4'", fsType)
-		}
-		output, err := pmemexec.RunCommand(cmd, args...)
-		if err != nil {
-			return fmt.Errorf("mkfs failed: %s", output)
-		}
+		return status.Error(codes.Unimplemented, fmt.Sprintf("Unsupported filesystem '%s'. Supported filesystems types: 'xfs', 'ext4'", fsType))
+	}
+	output, err := pmemexec.RunCommand(cmd, args...)
+	if err != nil {
+		return status.Error(codes.Unimplemented, fmt.Sprintf("mkfs failed: %s", output))
 	}
 
 	return nil
