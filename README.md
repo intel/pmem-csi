@@ -16,7 +16,6 @@
     - [Supported Kubernetes versions](#supported-kubernetes-versions)
     - [Setup](#setup)
         - [Get source code](#get-source-code)
-        - [Build PMEM-CSI](#build-pmem-csi)
         - [Run PMEM-CSI on Kubernetes](#run-pmem-csi-on-kubernetes)
     - [Automated testing](#automated-testing)
         - [Unit testing and code quality](#unit-testing-and-code-quality)
@@ -413,7 +412,6 @@ ephemeral volume usage.
 
 ### Software required
 
-Building of Docker images has been verified using Docker-ce versions 18.06.1, 19.03.0.
 The recommended mimimum Linux kernel version for running the PMEM-CSI driver is 4.15. See [Persistent Memory Programming](https://pmem.io/2018/05/15/using_persistent_memory_devices_with_the_linux_device_mapper.html) for more details about supported kernel versions.
 
 ### Hardware required
@@ -516,7 +514,7 @@ ls: cannot access '/dev/pmem*': No such file or directory
 
 ## Supported Kubernetes versions
 
-PMEM-CSI driver implements CSI specification version 1.0.0, which only
+PMEM-CSI implements the CSI specification version 1.x, which is only
 supported by Kubernetes versions >= v1.13. The following table
 summarizes the status of support for PMEM-CSI on different Kubernetes
 versions:
@@ -548,19 +546,6 @@ Use these commands:
 mkdir -p $GOPATH/src/github.com/intel
 git clone https://github.com/intel/pmem-csi $GOPATH/src/github.com/intel/pmem-csi
 ```
-
-### Build PMEM-CSI
-
-1.  Use `make build-images` to produce Docker container images.
-
-2.  Use `make push-images` to push Docker container images to a Docker image registry. The
-    default is to push to a local [Docker registry](https://docs.docker.com/registry/deploying/).
-    Some other registry can be configured by setting the variables described in
-    in the [test-config.sh](test/test-config.sh) file, see the [configuration options](#configuration-options)
-    section below. Alternatively, the registry can also be set with a make variable:
-    `make push-images REGISTRY_NAME=my-registry:5000`
-
-See the [Makefile](Makefile) for additional make targets and possible make variables.
 
 ### Run PMEM-CSI on Kubernetes
 
@@ -797,7 +782,7 @@ machines deployed by [GoVM](https://github.com/govm-project/govm). The
 same cluster can also be used interactively when real hardware is not
 available.
 
-This is known to work on a Linux development host system. The user
+E2E testing is known to work on a Linux development host system. The user
 must be allowed to use Docker.
 
 KVM must be enabled and the user must be allowed to use it. Usually this
