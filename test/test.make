@@ -1,9 +1,9 @@
-TEST_CMD=go test
+TEST_CMD=$(GO) test
 TEST_ARGS=$(IMPORT_PATH)/pkg/...
 
 .PHONY: vet
 test: vet
-	go vet $(IMPORT_PATH)/pkg/...
+	$(GO) vet $(IMPORT_PATH)/pkg/...
 
 # Check resp. fix formatting.
 .PHONY: test_fmt fmt
@@ -59,10 +59,10 @@ RUNTIME_DEPS =
 # We use "go list" because it is readily available. A good replacement
 # would be godeps. We list dependencies recursively, not just the
 # direct dependencies.
-RUNTIME_DEPS += go list -f '{{ join .Deps "\n" }}' ./cmd/pmem-csi-driver |
+# Filter out the go standard runtime packages from dependecies
+RUNTIME_DEPS += diff <($(GO) list -f '{{join .Deps "\n"}}' ./cmd/pmem-csi-driver/ | grep -v ^github.com/intel/pmem-csi | sort -u) \
+                <(go list std | sort -u) | grep ^'<' | cut -f2- -d' ' |
 
-# This focuses on packages that are not in Golang core.
-RUNTIME_DEPS += grep '^github.com/intel/pmem-csi/vendor/' |
 
 # Filter out some packages that aren't really code.
 RUNTIME_DEPS += grep -v -e 'github.com/container-storage-interface/spec' |
@@ -120,7 +120,7 @@ RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 	TEST_DEPLOYMENTMODE=$(shell source test/test-config.sh; echo $$TEST_DEPLOYMENTMODE) \
 	TEST_DEVICEMODE=$(shell source test/test-config.sh; echo $$TEST_DEVICEMODE) \
 	TEST_KUBERNETES_VERSION=$(shell source test/test-config.sh; echo $$TEST_KUBERNETES_VERSION) \
-	go test -count=1 -timeout 0 -v ./test/e2e \
+	${GO} test -count=1 -timeout 0 -v ./test/e2e \
                 -ginkgo.skip='$(subst $(space),|,$(TEST_E2E_SKIP))' \
                 -ginkgo.focus='$(subst $(space),|,$(TEST_E2E_FOCUS))' \
                 -report-dir=$(TEST_E2E_REPORT_DIR)
@@ -131,7 +131,7 @@ test_e2e: start
 .PHONY: run_tests
 test: run_tests
 RUN_TESTS = TEST_WORK=$(abspath _work) \
-	$(TEST_CMD) $(shell go list $(TEST_ARGS) | sed -e 's;$(IMPORT_PATH);.;')
+	$(TEST_CMD) $(shell $(GO) list $(TEST_ARGS) | sed -e 's;$(IMPORT_PATH);.;')
 run_tests: _work/pmem-ca/.ca-stamp _work/evil-ca/.ca-stamp
 	$(RUN_TESTS)
 
@@ -184,10 +184,10 @@ _work/coverage.out: _work/gocovmerge-$(GOCOVMERGE_VERSION)
 	$< _work/coverage/* >$@
 
 _work/coverage.html: _work/coverage.out
-	go tool cover -html $< -o $@
+	$(G0) tool cover -html $< -o $@
 
 _work/coverage.txt: _work/coverage.out
-	go tool cover -func $< -o $@
+	$(GO) tool cover -func $< -o $@
 
 .PHONY: coverage
 coverage:
