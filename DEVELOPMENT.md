@@ -1,11 +1,13 @@
 Table of Contents
 ----------------
 
+- [Setup](#setup)
+    - [Build PMEM-CSI](#build-pmem-csi)
 - [Code quality](#code-quality)
     - [Coding style](#coding-style)
     - [Input validation](#input-validation)
 - [Release management](#release-management)
--   - [Branching](#branching)
+    - [Branching](#branching)
     - [Tagging](#tagging)
 - [APIs](#apis)
     - [CSI API](#csi-api)
@@ -29,6 +31,23 @@ Table of Contents
     - [Diagrams describing provisioning sequence](#diagrams-describing-provisioning-sequence)
     - [RegistryServer spec](#registryserver-spec)
     - [Table of Contents in README and DEVELOPMENT](#table-of-contents-in-readme-and-development)
+
+Setup
+============
+
+Build PMEM-CSI
+--------------
+
+1.  Use `make build-images` to produce Docker container images.
+
+2.  Use `make push-images` to push Docker container images to a Docker image registry. The
+    default is to push to a local [Docker registry](https://docs.docker.com/registry/deploying/).
+    Some other registry can be configured by setting the variables described in
+    in the [test-config.sh](test/test-config.sh) file, see the [configuration options](#configuration-options)
+    section below. Alternatively, the registry can also be set with a make variable:
+    `make push-images REGISTRY_NAME=my-registry:5000`
+
+See the [Makefile](Makefile) for additional make targets and possible make variables.
 
 Code quality
 ============
@@ -341,4 +360,4 @@ Then check and hand-pick generated TOC part(s) from /tmp/temp.md and insert in d
 Note that pandoc is known to produce incorrect TOC entries if headers contain special characters,
 means TOC generation will be more reliable if we avoid non-letter-or-number characters in the headers.
 
-- Another method is to use emacs package markdown-toc-generate-toc
+- Another method is to use emacs command markdown-toc-generate-toc and manually check and edit the generated part: we do not show generated 3rd-level headings in README.md.
