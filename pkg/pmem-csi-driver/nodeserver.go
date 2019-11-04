@@ -236,6 +236,16 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	volumeMutex.LockKey(volumeID)
 	defer volumeMutex.UnlockKey(volumeID)
 
+	var vol *nodeVolume
+	if vol = ns.cs.getVolumeByID(req.VolumeId); vol == nil {
+		// For ephemeral volumes we use req.VolumeId as volume name.
+		vol = ns.cs.getVolumeByName(req.VolumeId)
+	}
+
+	if vol == nil {
+		return nil, status.Error(codes.NotFound, fmt.Sprintf("No volume found with volume id '%s'", req.VolumeId))
+	}
+
 	// Check if the target path is really a mount point. If its not a mount point do nothing
 	if notMnt, err := ns.mounter.IsLikelyNotMountPoint(targetPath); notMnt || err != nil && !os.IsNotExist(err) {
 		klog.V(5).Infof("NodeUnpublishVolume: %s is not mount point, skip", targetPath)
@@ -251,16 +261,6 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	klog.V(5).Infof("NodeUnpublishVolume: volume id:%s targetpath:%s has been unmounted", volumeID, targetPath)
 
 	os.Remove(targetPath) // nolint: gosec, errorchk
-
-	var vol *nodeVolume
-	if vol = ns.cs.getVolumeByID(req.VolumeId); vol == nil {
-		// For ephemeral volumes we use req.VolumeId as volume name.
-		vol = ns.cs.getVolumeByName(req.VolumeId)
-	}
-
-	if vol == nil {
-		return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("No volume found with volume id '%s'", req.VolumeId))
-	}
 
 	if vol.Params[pmemParameterKeyPersistencyModel] == string(pmemPersistencyModelEphemeral) {
 		if _, err := ns.cs.DeleteVolume(ctx, &csi.DeleteVolumeRequest{VolumeId: vol.ID}); err != nil {
