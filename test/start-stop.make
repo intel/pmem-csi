@@ -33,3 +33,6 @@ restart:
 		echo "Cluster $(CLUSTER) is not running, it cannot be restarted."; \
 		exit 1; \
 	fi
+
+start_test_vm: _work/bin/govm
+	PATH="$(PWD)/_work/bin:$$PATH" NODES=$(NODE) INIT_CLUSTER=false test/start-kubernetes.sh

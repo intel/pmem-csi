@@ -149,6 +149,17 @@ RUN_TESTS = TEST_WORK=$(abspath _work) \
 run_tests: _work/pmem-ca/.ca-stamp _work/evil-ca/.ca-stamp check-go-version-$(GO_BINARY)
 	$(RUN_TESTS)
 
+run_dm_tests: TEST_BINARY_NAME=pmem-dm-tests
+run_dm_tests: NODE=pmem-csi-$(CLUSTER)-worker1
+run_dm_tests: _work/bin/govm start_test_vm
+	$(TEST_CMD) ./pkg/pmem-device-manager -v -c -o $(PWD)/_work/$(shell echo  $(TEST_BINARY_NAME))
+	NODE_IP=$(shell `pwd`/_work/bin/govm list -f '{{select (filterRegexp . "Name" "^'$(NODE)'") "IP"}}'); \
+	SSH=$$(grep -l $$NODE_IP _work/$(CLUSTER)/ssh.*); \
+	SSH_USER=$$(grep ^exec $$SSH | rev | cut -f2 -d' ' | rev | cut -f1 -d'@'); \
+	SSH_ARGS=$$(grep ^exec $$SSH | cut -f3- -d' ' | rev | cut -f3- -d' ' | rev); \
+	scp $$SSH_ARGS `pwd`/_work/$(TEST_BINARY_NAME) $$SSH_USER@$$NODE_IP:. ; \
+	$$SSH sudo ./$(TEST_BINARY_NAME) -ginkgo.v
+
 _work/%/.ca-stamp: test/setup-ca.sh _work/.setupcfssl-stamp
 	rm -rf $(@D)
 	WORKDIR='$(@D)' PATH='$(PWD)/_work/bin/:$(PATH)' CA='$*' EXTRA_CNS="wrong-node-controller" $<

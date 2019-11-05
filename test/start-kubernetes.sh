@@ -15,10 +15,10 @@ RESOURCES_DIRECTORY=${RESOURCES_DIRECTORY:-${REPO_DIRECTORY}/_work/resources}
 WORKING_DIRECTORY="${WORKING_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
 LOCKFILE="${LOCKFILE:-${REPO_DIRECTORY}/_work/start-kubernetes.exclusivelock}"
 LOCKDELAY="${LOCKDELAY:-300}" # seconds
-NODES=( $DEPLOYMENT_ID-master
+NODES=(${NODES:-$DEPLOYMENT_ID-master
         $DEPLOYMENT_ID-worker1
         $DEPLOYMENT_ID-worker2
-        $DEPLOYMENT_ID-worker3)
+        $DEPLOYMENT_ID-worker3})
 CLOUD="${CLOUD:-true}"
 FLAVOR="${FLAVOR:-medium}" # actual memory size and CPUs selected below
 SSH_KEY="${SSH_KEY:-${RESOURCES_DIRECTORY}/id_rsa}"
@@ -32,7 +32,8 @@ mem-path=/data/nvdimm0,size=${TEST_PMEM_MEM_SIZE}M \
  -device nvdimm,id=nvdimm1,memdev=mem1,label-size=${TEST_PMEM_LABEL_SIZE} \
  -machine pc,nvdimm}"
 EXTRA_MASTER_ETCD_VOLUME=
-
+INIT_CLUSTER=${INIT_CLUSTER:-true}
+TEST_INIT_REGION=${TEST_INIT_REGION:-true}
 
 # We might already be running as root, for example inside the
 # CI's build container.
@@ -187,6 +188,10 @@ vms:
 EOF
 
     for node in ${NODES[@]}; do
+        # Create VM only if its not found in govm list
+        if [ -n "$(govm list -f '{{select (filterRegexp . "Name" "^'${node}'$") "Name"}}')" ]; then
+            continue
+        fi
         cat <<EOF
   - name: ${node}
     image: ${RESOURCES_DIRECTORY}/${CLOUD_IMAGE}
@@ -206,11 +211,16 @@ EOF
     done
 )
 
+function node_filter(){
+    IFS="|"; echo "($*)"
+}
+
 function print_ips() (
-    govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-(master|worker[[:digit:]]+)$") "IP"}}' | tac
+    govm list -f '{{select (filterRegexp . "Name" "^'$(node_filter ${NODES[@]})'$") "IP"}}' | tac
 )
 
 function create_vms() (
+    setup_script="setup-${TEST_DISTRO}-govm.sh"
     STOP_VMS_SCRIPT="${WORKING_DIRECTORY}/stop.sh"
     RESTART_VMS_SCRIPT="${WORKING_DIRECTORY}/restart.sh"
     print_govm_yaml >$GOVM_YAML || die "failed to create $GOVM_YAML"
@@ -219,7 +229,7 @@ function create_vms() (
 
     #Create scripts to delete virtual machines
     (
-        machines=$(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-(master|worker[[:digit:]]+)$") "Name"}}') &&
+        machines=$(govm list -f '{{select (filterRegexp . "Name" "^'$(node_filter ${NODES[@]})'$") "Name"}}') &&
         cat <<EOF
 #!/bin/bash -e
 $(for i in $machines; do echo govm remove $i; done)
@@ -264,17 +274,49 @@ while [ \$(${WORKING_DIRECTORY}/ssh-${CLUSTER} "kubectl get nodes  -o go-templat
 done
 EOF
       ) >$RESTART_VMS_SCRIPT && chmod +x $RESTART_VMS_SCRIPT || die "failed to create $RESTART_VMS_SCRIPT"
-    #Wait for the ssh connectivity in the vms
+
+    vm_id=0
+    pids=""
     for ip in ${IPS}; do
         SECONDS=0
         NO_PROXY+=",$ip"
+        #Wait for the ssh connectivity in the vms
         echo "Waiting for ssh connectivity on vm with ip $ip"
         while ! ssh $SSH_ARGS ${CLOUD_USER}@${ip} exit 2>/dev/null; do
             if [ "$SECONDS" -gt "$SSH_TIMEOUT" ]; then
                 die "timeout accessing ${ip} through ssh"
             fi
         done
+
+        vm_name=$(govm list -f '{{select (filterRegexp . "IP" "'${ip}'") "Name"}}') || die "failed to find VM for IP $ip"
+        log_name=${WORKING_DIRECTORY}/${vm_name}.log
+        ssh_script=${WORKING_DIRECTORY}/ssh.${vm_id}
+        ((vm_id=vm_id+1))
+        if [[ "$vm_name" = *"worker"* ]]; then
+            workers_ip+="$ip "
+        else
+            ( cat <<EOF
+#!/bin/sh
+
+exec ssh $SSH_ARGS ${CLOUD_USER}@${ip} "\$@"
+EOF
+            ) >${WORKING_DIRECTORY}/ssh-${CLUSTER} && chmod +x ${WORKING_DIRECTORY}/ssh-${CLUSTER} || die "failed to create ${WORKING_DIRECTORY}/ssh-${CLUSTER}"
+        fi
+        ( cat <<EOF
+#!/bin/sh
+
+exec ssh $SSH_ARGS ${CLOUD_USER}@${ip} "\$@"
+EOF
+        ) >$ssh_script && chmod +x $ssh_script || die "failed to create $ssh_script"
+        ENV_VARS="env$(env_vars) HOSTNAME='$vm_name' IPADDR='$ip'"
+        ENV_VARS+=" INIT_KUBERNETES=${INIT_CLUSTER}"
+        # The local registry and the master node might be used as insecure registries, enabled that just in case.
+        ENV_VARS+=" INSECURE_REGISTRIES='$TEST_INSECURE_REGISTRIES $TEST_LOCAL_REGISTRY pmem-csi-$CLUSTER-master:5000'"
+        scp $SSH_ARGS ${TEST_DIRECTORY}/${setup_script} ${CLOUD_USER}@${ip}:. >/dev/null || die "failed to copy install scripts to $vm_name = $ip"
+        ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo env $ENV_VARS ./$setup_script" </dev/null &> >(log_lines "$vm_name" "$log_name") &
+        pids+=" $!"
     done
+    waitall $pids || die "at least one of the nodes failed"
 )
 
 # Wait for some pids to finish. Once the first one fails, the others
@@ -322,10 +364,12 @@ function log_lines(){
 }
 
 function init_kubernetes_cluster() (
+    # Do nothing if INIT_CLUSTER set to false
+    ${INIT_CLUSTER} || return 0
+
     workers_ip=""
     master_ip="$(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-master$") "IP"}}')" || die "failed to find master IP"
     join_token=""
-    setup_script="setup-${TEST_DISTRO}-govm.sh"
     install_k8s_script="setup-kubernetes.sh"
     KUBECONFIG=${WORKING_DIRECTORY}/kube.config
     echo "Installing dependencies on cloud images, this process may take some minutes"
@@ -338,25 +382,10 @@ function init_kubernetes_cluster() (
         ((vm_id=vm_id+1))
         if [[ "$vm_name" = *"worker"* ]]; then
             workers_ip+="$ip "
-        else
-            ( cat <<EOF
-#!/bin/sh
-
-exec ssh $SSH_ARGS ${CLOUD_USER}@${ip} "\$@"
-EOF
-            ) >${WORKING_DIRECTORY}/ssh-${CLUSTER} && chmod +x ${WORKING_DIRECTORY}/ssh-${CLUSTER} || die "failed to create ${WORKING_DIRECTORY}/ssh-${CLUSTER}"
         fi
-        ( cat <<EOF
-#!/bin/sh
-
-exec ssh $SSH_ARGS ${CLOUD_USER}@${ip} "\$@"
-EOF
-        ) >$ssh_script && chmod +x $ssh_script || die "failed to create $ssh_script"
         ENV_VARS="env$(env_vars) HOSTNAME='$vm_name' IPADDR='$ip'"
-        # The local registry and the master node might be used as insecure registries, enabled that just in case.
-        ENV_VARS+=" INSECURE_REGISTRIES='$TEST_INSECURE_REGISTRIES $TEST_LOCAL_REGISTRY pmem-csi-$CLUSTER-master:5000'"
-        scp $SSH_ARGS ${TEST_DIRECTORY}/{$setup_script,$install_k8s_script} ${CLOUD_USER}@${ip}:. >/dev/null || die "failed to copy install scripts to $vm_name = $ip"
-        ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo env $ENV_VARS ./$setup_script && env $ENV_VARS ./$install_k8s_script" </dev/null &> >(log_lines "$vm_name" "$log_name") &
+        scp $SSH_ARGS ${TEST_DIRECTORY}/${install_k8s_script} ${CLOUD_USER}@${ip}:. >/dev/null || die "failed to copy install scripts to $vm_name = $ip"
+        ssh $SSH_ARGS ${CLOUD_USER}@${ip} "env $ENV_VARS ./$install_k8s_script" </dev/null &> >(log_lines "$vm_name" "$log_name") &
         pids+=" $!"
     done
     waitall $pids || die "at least one of the nodes failed"
@@ -375,17 +404,17 @@ EOF
             ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} sudo docker tag "$image" "$remoteimage" || die "failed to tag $image as $remoteimage"
             # "docker push" has been seen to fail temporarily with "error creating overlay mount to /var/lib/docker/overlay2/xxx/merged: device or resource busy".
             # Here we simply try three times before giving up.
-	    local i=0
+            local i=0
             while true; do
-		if (set -x; ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} sudo docker push "$remoteimage"); then
-		    break
-		elif [ $i -ge 2 ]; then
-		    die "'docker push' failed repeatedly, giving up"
-		else
-		    echo "attempt #$i: 'docker push' failed, will try again"
-		    i=$(($i + 1))
-		fi
-	    done
+                if (set -x; ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} sudo docker push "$remoteimage"); then
+                    break
+                elif [ $i -ge 2 ]; then
+                    die "'docker push' failed repeatedly, giving up"
+                else
+                    echo "attempt #$i: 'docker push' failed, will try again"
+                    i=$(($i + 1))
+                fi
+            done
         done
 
         # TEST_PMEM_REGISTRY in test-config.sh uses this machine name as registry,
@@ -423,11 +452,29 @@ function init_workdir() (
     ) 200>$LOCKFILE
 )
 
+function init_pmem_regions() {
+    if $TEST_INIT_REGION; then
+        for vm_id in ${!NODES[@]}; do
+            ${WORKING_DIRECTORY}/ssh.${vm_id} sudo ndctl disable-region region0
+            ${WORKING_DIRECTORY}/ssh.${vm_id} sudo ndctl init-labels nmem0
+            ${WORKING_DIRECTORY}/ssh.${vm_id} sudo ndctl enable-region region0
+        done
+    fi
+}
+
 function check_status() { # intentionally a composite command, so "exit" will exit the main script
-    deployments=$(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-master$") "Name"}}')
-    if [ ! -z "$deployments" ]; then
-        echo "Kubernetes cluster ${CLUSTER} is already running, using it unchanged."
-        exit 0
+    if ${INIT_CLUSTER} ; then
+        deployments=$(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-master$") "Name"}}')
+        if [ ! -z "$deployments" ]; then
+            echo "Kubernetes cluster ${CLUSTER} is already running, using it unchanged."
+            exit 0
+        fi
+    else 
+        vm_count=$(govm list -f '{{select (filterRegexp . "Name" "^'$(node_filter ${NODES[@]})'$") "Name"}}' | wc -l)
+        if [ $vm_count == ${#NODES[@]} ]; then
+            echo "All needed nodes are already running, using them unchanged."
+            exit 0
+        fi
     fi
 }
 
@@ -440,7 +487,7 @@ function cleanup() (
         govm list
         echo "Docker status:"
         docker ps
-        for vm in $(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-(master|worker[[:digit:]]+)$") "Name"}}'); do
+        for vm in $(govm list -f '{{select (filterRegexp . "Name" "^'$(node_filter ${NODES[@]})'$") "Name"}}'); do
             govm remove "$vm"
         done
         if [ "${EXTRA_MASTER_ETCD_VOLUME}" ] && mount | grep -q "${EXTRA_MASTER_ETCD_VOLUME}"; then
@@ -457,6 +504,7 @@ if init_workdir &&
    EXTRA_MASTER_ETCD_VOLUME=$(setup_etcd_volume) &&
    CLOUD_IMAGE=$(download_image) &&
    create_vms &&
+   init_pmem_regions &&
    init_kubernetes_cluster; then
     FAILED=false
 else

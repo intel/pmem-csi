@@ -9,7 +9,6 @@ set -x
 set -o errexit # TODO: replace with explicit error checking and messages
 set -o pipefail
 
-: ${TEST_INIT_REGION:=true}
 : ${TEST_CREATE_REGISTRY:=false}
 
 function error_handler(){
@@ -174,19 +173,6 @@ fi
 ${TEST_CONFIGURE_POST_ALL}
 
 }
-
-
-function init_region(){
-trap 'error_handler ${LINENO}' ERR
-sudo ndctl disable-region region0
-sudo ndctl init-labels nmem0
-sudo ndctl enable-region region0
-
-}
-
-if $TEST_INIT_REGION; then
-    init_region
-fi
 
 if [[ "$HOSTNAME" == *"master"* ]]; then
 	setup_kubernetes_master
