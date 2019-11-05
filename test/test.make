@@ -119,6 +119,7 @@ RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 	CLUSTER=$(CLUSTER) \
 	TEST_DEPLOYMENTMODE=$(shell source test/test-config.sh; echo $$TEST_DEPLOYMENTMODE) \
 	TEST_DEVICEMODE=$(shell source test/test-config.sh; echo $$TEST_DEVICEMODE) \
+	TEST_KUBERNETES_VERSION=$(shell source test/test-config.sh; echo $$TEST_KUBERNETES_VERSION) \
 	go test -count=1 -timeout 0 -v ./test/e2e \
                 -ginkgo.skip='$(subst $(space),|,$(TEST_E2E_SKIP))' \
                 -ginkgo.focus='$(subst $(space),|,$(TEST_E2E_FOCUS))' \
