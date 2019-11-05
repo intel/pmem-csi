@@ -20,6 +20,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -84,7 +85,31 @@ var _ = Describe("E2E", func() {
 		testsuites.InitVolumeIOTestSuite,
 		testsuites.InitVolumeModeTestSuite,
 		testsuites.InitVolumesTestSuite,
-		testsuites.InitEphemeralTestSuite,
+	}
+
+	enableEphemeralTests := func(k8sVersion string) bool {
+		if k8sVersion == "" {
+			// No K8S version set, default enable ephemeral tests
+			framework.Logf("No Kubernetes version set! Providing(via TEST_KUBERNETES_VERSION environment) the right Kubernetes version might affect the test suites to be run.")
+			return true
+		}
+		var major, minor int
+		if _, err := fmt.Sscanf(k8sVersion, "%d.%d", &major, &minor); err != nil {
+			framework.Logf("Failed to parse 'TEST_KUBERNETES_VERSION=%s': %s", k8sVersion, err.Error())
+			// Allow ephemeral tests
+			return true
+		}
+		if (major <= 0) || (major == 1 && minor <= 14) {
+			// Kubernetes version <= 1.14 does not support ephemeral devices
+			framework.Logf("Provided Kubernetes version '%s' does not support ephemeral volume provisioning. So disabling ephemeral testsuite", k8sVersion)
+			return false
+		}
+
+		return true
+	}(os.Getenv("TEST_KUBERNETES_VERSION"))
+
+	if enableEphemeralTests {
+		csiTestSuites = append(csiTestSuites, testsuites.InitEphemeralTestSuite)
 	}
 
 	for _, initDriver := range csiTestDrivers {
