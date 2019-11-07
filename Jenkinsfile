@@ -229,7 +229,7 @@ pipeline {
         stage('production 1.15 LVM') {
             when { not { changeRequest() } }
             options {
-                timeout(time: 30, unit: "MINUTES")
+                timeout(time: 45, unit: "MINUTES")
                 retry(2)
             }
             steps {
@@ -240,7 +240,7 @@ pipeline {
         stage('production 1.15 direct') {
             when { not { changeRequest() } }
             options {
-                timeout(time: 30, unit: "MINUTES")
+                timeout(time: 45, unit: "MINUTES")
                 retry(2)
             }
             steps {
@@ -251,7 +251,7 @@ pipeline {
         stage('production 1.14 LVM') {
             when { not { changeRequest() } }
             options {
-                timeout(time: 30, unit: "MINUTES")
+                timeout(time: 45, unit: "MINUTES")
                 retry(2)
             }
             steps {
@@ -262,7 +262,7 @@ pipeline {
         stage('production 1.14 direct') {
             when { not { changeRequest() } }
             options {
-                timeout(time: 30, unit: "MINUTES")
+                timeout(time: 45, unit: "MINUTES")
                 retry(2)
             }
             steps {
