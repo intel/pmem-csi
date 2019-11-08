@@ -420,6 +420,7 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                                      \$ssh top -b -n 1 -w 120 2>&1 | head -n 20; \
                                  done ) | sed -e \"s/^/\$hostname: /\" & \
                            done && \
+                           make run_dm_tests && \
                            make test_e2e TEST_E2E_REPORT_DIR=`pwd`/build/reports.tmp/\$testrun' \
            "
     } finally {
