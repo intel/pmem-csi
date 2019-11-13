@@ -9,7 +9,7 @@ test: vet
 .PHONY: test_fmt fmt
 test: test_fmt
 test_fmt:
-	@ files=$$(find pkg cmd -name '*.go'); \
+	@ files=$$(find pkg cmd test -name '*.go'); \
 	if [ $$(gofmt -d $$files | wc -l) -ne 0 ]; then \
 		echo "formatting errors:"; \
 		gofmt -d $$files; \
