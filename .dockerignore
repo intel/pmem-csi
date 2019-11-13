@@ -6,4 +6,5 @@
 ! pkg/**
 ! test/test-config.d/**
 ! test/test-config.sh
+! hack/copy-modules-license.sh
 ! vendor/**
