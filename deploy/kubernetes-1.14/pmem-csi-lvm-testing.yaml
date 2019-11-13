@@ -136,6 +136,16 @@ subjects:
 apiVersion: v1
 kind: Service
 metadata:
+  name: pmem-csi-controller
+spec:
+  ports:
+  - port: 10000
+  selector:
+    app: pmem-csi-controller
+---
+apiVersion: v1
+kind: Service
+metadata:
   name: pmem-csi-controller-testing
 spec:
   ports:
@@ -143,16 +153,6 @@ spec:
   selector:
     app: pmem-csi-controller
   type: NodePort
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: pmem-csi-controller
-spec:
-  ports:
-  - port: 10000
-  selector:
-    app: pmem-csi-controller
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -243,52 +243,6 @@ spec:
           path: /var/lib/pmem-csi-coverage
           type: DirectoryOrCreate
         name: coverage-dir
----
-apiVersion: apps/v1
-kind: DaemonSet
-metadata:
-  name: pmem-csi-node-testing
-spec:
-  selector:
-    matchLabels:
-      app: pmem-csi-node-testing
-  template:
-    metadata:
-      labels:
-        app: pmem-csi-node-testing
-    spec:
-      containers:
-      - args:
-        - -s
-        - tcp-listen:9735,fork,reuseaddr
-        - unix-connect:/pmem-csi/csi.sock
-        image: alpine/socat:1.0.3
-        name: socat
-        securityContext:
-          privileged: true
-        volumeMounts:
-        - mountPath: /pmem-csi
-          name: plugin-state-dir
-        - mountPath: /var/lib/kubelet/pods
-          mountPropagation: Bidirectional
-          name: mountpoint-dir
-        - mountPath: /var/lib/kubelet/plugins/kubernetes.io/csi/pv
-          mountPropagation: Bidirectional
-          name: staging-dir
-      hostNetwork: true
-      volumes:
-      - hostPath:
-          path: /var/lib/pmem-csi.intel.com/
-          type: DirectoryOrCreate
-        name: plugin-state-dir
-      - hostPath:
-          path: /var/lib/kubelet/plugins/kubernetes.io/csi/pv
-          type: DirectoryOrCreate
-        name: staging-dir
-      - hostPath:
-          path: /var/lib/kubelet/pods
-          type: DirectoryOrCreate
-        name: mountpoint-dir
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -443,6 +397,52 @@ spec:
           path: /var/lib/pmem-csi-coverage
           type: DirectoryOrCreate
         name: coverage-dir
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: pmem-csi-node-testing
+spec:
+  selector:
+    matchLabels:
+      app: pmem-csi-node-testing
+  template:
+    metadata:
+      labels:
+        app: pmem-csi-node-testing
+    spec:
+      containers:
+      - args:
+        - -s
+        - tcp-listen:9735,fork,reuseaddr
+        - unix-connect:/pmem-csi/csi.sock
+        image: alpine/socat:1.0.3
+        name: socat
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - mountPath: /pmem-csi
+          name: plugin-state-dir
+        - mountPath: /var/lib/kubelet/pods
+          mountPropagation: Bidirectional
+          name: mountpoint-dir
+        - mountPath: /var/lib/kubelet/plugins/kubernetes.io/csi/pv
+          mountPropagation: Bidirectional
+          name: staging-dir
+      hostNetwork: true
+      volumes:
+      - hostPath:
+          path: /var/lib/pmem-csi.intel.com/
+          type: DirectoryOrCreate
+        name: plugin-state-dir
+      - hostPath:
+          path: /var/lib/kubelet/plugins/kubernetes.io/csi/pv
+          type: DirectoryOrCreate
+        name: staging-dir
+      - hostPath:
+          path: /var/lib/kubelet/pods
+          type: DirectoryOrCreate
+        name: mountpoint-dir
 ---
 apiVersion: storage.k8s.io/v1beta1
 kind: CSIDriver

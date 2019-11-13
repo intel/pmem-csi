@@ -126,17 +126,13 @@ export CLUSTER ?= pmem-govm
 include test/start-stop.make
 include test/test.make
 
-# Build kustomize at a certain revision. Depends on go >= 1.11
-# because we use module support.
-KUSTOMIZE_VERSION=e42933ec54ce9a65f65e125a1ccf482927f0e515
-_work/kustomize-$(KUSTOMIZE_VERSION):
-	tmpdir=`mktemp -d` && \
-	trap 'rm -r $$tmpdir' EXIT && \
-	cd $$tmpdir && \
-	echo "module foo" >go.mod && \
-	go get sigs.k8s.io/kustomize@$(KUSTOMIZE_VERSION) && \
-	go build -o $(abspath $@) sigs.k8s.io/kustomize
-	ln -sf $(@F) _work/kustomize
+#Kustomize latest release version
+KUSTOMIZE_VERSION=v3.4.0
+_work/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz:
+	curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz -o $(abspath $@)
+
+_work/kustomize: _work/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz
+	tar xzf $< -C _work
 
 # We generate deployment files with kustomize and include the output
 # in the git repo because not all users will have kustomize or it
@@ -173,7 +169,7 @@ KUSTOMIZATION_deploy/common/pmem-storageclass-cache.yaml = deploy/kustomize/stor
 KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-late-binding.yaml
 KUSTOMIZATION_deploy/common/pmem-storageclass-late-binding.yaml = deploy/kustomize/storageclass-late-binding
 kustomize: $(KUSTOMIZE_OUTPUT)
-$(KUSTOMIZE_OUTPUT): _work/kustomize-$(KUSTOMIZE_VERSION) $(KUSTOMIZE_INPUT)
+$(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
 	$< build --load_restrictor none $(KUSTOMIZATION_$@) >$@
 
 # Always re-generate the output files because "git rebase" might have
@@ -189,5 +185,5 @@ clean-kustomize:
 .PHONY: test-kustomize $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
 test: test-kustomize
 test-kustomize: $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
-$(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT)): test-kustomize-%: _work/kustomize-$(KUSTOMIZE_VERSION)
+$(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT)): test-kustomize-%: _work/kustomize
 	@ if ! diff <($< build --load_restrictor none $(KUSTOMIZATION_$*)) $*; then echo "$* was modified manually" && false; fi

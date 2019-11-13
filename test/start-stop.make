@@ -1,19 +1,15 @@
-# Build a suitable https://github.com/govm-project/govm version.
-GOVM_VERSION=1166148359ed9b4b83df555e528aad3cd1144ed3
-_work/govm-$(GOVM_VERSION):
-	mkdir -p _work/bin
-	tmpdir=`mktemp -d` && \
-	trap 'rm -r $$tmpdir' EXIT && \
-	cd $$tmpdir && \
-	echo "module govm" > go.mod && \
-	go get -v github.com/govm-project/govm@$(GOVM_VERSION) && \
-	go build -o $(abspath $@) github.com/govm-project/govm
-	ln -sf ../$(@F) _work/bin/govm
+# Build a suitable https://github.com/govm-project/govm/releases/tag/latest version.
+GOVM_VERSION=0.9-alpha
+_work/govm_$(GOVM_VERSION)_Linux_amd64.tar.gz:
+	curl -L https://github.com/govm-project/govm/releases/download/$(GOVM_VERSION)/govm_$(GOVM_VERSION)_Linux_x86_64.tar.gz -o $(abspath $@)
+
+_work/bin/govm: _work/govm_$(GOVM_VERSION)_Linux_amd64.tar.gz
+	tar zxf $< -C _work/bin/
 
 # Brings up the emulator environment:
 # - starts a Kubernetes cluster with NVDIMMs as described in https://github.com/qemu/qemu/blob/bd54b11062c4baa7d2e4efadcf71b8cfd55311fd/docs/nvdimm.txt
 # - generate pmem secrets if necessary
-start: _work/.setupcfssl-stamp _work/govm-$(GOVM_VERSION)
+start: _work/.setupcfssl-stamp _work/bin/govm
 	PATH="$(PWD)/_work/bin:$$PATH" test/start-kubernetes.sh
 	if ! [ -e _work/$(CLUSTER)/secretsdone ] || [ $$(_work/$(CLUSTER)/ssh-$(CLUSTER) kubectl get secrets | grep -e pmem-csi-node-secrets -e pmem-csi-registry-secrets | wc -l) -ne 2 ]; then \
 		KUBECTL="$(PWD)/_work/$(CLUSTER)/ssh-$(CLUSTER) kubectl" PATH="$(PWD)/_work/bin:$$PATH" ./test/setup-ca-kubernetes.sh && \
@@ -22,7 +18,7 @@ start: _work/.setupcfssl-stamp _work/govm-$(GOVM_VERSION)
 	test/setup-deployment.sh
 
 # Stops the VMs and removes all files.
-stop: _work/govm-$(GOVM_VERSION)
+stop: _work/bin/govm
 	@ if [ -f _work/$(CLUSTER)/stop.sh ]; then \
 		PATH="$(PWD)/_work/bin:$$PATH" _work/$(CLUSTER)/stop.sh; \
 	else \
