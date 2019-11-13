@@ -182,7 +182,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		}
 	case *csi.VolumeCapability_Mount:
 		if !ephemeral && len(srcPath) == 0 {
-			return nil, status.Error(codes.InvalidArgument, "Staging target path missing in request")
+			return nil, status.Error(codes.FailedPrecondition, "Staging target path missing in request")
 		}
 
 		notMnt, err := mount.IsNotMountPoint(ns.mounter, targetPath)
