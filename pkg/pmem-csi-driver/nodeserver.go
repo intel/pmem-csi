@@ -334,8 +334,9 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	volumeMutex.LockKey(req.GetVolumeId())
 	defer volumeMutex.UnlockKey(req.GetVolumeId())
 
-	klog.V(4).Infof("NodeStageVolume: VolumeID:%v Staging target path:%v Requested fsType:%v",
-		req.GetVolumeId(), stagingtargetPath, requestedFsType)
+	mountOptions := req.GetVolumeCapability().GetMount().GetMountFlags()
+	klog.V(4).Infof("NodeStageVolume: VolumeID:%v Staging target path:%v Requested fsType:%v Requested mount options:%v",
+		req.GetVolumeId(), stagingtargetPath, requestedFsType, mountOptions)
 
 	device, err := ns.cs.dm.GetDevice(req.VolumeId)
 	if err != nil {
@@ -349,7 +350,6 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	mountOptions := []string{}
 	// FIXME(avalluri): we shouldn't depend on volumecontext to determine the device mode,
 	// instead PmemDeviceInfo should hold the device mode in which it was created.
 	if params := req.GetVolumeContext(); params != nil {
