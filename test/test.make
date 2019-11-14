@@ -20,16 +20,22 @@ fmt:
 	gofmt -l -w $$(find pkg cmd -name '*.go')
 
 
-# This ensures that the vendor directory and vendor-bom.csv are in sync
-# at least as far as the listed components go.
+# This ensures that the vendor directory and vendor-bom.csv are in
+# sync.  We track components by their license file. Compared to
+# focusing on components as seen by Go, this has the advantage that we
+# also find and track components with a separate license that are
+# embedded in other components (example:
+# github.com/onsi/ginkgo/reporters/stenographer/support/go-colorable).
+# The downside is that we might miss components with a missing license.
+# This has to be caught by code reviews.
 .PHONY: test_vendor_bom
 test: test_vendor_bom
 test_vendor_bom:
 	@ if ! diff -c \
 		<(tail -n +2 vendor-bom.csv | sed -e 's/;.*//') \
-		<((grep '^  name =' Gopkg.lock  | sed -e 's/.*"\(.*\)"/\1/') | LC_ALL=C LANG=C sort); then \
+		<(find vendor -name 'LICENSE*' -o -name COPYING | xargs --max-args 1 dirname | sed -e 's;^vendor/;;' | LC_ALL=C LANG=C sort -u); then \
 		echo; \
-		echo "vendor-bom.csv not in sync with vendor directory (aka Gopk.lock):"; \
+		echo "vendor-bom.csv not in sync with vendor directory:"; \
 		echo "+ new entry, missing in vendor-bom.csv"; \
 		echo "- obsolete entry in vendor-bom.csv"; \
 		false; \
