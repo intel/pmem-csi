@@ -354,6 +354,7 @@ String DockerBuildArgs() {
     -e BUILD_IMAGE_ID=${env.CACHEBUST} \
     -e 'BUILD_ARGS=--cache-from ${env.BUILD_IMAGE} --cache-from ${env.PMEM_CSI_IMAGE}' \
     -e REGISTRY_NAME=${env.REGISTRY_NAME} \
+    -e USER=root \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v /usr/bin/docker:/usr/bin/docker \
     -v `pwd`:${env.PMEM_PATH} \
