@@ -78,6 +78,7 @@ FROM build as binaries
 
 # build pmem-csi-driver
 ARG VERSION="unknown"
+# Beware that this copying is filtered with .dockerignore!
 ADD . /go/src/github.com/intel/pmem-csi
 ENV GOPATH=/go
 ENV PKG_CONFIG_PATH=/usr/lib/pkgconfig/
@@ -88,11 +89,14 @@ ARG BIN_SUFFIX
 # image is going to be the same, to avoid unnecessary deployment
 # differences.
 RUN make VERSION=${VERSION} pmem-csi-driver${BIN_SUFFIX} pmem-vgm${BIN_SUFFIX} pmem-ns-init${BIN_SUFFIX} && \
-    mkdir -p /go/bin/ && \
-    mv _output/pmem-csi-driver${BIN_SUFFIX} /go/bin/pmem-csi-driver && \
-    mv _output/pmem-vgm${BIN_SUFFIX} /go/bin/pmem-vgm && \
-    mv _output/pmem-ns-init${BIN_SUFFIX} /go/bin/pmem-ns-init && \
-    cp LICENSE /go/bin/PMEM-CSI.LICENSE
+    mkdir -p /usr/local/bin && \
+    mv _output/pmem-csi-driver${BIN_SUFFIX} /usr/local/bin/pmem-csi-driver && \
+    mv _output/pmem-vgm${BIN_SUFFIX} /usr/local/bin/pmem-vgm && \
+    mv _output/pmem-ns-init${BIN_SUFFIX} /usr/local/bin/pmem-ns-init && \
+    mkdir -p /usr/local/share/package-licenses && \
+    hack/copy-modules-license.sh /usr/local/share/package-licenses ./cmd/pmem-csi-driver ./cmd/pmem-vgm ./cmd/pmem-ns-init && \
+    cp /go/LICENSE /usr/local/share/package-licenses/go.LICENSE && \
+    cp LICENSE /usr/local/share/package-licenses/PMEM-CSI.LICENSE
 
 # The actual pmem-csi-driver image.
 FROM runtime as pmem
@@ -101,10 +105,11 @@ FROM runtime as pmem
 # All of our custom content is in /usr/local.
 COPY --from=binaries /usr/local/lib/libndctl.so.* /usr/local/lib/
 COPY --from=binaries /usr/local/lib/libdaxctl.so.* /usr/local/lib/
-COPY --from=binaries /usr/local/lib/NDCTL.COPYING /usr/local/lib/
 # We need to overwrite the system libs, hence -f here.
 RUN for i in /usr/local/lib/lib*.so.*; do ln -fs $i /usr/lib64; done
-COPY --from=binaries /go/bin/ /usr/local/bin/
+COPY --from=binaries /usr/local/bin/pmem-* /usr/local/bin/
+COPY --from=binaries /usr/local/share/package-licenses /usr/local/share/package-licenses
+COPY --from=binaries /usr/local/lib/NDCTL.COPYING /usr/local/share/package-licenses/
 # default lvm config uses lvmetad and throwing below warning for all lvm tools
 # WARNING: Failed to connect to lvmetad. Falling back to device scanning.
 # So, ask lvm not to use lvmetad
