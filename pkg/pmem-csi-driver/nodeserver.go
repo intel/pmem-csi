@@ -295,7 +295,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	requestedFsType := req.GetVolumeCapability().GetMount().GetFsType()
 	if requestedFsType == "" {
 		// Default to ext4 filesystem
-		requestedFsType = "ext4"
+		requestedFsType = defaultFilesystem
 	}
 
 	// Serialize by VolumeId
@@ -313,7 +313,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		return nil, status.Errorf(codes.Internal, "failed to get device details for volume id %q: %v", req.VolumeId, err)
 	}
 
-	if err = ns.provisionDevice(device, req.GetVolumeCapability().GetMount().GetFsType()); err != nil {
+	if err = ns.provisionDevice(device, requestedFsType); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
