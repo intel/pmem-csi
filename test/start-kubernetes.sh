@@ -78,7 +78,7 @@ case ${TEST_DISTRO} in
         ;;
 esac
 
-SSH_TIMEOUT=60
+SSH_TIMEOUT=120
 SSH_ARGS="-oIdentitiesOnly=yes -oStrictHostKeyChecking=no \
         -oUserKnownHostsFile=/dev/null -oLogLevel=error \
         -i ${SSH_KEY}"

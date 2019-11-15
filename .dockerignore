@@ -8,3 +8,5 @@
 ! test/test-config.sh
 ! hack/copy-modules-license.sh
 ! vendor/**
+! go.mod
+! go.sum

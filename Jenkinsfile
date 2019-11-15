@@ -48,7 +48,8 @@ pipeline {
         /* last version before the 1.14 update in 28630 */
         CLEAR_LINUX_VERSION_1_13 = "28620"
 
-        PMEM_PATH = "/go/src/github.com/intel/pmem-csi"
+        // path for placing the source to build outside of GOROOT
+        PMEM_PATH = "/src/pmem-csi"
         REGISTRY_NAME = "cloud-native-image-registry.westus.cloudapp.azure.com"
 
         // Per-branch build environment, marked as "do not promote to public registry".
@@ -353,6 +354,7 @@ String DockerBuildArgs() {
     -e BUILD_IMAGE_ID=${env.CACHEBUST} \
     -e 'BUILD_ARGS=--cache-from ${env.BUILD_IMAGE} --cache-from ${env.PMEM_CSI_IMAGE}' \
     -e REGISTRY_NAME=${env.REGISTRY_NAME} \
+    -e USER=root \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v /usr/bin/docker:/usr/bin/docker \
     -v `pwd`:${env.PMEM_PATH} \

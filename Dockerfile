@@ -18,7 +18,7 @@ ARG SWUPD_UPDATE_ARG
 ARG NDCTL_VERSION="67"
 ARG NDCTL_CONFIGFLAGS="--disable-docs --without-systemd --without-bash"
 ARG NDCTL_BUILD_DEPS="os-core-dev devpkg-util-linux devpkg-kmod devpkg-json-c"
-ARG GO_VERSION="1.12.9"
+ARG GO_VERSION="1.13.4"
 
 #pull dependencies required for downloading and building libndctl
 ARG CACHEBUST
@@ -78,11 +78,9 @@ FROM build as binaries
 
 # build pmem-csi-driver
 ARG VERSION="unknown"
-# Beware that this copying is filtered with .dockerignore!
-ADD . /go/src/github.com/intel/pmem-csi
-ENV GOPATH=/go
+ADD . /src/pmem-csi
 ENV PKG_CONFIG_PATH=/usr/lib/pkgconfig/
-WORKDIR /go/src/github.com/intel/pmem-csi
+WORKDIR /src/pmem-csi
 ARG BIN_SUFFIX
 # Here we choose explicitly which binaries we want in the image and in
 # which flavor (production or testing). The actual binary name in the

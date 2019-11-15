@@ -29,6 +29,8 @@ github.com/matttproud/golang_protobuf_extensions;Matt Proud golang-protobuf-exte
 github.com/modern-go/concurrent;modern-go concurrent;Apache License 2.0
 github.com/modern-go/reflect2;modern-go reflect2;Apache License 2.0
 github.com/onsi/ginkgo;ginkgo;MIT License
+github.com/onsi/ginkgo/reporters/stenographer/support/go-colorable;go-colorable;MIT License
+github.com/onsi/ginkgo/reporters/stenographer/support/go-isatty;go-isatty;MIT License
 github.com/onsi/gomega;gomega;MIT License
 github.com/opencontainers/go-digest;opencontainers go-digest;Apache License 2.0
 github.com/pborman/uuid;Pborman Go UUID;BSD 3-clause "New" or "Revised" License
@@ -56,6 +58,7 @@ google.golang.org/grpc;grpc grpc-go;Apache License 2.0
 gopkg.in/fsnotify.v1;fsnotify;BSD 3-clause "New" or "Revised" License
 gopkg.in/inf.v0;go-inf;BSD 3-clause "New" or "Revised" License
 gopkg.in/square/go-jose.v2;go-jose;Apache License 2.0
+gopkg.in/square/go-jose.v2/json;golang json;BSD 3-clause "New" or "Revised" License
 gopkg.in/tomb.v1;tomb;BSD 3-clause "New" or "Revised" License
 gopkg.in/yaml.v2;go-yaml;Apache License 2.0
 k8s.io/api;kubernetes api;Apache License 2.0
@@ -71,5 +74,6 @@ k8s.io/klog;kubernetes klog;Apache License 2.0
 k8s.io/kube-openapi;kubernetes kube-openapi;Apache License 2.0
 k8s.io/kubectl;kubectl;Apache License 2.0
 k8s.io/kubernetes;kubernetes;Apache License 2.0
+k8s.io/kubernetes/third_party/forked/golang;golang expand;BSD 3-clause "New" or "Revised" License
 k8s.io/utils;kubernetes utils;Apache License 2.0
 sigs.k8s.io/yaml;kubernetes yaml;MIT License

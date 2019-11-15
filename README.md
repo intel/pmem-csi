@@ -540,11 +540,13 @@ officially by upstream anymore.
 
 ### Get source code
 
-Use these commands:
+PMEM-CSI uses Go modules and thus can be checked out and (if that should be desired)
+built anywhere in the filesystem. Pre-built container images are available and thus
+users don't need to build from source, but they will still need some additional files.
+To get the source code, use:
 
 ```
-mkdir -p $GOPATH/src/github.com/intel
-git clone https://github.com/intel/pmem-csi $GOPATH/src/github.com/intel/pmem-csi
+git clone https://github.com/intel/pmem-csi
 ```
 
 ### Run PMEM-CSI on Kubernetes

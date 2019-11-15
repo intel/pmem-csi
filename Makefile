@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+GO=GOOS=linux GO111MODULE=on GOFLAGS=-mod=vendor go
 IMPORT_PATH=github.com/intel/pmem-csi
 CMDS=pmem-csi-driver pmem-vgm pmem-ns-init
 TEST_CMDS=$(addsuffix -test,$(CMDS))
@@ -58,7 +59,7 @@ all: build
 # Build all binaries, including tests.
 # Must use the workaround from https://github.com/golang/go/issues/15513
 build: $(CMDS) $(TEST_CMDS)
-	go test -run none ./pkg/... ./test/e2e
+	$(GO) test -run none ./pkg/... ./test/e2e
 
 # "make test" runs a variety of fast tests, including building all source code.
 # More tests are added elsewhere in this Makefile and test/test.make.
@@ -66,13 +67,13 @@ test: build
 
 # Build production binaries.
 $(CMDS):
-	GOOS=linux go build -ldflags '-X github.com/intel/pmem-csi/pkg/$@.version=${VERSION}' -a -o ${OUTPUT_DIR}/$@ ./cmd/$@
+	$(GO) build -ldflags '-X github.com/intel/pmem-csi/pkg/$@.version=${VERSION}' -a -o ${OUTPUT_DIR}/$@ ./cmd/$@
 
 # Build a test binary that can be used instead of the normal one with
 # additional "-run" parameters. In contrast to the normal it then also
 # supports -test.coverprofile.
 $(TEST_CMDS): %-test:
-	GOOS=linux go test --cover -covermode=atomic -c -coverpkg=./pkg/... -ldflags '-X github.com/intel/pmem-csi/pkg/$*.version=${VERSION}' -o ${OUTPUT_DIR}/$@ ./cmd/$*
+	$(GO) test --cover -covermode=atomic -c -coverpkg=./pkg/... -ldflags '-X github.com/intel/pmem-csi/pkg/$*.version=${VERSION}' -o ${OUTPUT_DIR}/$@ ./cmd/$*
 
 # The default is to refresh the base image once a day when building repeatedly.
 # This is achieved by passing a fake variable that changes its value once per day.
@@ -111,7 +112,7 @@ print-image-version:
 	@ echo "$(IMAGE_VERSION)"
 
 clean:
-	go clean -r -x
+	$(GO) clean -r -x ./cmd/...
 	-rm -rf $(OUTPUT_DIR)
 
 .PHONY: all build test clean $(CMDS) $(TEST_CMDS)
@@ -125,17 +126,13 @@ export CLUSTER ?= pmem-govm
 include test/start-stop.make
 include test/test.make
 
-# Build kustomize at a certain revision. Depends on go >= 1.11
-# because we use module support.
-KUSTOMIZE_VERSION=e42933ec54ce9a65f65e125a1ccf482927f0e515
-_work/kustomize-$(KUSTOMIZE_VERSION):
-	tmpdir=`mktemp -d` && \
-	trap 'rm -r $$tmpdir' EXIT && \
-	cd $$tmpdir && \
-	echo "module foo" >go.mod && \
-	go get sigs.k8s.io/kustomize@$(KUSTOMIZE_VERSION) && \
-	go build -o $(abspath $@) sigs.k8s.io/kustomize
-	ln -sf $(@F) _work/kustomize
+#Kustomize latest release version
+KUSTOMIZE_VERSION=v3.4.0
+_work/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz:
+	curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz -o $(abspath $@)
+
+_work/kustomize: _work/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz
+	tar xzf $< -C _work
 
 # We generate deployment files with kustomize and include the output
 # in the git repo because not all users will have kustomize or it
@@ -172,7 +169,7 @@ KUSTOMIZATION_deploy/common/pmem-storageclass-cache.yaml = deploy/kustomize/stor
 KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-late-binding.yaml
 KUSTOMIZATION_deploy/common/pmem-storageclass-late-binding.yaml = deploy/kustomize/storageclass-late-binding
 kustomize: $(KUSTOMIZE_OUTPUT)
-$(KUSTOMIZE_OUTPUT): _work/kustomize-$(KUSTOMIZE_VERSION) $(KUSTOMIZE_INPUT)
+$(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
 	$< build --load_restrictor none $(KUSTOMIZATION_$@) >$@
 
 # Always re-generate the output files because "git rebase" might have
@@ -188,5 +185,5 @@ clean-kustomize:
 .PHONY: test-kustomize $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
 test: test-kustomize
 test-kustomize: $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
-$(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT)): test-kustomize-%: _work/kustomize-$(KUSTOMIZE_VERSION)
+$(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT)): test-kustomize-%: _work/kustomize
 	@ if ! diff <($< build --load_restrictor none $(KUSTOMIZATION_$*)) $*; then echo "$* was modified manually" && false; fi
