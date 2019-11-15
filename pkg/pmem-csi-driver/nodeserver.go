@@ -262,11 +262,10 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	if len(targetPath) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Target path missing in request")
 	}
-	volumeID := req.GetVolumeId()
 
 	// Serialize by VolumeId
-	volumeMutex.LockKey(volumeID)
-	defer volumeMutex.UnlockKey(volumeID)
+	volumeMutex.LockKey(req.VolumeId)
+	defer volumeMutex.UnlockKey(req.VolumeId)
 
 	var vol *nodeVolume
 	if vol = ns.cs.getVolumeByID(req.VolumeId); vol == nil {
@@ -290,7 +289,7 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	klog.V(5).Infof("NodeUnpublishVolume: volume id:%s targetpath:%s has been unmounted", volumeID, targetPath)
+	klog.V(5).Infof("NodeUnpublishVolume: volume id:%s targetpath:%s has been unmounted", req.VolumeId, targetPath)
 
 	os.Remove(targetPath) // nolint: gosec, errorchk
 
