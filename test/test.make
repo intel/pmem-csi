@@ -41,6 +41,14 @@ test_vendor_bom:
 		false; \
 	fi
 
+# Verify that the go.mod is up-to-date and clean and that the "vendor"
+# directory contains the matching source code.
+.PHONY: test_vendor
+test: test_vendor
+test_vendor:
+	hack/verify-vendor.sh
+
+
 # This ensures that we know about all components that are needed at
 # runtime on a production system. Those must be scrutinized more
 # closely than components that are merely needed for testing.
