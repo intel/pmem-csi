@@ -198,7 +198,7 @@ _work/coverage.out: _work/gocovmerge-$(GOCOVMERGE_VERSION)
 	$< _work/coverage/* >$@
 
 _work/coverage.html: _work/coverage.out
-	$(G0) tool cover -html $< -o $@
+	$(GO) tool cover -html $< -o $@
 
 _work/coverage.txt: _work/coverage.out
 	$(GO) tool cover -func $< -o $@
