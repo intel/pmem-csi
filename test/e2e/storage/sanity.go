@@ -1023,7 +1023,9 @@ func GetHostVolumes() map[string][]string {
 	for worker := 1; ; worker++ {
 		sshcmd := fmt.Sprintf("%s/_work/%s/ssh.%d", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"), worker)
 		ssh := exec.Command(sshcmd, cmd)
-		out, err := ssh.CombinedOutput()
+		// Intentional Output instead of CombinedOutput to dismiss warnings from stderr.
+		// lvs may emit lvmetad-related WARNING msg which can't be silenced using -q option.
+		out, err := ssh.Output()
 		if err != nil && os.IsNotExist(err) {
 			break
 		}
