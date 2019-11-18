@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-GO=GOOS=linux GO111MODULE=on GOFLAGS=-mod=vendor go
+GO_BINARY=go
+GO=GOOS=linux GO111MODULE=on GOFLAGS=-mod=vendor $(GO_BINARY)
 IMPORT_PATH=github.com/intel/pmem-csi
 CMDS=pmem-csi-driver pmem-vgm pmem-ns-init
 TEST_CMDS=$(addsuffix -test,$(CMDS))
@@ -58,7 +59,7 @@ all: build
 
 # Build all binaries, including tests.
 # Must use the workaround from https://github.com/golang/go/issues/15513
-build: $(CMDS) $(TEST_CMDS)
+build: $(CMDS) $(TEST_CMDS) check-go-version-$(GO_BINARY)
 	$(GO) test -run none ./pkg/... ./test/e2e
 
 # "make test" runs a variety of fast tests, including building all source code.
@@ -66,13 +67,13 @@ build: $(CMDS) $(TEST_CMDS)
 test: build
 
 # Build production binaries.
-$(CMDS):
+$(CMDS): check-go-version-$(GO_BINARY)
 	$(GO) build -ldflags '-X github.com/intel/pmem-csi/pkg/$@.version=${VERSION}' -a -o ${OUTPUT_DIR}/$@ ./cmd/$@
 
 # Build a test binary that can be used instead of the normal one with
 # additional "-run" parameters. In contrast to the normal it then also
 # supports -test.coverprofile.
-$(TEST_CMDS): %-test:
+$(TEST_CMDS): %-test: check-go-version-$(GO_BINARY)
 	$(GO) test --cover -covermode=atomic -c -coverpkg=./pkg/... -ldflags '-X github.com/intel/pmem-csi/pkg/$*.version=${VERSION}' -o ${OUTPUT_DIR}/$@ ./cmd/$*
 
 # The default is to refresh the base image once a day when building repeatedly.
@@ -187,3 +188,11 @@ test: test-kustomize
 test-kustomize: $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
 $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT)): test-kustomize-%: _work/kustomize
 	@ if ! diff <($< build --load_restrictor none $(KUSTOMIZATION_$*)) $*; then echo "$* was modified manually" && false; fi
+
+# Targets in the makefile can depend on check-go-version-<path to go binary>
+# to trigger a warning if the x.y version of that binary does not match
+# what the project uses. Make ensures that this is only checked once per
+# invocation.
+.PHONY: check-go-version-%
+check-go-version-%:
+	hack/verify-go-version.sh "$*"

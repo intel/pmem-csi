@@ -6,7 +6,7 @@
 ! pkg/**
 ! test/test-config.d/**
 ! test/test-config.sh
-! hack/copy-modules-license.sh
+! hack/**
 ! vendor/**
 ! go.mod
 ! go.sum

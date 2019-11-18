@@ -2,7 +2,7 @@ TEST_CMD=$(GO) test
 TEST_ARGS=$(IMPORT_PATH)/pkg/...
 
 .PHONY: vet
-test: vet
+test: vet check-go-version-$(GO_BINARY)
 	$(GO) vet $(IMPORT_PATH)/pkg/...
 
 # Check resp. fix formatting.
@@ -59,7 +59,7 @@ test_vendor:
 .PHONY: test_runtime_deps
 test: test_runtime_deps
 
-test_runtime_deps:
+test_runtime_deps: check-go-version-$(GO_BINARY)
 	@ if ! diff -c \
 		runtime-deps.csv \
 		<( $(RUNTIME_DEPS) ); then \
@@ -146,7 +146,7 @@ test_e2e: start
 test: run_tests
 RUN_TESTS = TEST_WORK=$(abspath _work) \
 	$(TEST_CMD) $(shell $(GO) list $(TEST_ARGS) | sed -e 's;$(IMPORT_PATH);.;')
-run_tests: _work/pmem-ca/.ca-stamp _work/evil-ca/.ca-stamp
+run_tests: _work/pmem-ca/.ca-stamp _work/evil-ca/.ca-stamp check-go-version-$(GO_BINARY)
 	$(RUN_TESTS)
 
 _work/%/.ca-stamp: test/setup-ca.sh _work/.setupcfssl-stamp
@@ -200,7 +200,7 @@ _work/coverage.out: _work/gocovmerge-$(GOCOVMERGE_VERSION)
 _work/coverage.html: _work/coverage.out
 	$(GO) tool cover -html $< -o $@
 
-_work/coverage.txt: _work/coverage.out
+_work/coverage.txt: _work/coverage.out check-go-version-$(GO_BINARY)
 	$(GO) tool cover -func $< -o $@
 
 .PHONY: coverage
