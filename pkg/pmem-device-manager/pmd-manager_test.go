@@ -96,6 +96,29 @@ func runTests(mode string) {
 		Expect(dev.Path).ShouldNot(BeNil(), "Null device path")
 	})
 
+	It("Should support recreating a device", func() {
+		name := "test-dev"
+		size := uint64(2) * 1024 * 1024 // 2Mb
+		err := dm.CreateDevice(name, size, nsmode)
+		Expect(err).Should(BeNil(), "Failed to create new device")
+
+		cleanupList[name] = true
+
+		dev, err := dm.GetDevice(name)
+		Expect(err).Should(BeNil(), "Failed to retrieve device info")
+		Expect(dev.VolumeId).Should(Equal(name), "Name mismatch")
+		Expect(dev.Size >= size).Should(BeTrue(), "Size mismatch")
+		Expect(dev.Path).ShouldNot(BeNil(), "Null device path")
+
+		err = dm.DeleteDevice(name, false)
+		Expect(err).Should(BeNil(), "Failed to delete device")
+		cleanupList[name] = false
+
+		err = dm.CreateDevice(name, size, nsmode)
+		Expect(err).Should(BeNil(), "Failed to recreate the same device")
+		cleanupList[name] = true
+	})
+
 	It("Should fail to retrieve non-existent device", func() {
 		dev, err := dm.GetDevice("unknown")
 		Expect(err).ShouldNot(BeNil(), "Error expected")
