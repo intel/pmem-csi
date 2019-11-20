@@ -614,20 +614,49 @@ For example, to deploy for production with LVM device mode onto Kubernetes 1.14,
 ```
 
 These variants were generated with
-`[kustomize](https://github.com/kubernetes-sigs/kustomize)`. It is
-possible to customize these variants further with `kustomize`, but one
-has to use a version which supports the `--load_restrictor none` parameter.
-The `Makefile` can be used to build a suitable `kustomize`:
+`[kustomize](https://github.com/kubernetes-sigs/kustomize)`.
+`kubectl` >= 1.14 includes some support for that. The sub-directories
+of `deploy/kubernetes-<kubernetes version>` can be used as bases
+for `kubectl kustomize`. For example:
 
-``` sh
-    $ make kustomize # builds the binary and re-generates .yaml files
-    ...
-    go get sigs.k8s.io/kustomize@e42933ec54ce9a65f65e125a1ccf482927f0e515 && \
-    go build -o /work/gopath/src/github.com/intel/pmem-csi/_work/kustomize-e42933ec54ce9a65f65e125a1ccf482927f0e515 sigs.k8s.io/kustomize
-    ...
-    $ _work/kustomize build --load_restrictor none deploy/kustomize/kubernetes-1.14-lvm |
-      kubectl create -f -
-```
+   - Change namespace:
+     ```
+     $ mkdir -p my-pmem-csi-deployment
+     $ cat >my-pmem-csi-deployment/kustomization.yaml <<EOF
+     namespace: pmem-csi
+     bases:
+       - ../deploy/kubernetes-1.14/lvm
+     EOF
+     $ kubectl create namespace pmem-csi
+     $ kubectl create --kustomize my-pmem-csi-deployment
+     ```
+
+   - Configure how much PMEM is used by PMEM-CSI for LVM
+     (see [Namespace modes in LVM device mode](#namespace-modes-in-lvm-device-mode)):
+     ```
+     $ mkdir -p my-pmem-csi-deployment
+     $ cat >my-pmem-csi-deployment/kustomization.yaml <<EOF
+     bases:
+       - ../deploy/kubernetes-1.14/lvm
+     patchesJson6902:
+       - target:
+           group: apps
+           version: v1
+           kind: DaemonSet
+           name: pmem-csi-node
+         path: lvm-parameters-patch.yaml
+     EOF
+     $ cat >my-pmem-csi-deployment/lvm-parameters-patch.yaml <<EOF
+     # pmem-ns-init is in the init container #0. Append arguments at the end.
+     - op: add
+       path: /spec/template/spec/initContainers/0/args/-
+       value: "--useforfsdax=90"
+     - op: add
+       path: /spec/template/spec/initContainers/0/args/-
+       value: "--useforsector=0"
+     EOF
+     $ kubectl create --kustomize my-pmem-csi-deployment
+     ```
 
 - **Wait until all pods reach 'Running' status**
 
@@ -721,15 +750,15 @@ one with ext4-format and another with xfs-format file system.
 PMEM-CSI can create a namespace in the *sector* (alias safe) mode instead of default *fsdax* mode. See [Persistent Memory Programming](https://pmem.io/ndctl/ndctl-create-namespace.html) for more details about namespace modes. The main difference in PMEM-CSI context is that a sector-mode volume will not get 'dax' mount option. The deployment examples do not describe sector mode to keep the amount of combinations smaller. Here are the changes to be made to deploy volumes in sector mode:
 
 - add `nsmode: "sector"` line in parameters section in the storageclass definition file pmem-storageclass-XYZ.yaml:
-```
+  ```
 parameters:
   csi.storage.k8s.io/fstype: ext4
   eraseafter: "true"
   nsmode: "sector"                   <-- add this
-```
+  ```
 
-* Only if using LVM device mode: Modify pmem-ns-init options to create sector-mode pools in addition to fsdax-mode pools. Add `-useforfsdax` and `-useforsector` options to pmem-ns-init arguments in pmem-csi-lvm.yaml: (select the percentage values that fit your needs)
-```
+* Only if using LVM device mode: Modify pmem-ns-init options to create sector-mode pools in addition to fsdax-mode pools. Add `-useforfsdax` and `-useforsector` options to pmem-ns-init arguments in pmem-csi-lvm.yaml (select the percentage values that fit your needs):
+  ```
        initContainers:
        - args:
          - -v=3
@@ -737,7 +766,12 @@ parameters:
          - -useforsector=40                  <-- add this
          command:
          - /go/bin/pmem-ns-init
-```
+  ```
+
+  This change can be made either by copying and editing a deployment
+  yaml file or on-the-fly with `kustomize` as explained in [Run
+  PMEM-CSI on Kubernetes](#run-pmem-csi-on-kubernetes).
+
 
 #### Note about raw block volumes
 
