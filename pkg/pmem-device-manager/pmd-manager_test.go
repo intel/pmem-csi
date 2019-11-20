@@ -114,7 +114,7 @@ func runTests(mode string) {
 
 		for i := 1; i <= max_devices; i++ {
 			name := fmt.Sprintf("list-dev-%d", i)
-			sizes[name] = rand.Uint64() % 16 * 1024 * 1024
+			sizes[name] = uint64(rand.Intn(15)+1) * 1024 * 1024
 			err := dm.CreateDevice(name, sizes[name], nsmode)
 			Expect(err).Should(BeNil(), "Failed to create new device")
 			cleanupList[name] = true
