@@ -134,6 +134,7 @@ _work/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz:
 
 _work/kustomize: _work/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz
 	tar xzf $< -C _work
+	touch $@
 
 # We generate deployment files with kustomize and include the output
 # in the git repo because not all users will have kustomize or it
