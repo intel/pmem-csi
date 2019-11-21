@@ -146,10 +146,14 @@ space:= $(empty) $(empty)
 RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 	REPO_ROOT=`pwd` \
 	CLUSTER=$(CLUSTER) \
-	TEST_DEPLOYMENTMODE=$(shell source test/test-config.sh; echo $$TEST_DEPLOYMENTMODE) \
-	TEST_DEVICEMODE=$(shell source test/test-config.sh; echo $$TEST_DEVICEMODE) \
-	TEST_KUBERNETES_VERSION=$(shell source test/test-config.sh; echo $$TEST_KUBERNETES_VERSION) \
+	$(shell source test/test-config.sh; \
+	  echo TEST_DEPLOYMENTMODE=$$TEST_DEPLOYMENTMODE; \
+	  echo TEST_DEVICEMODE=$$TEST_DEVICEMODE; \
+	  echo TEST_KUBERNETES_VERSION=$$TEST_KUBERNETES_VERSION; \
+	  echo PMEM_CSI_IMAGE=$$TEST_LOCAL_REGISTRY/pmem-csi-driver$$(if $$TEST_DEPLOYMENTMODE = testing; then echo -test; fi):$(IMAGE_VERSION); \
+	) \
 	TEST_CMD='$(TEST_CMD)' \
+	GO='$(GO)' \
 	TEST_PKGS='$(shell for i in $(TEST_PKGS); do if ls $$i/*_test.go 2>/dev/null >&2; then echo $$i; fi; done)' \
 	$(GO) test -count=1 -timeout 0 -v ./test/e2e \
                 -ginkgo.skip='$(subst $(space),|,$(TEST_E2E_SKIP))' \
