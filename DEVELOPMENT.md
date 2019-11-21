@@ -49,15 +49,18 @@ Build PMEM-CSI
 
 See the [Makefile](Makefile) for additional make targets and possible make variables.
 
+The source code gets developed and tested using the version of Go that
+is set with `GO_VERSION` in the [Dockerfile](Dockerfile). Some other
+version may or may not work. In particular, `test_fmt` and
+`test_vendor` are known to be sensitive to the version of Go.
+
 Code quality
 ============
 
 Coding style
 ------------
 
-The normal Go style guide applies. It is enforced by `make test`, which calls `gofmt`. `gofmt` should be
-from Go >= v1.11.4, older versions (like v1.10) format the code slightly differently.
-Running `go test` requires go 1.12 or newer.
+The normal Go style guide applies. It is enforced by `make test`, which calls `gofmt`.
 
 
 Input validation
