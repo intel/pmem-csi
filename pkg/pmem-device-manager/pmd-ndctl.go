@@ -163,7 +163,7 @@ func (pmem *pmemNdctl) ListDevices() ([]*PmemDeviceInfo, error) {
 	defer ndctlMutex.Unlock()
 
 	devices := []*PmemDeviceInfo{}
-	for _, ns := range pmem.ctx.GetActiveNamespaces() {
+	for _, ns := range pmem.ctx.GetAllNamespaces() {
 		devices = append(devices, namespaceToPmemInfo(ns))
 	}
 	return devices, nil

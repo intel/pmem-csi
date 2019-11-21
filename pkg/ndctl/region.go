@@ -93,7 +93,9 @@ func (r *Region) ActiveNamespaces() []*Namespace {
 	return r.namespaces(true)
 }
 
-//AllNamespaces returns all namespaces in the region
+//AllNamespaces returns all non-zero sized namespaces in the region
+//as sometime a deleted namespace also lies around with size zero, we can ignore
+//such namespace
 func (r *Region) AllNamespaces() []*Namespace {
 	return r.namespaces(false)
 }
@@ -318,8 +320,15 @@ func (r *Region) namespaces(onlyActive bool) []*Namespace {
 	ndr := (*C.struct_ndctl_region)(r)
 
 	for ndns := C.ndctl_namespace_get_first(ndr); ndns != nil; ndns = C.ndctl_namespace_get_next(ndns) {
-		if !onlyActive || C.ndctl_namespace_is_active(ndns) == true {
-			namespaces = append(namespaces, (*Namespace)(ndns))
+		ns := (*Namespace)(ndns)
+		// If asked for only active namespaces return it regardless of it size
+		// if not, return only valid namespaces, i.e, non-zero sized.
+		if onlyActive {
+			if ns.Active() {
+				namespaces = append(namespaces, ns)
+			}
+		} else if ns.Size() > 0 {
+			namespaces = append(namespaces, ns)
 		}
 	}
 
