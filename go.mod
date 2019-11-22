@@ -47,7 +47,7 @@ require (
 	k8s.io/component-base v0.0.0
 	k8s.io/klog v1.0.0
 	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d // indirect
-	k8s.io/kubernetes v1.17.0-alpha.0.0.20191109043140-c3f2a6524ed8
+	k8s.io/kubernetes v0.0.0-00010101000000-000000000000
 	k8s.io/utils v0.0.0-20190801114015-581e00157fb1
 )
 
@@ -74,3 +74,7 @@ replace (
 	k8s.io/metrics => k8s.io/metrics v0.0.0-20191016113814-3b1a734dba6e
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.0.0-20191016112829-06bb3c9d77c9
 )
+
+// Temporary fork. Can be removed once https://github.com/kubernetes/kubernetes/pull/85540
+// is merged and we update to a version >= 1.18.
+replace k8s.io/kubernetes => github.com/pohly/kubernetes v1.10.0-alpha.3.0.20191122094604-c7faaae98a14
