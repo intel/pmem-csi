@@ -56,7 +56,7 @@ fi
 # To use this, do:
 # - make build-images
 # - TEST_CREATE_REGISTRY=true make start
-: ${TEST_BOOTSTRAP_IMAGES:=${TEST_BUILD_PMEM_REGISTRY}/pmem-csi-driver:v0.5.22 ${TEST_BUILD_PMEM_REGISTRY}/pmem-csi-driver-test:v0.5.22}
+: ${TEST_BOOTSTRAP_IMAGES:=${TEST_BUILD_PMEM_REGISTRY}/pmem-csi-driver:v0.5.23 ${TEST_BUILD_PMEM_REGISTRY}/pmem-csi-driver-test:v0.5.23}
 
 # Additional Clear Linux bundles.
 : ${TEST_CLEAR_LINUX_BUNDLES:=storage-utils}
