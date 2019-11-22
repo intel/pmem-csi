@@ -9,6 +9,7 @@ package pmemcsidriver
 import (
 	"crypto/sha1"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -273,6 +274,9 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 	}
 
 	if err := cs.dm.DeleteDevice(req.VolumeId, eraseafter); err != nil {
+		if errors.Is(err, pmdmanager.ErrDeviceInUse) {
+			return nil, status.Errorf(codes.FailedPrecondition, err.Error())
+		}
 		return nil, status.Errorf(codes.Internal, "Failed to delete volume: %s", err.Error())
 	}
 	if cs.sm != nil {

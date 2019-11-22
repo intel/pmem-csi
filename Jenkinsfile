@@ -159,6 +159,26 @@ pipeline {
             }
         }
 
+        stage('make dm-test') {
+            options {
+                timeout(time: 30, unit: "MINUTES")
+            }
+
+            steps {
+                sh "docker run --rm ${DockerBuildArgs()} \
+                               --privileged=true \
+                               -e TEST_CHECK_SIGNED_FILES=false \
+                               -e TEST_DISTRO=clear \
+                               -e TEST_DISTRO_VERSION=${env.CLEAR_LINUX_VERSION_1_15} \
+                               -v `pwd`:`pwd`:rshared \
+                               -w `pwd` \
+                               ${env.BUILD_IMAGE} bash -c 'set -x; \
+                                   swupd bundle-add openssh-client && \
+                                   make run_dm_tests; \
+                                   make stop'"
+            }
+        }
+
         stage('Build test image') {
             options {
                 timeout(time: 60, unit: "MINUTES")

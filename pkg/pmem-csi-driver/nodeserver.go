@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -127,9 +128,9 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		// 1) No Volume found with given volume id
 		// 2) No provisioner info found in VolumeContext "storage.kubernetes.io/csiProvisionerIdentity"
 		// 3) No StagingPath in the request
-		// TODO(avalluri): Inspect the error returned by GetDevice() once we
-		// implement the error codes in DeviceManager
-		device, _ = ns.cs.dm.GetDevice(req.VolumeId)
+		if device, err = ns.cs.dm.GetDevice(req.VolumeId); err != nil && !errors.Is(err, pmdmanager.ErrDeviceNotFound) {
+			return nil, status.Errorf(codes.Internal, "failed to get device details for volume id '%s': %v", req.VolumeId, err)
+		}
 		_, ok := req.GetVolumeContext()[volumeProvisionerIdentity]
 		ephemeral = device == nil && !ok && len(srcPath) == 0
 	}
@@ -146,11 +147,11 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 			mountOptions = []string{"dax"}
 		}
 	} else {
-		device, err = ns.cs.dm.GetDevice(req.VolumeId)
-		// TODO(avalluri): Inspect the error returned by GetDevice() once we
-		// implement the error codes in DeviceManager
-		if err != nil {
-			return nil, status.Error(codes.NotFound, "No device found with volume id "+req.VolumeId+": "+err.Error())
+		if device, err = ns.cs.dm.GetDevice(req.VolumeId); err != nil {
+			if errors.Is(err, pmdmanager.ErrDeviceNotFound) {
+				return nil, status.Errorf(codes.NotFound, "no device found with volume id %q: %v", req.VolumeId, err)
+			}
+			return nil, status.Errorf(codes.Internal, "failed to get device details for volume id %q: %v", req.VolumeId, err)
 		}
 
 		mountOptions = []string{"bind"}
@@ -303,8 +304,10 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 
 	device, err := ns.cs.dm.GetDevice(req.VolumeId)
 	if err != nil {
-		klog.Errorf("NodeStageVolume: did not find volume %s", req.VolumeId)
-		return nil, status.Error(codes.InvalidArgument, err.Error())
+		if errors.Is(err, pmdmanager.ErrDeviceNotFound) {
+			return nil, status.Errorf(codes.NotFound, "no device found with volume id %q: %v", req.VolumeId, err)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to get device details for volume id %q: %v", req.VolumeId, err)
 	}
 
 	if err = ns.provisionDevice(device, req.GetVolumeCapability().GetMount().GetFsType()); err != nil {
@@ -350,10 +353,11 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	// by spec, we have to return OK if asked volume is not mounted on asked path,
 	// so we look up the current device by volumeID and see is that device
 	// mounted on staging target path
-	_, err := ns.cs.dm.GetDevice(req.VolumeId)
-	if err != nil {
-		klog.Errorf("NodeUnstageVolume: did not find volume %s", req.GetVolumeId())
-		return nil, status.Error(codes.InvalidArgument, err.Error())
+	if _, err := ns.cs.dm.GetDevice(req.VolumeId); err != nil {
+		if errors.Is(err, pmdmanager.ErrDeviceNotFound) {
+			return nil, status.Errorf(codes.NotFound, "no device found with volume id '%s': %s", req.VolumeId, err.Error())
+		}
+		return nil, status.Errorf(codes.Internal, "failed to get device details for volume id '%s': %s", req.VolumeId, err.Error())
 	}
 
 	// Find out device name for mounted path
