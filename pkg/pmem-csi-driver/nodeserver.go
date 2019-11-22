@@ -345,8 +345,24 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		return nil, status.Errorf(codes.Internal, "failed to get device details for volume id %q: %v", req.VolumeId, err)
 	}
 
-	if err = ns.provisionDevice(device, requestedFsType); err != nil {
+	// Check does devicepath already contain a filesystem?
+	existingFsType, err := determineFilesystemType(device.Path)
+	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	// what to do if existing file system is detected;
+	if existingFsType != "" {
+		// Is existing filesystem type same as requested?
+		if existingFsType == requestedFsType {
+			klog.V(4).Infof("Skip mkfs as %v file system already exists on %v", existingFsType, device.Path)
+		} else {
+			return nil, status.Error(codes.AlreadyExists, "File system with different type exists")
+		}
+	} else {
+		if err = ns.provisionDevice(device, requestedFsType); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
 	}
 
 	// FIXME(avalluri): we shouldn't depend on volumecontext to determine the device mode,
@@ -480,44 +496,25 @@ func (ns *nodeServer) createEphemeralDevice(ctx context.Context, req *csi.NodePu
 // and mounts at given targetPath.
 func (ns *nodeServer) provisionDevice(device *pmdmanager.PmemDeviceInfo, fsType string) error {
 	if fsType == "" {
-		// Default to ext4 filesystem
+		// Empty FsType means "unspecified" and we pick default, currently hard-coded to ext4
 		fsType = defaultFilesystem
 	}
 
-	// Check does devicepath already contain a filesystem?
-	existingFsType, err := determineFilesystemType(device.Path)
-	if err != nil {
-		return err
-	}
-
-	// what to do if existing file system is detected and is different from request;
-	// forced re-format would lead to loss of previous data, so we refuse.
-	if existingFsType != "" {
-		// Is existing filesystem type same as requested?
-		if existingFsType == fsType {
-			klog.V(4).Infof("Skip mkfs as %v file system already exists on %v", existingFsType, device.Path)
-		} else {
-			return fmt.Errorf("File system with different type(%s) exists, whereas requested type is '%s'", existingFsType, fsType)
-		}
+	cmd := ""
+	var args []string
+	// hard-code block size to 4k to avoid smaller values and trouble to dax mount option
+	if fsType == "ext4" {
+		cmd = "mkfs.ext4"
+		args = []string{"-b 4096", "-F", device.Path}
+	} else if fsType == "xfs" {
+		cmd = "mkfs.xfs"
+		args = []string{"-b", "size=4096", "-f", device.Path}
 	} else {
-		// no existing file system, make fs
-		// Empty FsType means "unspecified" and we pick default, currently hard-codes to ext4
-		cmd := ""
-		var args []string
-		// hard-code block size to 4k to avoid smaller values and trouble to dax mount option
-		if fsType == "ext4" {
-			cmd = "mkfs.ext4"
-			args = []string{"-b 4096", "-F", device.Path}
-		} else if fsType == "xfs" {
-			cmd = "mkfs.xfs"
-			args = []string{"-b", "size=4096", "-f", device.Path}
-		} else {
-			return fmt.Errorf("Unsupported filesystem '%s'. Supported filesystems types: 'xfs', 'ext4'", fsType)
-		}
-		output, err := pmemexec.RunCommand(cmd, args...)
-		if err != nil {
-			return fmt.Errorf("mkfs failed: %s", output)
-		}
+		return fmt.Errorf("Unsupported filesystem '%s'. Supported filesystems types: 'xfs', 'ext4'", fsType)
+	}
+	output, err := pmemexec.RunCommand(cmd, args...)
+	if err != nil {
+		return fmt.Errorf("mkfs failed: %s", output)
 	}
 
 	return nil
