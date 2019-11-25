@@ -48,8 +48,6 @@ pipeline {
         /* last version before the 1.14 update in 28630 */
         CLEAR_LINUX_VERSION_1_13 = "28620"
 
-        // path for placing the source to build outside of GOROOT
-        PMEM_PATH = "/src/pmem-csi"
         REGISTRY_NAME = "cloud-native-image-registry.westus.cloudapp.azure.com"
 
         // Per-branch build environment, marked as "do not promote to public registry".
@@ -125,6 +123,29 @@ pipeline {
                     }
                     sh "env; echo Building BUILD_IMAGE=${env.BUILD_IMAGE} for BUILD_TARGET=${env.BUILD_TARGET}, CHANGE_ID=${env.CHANGE_ID}, CACHEBUST=${env.CACHEBUST}."
                     sh "docker build --cache-from ${env.BUILD_IMAGE} --label cachebust=${env.CACHEBUST} --target build --build-arg CACHEBUST=${env.CACHEBUST} -t ${env.BUILD_IMAGE} ."
+                    // Create a running container (https://stackoverflow.com/a/38308399).
+                    sh "docker create --name=builder -it ${env.BUILD_IMAGE}"
+                    sh "docker start builder"
+
+                    // Allow non-root users to become root via sudo when they are part of the root group.
+                    // ${DockerBuildArgs()} includes the necessary parameters for that.
+                    sh "docker exec builder mkdir /etc/sudoers.d"
+                    sh "echo '%root ALL=(ALL) NOPASSWD: ALL' | docker exec -i builder tee /etc/sudoers.d/nopasswd >/dev/null"
+
+                    // sudo needs a user entry for the jenkins user.
+                    sh "echo jenkins:x:`id -u`:0:Jenkins:`pwd`/..:/bin/bash | docker exec -i builder tee --append /etc/passwd >/dev/null"
+                    sh "echo 'jenkins:*:0:0:99999:0:::' | docker exec -i builder tee --append /etc/shadow >/dev/null"
+
+                    // Now commit those changes for use below and clean up.
+                    sh "docker commit builder ${env.BUILD_IMAGE}"
+                    sh "docker stop builder"
+                    sh "docker rm builder"
+
+                    // Verify that docker and mount work under sudo in the updated image (needed for etcd tmpfs, see start-kubernetes.sh).
+                    // sudo depends on --privileged.
+                    sh "docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} docker ps"
+                    sh "docker run --rm --privileged ${DockerBuildArgs()} ${env.BUILD_IMAGE} bash -c \
+                            'mkdir /tmp/mnt && sudo mount -osize=4096 -t tmpfs none /tmp/mnt && sudo umount /tmp/mnt'"
                 }
             }
         }
@@ -342,7 +363,13 @@ git push origin HEAD:master
  "docker run" parameters which:
  - make the Docker instance on the host available inside a container (socket and command)
  - set common Makefile values (cachebust, cache populated from images if available)
- - source in $GOPATH as current directory
+ - source in current directory
+ - GOPATH alongside it
+ - HOME above it
+ - same user inside and outside the container
+ - same uid/gid/groups as on the host, plus root=0 for sudo
+
+ "rshared" is needed for mount propagation when govm runs outside the build container.
 
  A function is used because a variable, even one which uses a closure with lazy evaluation,
  didn't actually result in a string with all variables replaced by the current values.
@@ -354,11 +381,16 @@ String DockerBuildArgs() {
     -e BUILD_IMAGE_ID=${env.CACHEBUST} \
     -e 'BUILD_ARGS=--cache-from ${env.BUILD_IMAGE} --cache-from ${env.PMEM_CSI_IMAGE}' \
     -e REGISTRY_NAME=${env.REGISTRY_NAME} \
-    -e USER=root \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    -v /usr/bin/docker:/usr/bin/docker \
-    -v `pwd`:${env.PMEM_PATH} \
-    -w ${env.PMEM_PATH} \
+    -e HOME=`pwd`/.. \
+    -e GOPATH=`pwd`/../gopath \
+    -e USER=`id -nu` \
+    --user `id -u`:`id -g` \
+    --group-add `id -G | sed -e 's/ / --group-add /g'` \
+    --group-add 0 \
+    --volume /var/run/docker.sock:/var/run/docker.sock \
+    --volume /usr/bin/docker:/usr/bin/docker \
+    --volume `pwd`/..:`pwd`/..:rshared \
+    --workdir `pwd` \
     "
 }
 
@@ -386,7 +418,7 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
            if ${env.LOGGING_JOURNALCTL}; then sudo journalctl -f; fi & \
            ( set +x; while true; do sleep ${env.LOGGING_SAMPLING_DELAY}; top -b -n 1 -w 120 | head -n 20; df -h; done ) & \
            docker run --rm \
-                  --privileged=true \
+                  --privileged \
                   -e CLUSTER=clear \
                   -e GOVM_YAML=`pwd`/_work/clear/deployment.yaml \
                   -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
@@ -399,18 +431,15 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                   -e TEST_KUBERNETES_VERSION=${kubernetesVersion} \
                   -e TEST_ETCD_VOLUME_SIZE=1073741824 \
                   ${DockerBuildArgs()} \
-                  --volume `pwd`:`pwd`:rshared \
-                  -w `pwd` \
                   ${env.BUILD_IMAGE} \
                   bash -c 'set -x; \
                            testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}-${deviceMode}-${deploymentMode}' | sed -e s/--*/-/g | tr . _ ) && \
-                           swupd bundle-add openssh-server && \
-                           make start && cd ${env.PMEM_PATH} && \
+                           make start && \
                            _work/clear/ssh.0 kubectl get pods --all-namespaces -o wide && \
                            for pod in ${env.LOGGING_PODS}; do \
                                _work/clear/ssh.0 kubectl logs -f -n kube-system \$pod-pmem-csi-clear-master | sed -e \"s/^/\$pod: /\" & \
                            done && \
-                           _work/clear/ssh.0 tar -C / -cf - usr/bin/kubectl | tar -C /usr/local/bin --strip-components=2 -xf - && \
+                           _work/clear/ssh.0 tar -C / -cf - usr/bin/kubectl | sudo tar -C /usr/local/bin --strip-components=2 -xf - && \
                            for ssh in \$(ls _work/clear/ssh.[0-9]); do \
                                hostname=\$(\$ssh hostname) && \
                                ( set +x; \
@@ -436,8 +465,7 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                fi
            done'''
 
-        // Always shut down the cluster to free up resources. As in "make start", we have to expose
-        // the path as used on the host also inside the containner, but we don't need to be in it.
-        sh "docker run --rm --privileged=true -e CLUSTER=clear ${DockerBuildArgs()} -v `pwd`:`pwd`:rshared ${env.BUILD_IMAGE} make stop"
+        // Always shut down the cluster to free up resources.
+        sh "docker run --rm --privileged -e CLUSTER=clear ${DockerBuildArgs()} ${env.BUILD_IMAGE} make stop"
     }
 }
