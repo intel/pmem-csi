@@ -172,7 +172,7 @@ spec:
               fieldPath: spec.nodeName
         - name: TERMINATION_LOG_PATH
           value: /tmp/termination-log
-        image: intel/pmem-csi-driver-test:v0.5.23
+        image: intel/pmem-csi-driver-test:v0.5.24
         imagePullPolicy: Always
         name: pmem-driver
         securityContext:
@@ -314,7 +314,7 @@ spec:
               fieldPath: status.podIP
         - name: TERMINATION_LOG_PATH
           value: /tmp/termination-log
-        image: intel/pmem-csi-driver-test:v0.5.23
+        image: intel/pmem-csi-driver-test:v0.5.24
         imagePullPolicy: Always
         name: pmem-driver
         securityContext:
@@ -359,7 +359,7 @@ spec:
         env:
         - name: TERMINATION_LOG_PATH
           value: /tmp/pmem-ns-init-termination-log
-        image: intel/pmem-csi-driver-test:v0.5.23
+        image: intel/pmem-csi-driver-test:v0.5.24
         imagePullPolicy: Always
         name: pmem-ns-init
         securityContext:
@@ -379,7 +379,7 @@ spec:
         env:
         - name: TERMINATION_LOG_PATH
           value: /tmp/pmem-vgm-termination-log
-        image: intel/pmem-csi-driver-test:v0.5.23
+        image: intel/pmem-csi-driver-test:v0.5.24
         imagePullPolicy: Always
         name: pmem-vgm
         securityContext:
