@@ -9,21 +9,22 @@ source ${TEST_CONFIG:-${TEST_DIRECTORY}/test-config.sh}
 CLUSTER=${CLUSTER:-pmem-govm}
 REPO_DIRECTORY="${REPO_DIRECTORY:-$(dirname $(dirname $(readlink -f $0)))}"
 WORK_DIRECTORY="${WORK_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
-KUBECTL="${KUBECTL:-${WORK_DIRECTORY}/ssh-${CLUSTER} kubectl}"
+SSH="${WORK_DIRECTORY}/ssh-${CLUSTER}"
+KUBECTL="${SSH} kubectl" # Always use the kubectl installed in the cluster.
 KUBERNETES_VERSION="$(${KUBECTL} version --short | grep 'Server Version' | \
         sed -e 's/.*: v\([0-9]*\)\.\([0-9]*\)\..*/\1.\2/')"
 DEPLOYMENT_DIRECTORY="${REPO_DIRECTORY}/deploy/kubernetes-$KUBERNETES_VERSION"
 case ${TEST_DEPLOYMENTMODE} in
     testing)
-        deployment_suffix="-testing";;
+        deployment_suffix="/testing";;
     production)
         deployment_suffix="";;
     *)
         echo >&2 "invalid TEST_DEPLOYMENTMODE: ${TEST_DEPLOYMENTMODE}"
         exit 1
 esac
-DEPLOYMENT_FILES=(
-    pmem-csi-${TEST_DEVICEMODE}${deployment_suffix}.yaml
+DEPLOY=(
+    ${TEST_DEVICEMODE}${deployment_suffix}
     pmem-storageclass-ext4.yaml
     pmem-storageclass-xfs.yaml
     pmem-storageclass-cache.yaml
@@ -31,9 +32,50 @@ DEPLOYMENT_FILES=(
 )
 
 echo "$KUBERNETES_VERSION" > $WORK_DIRECTORY/kubernetes.version
-for deployment_file in ${DEPLOYMENT_FILES[@]}; do
-    if [ -e ${DEPLOYMENT_DIRECTORY}/${deployment_file} ]; then
-        sed "s|intel/pmem|${TEST_PMEM_REGISTRY}/pmem|g" ${DEPLOYMENT_DIRECTORY}/${deployment_file} | ${KUBECTL} apply -f -
+for deploy in ${DEPLOY[@]}; do
+    path="${DEPLOYMENT_DIRECTORY}/${deploy}"
+    if [ -f "$path" ]; then
+        ${KUBECTL} apply -f - <"$path"
+    elif [ -d "$path" ]; then
+        # A kustomize base. We need to copy all files over into the cluster, otherwise
+        # `kubectl kustomize` won't work.
+        tmpdir=$(${SSH} mktemp -d)
+        case "$path" in /*) tar -C / -chf - "$(echo "$path" | sed -e 's;^/;;')";;
+                         *) tar -chf - "$path";;
+        esac | ${SSH} tar -xf - -C "$tmpdir"
+        if [ -f "$path/pmem-csi.yaml" ]; then
+            # Replace registry. This is easier with sed than kustomize...
+            ${SSH} sed -i -e "s^intel/pmem^${TEST_PMEM_REGISTRY}/pmem^g" "$tmpdir/$path/pmem-csi.yaml"
+        fi
+        ${SSH} mkdir "$tmpdir/my-deployment"
+        ${SSH} "cat >'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
+bases:
+  - ../$path
+EOF
+        if [ "${TEST_DEVICEMODE}" = "lvm" ]; then
+            # Test these options and kustomization by injecting some non-default values.
+            # This could be made optional to test both default and non-default values,
+            # but for now we just change this in all deployments.
+            ${SSH} "cat >>'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
+patchesJson6902:
+  - target:
+      group: apps
+      version: v1
+      kind: DaemonSet
+      name: pmem-csi-node
+    path: lvm-parameters-patch.yaml
+EOF
+            ${SSH} "cat >'$tmpdir/my-deployment/lvm-parameters-patch.yaml'" <<EOF
+- op: add
+  path: /spec/template/spec/initContainers/0/args/-
+  value: "--useforfsdax=50"
+- op: add
+  path: /spec/template/spec/initContainers/0/args/-
+  value: "--useforsector=10"
+EOF
+        fi
+        ${KUBECTL} apply --kustomize "$tmpdir/my-deployment"
+        ${SSH} rm -rf "$tmpdir"
     fi
 done
 

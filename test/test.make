@@ -1,5 +1,6 @@
 TEST_CMD=$(GO) test
 TEST_ARGS=$(IMPORT_PATH)/pkg/...
+TEST_PKGS=$(shell $(GO) list $(TEST_ARGS) | sed -e 's;$(IMPORT_PATH);.;')
 
 .PHONY: vet
 test: vet check-go-version-$(GO_BINARY)
@@ -134,7 +135,9 @@ RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 	TEST_DEPLOYMENTMODE=$(shell source test/test-config.sh; echo $$TEST_DEPLOYMENTMODE) \
 	TEST_DEVICEMODE=$(shell source test/test-config.sh; echo $$TEST_DEVICEMODE) \
 	TEST_KUBERNETES_VERSION=$(shell source test/test-config.sh; echo $$TEST_KUBERNETES_VERSION) \
-	${GO} test -count=1 -timeout 0 -v ./test/e2e \
+	TEST_CMD='$(TEST_CMD)' \
+	TEST_PKGS='$(shell for i in $(TEST_PKGS); do if ls $$i/*_test.go 2>/dev/null >&2; then echo $$i; fi; done)' \
+	$(GO) test -count=1 -timeout 0 -v ./test/e2e \
                 -ginkgo.skip='$(subst $(space),|,$(TEST_E2E_SKIP))' \
                 -ginkgo.focus='$(subst $(space),|,$(TEST_E2E_FOCUS))' \
                 -report-dir=$(TEST_E2E_REPORT_DIR)
@@ -142,10 +145,15 @@ test_e2e: start
 	$(RUN_E2E)
 
 # Execute simple unit tests.
+#
+# pmem-device-manager gets excluded because its tests need a special
+# environment. We could run it, but its tests would just be skipped
+# (https://github.com/intel/pmem-csi/pull/420#discussion_r346850741).
 .PHONY: run_tests
 test: run_tests
 RUN_TESTS = TEST_WORK=$(abspath _work) \
-	$(TEST_CMD) $(shell $(GO) list $(TEST_ARGS) | grep -v pmem-device-manager | sed -e 's;$(IMPORT_PATH);.;')
+	$(TEST_CMD) $(filter-out %/pmem-device-manager,$(TEST_PKGS))
+
 run_tests: _work/pmem-ca/.ca-stamp _work/evil-ca/.ca-stamp check-go-version-$(GO_BINARY)
 	$(RUN_TESTS)
 

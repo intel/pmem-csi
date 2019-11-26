@@ -134,6 +134,7 @@ _work/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz:
 
 _work/kustomize: _work/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz
 	tar xzf $< -C _work
+	touch $@
 
 # We generate deployment files with kustomize and include the output
 # in the git repo because not all users will have kustomize or it
@@ -172,6 +173,12 @@ KUSTOMIZATION_deploy/common/pmem-storageclass-late-binding.yaml = deploy/kustomi
 kustomize: $(KUSTOMIZE_OUTPUT)
 $(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
 	$< build --load_restrictor none $(KUSTOMIZATION_$@) >$@
+	if echo "$@" | grep -q '/pmem-csi-'; then \
+		dir=$$(echo "$@" | tr - / | sed -e 's;kubernetes/;kubernetes-;' -e 's/.yaml//' -e 's;/pmem/csi/;/;') && \
+		mkdir -p $$dir && \
+		cp $@ $$dir/pmem-csi.yaml && \
+		echo 'resources: [ pmem-csi.yaml ]' > $$dir/kustomization.yaml; \
+	fi
 
 # Always re-generate the output files because "git rebase" might have
 # left us with an inconsistent state.

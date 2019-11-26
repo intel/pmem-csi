@@ -5,6 +5,7 @@ _work/govm_$(GOVM_VERSION)_Linux_amd64.tar.gz:
 
 _work/bin/govm: _work/govm_$(GOVM_VERSION)_Linux_amd64.tar.gz
 	tar zxf $< -C _work/bin/
+	touch $@
 
 # Brings up the emulator environment:
 # - starts a Kubernetes cluster with NVDIMMs as described in https://github.com/qemu/qemu/blob/bd54b11062c4baa7d2e4efadcf71b8cfd55311fd/docs/nvdimm.txt

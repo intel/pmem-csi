@@ -30,6 +30,7 @@ import (
 	. "github.com/onsi/ginkgo"
 
 	// test sources
+	_ "github.com/intel/pmem-csi/test/e2e/gotests"
 	_ "github.com/intel/pmem-csi/test/e2e/storage"
 )
 

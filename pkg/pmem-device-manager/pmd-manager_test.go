@@ -96,6 +96,29 @@ func runTests(mode string) {
 		Expect(dev.Path).ShouldNot(BeNil(), "Null device path")
 	})
 
+	It("Should support recreating a device", func() {
+		name := "test-dev"
+		size := uint64(2) * 1024 * 1024 // 2Mb
+		err := dm.CreateDevice(name, size, nsmode)
+		Expect(err).Should(BeNil(), "Failed to create new device")
+
+		cleanupList[name] = true
+
+		dev, err := dm.GetDevice(name)
+		Expect(err).Should(BeNil(), "Failed to retrieve device info")
+		Expect(dev.VolumeId).Should(Equal(name), "Name mismatch")
+		Expect(dev.Size >= size).Should(BeTrue(), "Size mismatch")
+		Expect(dev.Path).ShouldNot(BeNil(), "Null device path")
+
+		err = dm.DeleteDevice(name, false)
+		Expect(err).Should(BeNil(), "Failed to delete device")
+		cleanupList[name] = false
+
+		err = dm.CreateDevice(name, size, nsmode)
+		Expect(err).Should(BeNil(), "Failed to recreate the same device")
+		cleanupList[name] = true
+	})
+
 	It("Should fail to retrieve non-existent device", func() {
 		dev, err := dm.GetDevice("unknown")
 		Expect(err).ShouldNot(BeNil(), "Error expected")
@@ -108,24 +131,28 @@ func runTests(mode string) {
 		max_deletes := 2
 		sizes := map[string]uint64{}
 
+		// This test may run on a host which already has some volumes.
 		list, err := dm.ListDevices()
 		Expect(err).Should(BeNil(), "Failed to list devices")
-		Expect(len(list)).Should(BeEquivalentTo(0), "count mismatch")
+		numExisting := len(list)
+		for _, dev := range list {
+			sizes[dev.VolumeId] = 0
+		}
 
 		for i := 1; i <= max_devices; i++ {
 			name := fmt.Sprintf("list-dev-%d", i)
-			sizes[name] = rand.Uint64() % 16 * 1024 * 1024
+			sizes[name] = uint64(rand.Intn(15)+1) * 1024 * 1024
 			err := dm.CreateDevice(name, sizes[name], nsmode)
 			Expect(err).Should(BeNil(), "Failed to create new device")
 			cleanupList[name] = true
 		}
 		list, err = dm.ListDevices()
 		Expect(err).Should(BeNil(), "Failed to list devices")
-		Expect(len(list)).Should(BeEquivalentTo(max_devices), "count mismatch")
+		Expect(len(list)).Should(BeEquivalentTo(max_devices+numExisting), "count mismatch")
 		for _, dev := range list {
 			size, ok := sizes[dev.VolumeId]
 			Expect(ok).Should(BeTrue(), "Unexpected device name:"+dev.VolumeId)
-			Expect(dev.Size >= size).Should(BeTrue(), "Device size mismatch")
+			Expect(dev.Size).Should(BeNumerically(">=", size), "Device size mismatch for "+dev.VolumeId)
 		}
 
 		for i := 1; i <= max_deletes; i++ {
@@ -139,11 +166,19 @@ func runTests(mode string) {
 		// List device after deleting a device
 		list, err = dm.ListDevices()
 		Expect(err).Should(BeNil(), "Failed to list devices")
-		Expect(len(list)).Should(BeEquivalentTo(max_devices-max_deletes), "count mismatch")
+		Expect(len(list)).Should(BeEquivalentTo(max_devices-max_deletes+numExisting), "count mismatch")
 		for _, dev := range list {
 			size, ok := sizes[dev.VolumeId]
 			Expect(ok).Should(BeTrue(), "Unexpected device name:"+dev.VolumeId)
-			Expect(dev.Size >= size).Should(BeTrue(), "Device size mismatch")
+			// When testing in direct mode on a node which was set up for LVM with
+			// both "sector" and "fsdax" namespaces, then we end don't have unique
+			// "volume IDs" for those existing namespaces (both have VolumeId = "pmem-csi")
+			// and we only have one entry in the size hash for two volumes. We simply skip
+			// the size check for existing volumes.
+			// TODO: should those volumes be listed at all?
+			if size > 0 {
+				Expect(dev.Size).Should(BeNumerically(">=", size), "Device size mismatch")
+			}
 		}
 	})
 
@@ -157,7 +192,7 @@ func runTests(mode string) {
 		dev, err := dm.GetDevice(name)
 		Expect(err).Should(BeNil(), "Failed to retrieve device info")
 		Expect(dev.VolumeId).Should(Equal(name), "Name mismatch")
-		Expect(dev.Size >= size).Should(BeTrue(), "Size mismatch")
+		Expect(dev.Size).Should(BeNumerically(">=", size), "Size mismatch")
 		Expect(dev.Path).ShouldNot(BeNil(), "Null device path")
 
 		mountPath, err := mountDevice(dev)
