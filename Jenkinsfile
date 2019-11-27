@@ -212,7 +212,7 @@ pipeline {
                 }
             }
         }
-
+/**
         stage('make test') {
             options {
                 timeout(time: 20, unit: "MINUTES")
@@ -222,7 +222,7 @@ pipeline {
                 sh "${RunInBuilder()} ${env.BUILD_CONTAINER} make test"
             }
         }
-
+**/
         stage('Build test image') {
             options {
                 timeout(time: 60, unit: "MINUTES")
