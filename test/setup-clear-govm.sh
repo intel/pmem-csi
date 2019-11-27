@@ -62,12 +62,15 @@ EOF
         # We put config changes in place for both runtimes, even though only one of them will
         # be used by Kubernetes, just in case that someone wants to use them manually.
 
-        # Proxy settings for CRI-O.
-        mkdir /etc/systemd/system/crio.service.d
-        cat >/etc/systemd/system/crio.service.d/proxy.conf <<EOF
+        # Proxy settings for the different container runtimes are injected into
+        # their environment.
+        for cri in crio docker containerd; do
+            mkdir /etc/systemd/system/$cri.service.d
+            cat >/etc/systemd/system/$cri.service.d/proxy.conf <<EOF
 [Service]
 Environment="HTTP_PROXY=${HTTP_PROXY}" "HTTPS_PROXY=${HTTPS_PROXY}" "NO_PROXY=${NO_PROXY}"
 EOF
+        done
 
         # Testing may involve a Docker registry running on the build host (see
         # TEST_LOCAL_REGISTRY and TEST_PMEM_REGISTRY). We need to trust that
@@ -85,12 +88,17 @@ EOF
 { "insecure-registries": [ $(echo $INSECURE_REGISTRIES | sed 's|^|"|g;s| |", "|g;s|$|"|') ] }
 EOF
 
-        # Proxy settings for Docker.
-        mkdir -p /etc/systemd/system/docker.service.d/
-        cat >/etc/systemd/system/docker.service.d/proxy.conf <<EOF
-[Service]
-Environment="HTTP_PROXY=$HTTP_PROXY" "HTTPS_PROXY=$HTTPS_PROXY" "NO_PROXY=$NO_PROXY"
+        # And for containerd.
+        mkdir -p /etc/containerd
+        cat >>/etc/containerd/config.toml <<EOF
+[plugins.cri.registry.mirrors]
 EOF
+        for registry in $INSECURE_REGISTRIES; do
+            cat >>/etc/containerd/config.toml <<EOF
+  [plugins.cri.registry.mirrors."$registry"]
+    endpoint = ["http://$registry"]
+EOF
+        done
 
         # Disable the use of Kata containers as default runtime in Docker.
         # The Kubernetes control plan (apiserver, etc.) fails to run otherwise
@@ -100,7 +108,8 @@ EOF
 [Service]
 Environment="DOCKER_DEFAULT_RUNTIME=--default-runtime runc"
 EOF
-    
+
+        containerd_daemon=
         mkdir -p /etc/systemd/system/kubelet.service.d/
         case $TEST_CRI in
             docker)
@@ -125,6 +134,9 @@ After=containerd.service
 EOF
                 fi
 	        ;;
+            containerd)
+                cri_daemon=containerd
+                ;;
             crio)
 	        cri_daemon=cri-o
 	        ;;
@@ -140,6 +152,7 @@ EOF
 [Unit]
 After=$cri_daemon.service
 EOF
+
         # flannel + CRI-O + Kata Containers needs a crio.conf change (https://clearlinux.org/documentation/clear-linux/tutorials/kubernetes):
         #    If you are using CRI-O and flannel and you want to use Kata Containers, edit the /etc/crio/crio.conf file to add:
         #    [crio.runtime]

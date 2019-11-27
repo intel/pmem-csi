@@ -36,17 +36,17 @@ kind: KubeProxyConfiguration"
 kubeadm_config_file="/tmp/kubeadm-config.yaml"
 
 case $TEST_CRI in
-	docker)
-		cri_daemon=docker
-		# [ERROR SystemVerification]: unsupported docker version: 18.06.1
-		kubeadm_args="$kubeadm_args --ignore-preflight-errors=SystemVerification"
+    docker)
+	# [ERROR SystemVerification]: unsupported docker version: 18.06.1
+	kubeadm_args="$kubeadm_args --ignore-preflight-errors=SystemVerification"
 	;;
-	crio)
-		cri_daemon=cri-o
-		# Needed for CRI-O (https://clearlinux.org/documentation/clear-linux/tutorials/kubernetes).
-		kubeadm_config_init="$kubeadm_config_init
+    crio)
+	# Needed for CRI-O (https://clearlinux.org/documentation/clear-linux/tutorials/kubernetes).
+	kubeadm_config_init="$kubeadm_config_init
 nodeRegistration:
   criSocket: /run/crio/crio.sock"
+	;;
+    containerd)
 	;;
     *)
 	echo "ERROR: unsupported TEST_CRI=$TEST_CRI"

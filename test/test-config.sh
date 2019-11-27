@@ -15,7 +15,7 @@ if [ -d test/test-config.d ]; then
 fi
 
 # The container runtime that is meant to be used inside Clear Linux.
-# Possible values are "docker" and "crio".
+# Possible values are "docker", "containerd", and "crio".
 #
 # Docker is the default for two reasons:
 # - survives killing the VMs while cri-o doesn't (https://github.com/kubernetes-sigs/cri-o/issues/1742#issuecomment-442384980)
