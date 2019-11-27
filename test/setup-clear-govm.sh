@@ -110,6 +110,20 @@ EOF
 [Service]
 Environment="KUBELET_EXTRA_ARGS="
 EOF
+
+                # Docker depends on containerd, in some Clear Linux
+                # releases. Here we assume that it does when it got
+                # installed together with Docker and then add the same
+                # runtime dependency as for kubelet -> Docker
+                # (https://github.com/clearlinux/distribution/issues/1004).
+                if [ -f /usr/lib/systemd/system/containerd.service ]; then
+                    containerd_daemon=containerd
+                    mkdir -p /etc/systemd/system/docker.service.d/
+                    cat >/etc/systemd/system/docker.service.d/10-containerd.conf <<EOF
+[Unit]
+After=containerd.service
+EOF
+                fi
 	        ;;
             crio)
 	        cri_daemon=cri-o
@@ -147,12 +161,12 @@ EOF
         # Reconfiguration done, start daemons. Starting kubelet must wait until kubeadm has created
         # the necessary config files.
         systemctl daemon-reload
-        systemctl restart $cri_daemon || (
-            systemctl status $cri_daemon || true
+        systemctl restart $cri_daemon $containerd_daemon || (
+            systemctl status $cri_daemon $containerd_daemon || true
             journalctl -xe || true
             false
         )
-        systemctl enable $cri_daemon kubelet
+        systemctl enable $cri_daemon $containerd_daemon kubelet
     fi
 }
 
