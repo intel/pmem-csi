@@ -26,7 +26,7 @@ pipeline {
           valid values:
           etcd kube-apiserver kube-controller-manager kube-scheduler
         */
-        LOGGING_PODS = ""
+        LOGGING_PODS = " " // the space is intentional, otherwise ${env.LOGGING_PODS} expands to null below
 
         /*
           For each major Kubernetes release we need one version of Clear Linux
