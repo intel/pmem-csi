@@ -14,13 +14,20 @@ if [ -d test/test-config.d ]; then
     done
 fi
 
-# The container runtime that is meant to be used inside Clear Linux.
-# Possible values are "docker", "containerd", and "crio".
+# The operating system to install inside the nodes.
+: ${TEST_DISTRO:=clear}
+
+# Choose the version of the operating system that gets installed. Valid
+# values depend on the OS.
+: ${TEST_DISTRO_VERSION:=}
+
+# The container runtime that is meant to be used.
+# Possible values are "docker", "containerd", and "crio". Non-default
+# values are untested and may or may not work.
 #
-# Docker is the default for two reasons:
-# - survives killing the VMs while cri-o doesn't (https://github.com/kubernetes-sigs/cri-o/issues/1742#issuecomment-442384980)
-# - Docker mounts /sys read/write while cri-o read-only. pmem-csi needs it in writable state.
-: ${TEST_CRI:=docker}
+# cri-o is the default on Clear Linux because that is supported better
+# and Docker elsewhere because we can install it easily.
+: ${TEST_CRI:=$(case ${TEST_DISTRO} in clear) echo crio;; *) echo docker;; esac)}
 
 # A local registry running on the build host, aka localhost:5000.
 # In order to reach it from inside the virtual cluster, we need
@@ -110,13 +117,6 @@ fi
 # on the version of OpenSSL on the build host
 # (https://github.com/clearlinux/distribution/issues/85).
 : ${TEST_CHECK_SIGNED_FILES:=true}
-
-# The operating system to install inside the nodes.
-: ${TEST_OS:=clear}
-
-# If set to a number, that version of Clear Linux is installed
-# instead of the latest one.
-: ${TEST_DISTRO_VERSION:=}
 
 # If set to a <major>.<minor> number, that version of Kubernetes
 # is installed instead of the latest one. Ignored when

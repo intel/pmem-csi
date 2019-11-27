@@ -156,7 +156,7 @@ ${TEST_CONFIGURE_POST_MASTER}
 # From https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/#pod-network
 # However, the commit currently listed there for 1.16 is broken. Current master fixes some issues
 # and works.
-kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/2140ac876ef134e0ed5af15c65e414cf26827915/Documentation/kube-flannel.yml
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/960b3243b9a7faccdfe7b3c09097105e68030ea7/Documentation/kube-flannel.yml
 
 # Install addon storage CRDs, needed if certain feature gates are enabled.
 # Only applicable to Kubernetes 1.13 and older. 1.14 will have them as builtin APIs.

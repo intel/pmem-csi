@@ -36,6 +36,8 @@ pipeline {
           the control plane is unsupported.
         */
 
+        CLEAR_LINUX_VERSION_1_16 = "31760" // latest version right now
+
         CLEAR_LINUX_VERSION_1_15 = "31070"
         /* 29890 broke networking
         (https://github.com/clearlinux/distribution/issues/904). In
@@ -243,13 +245,13 @@ pipeline {
           Therefore it is faster.
         */
 
-        stage('production 1.15, Clear Linux') {
+        stage('production 1.16, Clear Linux') {
             options {
                 timeout(time: 90, unit: "MINUTES")
                 retry(2)
             }
             steps {
-                TestInVM("lvm", "production", "clear", "${env.CLEAR_LINUX_VERSION_1_15}", "")
+                TestInVM("lvm", "production", "clear", "${env.CLEAR_LINUX_VERSION_1_16}", "")
             }
         }
 
