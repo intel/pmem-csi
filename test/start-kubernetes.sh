@@ -65,9 +65,10 @@ case ${TEST_DISTRO} in
     fedora)
         CLOUD_USER=${CLOUD_USER:-fedora}
         EFI=${EFI:-false}
-        TEST_DISTRO_VERSION=${TEST_DISTRO_VERSION:-30}
+        TEST_DISTRO_VERSION=${TEST_DISTRO_VERSION:-31}
+        FEDORA_CLOUDIMG_REL=${FEDORA_CLOUDIMG_REL:-1.9}
         IMAGE_URL=${IMAGE_URL:-https://download.fedoraproject.org/pub/fedora/linux/releases/${TEST_DISTRO_VERSION}/Cloud/x86_64/images}
-        CLOUD_IMAGE=${CLOUD_IMAGE:-Fedora-Cloud-Base-${TEST_DISTRO_VERSION}-1.2.x86_64.raw.xz}
+        CLOUD_IMAGE=${CLOUD_IMAGE:-Fedora-Cloud-Base-${TEST_DISTRO_VERSION}-${FEDORA_CLOUDIMG_REL}.x86_64.raw.xz}
         ;;
 esac
 
