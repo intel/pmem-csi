@@ -106,6 +106,20 @@ RUNTIME_DEPS += sed \
 # Ignore duplicates.
 RUNTIME_DEPS += LC_ALL=C LANG=C sort -u
 
+# Execute simple unit tests.
+#
+# pmem-device-manager gets excluded because its tests need a special
+# environment. We could run it, but its tests would just be skipped
+# (https://github.com/intel/pmem-csi/pull/420#discussion_r346850741).
+.PHONY: run_tests
+test: run_tests
+RUN_TESTS = TEST_WORK=$(abspath _work) \
+	$(TEST_CMD) $(filter-out %/pmem-device-manager,$(TEST_PKGS))
+RUN_TEST_DEPS = _work/pmem-ca/.ca-stamp _work/evil-ca/.ca-stamp check-go-version-$(GO_BINARY)
+
+run_tests: $(RUN_TEST_DEPS)
+	$(RUN_TESTS)
+
 # E2E tests which are known to be unsuitable (space separated list of regular expressions).
 TEST_E2E_SKIP = no-such-test
 
@@ -141,21 +155,8 @@ RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
                 -ginkgo.skip='$(subst $(space),|,$(TEST_E2E_SKIP))' \
                 -ginkgo.focus='$(subst $(space),|,$(TEST_E2E_FOCUS))' \
                 -report-dir=$(TEST_E2E_REPORT_DIR)
-test_e2e: start
+test_e2e: start $(RUN_TEST_DEPS)
 	$(RUN_E2E)
-
-# Execute simple unit tests.
-#
-# pmem-device-manager gets excluded because its tests need a special
-# environment. We could run it, but its tests would just be skipped
-# (https://github.com/intel/pmem-csi/pull/420#discussion_r346850741).
-.PHONY: run_tests
-test: run_tests
-RUN_TESTS = TEST_WORK=$(abspath _work) \
-	$(TEST_CMD) $(filter-out %/pmem-device-manager,$(TEST_PKGS))
-
-run_tests: _work/pmem-ca/.ca-stamp _work/evil-ca/.ca-stamp check-go-version-$(GO_BINARY)
-	$(RUN_TESTS)
 
 run_dm_tests: TEST_BINARY_NAME=pmem-dm-tests
 run_dm_tests: NODE=pmem-csi-$(CLUSTER)-worker1
