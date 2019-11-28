@@ -750,15 +750,15 @@ one with ext4-format and another with xfs-format file system.
 PMEM-CSI can create a namespace in the *sector* (alias safe) mode instead of default *fsdax* mode. See [Persistent Memory Programming](https://pmem.io/ndctl/ndctl-create-namespace.html) for more details about namespace modes. The main difference in PMEM-CSI context is that a sector-mode volume will not get 'dax' mount option. The deployment examples do not describe sector mode to keep the amount of combinations smaller. Here are the changes to be made to deploy volumes in sector mode:
 
 - add `nsmode: "sector"` line in parameters section in the storageclass definition file pmem-storageclass-XYZ.yaml:
-  ```
+```
 parameters:
   csi.storage.k8s.io/fstype: ext4
   eraseafter: "true"
   nsmode: "sector"                   <-- add this
-  ```
+```
 
 * Only if using LVM device mode: Modify pmem-ns-init options to create sector-mode pools in addition to fsdax-mode pools. Add `-useforfsdax` and `-useforsector` options to pmem-ns-init arguments in pmem-csi-lvm.yaml (select the percentage values that fit your needs):
-  ```
+```
        initContainers:
        - args:
          - -v=3
@@ -766,7 +766,7 @@ parameters:
          - -useforsector=40                  <-- add this
          command:
          - /go/bin/pmem-ns-init
-  ```
+```
 
   This change can be made either by copying and editing a deployment
   yaml file or on-the-fly with `kustomize` as explained in [Run
