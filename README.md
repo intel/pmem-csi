@@ -775,12 +775,32 @@ parameters:
 
 #### Note about raw block volumes
 
-Applications can use volumes provisioned by PMEM-CSI as 
-[raw block devices](https://kubernetes.io/blog/2019/03/07/raw-block-volume-support-to-beta/).
+Applications can use volumes provisioned by PMEM-CSI as [raw block
+devices](https://kubernetes.io/blog/2019/03/07/raw-block-volume-support-to-beta/). Such
+volumes use the same "fsdax" namespace mode as filesystem volumes
+and therefore are block devices. That mode only supports dax (=
+`mmap(MAP_SYNC)`) through a filesystem. Pages mapped on the raw block
+device go through the Linux page cache. Applications have to format
+and mount the raw block volume themselves if they want dax. The
+advantage then is that they have full control over that part.
+
+Volumes with "devdax" namespace mode are not supported. That mode
+results in a character device, something that Kubernetes does not
+expect from a storage driver and that does not work because Kubernetes
+internally tries to [bind the device to a loop
+device](https://github.com/kubernetes/kubernetes/blob/7c87b5fb55ca096c007c8739d4657a5a4e29fb09/pkg/volume/util/util.go#L531-L534).
+
 For provisioning a PMEM volume as raw block device, one has to create a 
 `PersistentVolumeClaim` with `volumeMode: Block`. See example [PVC](
 deploy/common/pmem-pvc-block-volume.yaml) and
 [application](deploy/common/pmem-app-block-volume.yaml) for usage reference.
+
+That example demonstrates how to handle some details:
+- `mkfs.ext4` needs `-b 4096` to produce volumes that support dax;
+  without it, the automatic block size detection may end up choosing
+  an unsuitable value depending on the volume size.
+- [Kubernetes bug #85624](https://github.com/kubernetes/kubernetes/issues/85624)
+  must be worked around to format and mount the raw block device.
 
 <!-- FILL TEMPLATE:
 
