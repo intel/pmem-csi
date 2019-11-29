@@ -219,6 +219,13 @@ function print_ips() (
     govm list -f '{{select (filterRegexp . "Name" "^'$(node_filter ${NODES[@]})'$") "IP"}}' | tac
 )
 
+function extend_no_proxy() (
+    for ip in $(print_ips); do
+        NO_PROXY+=",$ip"
+    done
+    echo "$NO_PROXY"
+)
+
 function create_vms() (
     setup_script="setup-${TEST_DISTRO}-govm.sh"
     STOP_VMS_SCRIPT="${WORKING_DIRECTORY}/stop.sh"
@@ -504,6 +511,7 @@ if init_workdir &&
    EXTRA_MASTER_ETCD_VOLUME=$(setup_etcd_volume) &&
    CLOUD_IMAGE=$(download_image) &&
    create_vms &&
+   NO_PROXY=$(extend_no_proxy) &&
    init_pmem_regions &&
    init_kubernetes_cluster; then
     FAILED=false
