@@ -127,6 +127,11 @@ pipeline {
                     sh "docker create --name=builder -it ${env.BUILD_IMAGE}"
                     sh "docker start builder"
 
+                    // Install additional tools:
+                    // - ssh client for govm
+                    // - sudo for non-privileged user
+                    sh "docker exec builder swupd bundle-add openssh-client sudo"
+
                     // Allow non-root users to become root via sudo when they are part of the root group.
                     // ${DockerBuildArgs()} includes the necessary parameters for that.
                     sh "docker exec builder mkdir /etc/sudoers.d"

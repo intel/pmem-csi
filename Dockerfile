@@ -23,11 +23,7 @@ ARG GO_VERSION="1.13.4"
 #pull dependencies required for downloading and building libndctl
 ARG CACHEBUST
 RUN echo "Updating build image from ${CLEAR_LINUX_BASE} to ${SWUPD_UPDATE_ARG:-the latest release}."
-# openssh-client and sudo are needed for CI testing. They are small enough that it doesn't
-# affect developers that they get installed here, but it is a small saving in the CI
-# because then the installation can be cached.
-RUN swupd update ${SWUPD_UPDATE_ARG} && swupd bundle-add ${NDCTL_BUILD_DEPS} c-basic openssh-client sudo && rm -rf /var/lib/swupd /var/tmp/swupd
-
+RUN swupd update ${SWUPD_UPDATE_ARG} && swupd bundle-add ${NDCTL_BUILD_DEPS} c-basic && rm -rf /var/lib/swupd /var/tmp/swupd
 # Workaround for "pkg-config: error while loading shared libraries" when using older Docker
 # (see https://github.com/clearlinux/distribution/issues/831)
 RUN ldconfig
