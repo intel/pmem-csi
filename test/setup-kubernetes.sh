@@ -132,7 +132,13 @@ cat ${kubeadm_config_file}
 kubeadm_args="$kubeadm_args --ignore-preflight-errors=SystemVerification"
 
 kubeadm_args_init="$kubeadm_args_init --config=$kubeadm_config_file"
-sudo kubeadm init $kubeadm_args $kubeadm_args_init
+sudo kubeadm init $kubeadm_args $kubeadm_args_init || (
+    set +e
+    # Dump some information that might explain the failure.
+    sudo systemctl status docker crio containerd kubelet
+    sudo journalctl -xe -u docker -u crio -u containerd -u kubelet
+    exit 1
+)
 mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
