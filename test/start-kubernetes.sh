@@ -447,7 +447,7 @@ function init_workdir() (
     (
         flock -x -w $LOCKDELAY 200
         if [ ! -e  "$SSH_KEY" ]; then
-            ssh-keygen -N '' -f ${SSH_KEY} &>/dev/null || die "failed to create ${SSH_KEY}"
+            ssh-keygen -N '' -f ${SSH_KEY} >/dev/null || die "failed to create ${SSH_KEY}"
         fi
     ) 200>$LOCKFILE
 )
