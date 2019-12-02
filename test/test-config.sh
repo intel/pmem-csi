@@ -35,35 +35,18 @@ fi
 # on. Here we default to the IP address of the docker0 interface.
 : ${TEST_LOCAL_REGISTRY:=$(ip addr show dev docker0 2>/dev/null | (grep " inet " || echo localhost) | sed -e 's/.* inet //' -e 's;/.*;;'):5000}
 
-# Set up a Docker registry on the master node.
-: ${TEST_CREATE_REGISTRY:=false}
-
 # The registry used for PMEM-CSI image(s). Must be reachable from
-# inside the cluster. The default is the registry on the master
-# node if that is enabled, otherwise a registry on the build
-# host.
-: ${TEST_PMEM_REGISTRY:=$(if ${TEST_CREATE_REGISTRY}; then echo pmem-csi-${CLUSTER}-master:5000; else echo ${TEST_LOCAL_REGISTRY}; fi)}
+# inside the cluster.
+: ${TEST_PMEM_REGISTRY:=${TEST_LOCAL_REGISTRY}}
 
 # The same registry reachable from the build host.
-# This is needed for "make push-images". Pushing
-# to the registry on the master node (TEST_CREATE_REGISTRY=true)
-# is only supported when making additional changes on the
-# build host (like enabling insecure access to that registry)
-# and therefore the default is always a local registry.
+# This is needed for "make push-images".
 : ${TEST_BUILD_PMEM_REGISTRY:=localhost:5000}
 
 # Additional insecure registries (for example, my-registry:5000),
 # separated by spaces. The default local registry above is always
 # marked as insecure and does not need to be listed.
 : ${TEST_INSECURE_REGISTRIES:=}
-
-# When using TEST_CREATE_REGISTRY, some images can be copied into
-# that registry to boot-strap the cluster.
-#
-# To use this, do:
-# - make build-images
-# - TEST_CREATE_REGISTRY=true make start
-: ${TEST_BOOTSTRAP_IMAGES:=${TEST_BUILD_PMEM_REGISTRY}/pmem-csi-driver:canary ${TEST_BUILD_PMEM_REGISTRY}/pmem-csi-driver-test:canary}
 
 # Additional Clear Linux bundles.
 : ${TEST_CLEAR_LINUX_BUNDLES:=storage-utils}

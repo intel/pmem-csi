@@ -9,16 +9,9 @@ set -x
 set -o errexit # TODO: replace with explicit error checking and messages
 set -o pipefail
 
-: ${TEST_CREATE_REGISTRY:=false}
-
 function error_handler(){
         local line="${1}"
         echo >&2 "ERROR: command '${BASH_COMMAND}' in function ${FUNCNAME[1]} at $0:${line} failed"
-}
-
-function create_local_registry(){
-trap 'error_handler ${LINENO}' ERR
-sudo docker run -d -p 5000:5000 --restart=always --name registry registry:2
 }
 
 function setup_kubernetes_master(){
@@ -182,7 +175,4 @@ ${TEST_CONFIGURE_POST_ALL}
 
 if [[ "$HOSTNAME" == *"master"* ]]; then
 	setup_kubernetes_master
-    if $TEST_CREATE_REGISTRY; then
-	    create_local_registry
-    fi
 fi

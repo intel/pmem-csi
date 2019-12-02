@@ -164,6 +164,10 @@ pipeline {
                     sh "docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} docker ps"
                     sh "docker run --rm --privileged ${DockerBuildArgs()} ${env.BUILD_IMAGE} bash -c \
                             'mkdir /tmp/mnt && sudo mount -osize=4096 -t tmpfs none /tmp/mnt && sudo umount /tmp/mnt'"
+
+                    // Run a per-test registry on the build host.  This is where we
+                    // will push images for use by the cluster during testing.
+                    sh "docker run -d -p 5000:5000 --restart=always --name registry registry:2"
                 }
             }
         }
@@ -205,7 +209,17 @@ pipeline {
             }
 
             steps {
+                // This builds images for REGISTRY_NAME with the version automatically determined by
+                // the make rules.
                 sh "docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} make build-images"
+
+                // For testing we have to have those same images also in a registry. Tag and push for
+                // localhost, which is the default test registry.
+                sh "imageversion=\$(docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} make print-image-version) && \
+                    for suffix in '' '-test'; do \
+                        docker tag ${env.REGISTRY_NAME}/pmem-csi-driver\$suffix:\$imageversion localhost:5000/pmem-csi-driver\$suffix:\$imageversion && \
+                        docker push localhost:5000/pmem-csi-driver\$suffix:\$imageversion; \
+                    done"
             }
         }
 
@@ -439,10 +453,9 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                   --privileged \
                   -e CLUSTER=clear \
                   -e GOVM_YAML=`pwd`/_work/clear/deployment.yaml \
-                  -e TEST_BUILD_PMEM_REGISTRY=${env.REGISTRY_NAME} \
+                  -e TEST_LOCAL_REGISTRY=\$(ip addr show dev docker0 | grep ' inet ' | sed -e 's/.* inet //' -e 's;/.*;;'):5000 \
                   -e TEST_DEVICEMODE=${deviceMode} \
                   -e TEST_DEPLOYMENTMODE=${deploymentMode} \
-                  -e TEST_CREATE_REGISTRY=true \
                   -e TEST_CHECK_SIGNED_FILES=false \
                   -e TEST_DISTRO=${distro} \
                   -e TEST_DISTRO_VERSION=${distroVersion} \
