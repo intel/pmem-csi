@@ -128,6 +128,17 @@ pipeline {
                     // Create a running container (https://stackoverflow.com/a/38308399).
                     sh "docker create --name=builder -it ${env.BUILD_IMAGE}"
                     sh "docker start builder"
+                        timeout=0; \
+                        while [ \$(docker inspect --format '{{.State.Status}}' builder) != running ]; do \
+                            docker ps; \
+                            if [ \$timeout -ge 60 ]; then \
+                               docker inspect builder; \
+                               echo 'ERROR: builder container still not running'; \
+                               exit 1; \
+                            fi; \
+                            sleep 10; \
+                            timeout=\$((timeout + 10)); \
+                       done"
 
                     // Install additional tools:
                     // - ssh client for govm
