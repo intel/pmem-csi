@@ -84,7 +84,6 @@ SSH_ARGS="-oIdentitiesOnly=yes -oStrictHostKeyChecking=no \
         -oUserKnownHostsFile=/dev/null -oLogLevel=error \
         -i ${SSH_KEY}"
 SSH_ARGS+=" -oServerAliveInterval=15" # required for disruptive testing, to detect quickly when the machine died
-TEST_CREATE_REGISTRY=${TEST_CREATE_REGISTRY:-false}
 TEST_CHECK_SIGNED_FILES=${TEST_CHECK_SIGNED_FILES:-true}
 
 function die() {
@@ -399,40 +398,6 @@ function init_kubernetes_cluster() (
     #get kubeconfig
     scp $SSH_ARGS ${CLOUD_USER}@${master_ip}:.kube/config $KUBECONFIG || die "failed to copy Kubernetes config file"
     export KUBECONFIG=${KUBECONFIG}
-    # Copy images to local registry in master vm?
-    if $TEST_CREATE_REGISTRY; then
-        for image in $TEST_BOOTSTRAP_IMAGES; do
-            # The image might have been build for a certain registry (like my-registry-server:5000).
-            # We need to re-tag it before pushing it to the localhost:5000 registry on the master node.
-            remoteimage="$(echo "$image" | sed -e 's;^[^/]*/;localhost:5000/;')"
-            echo "Copying $image to master node"
-            docker save "$image" | ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} sudo docker load || die "failed to copy $image"
-            echo Load $image into registry
-            ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} sudo docker tag "$image" "$remoteimage" || die "failed to tag $image as $remoteimage"
-            # "docker push" has been seen to fail temporarily with "error creating overlay mount to /var/lib/docker/overlay2/xxx/merged: device or resource busy".
-            # Here we simply try three times before giving up.
-            local i=0
-            while true; do
-                if (set -x; ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} sudo docker push "$remoteimage"); then
-                    break
-                elif [ $i -ge 2 ]; then
-                    die "'docker push' failed repeatedly, giving up"
-                else
-                    echo "attempt #$i: 'docker push' failed, will try again"
-                    i=$(($i + 1))
-                fi
-            done
-        done
-
-        # TEST_PMEM_REGISTRY in test-config.sh uses this machine name as registry,
-        # so we need to ensure that the name can be resolved.
-        for ip in ${workers_ip}; do
-            ( ssh $SSH_ARGS ${CLOUD_USER}@${ip} <<EOF
-sudo sh -c "echo ${master_ip} pmem-csi-${CLUSTER}-master >>/etc/hosts"
-EOF
-            ) || die "failed to reconfigure /etc/hosts on $workers_ip"
-        done
-    fi
 
     #get kubernetes join token
     join_token=$(ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} "$ENV_VARS kubeadm token create --print-join-command") || die "could not get kubeadm join token"

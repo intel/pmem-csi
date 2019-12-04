@@ -14,13 +14,20 @@ if [ -d test/test-config.d ]; then
     done
 fi
 
-# The container runtime that is meant to be used inside Clear Linux.
-# Possible values are "docker" and "crio".
+# The operating system to install inside the nodes.
+: ${TEST_DISTRO:=clear}
+
+# Choose the version of the operating system that gets installed. Valid
+# values depend on the OS.
+: ${TEST_DISTRO_VERSION:=}
+
+# The container runtime that is meant to be used.
+# Possible values are "docker", "containerd", and "crio". Non-default
+# values are untested and may or may not work.
 #
-# Docker is the default for two reasons:
-# - survives killing the VMs while cri-o doesn't (https://github.com/kubernetes-sigs/cri-o/issues/1742#issuecomment-442384980)
-# - Docker mounts /sys read/write while cri-o read-only. pmem-csi needs it in writable state.
-: ${TEST_CRI:=docker}
+# cri-o is the default on Clear Linux because that is supported better
+# and Docker elsewhere because we can install it easily.
+: ${TEST_CRI:=$(case ${TEST_DISTRO} in clear) echo crio;; *) echo docker;; esac)}
 
 # A local registry running on the build host, aka localhost:5000.
 # In order to reach it from inside the virtual cluster, we need
@@ -28,35 +35,18 @@ fi
 # on. Here we default to the IP address of the docker0 interface.
 : ${TEST_LOCAL_REGISTRY:=$(ip addr show dev docker0 2>/dev/null | (grep " inet " || echo localhost) | sed -e 's/.* inet //' -e 's;/.*;;'):5000}
 
-# Set up a Docker registry on the master node.
-: ${TEST_CREATE_REGISTRY:=false}
-
 # The registry used for PMEM-CSI image(s). Must be reachable from
-# inside the cluster. The default is the registry on the master
-# node if that is enabled, otherwise a registry on the build
-# host.
-: ${TEST_PMEM_REGISTRY:=$(if ${TEST_CREATE_REGISTRY}; then echo pmem-csi-${CLUSTER}-master:5000; else echo ${TEST_LOCAL_REGISTRY}; fi)}
+# inside the cluster.
+: ${TEST_PMEM_REGISTRY:=${TEST_LOCAL_REGISTRY}}
 
 # The same registry reachable from the build host.
-# This is needed for "make push-images". Pushing
-# to the registry on the master node (TEST_CREATE_REGISTRY=true)
-# is only supported when making additional changes on the
-# build host (like enabling insecure access to that registry)
-# and therefore the default is always a local registry.
+# This is needed for "make push-images".
 : ${TEST_BUILD_PMEM_REGISTRY:=localhost:5000}
 
 # Additional insecure registries (for example, my-registry:5000),
 # separated by spaces. The default local registry above is always
 # marked as insecure and does not need to be listed.
 : ${TEST_INSECURE_REGISTRIES:=}
-
-# When using TEST_CREATE_REGISTRY, some images can be copied into
-# that registry to boot-strap the cluster.
-#
-# To use this, do:
-# - make build-images
-# - TEST_CREATE_REGISTRY=true make start
-: ${TEST_BOOTSTRAP_IMAGES:=${TEST_BUILD_PMEM_REGISTRY}/pmem-csi-driver:canary ${TEST_BUILD_PMEM_REGISTRY}/pmem-csi-driver-test:canary}
 
 # Additional Clear Linux bundles.
 : ${TEST_CLEAR_LINUX_BUNDLES:=storage-utils}
@@ -110,13 +100,6 @@ fi
 # on the version of OpenSSL on the build host
 # (https://github.com/clearlinux/distribution/issues/85).
 : ${TEST_CHECK_SIGNED_FILES:=true}
-
-# The operating system to install inside the nodes.
-: ${TEST_OS:=clear}
-
-# If set to a number, that version of Clear Linux is installed
-# instead of the latest one.
-: ${TEST_DISTRO_VERSION:=}
 
 # If set to a <major>.<minor> number, that version of Kubernetes
 # is installed instead of the latest one. Ignored when

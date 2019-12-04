@@ -1,5 +1,6 @@
 *
 ! **/*.make
+! Dockerfile
 ! LICENSE
 ! Makefile
 ! cmd/**

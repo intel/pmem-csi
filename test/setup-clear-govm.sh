@@ -62,12 +62,15 @@ EOF
         # We put config changes in place for both runtimes, even though only one of them will
         # be used by Kubernetes, just in case that someone wants to use them manually.
 
-        # Proxy settings for CRI-O.
-        mkdir /etc/systemd/system/crio.service.d
-        cat >/etc/systemd/system/crio.service.d/proxy.conf <<EOF
+        # Proxy settings for the different container runtimes are injected into
+        # their environment.
+        for cri in crio docker containerd; do
+            mkdir /etc/systemd/system/$cri.service.d
+            cat >/etc/systemd/system/$cri.service.d/proxy.conf <<EOF
 [Service]
 Environment="HTTP_PROXY=${HTTP_PROXY}" "HTTPS_PROXY=${HTTPS_PROXY}" "NO_PROXY=${NO_PROXY}"
 EOF
+        done
 
         # Testing may involve a Docker registry running on the build host (see
         # TEST_LOCAL_REGISTRY and TEST_PMEM_REGISTRY). We need to trust that
@@ -85,12 +88,17 @@ EOF
 { "insecure-registries": [ $(echo $INSECURE_REGISTRIES | sed 's|^|"|g;s| |", "|g;s|$|"|') ] }
 EOF
 
-        # Proxy settings for Docker.
-        mkdir -p /etc/systemd/system/docker.service.d/
-        cat >/etc/systemd/system/docker.service.d/proxy.conf <<EOF
-[Service]
-Environment="HTTP_PROXY=$HTTP_PROXY" "HTTPS_PROXY=$HTTPS_PROXY" "NO_PROXY=$NO_PROXY"
+        # And for containerd.
+        mkdir -p /etc/containerd
+        cat >>/etc/containerd/config.toml <<EOF
+[plugins.cri.registry.mirrors]
 EOF
+        for registry in $INSECURE_REGISTRIES; do
+            cat >>/etc/containerd/config.toml <<EOF
+  [plugins.cri.registry.mirrors."$registry"]
+    endpoint = ["http://$registry"]
+EOF
+        done
 
         # Disable the use of Kata containers as default runtime in Docker.
         # The Kubernetes control plan (apiserver, etc.) fails to run otherwise
@@ -100,7 +108,8 @@ EOF
 [Service]
 Environment="DOCKER_DEFAULT_RUNTIME=--default-runtime runc"
 EOF
-    
+
+        containerd_daemon=
         mkdir -p /etc/systemd/system/kubelet.service.d/
         case $TEST_CRI in
             docker)
@@ -110,7 +119,24 @@ EOF
 [Service]
 Environment="KUBELET_EXTRA_ARGS="
 EOF
+
+                # Docker depends on containerd, in some Clear Linux
+                # releases. Here we assume that it does when it got
+                # installed together with Docker and then add the same
+                # runtime dependency as for kubelet -> Docker
+                # (https://github.com/clearlinux/distribution/issues/1004).
+                if [ -f /usr/lib/systemd/system/containerd.service ]; then
+                    containerd_daemon=containerd
+                    mkdir -p /etc/systemd/system/docker.service.d/
+                    cat >/etc/systemd/system/docker.service.d/10-containerd.conf <<EOF
+[Unit]
+After=containerd.service
+EOF
+                fi
 	        ;;
+            containerd)
+                cri_daemon=containerd
+                ;;
             crio)
 	        cri_daemon=cri-o
 	        ;;
@@ -126,6 +152,7 @@ EOF
 [Unit]
 After=$cri_daemon.service
 EOF
+
         # flannel + CRI-O + Kata Containers needs a crio.conf change (https://clearlinux.org/documentation/clear-linux/tutorials/kubernetes):
         #    If you are using CRI-O and flannel and you want to use Kata Containers, edit the /etc/crio/crio.conf file to add:
         #    [crio.runtime]
@@ -144,15 +171,25 @@ EOF
             ln -s $i /opt/cni/bin/
         done
 
+        # Switch to systemd cgroup driver (https://kubernetes.io/docs/setup/production-environment/container-runtimes/#cgroup-drivers):
+        # "Changing the settings such that your container runtime and kubelet use systemd as the cgroup driver stabilized the system."
+        # It's already the default in cri-o in recent Clear Linux. Docker and containerd might need further work.
+        #
+        # Not sure which file is used on Clear Linux, simply set both.
+        for config in /etc/default/kubelet /etc/sysconfig/kubelet; do
+            mkdir -p $(dirname $config)
+            echo 'KUBELET_EXTRA_ARGS=--cgroup-driver=systemd' >$config
+        done
+
         # Reconfiguration done, start daemons. Starting kubelet must wait until kubeadm has created
         # the necessary config files.
         systemctl daemon-reload
-        systemctl restart $cri_daemon || (
-            systemctl status $cri_daemon || true
+        systemctl restart $cri_daemon $containerd_daemon || (
+            systemctl status $cri_daemon $containerd_daemon || true
             journalctl -xe || true
             false
         )
-        systemctl enable $cri_daemon kubelet
+        systemctl enable $cri_daemon $containerd_daemon kubelet
     fi
 }
 

@@ -9,16 +9,9 @@ set -x
 set -o errexit # TODO: replace with explicit error checking and messages
 set -o pipefail
 
-: ${TEST_CREATE_REGISTRY:=false}
-
 function error_handler(){
         local line="${1}"
         echo >&2 "ERROR: command '${BASH_COMMAND}' in function ${FUNCNAME[1]} at $0:${line} failed"
-}
-
-function create_local_registry(){
-trap 'error_handler ${LINENO}' ERR
-sudo docker run -d -p 5000:5000 --restart=always --name registry registry:2
 }
 
 function setup_kubernetes_master(){
@@ -36,17 +29,17 @@ kind: KubeProxyConfiguration"
 kubeadm_config_file="/tmp/kubeadm-config.yaml"
 
 case $TEST_CRI in
-	docker)
-		cri_daemon=docker
-		# [ERROR SystemVerification]: unsupported docker version: 18.06.1
-		kubeadm_args="$kubeadm_args --ignore-preflight-errors=SystemVerification"
+    docker)
+	# [ERROR SystemVerification]: unsupported docker version: 18.06.1
+	kubeadm_args="$kubeadm_args --ignore-preflight-errors=SystemVerification"
 	;;
-	crio)
-		cri_daemon=cri-o
-		# Needed for CRI-O (https://clearlinux.org/documentation/clear-linux/tutorials/kubernetes).
-		kubeadm_config_init="$kubeadm_config_init
+    crio)
+	# Needed for CRI-O (https://clearlinux.org/documentation/clear-linux/tutorials/kubernetes).
+	kubeadm_config_init="$kubeadm_config_init
 nodeRegistration:
   criSocket: /run/crio/crio.sock"
+	;;
+    containerd)
 	;;
     *)
 	echo "ERROR: unsupported TEST_CRI=$TEST_CRI"
@@ -132,7 +125,13 @@ cat ${kubeadm_config_file}
 kubeadm_args="$kubeadm_args --ignore-preflight-errors=SystemVerification"
 
 kubeadm_args_init="$kubeadm_args_init --config=$kubeadm_config_file"
-sudo kubeadm init $kubeadm_args $kubeadm_args_init
+sudo kubeadm init $kubeadm_args $kubeadm_args_init || (
+    set +e
+    # Dump some information that might explain the failure.
+    sudo systemctl status docker crio containerd kubelet
+    sudo journalctl -xe -u docker -u crio -u containerd -u kubelet
+    exit 1
+)
 mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
@@ -156,7 +155,7 @@ ${TEST_CONFIGURE_POST_MASTER}
 # From https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/#pod-network
 # However, the commit currently listed there for 1.16 is broken. Current master fixes some issues
 # and works.
-kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/2140ac876ef134e0ed5af15c65e414cf26827915/Documentation/kube-flannel.yml
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/960b3243b9a7faccdfe7b3c09097105e68030ea7/Documentation/kube-flannel.yml
 
 # Install addon storage CRDs, needed if certain feature gates are enabled.
 # Only applicable to Kubernetes 1.13 and older. 1.14 will have them as builtin APIs.
@@ -176,7 +175,4 @@ ${TEST_CONFIGURE_POST_ALL}
 
 if [[ "$HOSTNAME" == *"master"* ]]; then
 	setup_kubernetes_master
-    if $TEST_CREATE_REGISTRY; then
-	    create_local_registry
-    fi
 fi
