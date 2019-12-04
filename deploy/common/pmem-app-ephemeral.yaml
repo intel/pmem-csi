@@ -19,5 +19,4 @@ spec:
       fsType: "xfs"
       volumeAttributes:
         size: "2Gi"
-        nsmode: "fsdax"
 

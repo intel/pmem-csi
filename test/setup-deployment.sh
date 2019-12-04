@@ -69,9 +69,6 @@ EOF
 - op: add
   path: /spec/template/spec/initContainers/0/command/-
   value: "--useforfsdax=50"
-- op: add
-  path: /spec/template/spec/initContainers/0/command/-
-  value: "--useforsector=10"
 EOF
         fi
         ${KUBECTL} apply --kustomize "$tmpdir/my-deployment"

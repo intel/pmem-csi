@@ -24,7 +24,7 @@ type pmemLvm struct {
 
 var _ PmemDeviceManager = &pmemLvm{}
 var lvsArgs = []string{"--noheadings", "--nosuffix", "-o", "lv_name,lv_path,lv_size", "--units", "B"}
-var vgsArgs = []string{"--noheadings", "--nosuffix", "-o", "vg_name,vg_size,vg_free,vg_tags", "--units", "B"}
+var vgsArgs = []string{"--noheadings", "--nosuffix", "-o", "vg_name,vg_size,vg_free", "--units", "B"}
 
 // mutex to synchronize all LVM calls
 // The reason we chose not to support concurrent LVM calls was
@@ -47,14 +47,11 @@ func NewPmemDeviceManagerLVM() (PmemDeviceManager, error) {
 	volumeGroups := []string{}
 	for _, bus := range ctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
-			nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
-			for _, nsmod := range nsmodes {
-				vgname := vgName(bus, r, nsmod)
-				if _, err := pmemexec.RunCommand("vgs", vgname); err != nil {
-					klog.V(5).Infof("NewPmemDeviceManagerLVM: VG %v non-existent, skip", vgname)
-				} else {
-					volumeGroups = append(volumeGroups, vgname)
-				}
+			vgname := vgName(bus, r)
+			if _, err := pmemexec.RunCommand("vgs", vgname); err != nil {
+				klog.V(5).Infof("NewPmemDeviceManagerLVM: VG %v non-existent, skip", vgname)
+			} else {
+				volumeGroups = append(volumeGroups, vgname)
 			}
 		}
 	}
@@ -79,20 +76,15 @@ type vgInfo struct {
 	name string
 	size uint64
 	free uint64
-	tag  string
 }
 
-func (lvm *pmemLvm) GetCapacity() (map[string]uint64, error) {
+func (lvm *pmemLvm) GetCapacity() (uint64, error) {
 	lvmMutex.Lock()
 	defer lvmMutex.Unlock()
 	return lvm.getCapacity()
 }
 
-// nsmode is expected to be either "fsdax" or "sector"
-func (lvm *pmemLvm) CreateDevice(volumeId string, size uint64, nsmode string) error {
-	if nsmode != string(ndctl.FsdaxMode) && nsmode != string(ndctl.SectorMode) {
-		return fmt.Errorf("unknown namespace mode %q: %w", nsmode, ErrInvalid)
-	}
+func (lvm *pmemLvm) CreateDevice(volumeId string, size uint64) error {
 	lvmMutex.Lock()
 	defer lvmMutex.Unlock()
 	// Check that such volume does not exist. In certain error states, for example when
@@ -103,7 +95,7 @@ func (lvm *pmemLvm) CreateDevice(volumeId string, size uint64, nsmode string) er
 	if _, err := lvm.getDevice(volumeId); err == nil {
 		return ErrDeviceExists
 	}
-	vgs, err := getVolumeGroups(lvm.volumeGroups, nsmode)
+	vgs, err := getVolumeGroups(lvm.volumeGroups)
 	if err != nil {
 		return err
 	}
@@ -231,8 +223,8 @@ func listDevices(volumeGroups ...string) (map[string]*PmemDeviceInfo, error) {
 	return parseLVSOutput(output)
 }
 
-func vgName(bus *ndctl.Bus, region *ndctl.Region, nsmode ndctl.NamespaceMode) string {
-	return bus.DeviceName() + region.DeviceName() + string(nsmode)
+func vgName(bus *ndctl.Bus, region *ndctl.Region) string {
+	return bus.DeviceName() + region.DeviceName()
 }
 
 //lvs options "lv_name,lv_path,lv_size,lv_free"
@@ -256,26 +248,23 @@ func parseLVSOutput(output string) (map[string]*PmemDeviceInfo, error) {
 	return devices, nil
 }
 
-func (lvm *pmemLvm) getCapacity() (map[string]uint64, error) {
-	capacity := map[string]uint64{}
-	nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
-	for _, nsmod := range nsmodes {
-		vgs, err := getVolumeGroups(lvm.volumeGroups, string(nsmod))
-		if err != nil {
-			return nil, err
-		}
+func (lvm *pmemLvm) getCapacity() (uint64, error) {
+	var capacity uint64
+	vgs, err := getVolumeGroups(lvm.volumeGroups)
+	if err != nil {
+		return 0, err
+	}
 
-		for _, vg := range vgs {
-			if vg.free > capacity[string(nsmod)] {
-				capacity[string(nsmod)] = vg.free
-			}
+	for _, vg := range vgs {
+		if vg.free > capacity {
+			capacity = vg.free
 		}
 	}
 
 	return capacity, nil
 }
 
-func getVolumeGroups(groups []string, wantedTag string) ([]vgInfo, error) {
+func getVolumeGroups(groups []string) ([]vgInfo, error) {
 	vgs := []vgInfo{}
 	args := append(vgsArgs, groups...)
 	output, err := pmemexec.RunCommand("vgs", args...)
@@ -284,18 +273,14 @@ func getVolumeGroups(groups []string, wantedTag string) ([]vgInfo, error) {
 	}
 	for _, line := range strings.SplitN(output, "\n", len(groups)) {
 		fields := strings.Fields(strings.TrimSpace(line))
-		if len(fields) != 4 {
+		if len(fields) != 3 {
 			return vgs, fmt.Errorf("failed to parse vgs output: %q", line)
 		}
-		tag := fields[3]
-		if tag == wantedTag {
-			vg := vgInfo{}
-			vg.name = fields[0]
-			vg.size, _ = strconv.ParseUint(fields[1], 10, 64)
-			vg.free, _ = strconv.ParseUint(fields[2], 10, 64)
-			vg.tag = tag
-			vgs = append(vgs, vg)
-		}
+		vg := vgInfo{}
+		vg.name = fields[0]
+		vg.size, _ = strconv.ParseUint(fields[1], 10, 64)
+		vg.free, _ = strconv.ParseUint(fields[2], 10, 64)
+		vgs = append(vgs, vg)
 	}
 
 	return vgs, nil

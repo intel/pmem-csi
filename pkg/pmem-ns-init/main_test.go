@@ -26,34 +26,29 @@ var _ = AfterSuite(func() {
 var _ = Describe("pmem-ns-init", func() {
 	Context("Check arguments", func() {
 		type cases struct {
-			name                      string
-			useforfsdax, useforsector int
+			name        string
+			useforfsdax int
 		}
 		goodcases := []cases{
-			{"useforfsdax ok", 50, 0},
-			{"useforsector ok", 0, 50},
-			{"useforfsdax and useforsector combined 100", 70, 30},
-			{"useforfsdax and useforsector combined less than 100", 40, 30},
+			{"useforfsdax below 100", 50},
+			{"useforfsdax 100", 100},
 		}
 		badcases := []cases{
-			{"useforfsdax negative", -1, 0},
-			{"useforsector negative", 0, -1},
-			{"useforfsdax too large", 101, 0},
-			{"useforsector too large", 0, 101},
-			{"useforfsdax and useforsector combined too large", 51, 51},
+			{"useforfsdax negative", -1},
+			{"useforfsdax too large", 101},
 		}
 
 		for _, c := range goodcases {
 			c := c
 			It(c.name, func() {
-				err := pmemnsinit.CheckArgs(c.useforfsdax, c.useforsector)
+				err := pmemnsinit.CheckArgs(c.useforfsdax)
 				Expect(err).NotTo(HaveOccurred())
 			})
 		}
 		for _, c := range badcases {
 			c := c
 			It(c.name, func() {
-				err := pmemnsinit.CheckArgs(c.useforfsdax, c.useforsector)
+				err := pmemnsinit.CheckArgs(c.useforfsdax)
 				Expect(err).To(HaveOccurred())
 			})
 		}

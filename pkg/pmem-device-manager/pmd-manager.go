@@ -41,11 +41,11 @@ type PmemDeviceInfo struct {
 //PmemDeviceManager interface to manage the PMEM block devices
 type PmemDeviceManager interface {
 	// GetCapacity returns the available maximum capacity that can be assigned to a Device/Volume
-	GetCapacity() (map[string]uint64, error)
+	GetCapacity() (uint64, error)
 
 	// CreateDevice creates a new block device with give name, size and namespace mode
 	// Possible errors: ErrNotEnoughSpace, ErrInvalid, ErrDeviceExists
-	CreateDevice(name string, size uint64, nsmode string) error
+	CreateDevice(name string, size uint64) error
 
 	// GetDevice returns the block device information for given name
 	// Possible errors: ErrDeviceNotFound

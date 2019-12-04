@@ -22,7 +22,6 @@ import (
 
 const (
 	vgname = "test-group"
-	nsmode = "fsdax"
 	vgsize = uint64(1) * 1024 * 1024 * 1024 // 1Gb
 
 	ModeLVM    = "lvm"
@@ -56,7 +55,7 @@ func runTests(mode string) {
 		cleanupList = map[string]bool{}
 
 		if mode == ModeLVM {
-			vg, err = createTestVGS(vgname, nsmode, vgsize)
+			vg, err = createTestVGS(vgname, vgsize)
 			Expect(err).Should(BeNil(), "Failed to create volume group")
 
 			dm, err = NewPmemDeviceManagerLVMForVGs([]string{vg.name})
@@ -84,7 +83,7 @@ func runTests(mode string) {
 	It("Should create a new device", func() {
 		name := "test-dev-new"
 		size := uint64(2) * 1024 * 1024 // 2Mb
-		err := dm.CreateDevice(name, size, nsmode)
+		err := dm.CreateDevice(name, size)
 		Expect(err).Should(BeNil(), "Failed to create new device")
 
 		cleanupList[name] = true
@@ -99,7 +98,7 @@ func runTests(mode string) {
 	It("Should support recreating a device", func() {
 		name := "test-dev"
 		size := uint64(2) * 1024 * 1024 // 2Mb
-		err := dm.CreateDevice(name, size, nsmode)
+		err := dm.CreateDevice(name, size)
 		Expect(err).Should(BeNil(), "Failed to create new device")
 
 		cleanupList[name] = true
@@ -114,7 +113,7 @@ func runTests(mode string) {
 		Expect(err).Should(BeNil(), "Failed to delete device")
 		cleanupList[name] = false
 
-		err = dm.CreateDevice(name, size, nsmode)
+		err = dm.CreateDevice(name, size)
 		Expect(err).Should(BeNil(), "Failed to recreate the same device")
 		cleanupList[name] = true
 	})
@@ -142,7 +141,7 @@ func runTests(mode string) {
 		for i := 1; i <= max_devices; i++ {
 			name := fmt.Sprintf("list-dev-%d", i)
 			sizes[name] = uint64(rand.Intn(15)+1) * 1024 * 1024
-			err := dm.CreateDevice(name, sizes[name], nsmode)
+			err := dm.CreateDevice(name, sizes[name])
 			Expect(err).Should(BeNil(), "Failed to create new device")
 			cleanupList[name] = true
 		}
@@ -170,8 +169,8 @@ func runTests(mode string) {
 		for _, dev := range list {
 			size, ok := sizes[dev.VolumeId]
 			Expect(ok).Should(BeTrue(), "Unexpected device name:"+dev.VolumeId)
-			// When testing in direct mode on a node which was set up for LVM with
-			// both "sector" and "fsdax" namespaces, then we end don't have unique
+			// When testing in direct mode on a node which was set up for LVM
+			// then we don't have unique
 			// "volume IDs" for those existing namespaces (both have VolumeId = "pmem-csi")
 			// and we only have one entry in the size hash for two volumes. We simply skip
 			// the size check for existing volumes.
@@ -185,7 +184,7 @@ func runTests(mode string) {
 	It("Should delete devices", func() {
 		name := "delete-dev"
 		size := uint64(2) * 1024 * 1024 // 2Mb
-		err := dm.CreateDevice(name, size, nsmode)
+		err := dm.CreateDevice(name, size)
 		Expect(err).Should(BeNil(), "Failed to create new device")
 		cleanupList[name] = true
 
@@ -244,7 +243,7 @@ type testVGS struct {
 	backedFile string
 }
 
-func createTestVGS(vgname, nsmode string, size uint64) (*testVGS, error) {
+func createTestVGS(vgname string, size uint64) (*testVGS, error) {
 	var err error
 	var file *os.File
 	var dev losetup.Device
@@ -309,11 +308,6 @@ func createTestVGS(vgname, nsmode string, size uint64) (*testVGS, error) {
 			pmemexec.RunCommand("vgremove", "--force", vgname)
 		}
 	}()
-
-	By("Append tag(s) to volume group")
-	if out, err = pmemexec.RunCommand("vgchange", "--addtag", string(nsmode), vgname); err != nil {
-		return nil, fmt.Errorf("vgchange failure(output:%s): %s", out, err.Error())
-	}
 
 	return &testVGS{
 		name:       vgname,
