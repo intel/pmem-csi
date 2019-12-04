@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pmem-csi-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: pmem-csi-operator
+  template:
+    metadata:
+      labels:
+        name: pmem-csi-operator
+    spec:
+      serviceAccountName: pmem-csi-operator
+      containers:
+        - name: pmem-csi-operator
+          # Replace this with the built image name
+          image: REPLACE_IMAGE
+          command:
+          - pmem-csi-operator
+          imagePullPolicy: Always
+          env:
+            - name: WATCH_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: "pmem-csi-operator"
