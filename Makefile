@@ -124,6 +124,8 @@ clean:
 
 .PHONY: all build test clean $(CMDS) $(TEST_CMDS)
 
+include operator/operator.make
+
 # Add support for creating and booting a cluster under QEMU.
 # All of the commands operate on a cluster stored in _work/$(CLUSTER),
 # which defaults to _work/clear-govm. This can be changed with

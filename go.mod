@@ -8,6 +8,7 @@ require (
 	github.com/container-storage-interface/spec v1.2.0
 	github.com/docker/spdystream v0.0.0-20181023171402-6480d4af844c // indirect
 	github.com/go-logr/logr v0.1.0
+	github.com/go-openapi/spec v0.19.2
 	github.com/gogo/protobuf v1.3.1 // indirect
 	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9 // indirect
 	github.com/golang/protobuf v1.3.2
@@ -20,13 +21,13 @@ require (
 	github.com/kubernetes-csi/csi-test/v3 v3.0.0
 	github.com/onsi/ginkgo v1.10.3
 	github.com/onsi/gomega v1.7.1
+	github.com/operator-framework/operator-sdk v0.13.0
 	github.com/pkg/errors v0.8.1
-	github.com/prometheus/client_golang v0.9.2
+	github.com/prometheus/client_golang v1.1.0
 	github.com/prometheus/common v0.4.1
 	github.com/prometheus/procfs v0.0.5 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.4.0
-	go.uber.org/atomic v1.4.0 // indirect
 	go.uber.org/multierr v1.2.0 // indirect
 	go.uber.org/zap v1.11.0 // indirect
 	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550 // indirect
@@ -39,10 +40,10 @@ require (
 	gopkg.in/square/go-jose.v2 v2.4.0 // indirect
 	k8s.io/api v0.0.0
 	k8s.io/apimachinery v0.17.0
-	k8s.io/client-go v0.0.0
+	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/component-base v0.0.0
 	k8s.io/klog v1.0.0
-	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d // indirect
+	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d
 	k8s.io/kubernetes v1.17.2
 	k8s.io/utils v0.0.0-20190801114015-581e00157fb1
 	sigs.k8s.io/controller-runtime v0.4.0
@@ -71,6 +72,26 @@ replace (
 	k8s.io/metrics => k8s.io/metrics v0.0.0-20191016113814-3b1a734dba6e
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.0.0-20191016112829-06bb3c9d77c9
 )
+
+//  Operator:-  To resolve below ambigutiy, pin Azure/go-autorest/autorest to v13.3.0
+// 	github.com/Azure/go-autorest/autorest: ambiguous import: found github.com/Azure/go-autorest/autorest in multiple modules:
+//	github.com/Azure/go-autorest v11.1.0+incompatible (/home/avalluri/work/go/pkg/mod/github.com/!azure/go-autorest@v11.1.0+incompatible/autorest)
+//	github.com/Azure/go-autorest/autorest v0.9.0 (/home/avalluri/work/go/pkg/mod/github.com/!azure/go-autorest/autorest@v0.9.0)
+replace github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.0+incompatible
+
+// Pin client_golang version to that compatible with component-base@kubernetes-v1.16.2
+// We with client_golang > v0.9.4 had backword incompatible chaanges and we hit with below compilation error:
+// # k8s.io/component-base/metrics/legacyregistry
+// vendor/k8s.io/component-base/metrics/legacyregistry/registry.go:44:9: undefined: prometheus.InstrumentHandler
+replace github.com/prometheus/client_golang => github.com/prometheus/client_golang v0.9.3-0.20190127221311-3c4408c8b829
+
+// Fix docker/docker version as needed by : https://github.com/deislabs/oras/blob/v0.7.0/go.mod
+// Otherwise, we hit with:
+// go: github.com/operator-framework/operator-sdk@v0.15.0 requires
+//	helm.sh/helm/v3@v3.0.1 requires
+//	github.com/deislabs/oras@v0.7.0 requires
+//	github.com/docker/docker@v0.0.0-00010101000000-000000000000: invalid version: unknown revision 000000000000
+replace github.com/docker/docker => github.com/moby/moby v0.7.3-0.20190826074503-38ab9da00309
 
 // Temporary fork. Can be removed once https://github.com/kubernetes/kubernetes/pull/85540
 // is merged and we update to a version >= 1.18.
