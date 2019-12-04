@@ -64,6 +64,13 @@ pipeline {
         // TODO: Here we use "canary" which is correct for the "devel" branch, but other
         // branches may need something else to get better caching.
         PMEM_CSI_IMAGE = "${env.REGISTRY_NAME}/pmem-csi-driver:canary"
+
+        // A file stored on a sufficiently large tmpfs for use as etcd volume
+        // and its size. It has to be inside the data directory of the master node.
+        CLUSTER = "govm"
+        TEST_ETCD_TMPFS = "${WORKSPACE}/_work/${env.CLUSTER}/data/pmem-csi-${env.CLUSTER}-master/etcd-tmpfs"
+        TEST_ETCD_VOLUME = "${env.TEST_ETCD_TMPFS}/etcd-volume"
+        TEST_ETCD_VOLUME_SIZE = "1073741824" // 1GB
     }
 
     stages {
@@ -86,6 +93,13 @@ pipeline {
                 sh "git remote set-url origin git@github.com:intel/pmem-csi.git"
                 sh "git config user.name 'Intel Kubernetes CI/CD Bot'"
                 sh "git config user.email 'k8s-bot@intel.com'"
+
+                // Create a tmpfs for use as backing store for a large file that will be passed
+                // into QEMU for storing the etcd database.
+                sh "mkdir -p '${env.TEST_ETCD_TMPFS}'"
+                sh "sudo mount -osize=${env.TEST_ETCD_VOLUME_SIZE} -t tmpfs none '${env.TEST_ETCD_TMPFS}'"
+                sh "sudo truncate --size=${env.TEST_ETCD_VOLUME_SIZE} '${env.TEST_ETCD_VOLUME}'"
+
                 // known_hosts entry created and verified as described in https://serverfault.com/questions/856194/securely-add-a-host-e-g-github-to-the-ssh-known-hosts-file
                 sh "mkdir -p ~/.ssh && echo 'github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==' >>~/.ssh/known_hosts && chmod -R go-rxw ~/.ssh"
                 withDockerRegistry([ credentialsId: "e16bd38a-76cb-4900-a5cb-7f6aa3aeb22d", url: "https://${REGISTRY_NAME}" ]) {
@@ -142,15 +156,12 @@ pipeline {
 
                     // Install additional tools:
                     // - ssh client for govm
-                    // - sudo for non-privileged user
-                    sh "docker exec builder swupd bundle-add openssh-client sudo"
+                    sh "docker exec builder swupd bundle-add openssh-client"
 
-                    // Allow non-root users to become root via sudo when they are part of the root group.
-                    // ${DockerBuildArgs()} includes the necessary parameters for that.
-                    sh "docker exec builder mkdir /etc/sudoers.d"
-                    sh "echo '%root ALL=(ALL) NOPASSWD: ALL' | docker exec -i builder tee /etc/sudoers.d/nopasswd >/dev/null"
+                    // Make /usr/local/bin writable for all users. Used to install kubectl.
+                    sh "docker exec builder sh -c 'mkdir -p /usr/local/bin && chmod a+wx /usr/local/bin'"
 
-                    // sudo needs a user entry for the jenkins user.
+                    // Some tools expect a user entry for the jenkins user (like govm?)
                     sh "echo jenkins:x:`id -u`:0:Jenkins:`pwd`/..:/bin/bash | docker exec -i builder tee --append /etc/passwd >/dev/null"
                     sh "echo 'jenkins:*:0:0:99999:0:::' | docker exec -i builder tee --append /etc/shadow >/dev/null"
 
@@ -159,11 +170,8 @@ pipeline {
                     sh "docker stop builder"
                     sh "docker rm builder"
 
-                    // Verify that docker and mount work under sudo in the updated image (needed for etcd tmpfs, see start-kubernetes.sh).
-                    // sudo depends on --privileged.
+                    // Verify that docker works in the updated image.
                     sh "docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} docker ps"
-                    sh "docker run --rm --privileged ${DockerBuildArgs()} ${env.BUILD_IMAGE} bash -c \
-                            'mkdir /tmp/mnt && sudo mount -osize=4096 -t tmpfs none /tmp/mnt && sudo umount /tmp/mnt'"
 
                     // Run a per-test registry on the build host.  This is where we
                     // will push images for use by the cluster during testing.
@@ -399,7 +407,7 @@ git push origin HEAD:master
  - GOPATH alongside it
  - HOME above it
  - same user inside and outside the container
- - same uid/gid/groups as on the host, plus root=0 for sudo
+ - same uid/gid/groups as on the host
 
  "rshared" is needed for mount propagation when govm runs outside the build container.
 
@@ -418,7 +426,6 @@ String DockerBuildArgs() {
     -e USER=`id -nu` \
     --user `id -u`:`id -g` \
     --group-add `id -G | sed -e 's/ / --group-add /g'` \
-    --group-add 0 \
     --volume /var/run/docker.sock:/var/run/docker.sock \
     --volume /usr/bin/docker:/usr/bin/docker \
     --volume `pwd`/..:`pwd`/..:rshared \
@@ -438,10 +445,6 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
         GOPATH. Once we can build outside of the GOPATH, we can
         simplify that to build inside one directory.
 
-        For mounting an etcd tmpfs inside the container such that Docker
-        on the host and thus QEMU can access it, privileges (for mount)
-        and shared mount propagation are needed.
-
         TODO: test in parallel (on different nodes? single node didn't work,
         https://github.com/intel/pmem-CSI/pull/309#issuecomment-504659383)
         */
@@ -450,9 +453,8 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
            if ${env.LOGGING_JOURNALCTL}; then sudo journalctl -f; fi & \
            ( set +x; while true; do sleep ${env.LOGGING_SAMPLING_DELAY}; top -b -n 1 -w 120 | head -n 20; df -h; done ) & \
            docker run --rm \
-                  --privileged \
-                  -e CLUSTER=clear \
-                  -e GOVM_YAML=`pwd`/_work/clear/deployment.yaml \
+                  -e CLUSTER=${env.CLUSTER} \
+                  -e GOVM_YAML=`pwd`/_work/${env.CLUSTER}/deployment.yaml \
                   -e TEST_LOCAL_REGISTRY=\$(ip addr show dev docker0 | grep ' inet ' | sed -e 's/.* inet //' -e 's;/.*;;'):5000 \
                   -e TEST_DEVICEMODE=${deviceMode} \
                   -e TEST_DEPLOYMENTMODE=${deploymentMode} \
@@ -461,18 +463,18 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                   -e TEST_DISTRO=${distro} \
                   -e TEST_DISTRO_VERSION=${distroVersion} \
                   -e TEST_KUBERNETES_VERSION=${kubernetesVersion} \
-                  -e TEST_ETCD_VOLUME_SIZE=1073741824 \
+                  -e TEST_ETCD_VOLUME=${env.TEST_ETCD_VOLUME} \
                   ${DockerBuildArgs()} \
                   ${env.BUILD_IMAGE} \
                   bash -c 'set -x; \
                            testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}-${deviceMode}-${deploymentMode}' | sed -e s/--*/-/g | tr . _ ) && \
                            make start && \
-                           _work/clear/ssh.0 kubectl get pods --all-namespaces -o wide && \
+                           _work/${env.CLUSTER}/ssh.0 kubectl get pods --all-namespaces -o wide && \
                            for pod in ${env.LOGGING_PODS}; do \
-                               _work/clear/ssh.0 kubectl logs -f -n kube-system \$pod-pmem-csi-clear-master | sed -e \"s/^/\$pod: /\" & \
+                               _work/${env.CLUSTER}/ssh.0 kubectl logs -f -n kube-system \$pod-pmem-csi-${env.CLUSTER}-master | sed -e \"s/^/\$pod: /\" & \
                            done && \
-                           _work/clear/ssh.0 tar -C / -cf - usr/bin/kubectl | sudo tar -C /usr/local/bin --strip-components=2 -xf - && \
-                           for ssh in \$(ls _work/clear/ssh.[0-9]); do \
+                           _work/${env.CLUSTER}/ssh.0 tar -C / -cf - usr/bin/kubectl | tar -C /usr/local/bin --strip-components=2 -xf - && \
+                           for ssh in \$(ls _work/${env.CLUSTER}/ssh.[0-9]); do \
                                hostname=\$(\$ssh hostname) && \
                                ( set +x; \
                                  if ${env.LOGGING_JOURNALCTL}; then while true; do \$ssh journalctl -f; done; fi & \
@@ -498,6 +500,6 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
            done'''
 
         // Always shut down the cluster to free up resources.
-        sh "docker run --rm --privileged -e CLUSTER=clear ${DockerBuildArgs()} ${env.BUILD_IMAGE} make stop"
+        sh "docker run --rm -e CLUSTER=${env.CLUSTER} ${DockerBuildArgs()} ${env.BUILD_IMAGE} make stop"
     }
 }
