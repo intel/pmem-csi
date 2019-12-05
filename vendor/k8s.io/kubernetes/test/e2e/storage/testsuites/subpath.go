@@ -59,8 +59,8 @@ var _ TestSuite = &subPathTestSuite{}
 func InitSubPathTestSuite() TestSuite {
 	return &subPathTestSuite{
 		tsInfo: TestSuiteInfo{
-			name: "subPath",
-			testPatterns: []testpatterns.TestPattern{
+			Name: "subPath",
+			TestPatterns: []testpatterns.TestPattern{
 				testpatterns.DefaultFsInlineVolume,
 				testpatterns.DefaultFsPreprovisionedPV,
 				testpatterns.DefaultFsDynamicPV,
@@ -70,22 +70,22 @@ func InitSubPathTestSuite() TestSuite {
 	}
 }
 
-func (s *subPathTestSuite) getTestSuiteInfo() TestSuiteInfo {
+func (s *subPathTestSuite) GetTestSuiteInfo() TestSuiteInfo {
 	return s.tsInfo
 }
 
-func (s *subPathTestSuite) skipRedundantSuite(driver TestDriver, pattern testpatterns.TestPattern) {
+func (s *subPathTestSuite) SkipRedundantSuite(driver TestDriver, pattern testpatterns.TestPattern) {
 	skipVolTypePatterns(pattern, driver, testpatterns.NewVolTypeMap(
 		testpatterns.PreprovisionedPV,
 		testpatterns.InlineVolume))
 }
 
-func (s *subPathTestSuite) defineTests(driver TestDriver, pattern testpatterns.TestPattern) {
+func (s *subPathTestSuite) DefineTests(driver TestDriver, pattern testpatterns.TestPattern) {
 	type local struct {
 		config      *PerTestConfig
 		testCleanup func()
 
-		resource          *genericVolumeTestResource
+		resource          *VolumeResource
 		roVolSource       *v1.VolumeSource
 		pod               *v1.Pod
 		formatPod         *v1.Pod
@@ -112,26 +112,26 @@ func (s *subPathTestSuite) defineTests(driver TestDriver, pattern testpatterns.T
 		// Now do the more expensive test initialization.
 		l.config, l.testCleanup = driver.PrepareTest(f)
 		l.intreeOps, l.migratedOps = getMigrationVolumeOpCounts(f.ClientSet, driver.GetDriverInfo().InTreePluginName)
-		l.resource = createGenericVolumeTestResource(driver, l.config, pattern)
+		l.resource = CreateVolumeResource(driver, l.config, pattern)
 
 		// Setup subPath test dependent resource
 		volType := pattern.VolType
 		switch volType {
 		case testpatterns.InlineVolume:
 			if iDriver, ok := driver.(InlineVolumeTestDriver); ok {
-				l.roVolSource = iDriver.GetVolumeSource(true, pattern.FsType, l.resource.volume)
+				l.roVolSource = iDriver.GetVolumeSource(true, pattern.FsType, l.resource.Volume)
 			}
 		case testpatterns.PreprovisionedPV:
 			l.roVolSource = &v1.VolumeSource{
 				PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-					ClaimName: l.resource.pvc.Name,
+					ClaimName: l.resource.Pvc.Name,
 					ReadOnly:  true,
 				},
 			}
 		case testpatterns.DynamicPV:
 			l.roVolSource = &v1.VolumeSource{
 				PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-					ClaimName: l.resource.pvc.Name,
+					ClaimName: l.resource.Pvc.Name,
 					ReadOnly:  true,
 				},
 			}
@@ -140,11 +140,11 @@ func (s *subPathTestSuite) defineTests(driver TestDriver, pattern testpatterns.T
 		}
 
 		subPath := f.Namespace.Name
-		l.pod = SubpathTestPod(f, subPath, l.resource.volType, l.resource.volSource, true)
+		l.pod = SubpathTestPod(f, subPath, l.resource.VolType, l.resource.VolSource, true)
 		l.pod.Spec.NodeName = l.config.ClientNodeName
 		l.pod.Spec.NodeSelector = l.config.ClientNodeSelector
 
-		l.formatPod = volumeFormatPod(f, l.resource.volSource)
+		l.formatPod = volumeFormatPod(f, l.resource.VolSource)
 		l.formatPod.Spec.NodeName = l.config.ClientNodeName
 		l.formatPod.Spec.NodeSelector = l.config.ClientNodeSelector
 
@@ -162,7 +162,7 @@ func (s *subPathTestSuite) defineTests(driver TestDriver, pattern testpatterns.T
 		}
 
 		if l.resource != nil {
-			l.resource.cleanupResource()
+			l.resource.CleanupResource()
 			l.resource = nil
 		}
 
@@ -336,9 +336,9 @@ func (s *subPathTestSuite) defineTests(driver TestDriver, pattern testpatterns.T
 		init()
 		defer cleanup()
 
-		if strings.HasPrefix(l.resource.volType, "hostPath") || strings.HasPrefix(l.resource.volType, "csi-hostpath") {
+		if strings.HasPrefix(l.resource.VolType, "hostPath") || strings.HasPrefix(l.resource.VolType, "csi-hostpath") {
 			// TODO: This skip should be removed once #61446 is fixed
-			framework.Skipf("%s volume type does not support reconstruction, skipping", l.resource.volType)
+			framework.Skipf("%s volume type does not support reconstruction, skipping", l.resource.VolType)
 		}
 
 		testSubpathReconstruction(f, l.pod, true)
@@ -378,7 +378,7 @@ func (s *subPathTestSuite) defineTests(driver TestDriver, pattern testpatterns.T
 		init()
 		defer cleanup()
 		if l.roVolSource == nil {
-			framework.Skipf("Volume type %v doesn't support readOnly source", l.resource.volType)
+			framework.Skipf("Volume type %v doesn't support readOnly source", l.resource.VolType)
 		}
 
 		origpod := l.pod.DeepCopy()
@@ -406,7 +406,7 @@ func (s *subPathTestSuite) defineTests(driver TestDriver, pattern testpatterns.T
 		init()
 		defer cleanup()
 		if l.roVolSource == nil {
-			framework.Skipf("Volume type %v doesn't support readOnly source", l.resource.volType)
+			framework.Skipf("Volume type %v doesn't support readOnly source", l.resource.VolType)
 		}
 
 		// Format the volume while it's writable

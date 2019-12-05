@@ -42,8 +42,8 @@ var _ TestSuite = &multiVolumeTestSuite{}
 func InitMultiVolumeTestSuite() TestSuite {
 	return &multiVolumeTestSuite{
 		tsInfo: TestSuiteInfo{
-			name: "multiVolume [Slow]",
-			testPatterns: []testpatterns.TestPattern{
+			Name: "multiVolume [Slow]",
+			TestPatterns: []testpatterns.TestPattern{
 				testpatterns.FsVolModePreprovisionedPV,
 				testpatterns.FsVolModeDynamicPV,
 				testpatterns.BlockVolModePreprovisionedPV,
@@ -53,15 +53,15 @@ func InitMultiVolumeTestSuite() TestSuite {
 	}
 }
 
-func (t *multiVolumeTestSuite) getTestSuiteInfo() TestSuiteInfo {
+func (t *multiVolumeTestSuite) GetTestSuiteInfo() TestSuiteInfo {
 	return t.tsInfo
 }
 
-func (t *multiVolumeTestSuite) skipRedundantSuite(driver TestDriver, pattern testpatterns.TestPattern) {
+func (t *multiVolumeTestSuite) SkipRedundantSuite(driver TestDriver, pattern testpatterns.TestPattern) {
 	skipVolTypePatterns(pattern, driver, testpatterns.NewVolTypeMap(testpatterns.PreprovisionedPV))
 }
 
-func (t *multiVolumeTestSuite) defineTests(driver TestDriver, pattern testpatterns.TestPattern) {
+func (t *multiVolumeTestSuite) DefineTests(driver TestDriver, pattern testpatterns.TestPattern) {
 	type local struct {
 		config      *PerTestConfig
 		testCleanup func()
@@ -69,7 +69,7 @@ func (t *multiVolumeTestSuite) defineTests(driver TestDriver, pattern testpatter
 		cs        clientset.Interface
 		ns        *v1.Namespace
 		driver    TestDriver
-		resources []*genericVolumeTestResource
+		resources []*VolumeResource
 
 		intreeOps   opCounts
 		migratedOps opCounts
@@ -105,7 +105,7 @@ func (t *multiVolumeTestSuite) defineTests(driver TestDriver, pattern testpatter
 
 	cleanup := func() {
 		for _, resource := range l.resources {
-			resource.cleanupResource()
+			resource.CleanupResource()
 		}
 
 		if l.testCleanup != nil {
@@ -136,9 +136,9 @@ func (t *multiVolumeTestSuite) defineTests(driver TestDriver, pattern testpatter
 		numVols := 2
 
 		for i := 0; i < numVols; i++ {
-			resource := createGenericVolumeTestResource(driver, l.config, pattern)
+			resource := CreateVolumeResource(driver, l.config, pattern)
 			l.resources = append(l.resources, resource)
-			pvcs = append(pvcs, resource.pvc)
+			pvcs = append(pvcs, resource.Pvc)
 		}
 
 		TestAccessMultipleVolumesAcrossPodRecreation(l.config.Framework, l.cs, l.ns.Name,
@@ -174,9 +174,9 @@ func (t *multiVolumeTestSuite) defineTests(driver TestDriver, pattern testpatter
 		numVols := 2
 
 		for i := 0; i < numVols; i++ {
-			resource := createGenericVolumeTestResource(driver, l.config, pattern)
+			resource := CreateVolumeResource(driver, l.config, pattern)
 			l.resources = append(l.resources, resource)
-			pvcs = append(pvcs, resource.pvc)
+			pvcs = append(pvcs, resource.Pvc)
 		}
 
 		TestAccessMultipleVolumesAcrossPodRecreation(l.config.Framework, l.cs, l.ns.Name,
@@ -212,9 +212,9 @@ func (t *multiVolumeTestSuite) defineTests(driver TestDriver, pattern testpatter
 				// 1st volume should be block and set filesystem for 2nd and later volumes
 				curPattern.VolMode = v1.PersistentVolumeFilesystem
 			}
-			resource := createGenericVolumeTestResource(driver, l.config, curPattern)
+			resource := CreateVolumeResource(driver, l.config, curPattern)
 			l.resources = append(l.resources, resource)
-			pvcs = append(pvcs, resource.pvc)
+			pvcs = append(pvcs, resource.Pvc)
 		}
 
 		TestAccessMultipleVolumesAcrossPodRecreation(l.config.Framework, l.cs, l.ns.Name,
@@ -259,9 +259,9 @@ func (t *multiVolumeTestSuite) defineTests(driver TestDriver, pattern testpatter
 				// 1st volume should be block and set filesystem for 2nd and later volumes
 				curPattern.VolMode = v1.PersistentVolumeFilesystem
 			}
-			resource := createGenericVolumeTestResource(driver, l.config, curPattern)
+			resource := CreateVolumeResource(driver, l.config, curPattern)
 			l.resources = append(l.resources, resource)
-			pvcs = append(pvcs, resource.pvc)
+			pvcs = append(pvcs, resource.Pvc)
 		}
 
 		TestAccessMultipleVolumesAcrossPodRecreation(l.config.Framework, l.cs, l.ns.Name,
@@ -284,12 +284,12 @@ func (t *multiVolumeTestSuite) defineTests(driver TestDriver, pattern testpatter
 		}
 
 		// Create volume
-		resource := createGenericVolumeTestResource(l.driver, l.config, pattern)
+		resource := CreateVolumeResource(l.driver, l.config, pattern)
 		l.resources = append(l.resources, resource)
 
 		// Test access to the volume from pods on different node
 		TestConcurrentAccessToSingleVolume(l.config.Framework, l.cs, l.ns.Name,
-			e2epod.NodeSelection{Name: l.config.ClientNodeName}, resource.pvc, numPods, true /* sameNode */)
+			e2epod.NodeSelection{Name: l.config.ClientNodeName}, resource.Pvc, numPods, true /* sameNode */)
 	})
 
 	// This tests below configuration:
@@ -317,12 +317,12 @@ func (t *multiVolumeTestSuite) defineTests(driver TestDriver, pattern testpatter
 		}
 
 		// Create volume
-		resource := createGenericVolumeTestResource(l.driver, l.config, pattern)
+		resource := CreateVolumeResource(l.driver, l.config, pattern)
 		l.resources = append(l.resources, resource)
 
 		// Test access to the volume from pods on different node
 		TestConcurrentAccessToSingleVolume(l.config.Framework, l.cs, l.ns.Name,
-			e2epod.NodeSelection{Name: l.config.ClientNodeName}, resource.pvc, numPods, false /* sameNode */)
+			e2epod.NodeSelection{Name: l.config.ClientNodeName}, resource.Pvc, numPods, false /* sameNode */)
 	})
 }
 

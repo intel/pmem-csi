@@ -69,8 +69,8 @@ var _ TestSuite = &provisioningTestSuite{}
 func InitProvisioningTestSuite() TestSuite {
 	return &provisioningTestSuite{
 		tsInfo: TestSuiteInfo{
-			name: "provisioning",
-			testPatterns: []testpatterns.TestPattern{
+			Name: "provisioning",
+			TestPatterns: []testpatterns.TestPattern{
 				testpatterns.DefaultFsDynamicPV,
 				testpatterns.NtfsDynamicPV,
 			},
@@ -78,14 +78,14 @@ func InitProvisioningTestSuite() TestSuite {
 	}
 }
 
-func (p *provisioningTestSuite) getTestSuiteInfo() TestSuiteInfo {
+func (p *provisioningTestSuite) GetTestSuiteInfo() TestSuiteInfo {
 	return p.tsInfo
 }
 
-func (p *provisioningTestSuite) skipRedundantSuite(driver TestDriver, pattern testpatterns.TestPattern) {
+func (p *provisioningTestSuite) SkipRedundantSuite(driver TestDriver, pattern testpatterns.TestPattern) {
 }
 
-func (p *provisioningTestSuite) defineTests(driver TestDriver, pattern testpatterns.TestPattern) {
+func (p *provisioningTestSuite) DefineTests(driver TestDriver, pattern testpatterns.TestPattern) {
 	type local struct {
 		config      *PerTestConfig
 		testCleanup func()
@@ -108,7 +108,7 @@ func (p *provisioningTestSuite) defineTests(driver TestDriver, pattern testpatte
 	ginkgo.BeforeEach(func() {
 		// Check preconditions.
 		if pattern.VolType != testpatterns.DynamicPV {
-			framework.Skipf("Suite %q does not support %v", p.tsInfo.name, pattern.VolType)
+			framework.Skipf("Suite %q does not support %v", p.tsInfo.Name, pattern.VolType)
 		}
 		ok := false
 		dDriver, ok = driver.(DynamicPVTestDriver)

@@ -84,7 +84,15 @@ A simplified example: This state develops after steps: create 63 GB namespace, c
 
 <sup>2 </sup> *Region affinity* means that all parts of a provisioned file system are physically located on device(s) that belong to same PMEM region. This is important on multi-socket systems where media access time may vary based on where the storage device(s) are physically attached.
 
-<sup>3 </sup> *fsdax, sector* modes refer to the modes of NVDIMM namespaces. See [Persistent Memory Programming](https://pmem.io/ndctl/ndctl-create-namespace.html) for details
+<sup>3 </sup> *fsdax, sector* modes refer to the modes of NVDIMM
+namespaces. See [Persistent Memory
+Programming](https://pmem.io/ndctl/ndctl-create-namespace.html) for
+details. The *devdax* mode is not supported. It might make sense for a
+raw block volume when the application does not need a filesystem. But
+the *devdax* mode creates a character device, something that
+Kubernetes does not expect from a storage driver and cannot handle
+when it [binds the device to a loop
+device](https://github.com/kubernetes/kubernetes/blob/7c87b5fb55ca096c007c8739d4657a5a4e29fb09/pkg/volume/util/util.go#L531-L534),
 
 ### LVM device mode
 
@@ -775,12 +783,26 @@ parameters:
 
 #### Note about raw block volumes
 
-Applications can use volumes provisioned by PMEM-CSI as 
-[raw block devices](https://kubernetes.io/blog/2019/03/07/raw-block-volume-support-to-beta/).
+Applications can use volumes provisioned by PMEM-CSI as [raw block
+devices](https://kubernetes.io/blog/2019/03/07/raw-block-volume-support-to-beta/). Such
+volumes use the same "fsdax" namespace mode as filesystem volumes
+and therefore are block devices. That mode only supports dax (=
+`mmap(MAP_SYNC)`) through a filesystem. Pages mapped on the raw block
+device go through the Linux page cache. Applications have to format
+and mount the raw block volume themselves if they want dax. The
+advantage then is that they have full control over that part.
+
 For provisioning a PMEM volume as raw block device, one has to create a 
 `PersistentVolumeClaim` with `volumeMode: Block`. See example [PVC](
 deploy/common/pmem-pvc-block-volume.yaml) and
 [application](deploy/common/pmem-app-block-volume.yaml) for usage reference.
+
+That example demonstrates how to handle some details:
+- `mkfs.ext4` needs `-b 4096` to produce volumes that support dax;
+  without it, the automatic block size detection may end up choosing
+  an unsuitable value depending on the volume size.
+- [Kubernetes bug #85624](https://github.com/kubernetes/kubernetes/issues/85624)
+  must be worked around to format and mount the raw block device.
 
 <!-- FILL TEMPLATE:
 

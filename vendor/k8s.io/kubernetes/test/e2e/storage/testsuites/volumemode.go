@@ -54,8 +54,8 @@ var _ TestSuite = &volumeModeTestSuite{}
 func InitVolumeModeTestSuite() TestSuite {
 	return &volumeModeTestSuite{
 		tsInfo: TestSuiteInfo{
-			name: "volumeMode",
-			testPatterns: []testpatterns.TestPattern{
+			Name: "volumeMode",
+			TestPatterns: []testpatterns.TestPattern{
 				testpatterns.FsVolModePreprovisionedPV,
 				testpatterns.FsVolModeDynamicPV,
 				testpatterns.BlockVolModePreprovisionedPV,
@@ -65,22 +65,22 @@ func InitVolumeModeTestSuite() TestSuite {
 	}
 }
 
-func (t *volumeModeTestSuite) getTestSuiteInfo() TestSuiteInfo {
+func (t *volumeModeTestSuite) GetTestSuiteInfo() TestSuiteInfo {
 	return t.tsInfo
 }
 
-func (t *volumeModeTestSuite) skipRedundantSuite(driver TestDriver, pattern testpatterns.TestPattern) {
+func (t *volumeModeTestSuite) SkipRedundantSuite(driver TestDriver, pattern testpatterns.TestPattern) {
 }
 
-func (t *volumeModeTestSuite) defineTests(driver TestDriver, pattern testpatterns.TestPattern) {
+func (t *volumeModeTestSuite) DefineTests(driver TestDriver, pattern testpatterns.TestPattern) {
 	type local struct {
 		config      *PerTestConfig
 		testCleanup func()
 
 		cs clientset.Interface
 		ns *v1.Namespace
-		// genericVolumeTestResource contains pv, pvc, sc, etc., owns cleaning that up
-		genericVolumeTestResource
+		// VolumeResource contains pv, pvc, sc, etc., owns cleaning that up
+		VolumeResource
 
 		intreeOps   opCounts
 		migratedOps opCounts
@@ -108,7 +108,7 @@ func (t *volumeModeTestSuite) defineTests(driver TestDriver, pattern testpattern
 		l.intreeOps, l.migratedOps = getMigrationVolumeOpCounts(f.ClientSet, dInfo.InTreePluginName)
 	}
 
-	// manualInit initializes l.genericVolumeTestResource without creating the PV & PVC objects.
+	// manualInit initializes l.VolumeResource without creating the PV & PVC objects.
 	manualInit := func() {
 		init()
 
@@ -121,14 +121,13 @@ func (t *volumeModeTestSuite) defineTests(driver TestDriver, pattern testpattern
 			volumeNodeAffinity *v1.VolumeNodeAffinity
 		)
 
-		l.genericVolumeTestResource = genericVolumeTestResource{
-			driver:  driver,
-			config:  l.config,
-			pattern: pattern,
+		l.VolumeResource = VolumeResource{
+			Config:  l.config,
+			Pattern: pattern,
 		}
 
 		// Create volume for pre-provisioned volume tests
-		l.volume = CreateVolume(driver, l.config, pattern.VolType)
+		l.Volume = CreateVolume(driver, l.config, pattern.VolType)
 
 		switch pattern.VolType {
 		case testpatterns.PreprovisionedPV:
@@ -138,27 +137,27 @@ func (t *volumeModeTestSuite) defineTests(driver TestDriver, pattern testpattern
 				scName = fmt.Sprintf("%s-%s-sc-for-file", l.ns.Name, dInfo.Name)
 			}
 			if pDriver, ok := driver.(PreprovisionedPVTestDriver); ok {
-				pvSource, volumeNodeAffinity = pDriver.GetPersistentVolumeSource(false, fsType, l.volume)
+				pvSource, volumeNodeAffinity = pDriver.GetPersistentVolumeSource(false, fsType, l.Volume)
 				if pvSource == nil {
 					framework.Skipf("Driver %q does not define PersistentVolumeSource - skipping", dInfo.Name)
 				}
 
 				storageClass, pvConfig, pvcConfig := generateConfigsForPreprovisionedPVTest(scName, volBindMode, pattern.VolMode, *pvSource, volumeNodeAffinity)
-				l.sc = storageClass
-				l.pv = framework.MakePersistentVolume(pvConfig)
-				l.pvc = framework.MakePersistentVolumeClaim(pvcConfig, l.ns.Name)
+				l.Sc = storageClass
+				l.Pv = framework.MakePersistentVolume(pvConfig)
+				l.Pvc = framework.MakePersistentVolumeClaim(pvcConfig, l.ns.Name)
 			}
 		case testpatterns.DynamicPV:
 			if dDriver, ok := driver.(DynamicPVTestDriver); ok {
-				l.sc = dDriver.GetDynamicProvisionStorageClass(l.config, fsType)
-				if l.sc == nil {
+				l.Sc = dDriver.GetDynamicProvisionStorageClass(l.config, fsType)
+				if l.Sc == nil {
 					framework.Skipf("Driver %q does not define Dynamic Provision StorageClass - skipping", dInfo.Name)
 				}
-				l.sc.VolumeBindingMode = &volBindMode
+				l.Sc.VolumeBindingMode = &volBindMode
 
-				l.pvc = framework.MakePersistentVolumeClaim(framework.PersistentVolumeClaimConfig{
+				l.Pvc = framework.MakePersistentVolumeClaim(framework.PersistentVolumeClaimConfig{
 					ClaimSize:        dDriver.GetClaimSize(),
-					StorageClassName: &(l.sc.Name),
+					StorageClassName: &(l.Sc.Name),
 					VolumeMode:       &pattern.VolMode,
 				}, l.ns.Name)
 			}
@@ -168,7 +167,7 @@ func (t *volumeModeTestSuite) defineTests(driver TestDriver, pattern testpattern
 	}
 
 	cleanup := func() {
-		l.cleanupResource()
+		l.CleanupResource()
 
 		if l.testCleanup != nil {
 			l.testCleanup()
@@ -190,22 +189,22 @@ func (t *volumeModeTestSuite) defineTests(driver TestDriver, pattern testpattern
 				var err error
 
 				ginkgo.By("Creating sc")
-				l.sc, err = l.cs.StorageV1().StorageClasses().Create(l.sc)
+				l.Sc, err = l.cs.StorageV1().StorageClasses().Create(l.Sc)
 				framework.ExpectNoError(err, "Failed to create sc")
 
 				ginkgo.By("Creating pv and pvc")
-				l.pv, err = l.cs.CoreV1().PersistentVolumes().Create(l.pv)
+				l.Pv, err = l.cs.CoreV1().PersistentVolumes().Create(l.Pv)
 				framework.ExpectNoError(err, "Failed to create pv")
 
 				// Prebind pv
-				l.pvc.Spec.VolumeName = l.pv.Name
-				l.pvc, err = l.cs.CoreV1().PersistentVolumeClaims(l.ns.Name).Create(l.pvc)
+				l.Pvc.Spec.VolumeName = l.Pv.Name
+				l.Pvc, err = l.cs.CoreV1().PersistentVolumeClaims(l.ns.Name).Create(l.Pvc)
 				framework.ExpectNoError(err, "Failed to create pvc")
 
-				framework.ExpectNoError(framework.WaitOnPVandPVC(l.cs, l.ns.Name, l.pv, l.pvc), "Failed to bind pv and pvc")
+				framework.ExpectNoError(framework.WaitOnPVandPVC(l.cs, l.ns.Name, l.Pv, l.Pvc), "Failed to bind pv and pvc")
 
 				ginkgo.By("Creating pod")
-				pod := e2epod.MakeSecPod(l.ns.Name, []*v1.PersistentVolumeClaim{l.pvc}, nil, false, "", false, false, framework.SELinuxLabel, nil)
+				pod := e2epod.MakeSecPod(l.ns.Name, []*v1.PersistentVolumeClaim{l.Pvc}, nil, false, "", false, false, framework.SELinuxLabel, nil)
 				// Setting node
 				pod.Spec.NodeName = l.config.ClientNodeName
 				pod, err = l.cs.CoreV1().Pods(l.ns.Name).Create(pod)
@@ -244,16 +243,16 @@ func (t *volumeModeTestSuite) defineTests(driver TestDriver, pattern testpattern
 				var err error
 
 				ginkgo.By("Creating sc")
-				l.sc, err = l.cs.StorageV1().StorageClasses().Create(l.sc)
+				l.Sc, err = l.cs.StorageV1().StorageClasses().Create(l.Sc)
 				framework.ExpectNoError(err, "Failed to create sc")
 
 				ginkgo.By("Creating pv and pvc")
-				l.pvc, err = l.cs.CoreV1().PersistentVolumeClaims(l.ns.Name).Create(l.pvc)
+				l.Pvc, err = l.cs.CoreV1().PersistentVolumeClaims(l.ns.Name).Create(l.Pvc)
 				framework.ExpectNoError(err, "Failed to create pvc")
 
 				eventSelector := fields.Set{
 					"involvedObject.kind":      "PersistentVolumeClaim",
-					"involvedObject.name":      l.pvc.Name,
+					"involvedObject.name":      l.Pvc.Name,
 					"involvedObject.namespace": l.ns.Name,
 					"reason":                   volevents.ProvisioningFailed,
 				}.AsSelector().String()
@@ -266,7 +265,7 @@ func (t *volumeModeTestSuite) defineTests(driver TestDriver, pattern testpattern
 				}
 
 				// Check the pvc is still pending
-				pvc, err := l.cs.CoreV1().PersistentVolumeClaims(l.ns.Name).Get(l.pvc.Name, metav1.GetOptions{})
+				pvc, err := l.cs.CoreV1().PersistentVolumeClaims(l.ns.Name).Get(l.Pvc.Name, metav1.GetOptions{})
 				framework.ExpectNoError(err, "Failed to re-read the pvc after event (or timeout)")
 				framework.ExpectEqual(pvc.Status.Phase, v1.ClaimPending, "PVC phase isn't pending")
 			})
@@ -278,12 +277,12 @@ func (t *volumeModeTestSuite) defineTests(driver TestDriver, pattern testpattern
 	ginkgo.It("should fail to use a volume in a pod with mismatched mode [Slow]", func() {
 		skipBlockTest(driver)
 		init()
-		l.genericVolumeTestResource = *createGenericVolumeTestResource(driver, l.config, pattern)
+		l.VolumeResource = *CreateVolumeResource(driver, l.config, pattern)
 		defer cleanup()
 
 		ginkgo.By("Creating pod")
 		var err error
-		pod := e2epod.MakeSecPod(l.ns.Name, []*v1.PersistentVolumeClaim{l.pvc}, nil, false, "", false, false, framework.SELinuxLabel, nil)
+		pod := e2epod.MakeSecPod(l.ns.Name, []*v1.PersistentVolumeClaim{l.Pvc}, nil, false, "", false, false, framework.SELinuxLabel, nil)
 		// Change volumeMounts to volumeDevices and the other way around
 		pod = swapVolumeMode(pod)
 
@@ -328,12 +327,12 @@ func (t *volumeModeTestSuite) defineTests(driver TestDriver, pattern testpattern
 			skipBlockTest(driver)
 		}
 		init()
-		l.genericVolumeTestResource = *createGenericVolumeTestResource(driver, l.config, pattern)
+		l.VolumeResource = *CreateVolumeResource(driver, l.config, pattern)
 		defer cleanup()
 
 		ginkgo.By("Creating pod")
 		var err error
-		pod := e2epod.MakeSecPod(l.ns.Name, []*v1.PersistentVolumeClaim{l.pvc}, nil, false, "", false, false, framework.SELinuxLabel, nil)
+		pod := e2epod.MakeSecPod(l.ns.Name, []*v1.PersistentVolumeClaim{l.Pvc}, nil, false, "", false, false, framework.SELinuxLabel, nil)
 		for i := range pod.Spec.Containers {
 			pod.Spec.Containers[i].VolumeDevices = nil
 			pod.Spec.Containers[i].VolumeMounts = nil

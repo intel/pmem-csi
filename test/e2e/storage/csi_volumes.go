@@ -25,6 +25,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/intel/pmem-csi/test/e2e/storage/dax"
+
 	v1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -85,6 +87,7 @@ var _ = Describe("E2E", func() {
 		testsuites.InitVolumeIOTestSuite,
 		testsuites.InitVolumeModeTestSuite,
 		testsuites.InitVolumesTestSuite,
+		dax.InitDaxTestSuite,
 	}
 
 	enableEphemeralTests := func(k8sVersion string) bool {

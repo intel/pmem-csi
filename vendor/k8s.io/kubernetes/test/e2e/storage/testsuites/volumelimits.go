@@ -58,30 +58,30 @@ var _ TestSuite = &volumeLimitsTestSuite{}
 func InitVolumeLimitsTestSuite() TestSuite {
 	return &volumeLimitsTestSuite{
 		tsInfo: TestSuiteInfo{
-			name: "volumeLimits",
-			testPatterns: []testpatterns.TestPattern{
+			Name: "volumeLimits",
+			TestPatterns: []testpatterns.TestPattern{
 				testpatterns.FsVolModeDynamicPV,
 			},
 		},
 	}
 }
 
-func (t *volumeLimitsTestSuite) getTestSuiteInfo() TestSuiteInfo {
+func (t *volumeLimitsTestSuite) GetTestSuiteInfo() TestSuiteInfo {
 	return t.tsInfo
 }
 
-func (t *volumeLimitsTestSuite) skipRedundantSuite(driver TestDriver, pattern testpatterns.TestPattern) {
+func (t *volumeLimitsTestSuite) SkipRedundantSuite(driver TestDriver, pattern testpatterns.TestPattern) {
 }
 
-func (t *volumeLimitsTestSuite) defineTests(driver TestDriver, pattern testpatterns.TestPattern) {
+func (t *volumeLimitsTestSuite) DefineTests(driver TestDriver, pattern testpatterns.TestPattern) {
 	type local struct {
 		config      *PerTestConfig
 		testCleanup func()
 
 		cs clientset.Interface
 		ns *v1.Namespace
-		// genericVolumeTestResource contains pv, pvc, sc, etc. of the first pod created
-		resource *genericVolumeTestResource
+		// VolumeResource contains pv, pvc, sc, etc. of the first pod created
+		resource *VolumeResource
 
 		// All created PVCs, incl. the one in resource
 		pvcs []*v1.PersistentVolumeClaim
@@ -138,8 +138,8 @@ func (t *volumeLimitsTestSuite) defineTests(driver TestDriver, pattern testpatte
 
 		framework.Logf("Node %s can handle %d volumes of driver %s", nodeName, limit, driverInfo.Name)
 		// Create a storage class and generate a PVC. Do not instantiate the PVC yet, keep it for the last pod.
-		l.resource = createGenericVolumeTestResource(driver, l.config, pattern)
-		defer l.resource.cleanupResource()
+		l.resource = CreateVolumeResource(driver, l.config, pattern)
+		defer l.resource.CleanupResource()
 
 		defer func() {
 			cleanupTest(l.cs, l.ns.Name, l.runningPod.Name, l.unschedulablePod.Name, l.pvcs, l.pvNames)
@@ -150,7 +150,7 @@ func (t *volumeLimitsTestSuite) defineTests(driver TestDriver, pattern testpatte
 		for i := 0; i < limit; i++ {
 			pvc := framework.MakePersistentVolumeClaim(framework.PersistentVolumeClaimConfig{
 				ClaimSize:        dDriver.GetClaimSize(),
-				StorageClassName: &l.resource.sc.Name,
+				StorageClassName: &l.resource.Sc.Name,
 			}, l.ns.Name)
 			pvc, err = l.cs.CoreV1().PersistentVolumeClaims(l.ns.Name).Create(pvc)
 			framework.ExpectNoError(err)
@@ -175,7 +175,7 @@ func (t *volumeLimitsTestSuite) defineTests(driver TestDriver, pattern testpatte
 		framework.ExpectNoError(err)
 
 		ginkgo.By("Creating an extra pod with one volume to exceed the limit")
-		pod = e2epod.MakeSecPod(l.ns.Name, []*v1.PersistentVolumeClaim{l.resource.pvc}, nil, false, "", false, false, framework.SELinuxLabel, nil)
+		pod = e2epod.MakeSecPod(l.ns.Name, []*v1.PersistentVolumeClaim{l.resource.Pvc}, nil, false, "", false, false, framework.SELinuxLabel, nil)
 		// Use affinity to schedule everything on the right node
 		e2epod.SetAffinity(&selection, nodeName)
 		pod.Spec.Affinity = selection.Affinity

@@ -408,6 +408,8 @@ github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINE
 github.com/pmezard/go-difflib v0.0.0-20151028094244-d8ed2627bdf0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
+github.com/pohly/kubernetes v1.10.0-alpha.3.0.20191122094604-c7faaae98a14 h1:pdVmZwaq53mKMhODWomH+DnaUSBHj02XvqwrFCV+sGY=
+github.com/pohly/kubernetes v1.10.0-alpha.3.0.20191122094604-c7faaae98a14/go.mod h1:hJd0X6w7E/MiE7PcDp11XHhdgQBYc33vP+WtTJqG/AU=
 github.com/pquerna/cachecontrol v0.0.0-20171018203845-0dec1b30a021/go.mod h1:prYjPmNq4d1NPVmpShWobRqXY3q7Vp+80DqgxxUrUIA=
 github.com/pquerna/ffjson v0.0.0-20180717144149-af8b230fcd20 h1:7sBb9iOkeq+O7AXlVoH/8zpIcRXX523zMkKKspHjjx8=
 github.com/pquerna/ffjson v0.0.0-20180717144149-af8b230fcd20/go.mod h1:YARuvh7BUWHNhzDq2OM5tzR2RiCcN2D7sapiKyCel/M=
@@ -698,8 +700,6 @@ k8s.io/kubectl v0.0.0-20191016120415-2ed914427d51 h1:RBkTKVMF+xsNsSOVc0+HdC0B5gD
 k8s.io/kubectl v0.0.0-20191016120415-2ed914427d51/go.mod h1:gL826ZTIfD4vXTGlmzgTbliCAT9NGiqpCqK2aNYv5MQ=
 k8s.io/kubelet v0.0.0-20191016114556-7841ed97f1b2 h1:YXArqZfchiY+62+AyWPWE59wICh7xnAEowHGWggxBXs=
 k8s.io/kubelet v0.0.0-20191016114556-7841ed97f1b2/go.mod h1:SBvrtLbuePbJygVXGGCMtWKH07+qrN2dE1iMnteSG8E=
-k8s.io/kubernetes v1.17.0-alpha.0.0.20191109043140-c3f2a6524ed8 h1:+6/wrEXyQxJU5/Y6X4fqRtRpqP6rJASAqI7bBigJpF0=
-k8s.io/kubernetes v1.17.0-alpha.0.0.20191109043140-c3f2a6524ed8/go.mod h1:hJd0X6w7E/MiE7PcDp11XHhdgQBYc33vP+WtTJqG/AU=
 k8s.io/legacy-cloud-providers v0.0.0-20191016115753-cf0698c3a16b h1:cgLCVtQnxjALxIUjjEkiMaKlQZW5sGj6P3+3K5Y/d+8=
 k8s.io/legacy-cloud-providers v0.0.0-20191016115753-cf0698c3a16b/go.mod h1:tKW3pKqdRW8pMveUTpF5pJuCjQxg6a25iLo+Z9BXVH0=
 k8s.io/metrics v0.0.0-20191016113814-3b1a734dba6e/go.mod h1:ve7/vMWeY5lEBkZf6Bt5TTbGS3b8wAxwGbdXAsufjRs=

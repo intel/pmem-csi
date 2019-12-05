@@ -54,22 +54,22 @@ var _ TestSuite = &snapshottableTestSuite{}
 func InitSnapshottableTestSuite() TestSuite {
 	return &snapshottableTestSuite{
 		tsInfo: TestSuiteInfo{
-			name: "snapshottable",
-			testPatterns: []testpatterns.TestPattern{
+			Name: "snapshottable",
+			TestPatterns: []testpatterns.TestPattern{
 				testpatterns.DynamicSnapshot,
 			},
 		},
 	}
 }
 
-func (s *snapshottableTestSuite) getTestSuiteInfo() TestSuiteInfo {
+func (s *snapshottableTestSuite) GetTestSuiteInfo() TestSuiteInfo {
 	return s.tsInfo
 }
 
-func (s *snapshottableTestSuite) skipRedundantSuite(driver TestDriver, pattern testpatterns.TestPattern) {
+func (s *snapshottableTestSuite) SkipRedundantSuite(driver TestDriver, pattern testpatterns.TestPattern) {
 }
 
-func (s *snapshottableTestSuite) defineTests(driver TestDriver, pattern testpatterns.TestPattern) {
+func (s *snapshottableTestSuite) DefineTests(driver TestDriver, pattern testpatterns.TestPattern) {
 	var (
 		sDriver SnapshottableTestDriver
 		dDriver DynamicPVTestDriver
