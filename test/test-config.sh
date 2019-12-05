@@ -101,6 +101,16 @@ fi
 # (https://github.com/clearlinux/distribution/issues/85).
 : ${TEST_CHECK_SIGNED_FILES:=true}
 
+# "make start" tests that /dev/kvm exists before invoking govm because
+# when it is missing, the failure of QEMU inside the containers is
+# hard to diagnose.
+#
+# However, in some rather special circumstances it may be necessary to
+# disable this check. For example, the CI runs "make start" in a
+# non-privileged container without /dev/kvm whereas QEMU will run in
+# privileged containers where /dev/kvm is available.
+: ${TEST_CHECK_KVM:=true}
+
 # If set to a <major>.<minor> number, that version of Kubernetes
 # is installed instead of the latest one. Ignored when
 # using Clear Linux as OS because with Clear Linux we have
