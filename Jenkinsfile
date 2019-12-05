@@ -291,13 +291,25 @@ pipeline {
           Therefore it is faster.
         */
 
-        stage('production 1.16, Clear Linux') {
+        stage('production 1.14 LVM') {
+            when { not { changeRequest() } }
             options {
-                timeout(time: 90, unit: "MINUTES")
+                timeout(time: 45, unit: "MINUTES")
                 retry(2)
             }
             steps {
-                TestInVM("lvm", "production", "clear", "${env.CLEAR_LINUX_VERSION_1_16}", "")
+                TestInVM("lvm", "production", "fedora", "", "1.14")
+            }
+        }
+
+        stage('production 1.14 direct') {
+            when { not { changeRequest() } }
+            options {
+                timeout(time: 45, unit: "MINUTES")
+                retry(2)
+            }
+            steps {
+                TestInVM("direct", "production", "fedora", "", "1.14")
             }
         }
 
@@ -323,25 +335,13 @@ pipeline {
             }
         }
 
-        stage('production 1.14 LVM') {
-            when { not { changeRequest() } }
+        stage('production 1.16, Clear Linux') {
             options {
-                timeout(time: 45, unit: "MINUTES")
+                timeout(time: 90, unit: "MINUTES")
                 retry(2)
             }
             steps {
-                TestInVM("lvm", "production", "fedora", "", "1.14")
-            }
-        }
-
-        stage('production 1.14 direct') {
-            when { not { changeRequest() } }
-            options {
-                timeout(time: 45, unit: "MINUTES")
-                retry(2)
-            }
-            steps {
-                TestInVM("direct", "production", "fedora", "", "1.14")
+                TestInVM("lvm", "production", "clear", "${env.CLEAR_LINUX_VERSION_1_16}", "")
             }
         }
 
@@ -473,7 +473,6 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
            loggers=\"\$loggers \$!\" && \
            ${RunInBuilder()} \
                   -e CLUSTER=${env.CLUSTER} \
-                  -e GOVM_YAML=${WORKSPACE}/_work/${env.CLUSTER}/deployment.yaml \
                   -e TEST_LOCAL_REGISTRY=\$(ip addr show dev docker0 | grep ' inet ' | sed -e 's/.* inet //' -e 's;/.*;;'):5000 \
                   -e TEST_DEVICEMODE=${deviceMode} \
                   -e TEST_DEPLOYMENTMODE=${deploymentMode} \
@@ -488,7 +487,13 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                            loggers=; \
                            atexit () { set -x; kill \$loggers; kill \$( ps --no-header -o %p ); }; \
                            trap atexit EXIT; \
+                           echo CLUSTER=\$CLUSTER TEST_LOCAL_REGISTRY=\$TEST_LOCAL_REGISTRY TEST_DISTRO=\$TEST_DISTRO TEST_DISTRO_VERSION=\$TEST_DISTRO_VERSION TEST_KUBERNETES_VERSION=\$TEST_KUBERNETES_VERSION >_work/new-cluster-config && \
+                           if [ -e _work/\$CLUSTER/cluster-config ] && ! diff _work/\$CLUSTER/cluster-config _work/new-cluster-config; then \
+                               echo QEMU cluster configuration has changed, need to stop old cluster. && \
+                               make stop; \
+                           fi && \
                            make start && \
+                           mv _work/new-cluster-config _work/\$CLUSTER/cluster-config && \
                            _work/${env.CLUSTER}/ssh.0 kubectl get pods --all-namespaces -o wide && \
                            for pod in ${env.LOGGING_PODS}; do \
                                _work/${env.CLUSTER}/ssh.0 kubectl logs -f -n kube-system \$pod-pmem-csi-${env.CLUSTER}-master | sed -e \"s/^/\$pod: /\" & \
@@ -523,8 +528,5 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                     sed -e "s/PMEM E2E suite/$testrun/" -e 's/testcase name="\\([^ ]*\\) *\\(.*\\)" classname="\\([^"]*\\)"/testcase classname="\\3.\\1" name="\\2"/' $i >build/reports/$testrun.xml
                fi
            done'''
-
-        // Always shut down the cluster to free up resources.
-        sh "${RunInBuilder()} -e CLUSTER=${env.CLUSTER} ${env.BUILD_CONTAINER} make stop"
     }
 }
