@@ -843,11 +843,25 @@ available.
 E2E testing is known to work on a Linux development host system. The user
 must be allowed to use Docker.
 
-KVM must be enabled and the user must be allowed to use it. Usually this
-is done by adding the user to the `kvm` group. The
-["Install QEMU-KVM"](https://clearlinux.org/documentation/clear-linux/get-started/virtual-machine-install/kvm)
-section in the Clear Linux documentation contains further information
-about enabling KVM.
+KVM must be enabled. Usually this is the case when `/dev/kvm` exists.
+The current user does not need the privileges to use KVM and QEMU
+doesn't have to be installed because GoVM will run QEMU inside a
+container with root privileges.
+
+Note that cloud providers often don't offer KVM support on their
+regular machines. Search for "nested virtualization" for your provider
+to determine whether and how it supports KVM.
+
+Nested virtualization is also needed when using Kata Containers inside
+the cluster. On Intel-based machines it can be enabled by loading the
+`kvm_intel` module with `nested=1` (see
+https://wiki.archlinux.org/index.php/KVM#Nested_virtualization). At
+this time, Kata Containers up to and including 1.9.1 is [not
+compatible with
+PMEM-CSI](https://github.com/intel/pmem-csi/issues/303) because
+volumes are not passed in as PMEM, but Kata Containers [can be
+installed](https://github.com/kata-containers/packaging/tree/master/kata-deploy#kubernetes-quick-start)
+and used for applications that are not using PMEM.
 
 The `clear-cloud` image is downloaded automatically. By default,
 four different virtual machines are prepared. Each image is pre-configured

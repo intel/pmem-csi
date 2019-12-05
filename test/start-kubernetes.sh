@@ -23,14 +23,18 @@ CLOUD="${CLOUD:-true}"
 FLAVOR="${FLAVOR:-medium}" # actual memory size and CPUs selected below
 SSH_KEY="${SSH_KEY:-${RESOURCES_DIRECTORY}/id_rsa}"
 SSH_PUBLIC_KEY="${SSH_KEY}.pub"
+# -cpu host enables nested virtualization (required for Kata Containers).
+# The build host must have the kvm_intel module loaded with
+# nested=1 (see https://wiki.archlinux.org/index.php/KVM#Nested_virtualization).
 KVM_CPU_OPTS="${KVM_CPU_OPTS:-\
  -m ${TEST_NORMAL_MEM_SIZE}M,slots=${TEST_MEM_SLOTS},maxmem=$((${TEST_NORMAL_MEM_SIZE} + ${TEST_PMEM_MEM_SIZE}))M -smp ${TEST_NUM_CPUS} \
+ -cpu host \
  -machine pc,accel=kvm,nvdimm=on}"
 EXTRA_QEMU_OPTS="${EXTRA_QWEMU_OPTS:-\
  -object memory-backend-file,id=mem1,share=${TEST_PMEM_SHARE},\
 mem-path=/data/nvdimm0,size=${TEST_PMEM_MEM_SIZE}M \
  -device nvdimm,id=nvdimm1,memdev=mem1,label-size=${TEST_PMEM_LABEL_SIZE} \
- -machine pc,nvdimm}"
+}"
 EXTRA_MASTER_ETCD_VOLUME=
 INIT_CLUSTER=${INIT_CLUSTER:-true}
 TEST_INIT_REGION=${TEST_INIT_REGION:-true}
@@ -447,6 +451,11 @@ function check_status() { # intentionally a composite command, so "exit" will ex
             echo "All needed nodes are already running, using them unchanged."
             exit 0
         fi
+    fi
+
+    if [ ! -e /dev/kvm ]; then
+        echo "ERROR: /dev/kvm does not exist. KVM has to be enabled before starting the virtual cluster."
+        exit 1
     fi
 }
 
