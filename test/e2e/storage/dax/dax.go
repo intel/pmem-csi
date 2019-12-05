@@ -87,13 +87,13 @@ func (p *daxTestSuite) DefineTests(driver testsuites.TestDriver, pattern testpat
 		// Build pmem-dax-check helper binary.
 		l.root = os.Getenv("REPO_ROOT")
 		l.daxCheckBinary = "_work/pmem-dax-check"
-		build := exec.Command("/bin/sh", "-c", os.Getenv("GO")+" build -o "+l.daxCheckBinary+" ./cmd/pmem-dax-check")
+		build := exec.Command("/bin/sh", "-c", os.Getenv("GO")+" build -o "+l.daxCheckBinary+" ./test/cmd/pmem-dax-check")
 		build.Stdout = GinkgoWriter
 		build.Stderr = GinkgoWriter
 		build.Dir = l.root
 		By("Compiling with: " + strings.Join(build.Args, " "))
 		err := build.Run()
-		framework.ExpectNoError(err, "compile ./cmd/pmem-dax-check")
+		framework.ExpectNoError(err, "compile ./test/cmd/pmem-dax-check")
 
 		// Now do the more expensive test initialization.
 		l.config, l.testCleanup = driver.PrepareTest(f)
