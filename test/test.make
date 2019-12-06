@@ -150,7 +150,7 @@ RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 	  echo TEST_DEPLOYMENTMODE=$$TEST_DEPLOYMENTMODE; \
 	  echo TEST_DEVICEMODE=$$TEST_DEVICEMODE; \
 	  echo TEST_KUBERNETES_VERSION=$$TEST_KUBERNETES_VERSION; \
-	  echo PMEM_CSI_IMAGE=$$TEST_LOCAL_REGISTRY/pmem-csi-driver$$(if $$TEST_DEPLOYMENTMODE = testing; then echo -test; fi):$(IMAGE_VERSION); \
+	  echo PMEM_CSI_IMAGE=$$TEST_LOCAL_REGISTRY/pmem-csi-driver$$(if [ $$TEST_DEPLOYMENTMODE = testing ]; then echo -test; fi):$(IMAGE_VERSION); \
 	) \
 	TEST_CMD='$(TEST_CMD)' \
 	GO='$(GO)' \
