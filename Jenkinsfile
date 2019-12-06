@@ -513,7 +513,9 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                                loggers=\"\$loggers \$!\"; \
                            done && \
                            testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}-${deviceMode}-${deploymentMode}' | sed -e s/--*/-/g | tr . _ ) && \
-                           make test_e2e TEST_E2E_REPORT_DIR=${WORKSPACE}/build/reports.tmp/\$testrun' \
+                           make test_e2e TEST_E2E_REPORT_DIR=${WORKSPACE}/build/reports.tmp/\$testrun \
+                                         TEST_E2E_SKIP=\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]; fi) \
+                           ' \
            "
     } finally {
         // Each test run produces junit_*.xml files with testsuite name="PMEM E2E suite".
