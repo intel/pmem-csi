@@ -1,6 +1,6 @@
 # Select LVM mode. The PMEM-CSI driver must be in container #0.
 - op: add
-  path: /spec/template/spec/containers/0/args/0
+  path: /spec/template/spec/containers/0/command/1
   value: "-deviceManager=lvm"
 
 # LVM mode needs init containers.
@@ -10,8 +10,7 @@
   - name: pmem-ns-init
     imagePullPolicy: Always
     image: intel/pmem-csi-driver:canary
-    command: ["/usr/local/bin/pmem-ns-init"]
-    args: [ "-v=3" ]
+    command: ["/usr/local/bin/pmem-ns-init", "-v=3"]
     env:
       - name: TERMINATION_LOG_PATH
         value: /tmp/pmem-ns-init-termination-log
@@ -24,8 +23,7 @@
   - name: pmem-vgm
     imagePullPolicy: Always
     image: intel/pmem-csi-driver:canary
-    command: ["/usr/local/bin/pmem-vgm"]
-    args: [ "-v=3" ]
+    command: ["/usr/local/bin/pmem-vgm", "-v=3"]
     env:
       - name: TERMINATION_LOG_PATH
         value: /tmp/pmem-vgm-termination-log

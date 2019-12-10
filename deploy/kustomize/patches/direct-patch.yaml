@@ -1,6 +1,6 @@
-# Select LVM mode. The PMEM-CSI driver must be in container #0.
+# Select direct mode. The PMEM-CSI driver must be in container #0.
 - op: add
-  path: /spec/template/spec/containers/0/args/0
+  path: /spec/template/spec/containers/0/command/1
   value: "-deviceManager=ndctl"
 
 # Direct mode needs /dev and /sys.
