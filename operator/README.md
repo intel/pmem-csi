@@ -1,2 +1,111 @@
-# pmem-csi-operator
-Operator for PMEM-CSI
+<!-- TOC -->
+- [PMEM-CSI Operator](#pmem-csi-for-kubernetes)
+  - [About](#about)
+  - [Usage](#usage)
+    - [Pre-requisites](#pre-requisites)
+    - [Deploy PMEM-CSI operator](#deploy-pmem-csi-operator)
+    - [Deployment CRD API](#deployment-crd-api)
+  - [Example Deployment](#example-deployment)
+
+<!-- /TOC -->
+# PMEM-CSI operator
+
+## About
+
+PMEM-CSI operator facilitates deploying and managing the [PMEM-CSI driver](https://github.com/intel/pmem-csi) on a Kubernetes cluster. 
+
+This operator is based on the CoreOS [operator-sdk](https://github.com/operator-framework/operator-sdk) tools and APIs.
+
+## Usage
+
+### Pre-requisites
+
+A running Kubernetes cluster with one or more nodes installed with PMEM hardware(NVDIMM). The persistent memory on these nodes must be [pre-provisioned](../README.md#persistent-memory-pre-provisioning).
+
+### Deploy PMEM-CSI operator
+
+<!-- The assumptions:
+  a) pmem-csi-operator binary is part of released intel/pmem-csi-driver image and no additional steps required to build the images
+-->
+<!--
+  TODOs: Changes to below URL
+    1) Current url is referring to 'operator' branch. so, when moved to devel branch change the url accordingly: 'raw/operator' ->  'raw/devel'
+    2) Though currently operator deployments are in 'REPO_ROOT/operator/deploy', they must moved to 'REPO_ROOT/deploy'. Then that change should reflect in this url : 'operator/deploy' -> '/deploy'
+    3) In release branch, branch name part of the url should point to appropriate release branch name
+-->
+```sh
+$ kubectl create -f https://github.com/intel/pmem-csi/raw/operator/operator/deploy/operator.yaml
+```
+
+### Deployment CRD API
+
+Current PMEM-CSI Deployment object supports below API:
+
+#### Deployment
+
+|Field | type | Description |
+|---|---|---|
+| apiVersion | string  | `pmem-csi.intel.com/v1alpha1`|
+| kind | string | `Deployment`|
+| metadata | [ObjectMeta](https://git.k8s.io/community/contributors/devel/api-conventions.md#spec-and-status) | Standard objects metadata |
+| spec | [DeploymentSpec](#deployment-spec) | Specification of the desired behavior of the deployment |
+
+#### DeploymentSpec
+
+|Field | type | Description | Default Value |
+|---|---|---|---|
+| driverName | string | Unique CSI driver name to use | `pmem-csi.intel.com` |
+| image | string | PMEM-CSI docker image name used for the deployment | the same version as the operator |
+| provisionerImage | string | [CSI provisioner](https://kubernetes-csi.github.io/docs/external-provisioner.html) docker image name | latest [external provisioner](https://kubernetes-csi.github.io/docs/external-provisioner.html) stable release image<sup>1</sup> |
+| registrarImage | string | [CSI node driver registrar](https://github.com/kubernetes-csi/node-driver-registrar) docker image name | latest [node driver registrar](https://kubernetes-csi.github.io/docs/node-driver-registrar.html) stable release image<sup>1</sup> |
+| pullPolicy | string | Docker image pull policy. either one of `Always`, `Never`, `IfNotPresent` | `IfNotPresent` |
+| logLevel | integer | PMEM-CSI driver logging level | 3 |
+| deviceMode | string | Device management mode to use. Supports one of `lvm` or `direct` | `lvm`
+| controllerResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for controller pod |
+| nodeResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for the pods running on node(s) |
+
+<sup>1</sup> Image versions depend on the Kubernetes cluster version. The operator figures out itself the appropriate image version(s). Whereas users have to handle choosing the right version(s) themselves when overriding the values.
+
+## Example Deployment
+
+Once the [operator deployed](#deploy-PMEM-CSI-operator) is in `Running` state, it is ready to handle PMEM-CSI `Deployment` objects in `pmem-csi.intel.com` API group.
+
+Here is an example driver deployment with custom driver image and pod resources:
+
+```sh
+$ kubectl create -f - <<EOF
+apiVersion: pmem-csi.intel.com/v1alpha1
+kind: Deployment
+metadata:
+  name: pmem-deployment
+spec:
+  image: localhost/pmem-csi-driver:canary
+  deviceMode: lvm
+  controllerResources:
+    requests:
+      cpu: "200m"
+      memory: "100Mi"
+  nodeResources:
+    requests:
+      cpu: "200m"
+      memory: "100Mi"
+EOF
+```
+
+Once the above deployment installation is successful, we can see all the driver pods in `Running` state:
+```sh
+$ kubectl get deployments.pmem-csi.intel.com
+NAME                 AGE
+pmem-deployment      50s
+
+$ kubectl get po
+NAME                    READY   STATUS    RESTARTS   AGE
+pmem-csi-controller-0   2/2     Running   0          51s
+pmem-csi-node-4x7cv     2/2     Running   0          50s
+pmem-csi-node-6grt6     2/2     Running   0          50s
+pmem-csi-node-msgds     2/2     Running   0          51s
+```
+
+> **WARNING**: If one wants to run multiple driver deployments, make sure that those deployments:
+>  - do not run more than one driver on the same node
+>  - driver names\(`driverName`\) are unique.
