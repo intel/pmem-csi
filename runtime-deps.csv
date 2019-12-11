@@ -1,9 +1,9 @@
 Go,https://github.com/golang/go,9051
-go-openapi spec,https://github.com/go-openapi/spec
-golang-protobuf,https://github.com/golang/protobuf
-google uuid,https://github.com/google/uuid
-grpc-go,https://github.com/grpc/grpc-go
+go-openapi spec,https://github.com/go-openapi/spec,
+golang-protobuf,https://github.com/golang/protobuf,
+google uuid,https://github.com/google/uuid,
+grpc-go,https://github.com/grpc/grpc-go,
 kubernetes,https://github.com/kubernetes/kubernetes,9641
-kubernetes-sigs/controller-runtime,https://github.com/kubernetes-sigs/controller-runtime
-operator-sdk,https://github.com/operator-framework/operator-sdk
-pkg/errors,https://github.com/pkg/errors
+kubernetes-sigs/controller-runtime,https://github.com/kubernetes-sigs/controller-runtime,
+operator-sdk,https://github.com/operator-framework/operator-sdk,
+pkg/errors,https://github.com/pkg/errors,
