@@ -3,34 +3,46 @@ module github.com/intel/pmem-csi
 go 1.13
 
 require (
+	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/container-storage-interface/spec v1.2.0
-	github.com/go-openapi/spec v0.19.4
+	github.com/coreos/prometheus-operator v0.34.0 // indirect
+	github.com/go-openapi/spec v0.19.2
+	github.com/gogo/protobuf v1.3.1 // indirect
+	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9 // indirect
 	github.com/golang/protobuf v1.3.2
+	github.com/google/go-cmp v0.3.1 // indirect
 	github.com/google/uuid v1.1.1
+	github.com/hashicorp/golang-lru v0.5.3 // indirect
+	github.com/imdario/mergo v0.3.8 // indirect
 	github.com/json-iterator/go v1.1.8-0.20191012130704-03217c3e9766 // indirect
 	github.com/kubernetes-csi/csi-lib-utils v0.6.1
 	github.com/kubernetes-csi/csi-test v1.1.2-0.20191016154743-6931aedb3df0
 	github.com/onsi/ginkgo v1.10.2
 	github.com/onsi/gomega v1.7.0
-	github.com/operator-framework/operator-sdk v0.10.0
+	github.com/operator-framework/operator-sdk v0.12.1-0.20191107022206-36b6de4c479e
 	github.com/pkg/errors v0.8.1
-	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.4.0
 	go.uber.org/multierr v1.2.0 // indirect
 	go.uber.org/zap v1.11.0 // indirect
-	golang.org/x/net v0.0.0-20191028085509-fe3aa8a45271
+	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550 // indirect
+	golang.org/x/net v0.0.0-20191027233614-53de4c7853b5
 	golang.org/x/sys v0.0.0-20191105231009-c1f44814a5cd
+	golang.org/x/time v0.0.0-20191024005414-555d28b269f0 // indirect
+	golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898 // indirect
+	google.golang.org/appengine v1.6.5 // indirect
+	google.golang.org/genproto v0.0.0-20191009194640-548a555dbc03 // indirect
 	google.golang.org/grpc v1.24.0
 	gopkg.in/freddierice/go-losetup.v1 v1.0.0-20170407175016-fc9adea44124
 	gopkg.in/square/go-jose.v2 v2.4.0 // indirect
+	gopkg.in/yaml.v2 v2.2.7 // indirect
 	k8s.io/api v0.0.0
 	k8s.io/apimachinery v0.17.0
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/component-base v0.0.0
 	k8s.io/klog v1.0.0
 	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d
-	k8s.io/kubernetes v1.16.2
-	k8s.io/utils v0.0.0-20191010214722-8d271d903fe4
+	k8s.io/kubernetes v1.15.4
+	k8s.io/utils v0.0.0-20190801114015-581e00157fb1
 	sigs.k8s.io/controller-runtime v0.4.0
 )
 
