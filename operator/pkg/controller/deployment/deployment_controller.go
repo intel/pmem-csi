@@ -2,11 +2,12 @@ package deployment
 
 import (
 	"context"
+	"fmt"
 
 	pmemcsiv1alpha1 "github.com/intel/pmem-csi/operator/pkg/apis/pmemcsi/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog"
@@ -79,8 +80,8 @@ func newReconcileDeployment(c client.Client, s *runtime.Scheme) reconcile.Reconc
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the Deployment instance
-	instance := &pmemcsiv1alpha1.Deployment{}
-	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
+	deployment := &pmemcsiv1alpha1.Deployment{}
+	err := r.client.Get(context.TODO(), request.NamespacedName, deployment)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -92,7 +93,43 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	// Define a new Pod object
+	deployment.EnsureDefaults()
+
+	d := PmemCSIDriver{*deployment}
+
+	objects := d.getDeploymentObjects()
+	for _, obj := range objects {
+		metaObj, err := meta.Accessor(obj)
+		if err != nil {
+			klog.Error("Failed to get meta object: %s", err, "(", obj, ")")
+			return reconcile.Result{}, err
+		}
+
+		// Set Deployment instance as the owner and controller
+		if metaObj.GetNamespace() != "" {
+			if err := controllerutil.SetControllerReference(deployment, metaObj, r.scheme); err != nil {
+				klog.Info("Failed to set controller reference:", err)
+			}
+		}
+
+		klog.Info(fmt.Sprintf("Checking if object %q is present in namespace %q", metaObj.GetName(), metaObj.GetNamespace()))
+		err = r.client.Get(context.TODO(), types.NamespacedName{Name: metaObj.GetName(), Namespace: metaObj.GetNamespace()}, obj)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				klog.Info("Creating a new Object(Namespace: ", metaObj.GetNamespace(), ", Name: ", metaObj.GetName())
+				if err := r.client.Create(context.TODO(), obj); err != nil {
+					klog.Error("Failed to create object:", err)
+					return reconcile.Result{}, err
+				}
+				klog.Info("Object created")
+			} else {
+			}
+		} else {
+			klog.Info("Found object: ", metaObj.GetName())
+		}
+
+	}
+	/* // Define a new Pod object
 	pod := newPodForCR(instance)
 
 	// Set Deployment instance as the owner and controller
@@ -118,28 +155,6 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 
 	// Pod already exists - don't requeue
 	klog.Info("Skip reconcile: Pod already exists (Namespace: ", found.Namespace, ", Name: ", found.Name, ")")
+	*/
 	return reconcile.Result{}, nil
-}
-
-// newPodForCR returns a busybox pod with the same name/namespace as the cr
-func newPodForCR(cr *pmemcsiv1alpha1.Deployment) *corev1.Pod {
-	labels := map[string]string{
-		"app": cr.Name,
-	}
-	return &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-pod",
-			Namespace: cr.Namespace,
-			Labels:    labels,
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:    "busybox",
-					Image:   "busybox",
-					Command: []string{"sleep", "3600"},
-				},
-			},
-		},
-	}
 }
