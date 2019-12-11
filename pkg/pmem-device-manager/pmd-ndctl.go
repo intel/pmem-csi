@@ -17,7 +17,6 @@ const (
 )
 
 type pmemNdctl struct {
-	ctx *ndctl.Context
 }
 
 var _ PmemDeviceManager = &pmemNdctl{}
@@ -30,13 +29,6 @@ var ndctlMutex = &sync.Mutex{}
 
 //NewPmemDeviceManagerNdctl Instantiates a new ndctl based pmem device manager
 func NewPmemDeviceManagerNdctl() (PmemDeviceManager, error) {
-	ndctlMutex.Lock()
-	defer ndctlMutex.Unlock()
-
-	ctx, err := ndctl.NewContext()
-	if err != nil {
-		return nil, err
-	}
 	// Check is /sys writable. If not then there is no point starting
 	mounts, _ := mount.New("").List()
 	for _, mnt := range mounts {
@@ -54,19 +46,23 @@ func NewPmemDeviceManagerNdctl() (PmemDeviceManager, error) {
 		}
 	}
 
-	return &pmemNdctl{
-		ctx: ctx,
-	}, nil
+	return &pmemNdctl{}, nil
 }
 
 func (pmem *pmemNdctl) GetCapacity() (map[string]uint64, error) {
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
 
+	ndctx, err := ndctl.NewContext()
+	if err != nil {
+		return nil, err
+	}
+	defer ndctx.Free()
+
 	Capacity := map[string]uint64{}
 	nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
 	var capacity uint64
-	for _, bus := range pmem.ctx.GetBuses() {
+	for _, bus := range ndctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
 			realalign := ndctlAlign * r.InterleaveWays()
 			available := r.MaxAvailableExtent()
@@ -92,14 +88,22 @@ func (pmem *pmemNdctl) GetCapacity() (map[string]uint64, error) {
 func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64, nsmode string) error {
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
+
+	ndctx, err := ndctl.NewContext()
+	if err != nil {
+		return err
+	}
+	defer ndctx.Free()
+
 	// Check that such volume does not exist. In certain error states, for example when
 	// namespace creation works but device zeroing fails (missing /dev/pmemX.Y in container),
 	// this function is asked to create new devices repeatedly, forcing running out of space.
 	// Avoid device filling with garbage entries by returning error.
 	// Overall, no point having more than one namespace with same name.
-	if _, err := pmem.getDevice(volumeId); err == nil {
+	if _, err := getDevice(ndctx, volumeId); err == nil {
 		return ErrDeviceExists
 	}
+
 	// libndctl needs to store meta data and will use some of the allocated
 	// space for that (https://github.com/pmem/ndctl/issues/79).
 	// We don't know exactly how much space that is, just
@@ -108,7 +112,7 @@ func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64, nsmode string)
 	// to request `align` additional bytes.
 	size += ndctlAlign
 	klog.V(4).Infof("Compensate for libndctl creating one alignment step smaller: increase size to %d", size)
-	ns, err := pmem.ctx.CreateNamespace(ndctl.CreateNamespaceOpts{
+	ns, err := ndctx.CreateNamespace(ndctl.CreateNamespaceOpts{
 		Name:  volumeId,
 		Size:  size,
 		Align: ndctlAlign,
@@ -120,7 +124,7 @@ func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64, nsmode string)
 	data, _ := ns.MarshalJSON() //nolint: gosec
 	klog.V(3).Infof("Namespace created: %s", data)
 	// clear start of device to avoid old data being recognized as file system
-	device, err := pmem.getDevice(volumeId)
+	device, err := getDevice(ndctx, volumeId)
 	if err != nil {
 		return err
 	}
@@ -135,7 +139,13 @@ func (pmem *pmemNdctl) DeleteDevice(volumeId string, flush bool) error {
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
 
-	device, err := pmem.getDevice(volumeId)
+	ndctx, err := ndctl.NewContext()
+	if err != nil {
+		return err
+	}
+	defer ndctx.Free()
+
+	device, err := getDevice(ndctx, volumeId)
 	if err != nil {
 		if errors.Is(err, ErrDeviceNotFound) {
 			return nil
@@ -148,29 +158,41 @@ func (pmem *pmemNdctl) DeleteDevice(volumeId string, flush bool) error {
 		}
 		return err
 	}
-	return pmem.ctx.DestroyNamespaceByName(volumeId)
+	return ndctx.DestroyNamespaceByName(volumeId)
 }
 
 func (pmem *pmemNdctl) GetDevice(volumeId string) (*PmemDeviceInfo, error) {
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
 
-	return pmem.getDevice(volumeId)
+	ndctx, err := ndctl.NewContext()
+	if err != nil {
+		return nil, err
+	}
+	defer ndctx.Free()
+
+	return getDevice(ndctx, volumeId)
 }
 
 func (pmem *pmemNdctl) ListDevices() ([]*PmemDeviceInfo, error) {
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
 
+	ndctx, err := ndctl.NewContext()
+	if err != nil {
+		return nil, err
+	}
+	defer ndctx.Free()
+
 	devices := []*PmemDeviceInfo{}
-	for _, ns := range pmem.ctx.GetAllNamespaces() {
+	for _, ns := range ndctx.GetAllNamespaces() {
 		devices = append(devices, namespaceToPmemInfo(ns))
 	}
 	return devices, nil
 }
 
-func (pmem *pmemNdctl) getDevice(volumeId string) (*PmemDeviceInfo, error) {
-	ns, err := pmem.ctx.GetNamespaceByName(volumeId)
+func getDevice(ndctx *ndctl.Context, volumeId string) (*PmemDeviceInfo, error) {
+	ns, err := ndctx.GetNamespaceByName(volumeId)
 	if err != nil {
 		if errors.Is(err, ndctl.ErrNotExist) {
 			return nil, ErrDeviceNotFound
