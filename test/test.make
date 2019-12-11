@@ -116,6 +116,8 @@ RUNTIME_DEPS += sed \
 	-e 's;sigs.k8s.io/controller-runtime;kubernetes-sigs/controller-runtime,https://github.com/kubernetes-sigs/controller-runtime;' \
 	-e 's;sigs.k8s.io/yaml;kubernetes-sigs/yaml,https://github.com/kubernetes-sigs/yaml;' \
 	| cat |
+# - ensure that we have three columns
+RUNTIME_DEPS += sed -e 's;^\([^,]*\),\([^,]*\)$$;\1,\2,;' |
 
 # Ignore duplicates.
 RUNTIME_DEPS += LC_ALL=C LANG=C sort -u
