@@ -29,6 +29,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/storage/testpatterns"
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
 
+	"github.com/intel/pmem-csi/test/e2e/ephemeral"
 	pmempod "github.com/intel/pmem-csi/test/e2e/pod"
 
 	. "github.com/onsi/ginkgo"
@@ -42,7 +43,7 @@ var _ testsuites.TestSuite = &daxTestSuite{}
 
 // InitDaxTestSuite returns daxTestSuite that implements TestSuite interface
 func InitDaxTestSuite() testsuites.TestSuite {
-	return &daxTestSuite{
+	suite := &daxTestSuite{
 		tsInfo: testsuites.TestSuiteInfo{
 			Name: "dax",
 			TestPatterns: []testpatterns.TestPattern{
@@ -50,14 +51,18 @@ func InitDaxTestSuite() testsuites.TestSuite {
 				testpatterns.Ext4DynamicPV,
 				testpatterns.XfsDynamicPV,
 
-				testpatterns.DefaultFsEphemeralVolume,
-				testpatterns.Ext4EphemeralVolume,
-				testpatterns.XfsEphemeralVolume,
-
 				testpatterns.BlockVolModeDynamicPV,
 			},
 		},
 	}
+	if ephemeral.Supported {
+		suite.tsInfo.TestPatterns = append(suite.tsInfo.TestPatterns,
+			testpatterns.DefaultFsEphemeralVolume,
+			testpatterns.Ext4EphemeralVolume,
+			testpatterns.XfsEphemeralVolume,
+		)
+	}
+	return suite
 }
 
 func (p *daxTestSuite) GetTestSuiteInfo() testsuites.TestSuiteInfo {
