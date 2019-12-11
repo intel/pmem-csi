@@ -3,7 +3,13 @@ kind: Deployment
 metadata:
   name: example-deployment
 spec:
-  imageRegistry: 172.17.0.1
-  imageVersion: canary
-  deviceMode: lvm
+  image: 172.17.0.1:5000/pmem-csi-driver:canary
+  controllerResources:
+      requests:
+        cpu: "200m"
+        memory: "100Mi"
+  nodeResources:
+      requests:
+        cpu: "200m"
+        memory: "100Mi"
 
