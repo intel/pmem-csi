@@ -79,9 +79,9 @@ scheduler:
 fi
 
 if [ -e /dev/vdc ]; then
-    # We have an extra volume specifically for etcd (see TEST_ETCD_VOLUME).
+    # We have an extra volume specifically for etcd (see TEST_ETCD_VOLUME_SIZE).
     sudo mkdir -p /mnt/etcd-volume
-    sudo mkfs.ext4 -F /dev/vdc
+    sudo mkfs.ext4 /dev/vdc
     sudo mount /dev/vdc /mnt/etcd-volume
     # etcd wants an empty directory, giving it the volume fails due to "lost+found".
     sudo mkdir /mnt/etcd-volume/etcd
