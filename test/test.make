@@ -49,7 +49,7 @@ test_runtime_deps: check-go-version-$(GO_BINARY)
 RUNTIME_DEPS =
 
 # List direct imports of our commands, ignoring the go standard runtime packages.
-RUNTIME_DEPS += diff <(env "GO=$(GO)" hack/list-direct-imports.sh $(IMPORT_PATH) ./cmd/... | grep -v ^github.com/intel/pmem-csi | sort -u) \
+RUNTIME_DEPS += diff <(env "GO=$(GO)" hack/list-direct-imports.sh $(IMPORT_PATH) ./cmd/...  ./operator/cmd/... | grep -v ^github.com/intel/pmem-csi | sort -u) \
                 <(go list std | sort -u) | grep ^'<' | cut -f2- -d' ' |
 
 
