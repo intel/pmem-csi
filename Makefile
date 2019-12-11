@@ -54,7 +54,7 @@ endif
 
 BUILD_ARGS:=${BUILD_ARGS} --build-arg VERSION=${VERSION}
 
-include operator/makefile
+include operator/operator.make
 
 # An alias for "make build" and the default target.
 all: build
