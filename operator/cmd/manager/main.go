@@ -14,6 +14,7 @@ import (
 
 	"github.com/intel/pmem-csi/operator/pkg/apis"
 	"github.com/intel/pmem-csi/operator/pkg/controller"
+	"github.com/intel/pmem-csi/operator/pkg/utils"
 	"github.com/intel/pmem-csi/operator/version"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
@@ -73,6 +74,14 @@ func main() {
 		klog.Error(err)
 		os.Exit(1)
 	}
+
+	version, err := utils.GetKubernetesVersion()
+	if err != nil {
+		klog.Error(err)
+		os.Exit(1)
+	}
+
+	klog.Info("Kubernetes", " Version", version)
 
 	// Create a new Cmd to provide shared dependencies and start components
 	mgr, err := manager.New(cfg, manager.Options{
