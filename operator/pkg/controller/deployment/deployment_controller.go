@@ -21,20 +21,10 @@ import (
 
 var log = logf.Log.WithName("controller_deployment")
 
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
-
 // Add creates a new Deployment Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
-}
-
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileDeployment{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return add(mgr, newReconcileDeployment(mgr.GetClient(), mgr.GetScheme()))
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -73,6 +63,13 @@ type ReconcileDeployment struct {
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
 	scheme *runtime.Scheme
+}
+
+func newReconcileDeployment(c client.Client, s *runtime.Scheme) reconcile.Reconciler {
+	return &ReconcileDeployment{
+		client: c,
+		scheme: s,
+	}
 }
 
 // Reconcile reads that state of the cluster for a Deployment object and makes changes based on the state read
