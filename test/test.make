@@ -75,32 +75,71 @@ RUNTIME_DEPS =
 # would be godeps. We list dependencies recursively, not just the
 # direct dependencies.
 # Filter out the go standard runtime packages from dependecies
-RUNTIME_DEPS += diff <($(GO) list -f '{{join .Deps "\n"}}' ./cmd/pmem-csi-driver/ | grep -v ^github.com/intel/pmem-csi | sort -u) \
+RUNTIME_DEPS += diff <($(GO) list -f '{{join .Deps "\n"}}' ./cmd/pmem-csi-driver/ ./operator/cmd/... | grep -v ^github.com/intel/pmem-csi | sort -u) \
                 <(go list std | sort -u) | grep ^'<' | cut -f2- -d' ' |
 
 
 # Filter out some packages that aren't really code.
-RUNTIME_DEPS += grep -v -e 'github.com/container-storage-interface/spec' |
-RUNTIME_DEPS += grep -v -e 'google.golang.org/genproto/googleapis/rpc/status' |
+RUNTIME_DEPS += grep -v -e '^github.com/container-storage-interface/spec/lib/go/csi$$' |
+RUNTIME_DEPS += grep -v -e '^google.golang.org/genproto/googleapis/rpc/status$$' |
+RUNTIME_DEPS += grep -v -e '^github.com/go-logr/logr$$' |
 
 # Reduce the package import paths to project names + download URL.
 # - strip prefix
 RUNTIME_DEPS += sed -e 's;github.com/intel/pmem-csi/vendor/;;' |
 # - use path inside github.com as project name
 RUNTIME_DEPS += sed -e 's;^github.com/\([^/]*\)/\([^/]*\).*;github.com/\1/\2;' |
+# - same for sigs.k8s.io
+RUNTIME_DEPS += sed -e 's;^sigs.k8s.io/\([^/]*\).*;sigs.k8s.io/\1;' |
 # - everything from gRPC is one project
 RUNTIME_DEPS += sed -e 's;google.golang.org/grpc/*.*;grpc-go,https://github.com/grpc/grpc-go;' |
-# - various other projects
+# - Kubernetes is split across several repos.
+RUNTIME_DEPS += sed -e 's;^k8s.io/.*\|github.com/kubernetes-csi/.*;kubernetes,https://github.com/kubernetes/kubernetes,9641;' | \
+# - additional Golang repos
+RUNTIME_DEPS += sed -e 's;\(golang.org/x/.*\);Go,https://github.com/golang/go,9051;' | \
+# - various other projects (sorted alphabetically)
 RUNTIME_DEPS += sed \
-	-e 's;github.com/google/uuid;google uuid,https://github.com/google/uuid;' \
-	-e 's;github.com/golang/protobuf;golang-protobuf,https://github.com/golang/protobuf;' \
-	-e 's;github.com/gogo/protobuf;gogo protobuf,https://github.com/gogo/protobuf;' \
-	-e 's;github.com/pkg/errors;pkg/errors,https://github.com/pkg/errors;' \
-	-e 's;github.com/vgough/grpc-proxy;grpc-proxy,https://github.com/vgough/grpc-proxy;' \
-	-e 's;golang.org/x/.*;Go,https://github.com/golang/go,9051;' \
-	-e 's;k8s.io/.*\|github.com/kubernetes-csi/.*;kubernetes,https://github.com/kubernetes/kubernetes,9641;' \
+	-e 's;\(github.com/PuerkitoBio/purell\);purell,https://\1;' \
+	-e 's;\(github.com/PuerkitoBio/urlesc\);urlesc,https://\1;' \
+	-e 's;\(github.com/beorn7/perks\);perks,https://\1;' \
+	-e 's;\(github.com/cespare/xxhash\);go-xxhash,https://\1;' \
+	-e 's;\(github.com/coreos/prometheus-operator\);Prometheus Operator,https://\1;' \
+	-e 's;\(github.com/davecgh/go-spew\);davecgh/go-spew,https://\1;' \
+	-e 's;\(github.com/docker/go-units\);go-units,https://\1,9173;' \
+	-e 's;\(github.com/emicklei/go-restful\);go-restful,http://\1,10372;' \
+	-e 's;\(github.com/evanphx/json-patch\);json-patch,https://\1;' \
+	-e 's;\(github.com/go-openapi/jsonpointer\);gojsonpointer,https://\1;' \
+	-e 's;\(github.com/go-openapi/jsonreference\);go-openapi jsonreference,https://\1;' \
+	-e 's;\(github.com/go-openapi/spec\);go-openapi spec,https://\1;' \
+	-e 's;\(github.com/go-openapi/swag\);go-openapi/swag,https://\1;' \
+	-e 's;\(github.com/gogo/protobuf\);gogo protobuf,https://\1;' \
+	-e 's;\(github.com/golang/groupcache\);golang-groupcache,https://\1;' \
+	-e 's;\(github.com/golang/protobuf\);golang-protobuf,https://\1;' \
+	-e 's;\(github.com/google/go-cmp\);go-cmp,https://\1;' \
+	-e 's;\(github.com/google/gofuzz\);Google gofuzz,https://\1;' \
+	-e 's;\(github.com/google/uuid\);google uuid,https://\1;' \
+	-e 's;\(github.com/googleapis/gnostic\);gnostic,https://\1;' \
+	-e 's;\(github.com/hashicorp/golang-lru\);golang-lru,https://\1;' \
+	-e 's;\(github.com/imdario/mergo\);mergo,https://\1;' \
+	-e 's;\(github.com/json-iterator/go\);json-iterator,https://\1;' \
+	-e 's;\(github.com/mailru/easyjson\);golang easyjson,https://\1;' \
+	-e 's;\(github.com/matttproud/golang_protobuf_extensions\);golang_protobuf_extensions,https://\1;' \
+	-e 's;\(github.com/modern-go/concurrent\);concurrent,https://\1;' \
+	-e 's;\(github.com/modern-go/reflect2\);reflect2,https://\1;' \
+	-e 's;\(github.com/operator-framework/operator-sdk\);operator-sdk,https://\1;' \
+	-e 's;\(github.com/pkg/errors\);pkg/errors,https://\1;' \
+	-e 's;\(github.com/prometheus/client_golang\);client_golang,https://\1;' \
+	-e 's;\(github.com/prometheus/client_model\);prometheus client_model,https://\1;' \
+	-e 's;\(github.com/prometheus/common\);prometheus_common,https://\1;' \
+	-e 's;\(github.com/prometheus/procfs\);prometheus_procfs,https://\1;' \
+	-e 's;\(github.com/spf13/pflag\);github.com\\spf13\\pflag,https://\1;' \
+	-e 's;\(github.com/vgough/grpc-proxy\);grpc-proxy,https://\1;' \
+	-e 's;gomodules.xyz/jsonpatch/v.*;gomodules jsonpatch,https://github.com/gomodules/jsonpatch;' \
 	-e 's;gopkg.in/fsnotify.*;golang-github-fsnotify-fsnotify,https://github.com/fsnotify/fsnotify;' \
-	-e 's;github.com/docker/go-units;go-units,https://github.com/docker/go-units,9173;' \
+	-e 's;gopkg.in/inf\.v.*;go-inf,https://github.com/go-inf/inf;' \
+	-e 's;gopkg.in/yaml\.v.*;go-yaml,https://https://github.com/go-yaml/yaml,9476;' \
+	-e 's;sigs.k8s.io/controller-runtime;kubernetes-sigs/controller-runtime,https://github.com/kubernetes-sigs/controller-runtime;' \
+	-e 's;sigs.k8s.io/yaml;kubernetes-sigs/yaml,https://github.com/kubernetes-sigs/yaml;' \
 	| cat |
 
 # Ignore duplicates.
