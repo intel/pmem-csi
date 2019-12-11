@@ -1,8 +1,41 @@
 Go,https://github.com/golang/go,9051
+Google gofuzz,https://github.com/google/gofuzz
+Prometheus Operator,https://github.com/coreos/prometheus-operator
+client_golang,https://github.com/prometheus/client_golang
+concurrent,https://github.com/modern-go/concurrent
+davecgh/go-spew,https://github.com/davecgh/go-spew
+github.com\spf13\pflag,https://github.com/spf13/pflag
+gnostic,https://github.com/googleapis/gnostic
+go-cmp,https://github.com/google/go-cmp
+go-inf,https://github.com/go-inf/inf
+go-openapi jsonreference,https://github.com/go-openapi/jsonreference
+go-openapi spec,https://github.com/go-openapi/spec
+go-openapi/swag,https://github.com/go-openapi/swag
+go-restful,http://github.com/emicklei/go-restful,10372
+go-yaml,https://https://github.com/go-yaml/yaml,9476
 gogo protobuf,https://github.com/gogo/protobuf
+gojsonpointer,https://github.com/go-openapi/jsonpointer
+golang easyjson,https://github.com/mailru/easyjson
+golang-github-fsnotify-fsnotify,https://github.com/fsnotify/fsnotify
+golang-groupcache,https://github.com/golang/groupcache
+golang-lru,https://github.com/hashicorp/golang-lru
 golang-protobuf,https://github.com/golang/protobuf
+golang_protobuf_extensions,https://github.com/matttproud/golang_protobuf_extensions
+gomodules jsonpatch,https://github.com/gomodules/jsonpatch
 google uuid,https://github.com/google/uuid
-gopkg.in/inf,https://github.com/go-inf/inf
 grpc-go,https://github.com/grpc/grpc-go
+json-iterator,https://github.com/json-iterator/go
+json-patch,https://github.com/evanphx/json-patch
 kubernetes,https://github.com/kubernetes/kubernetes,9641
+kubernetes-sigs/controller-runtime,https://github.com/kubernetes-sigs/controller-runtime
+kubernetes-sigs/yaml,https://github.com/kubernetes-sigs/yaml
+mergo,https://github.com/imdario/mergo
+operator-sdk,https://github.com/operator-framework/operator-sdk
+perks,https://github.com/beorn7/perks
 pkg/errors,https://github.com/pkg/errors
+prometheus client_model,https://github.com/prometheus/client_model
+prometheus_common,https://github.com/prometheus/common
+prometheus_procfs,https://github.com/prometheus/procfs
+purell,https://github.com/PuerkitoBio/purell
+reflect2,https://github.com/modern-go/reflect2
+urlesc,https://github.com/PuerkitoBio/urlesc
