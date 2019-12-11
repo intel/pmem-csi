@@ -71,13 +71,15 @@ fi
 : ${TEST_NUM_CPUS:=2}
 
 # The etcd instance running on the master node can be configured to
-# store its data in a tmpfs volume that gets created on the build
-# host. This is useful when the _work directory is on a slow disk
+# store its data on a separate disk. This is the path to an existing
+# file of the desired size which will then be passed into the master
+# node via "-drive file=...". For that to work the file has
+# to be inside the "data" directory of the master node.
+#
+# This is useful when the _work directory is on a slow disk
 # because that can lead to slow performance and failures
 # (https://github.com/kubernetes/kubernetes/issues/70082).
-#
-# This is the size of that volume in bytes, zero disables this feature.
-: ${TEST_ETCD_VOLUME_SIZE:=0}
+: ${TEST_ETCD_VOLUME:=}
 
 # Kubernetes feature gates to enable/disable
 # featurename=true,feature=false
@@ -100,6 +102,16 @@ fi
 # on the version of OpenSSL on the build host
 # (https://github.com/clearlinux/distribution/issues/85).
 : ${TEST_CHECK_SIGNED_FILES:=true}
+
+# "make start" tests that /dev/kvm exists before invoking govm because
+# when it is missing, the failure of QEMU inside the containers is
+# hard to diagnose.
+#
+# However, in some rather special circumstances it may be necessary to
+# disable this check. For example, the CI runs "make start" in a
+# non-privileged container without /dev/kvm whereas QEMU will run in
+# privileged containers where /dev/kvm is available.
+: ${TEST_CHECK_KVM:=true}
 
 # If set to a <major>.<minor> number, that version of Kubernetes
 # is installed instead of the latest one. Ignored when

@@ -121,12 +121,13 @@ run_tests: $(RUN_TEST_DEPS)
 	$(RUN_TESTS)
 
 # E2E tests which are known to be unsuitable (space separated list of regular expressions).
-TEST_E2E_SKIP = no-such-test
+TEST_E2E_SKIP =
+TEST_E2E_SKIP_ALL = no-such-test $(TEST_E2E_SKIP)
 
 # The test's check whether a driver supports multiple nodes is incomplete and does
 # not work for the topology-based single-node access in PMEM-CSI:
 # https://github.com/kubernetes/kubernetes/blob/25ffbe633810609743944edd42d164cd7990071c/test/e2e/storage/testsuites/provisioning.go#L175-L181
-TEST_E2E_SKIP += should.access.volume.from.different.nodes
+TEST_E2E_SKIP_ALL += should.access.volume.from.different.nodes
 
 # E2E tests which are to be executed (space separated list of regular expressions, default is all that aren't skipped).
 TEST_E2E_FOCUS =
@@ -150,13 +151,13 @@ RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 	  echo TEST_DEPLOYMENTMODE=$$TEST_DEPLOYMENTMODE; \
 	  echo TEST_DEVICEMODE=$$TEST_DEVICEMODE; \
 	  echo TEST_KUBERNETES_VERSION=$$TEST_KUBERNETES_VERSION; \
-	  echo PMEM_CSI_IMAGE=$$TEST_LOCAL_REGISTRY/pmem-csi-driver$$(if $$TEST_DEPLOYMENTMODE = testing; then echo -test; fi):$(IMAGE_VERSION); \
+	  echo PMEM_CSI_IMAGE=$$TEST_LOCAL_REGISTRY/pmem-csi-driver$$(if [ $$TEST_DEPLOYMENTMODE = testing ]; then echo -test; fi):$(IMAGE_VERSION); \
 	) \
 	TEST_CMD='$(TEST_CMD)' \
 	GO='$(GO)' \
 	TEST_PKGS='$(shell for i in $(TEST_PKGS); do if ls $$i/*_test.go 2>/dev/null >&2; then echo $$i; fi; done)' \
 	$(GO) test -count=1 -timeout 0 -v ./test/e2e \
-                -ginkgo.skip='$(subst $(space),|,$(TEST_E2E_SKIP))' \
+                -ginkgo.skip='$(subst $(space),|,$(TEST_E2E_SKIP_ALL))' \
                 -ginkgo.focus='$(subst $(space),|,$(TEST_E2E_FOCUS))' \
                 -report-dir=$(TEST_E2E_REPORT_DIR)
 test_e2e: start $(RUN_TEST_DEPS)
