@@ -14,10 +14,10 @@ _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION):
 # to operator folder.
 operator-generate-k8s: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
 	cd ./operator && ( \
-		ln -s ../go.mod && \
-		ln -s ../go.sum && \
-		../_work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) generate k8s; \
-		rm ./go.mod ./go.sum; \
+		ln -fs ../go.mod && \
+		ln -fs ../go.sum && \
+		trap 'rm -f go.mod go.sum' EXIT && \
+		../_work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) generate k8s \
 	)
 
 .PHONY: pmem-cis-operator
