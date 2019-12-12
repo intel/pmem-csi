@@ -8,7 +8,6 @@ require (
 	github.com/container-storage-interface/spec v1.2.0
 	github.com/docker/spdystream v0.0.0-20181023171402-6480d4af844c // indirect
 	github.com/go-logr/logr v0.1.0
-	github.com/go-openapi/spec v0.19.2
 	github.com/gogo/protobuf v1.3.1 // indirect
 	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9 // indirect
 	github.com/golang/protobuf v1.3.2
@@ -42,7 +41,6 @@ require (
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/component-base v0.0.0
 	k8s.io/klog v1.0.0
-	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d
 	k8s.io/kubernetes v1.17.2
 	k8s.io/utils v0.0.0-20190801114015-581e00157fb1
 	sigs.k8s.io/controller-runtime v0.4.0
