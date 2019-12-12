@@ -54,8 +54,6 @@ endif
 
 BUILD_ARGS:=${BUILD_ARGS} --build-arg VERSION=${VERSION}
 
-include operator/operator.make
-
 # An alias for "make build" and the default target.
 all: build
 
@@ -119,6 +117,8 @@ clean:
 	-rm -rf $(OUTPUT_DIR)
 
 .PHONY: all build test clean $(CMDS) $(TEST_CMDS)
+
+include operator/operator.make
 
 # Add support for creating and booting a cluster under QEMU.
 # All of the commands operate on a cluster stored in _work/$(CLUSTER),

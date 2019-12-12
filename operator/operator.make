@@ -1,3 +1,5 @@
+# Operator image tagging: we use same version number as driver
+OPERATOR_IMAGE_TAG=$(REGISTRY_NAME)/pmem-csi-operator$*:$(IMAGE_VERSION)
 OPERATOR_SDK_VERSION=v0.12.0
 
 # download operator-sdk binary
@@ -20,6 +22,9 @@ operator-generate-k8s: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
 		../_work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) generate k8s \
 	)
 
-.PHONY: pmem-cis-operator
+.PHONY: pmem-csi-operator
 pmem-csi-operator: check-go-version-$(GO_BINARY)
-	$(GO) build -ldflags '-X github.com/intel/pmem-csi/pkg/$@.version=${VERSION}' -a -o ${OUTPUT_DIR}/$@ ./operator/cmd/manager
+	$(GO) build -ldflags '-X github.com/intel/pmem-csi/operator/cmd/manager.version=${VERSION}' -a -o ${OUTPUT_DIR}/$@ ./operator/cmd/manager
+
+build-operator-image:
+	docker build --pull --build-arg CACHEBUST=$(BUILD_IMAGE_ID) $(BUILD_ARGS) -t $(OPERATOR_IMAGE_TAG) -f ./operator/build/Dockerfile . --label revision=$(VERSION)
