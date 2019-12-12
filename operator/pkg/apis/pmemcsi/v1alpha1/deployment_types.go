@@ -66,8 +66,6 @@ type DeploymentSpec struct {
 	Node NodeDriver `json:"node,omitempty"`
 	// LogLevel number for the log verbosity
 	LogLevel uint16 `json:"logLevel,omitempty"`
-	// Namespace in which the new deployment should deploy
-	Namespace string `json:"namespace,omitempty"`
 }
 
 // DeploymentStatus defines the observed state of Deployment
