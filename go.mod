@@ -5,8 +5,8 @@ go 1.13
 require (
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/container-storage-interface/spec v1.2.0
-	github.com/coreos/prometheus-operator v0.34.0 // indirect
 	github.com/go-openapi/spec v0.19.2
+	github.com/go-openapi/swag v0.19.4 // indirect
 	github.com/gogo/protobuf v1.3.1 // indirect
 	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9 // indirect
 	github.com/golang/protobuf v1.3.2

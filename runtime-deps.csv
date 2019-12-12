@@ -1,6 +1,5 @@
 Go,https://github.com/golang/go,9051
 Google gofuzz,https://github.com/google/gofuzz,
-Prometheus Operator,https://github.com/coreos/prometheus-operator,
 client_golang,https://github.com/prometheus/client_golang,
 concurrent,https://github.com/modern-go/concurrent,
 davecgh/go-spew,https://github.com/davecgh/go-spew,
