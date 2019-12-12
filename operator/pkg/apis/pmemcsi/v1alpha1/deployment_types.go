@@ -53,7 +53,6 @@ func (ii ImageInfo) String() string {
 }
 
 // DeploymentSpec defines the desired state of Deployment
-// +k8s:openapi-gen=true
 type DeploymentSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
@@ -72,7 +71,6 @@ type DeploymentSpec struct {
 }
 
 // DeploymentStatus defines the observed state of Deployment
-// +k8s:openapi-gen=true
 type DeploymentStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
@@ -82,7 +80,6 @@ type DeploymentStatus struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // Deployment is the Schema for the deployments API
-// +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=deployments,scope=Namespaced
 type Deployment struct {
