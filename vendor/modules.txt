@@ -33,11 +33,6 @@ github.com/coreos/etcd/raft/raftpb
 github.com/coreos/go-systemd/journal
 # github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f
 github.com/coreos/pkg/capnslog
-# github.com/coreos/prometheus-operator v0.34.0
-github.com/coreos/prometheus-operator/pkg/apis/monitoring
-github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1
-github.com/coreos/prometheus-operator/pkg/client/versioned/scheme
-github.com/coreos/prometheus-operator/pkg/client/versioned/typed/monitoring/v1
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
 # github.com/docker/distribution v2.7.1+incompatible
@@ -159,9 +154,7 @@ github.com/onsi/gomega/types
 github.com/opencontainers/go-digest
 # github.com/operator-framework/operator-sdk v0.12.1-0.20191107022206-36b6de4c479e
 github.com/operator-framework/operator-sdk/pkg/k8sutil
-github.com/operator-framework/operator-sdk/pkg/kube-metrics
 github.com/operator-framework/operator-sdk/pkg/leader
-github.com/operator-framework/operator-sdk/pkg/metrics
 github.com/operator-framework/operator-sdk/pkg/restmapper
 github.com/operator-framework/operator-sdk/version
 # github.com/pborman/uuid v1.2.0
@@ -651,9 +644,6 @@ k8s.io/klog
 # k8s.io/kube-openapi v0.0.0-20191107075043-30be4d16710a
 k8s.io/kube-openapi/pkg/common
 k8s.io/kube-openapi/pkg/util/proto
-# k8s.io/kube-state-metrics v1.7.2
-k8s.io/kube-state-metrics/pkg/metric
-k8s.io/kube-state-metrics/pkg/metrics_store
 # k8s.io/kubectl v0.0.0 => k8s.io/kubectl v0.0.0-20191016120415-2ed914427d51
 k8s.io/kubectl/pkg/scale
 # k8s.io/kubernetes v1.16.3
