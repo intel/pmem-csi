@@ -5,8 +5,6 @@ go 1.13
 require (
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/container-storage-interface/spec v1.2.0
-	github.com/go-openapi/spec v0.19.2
-	github.com/go-openapi/swag v0.19.4 // indirect
 	github.com/gogo/protobuf v1.3.1 // indirect
 	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9 // indirect
 	github.com/golang/protobuf v1.3.2
@@ -40,9 +38,8 @@ require (
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/component-base v0.0.0
 	k8s.io/klog v1.0.0
-	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d
-	k8s.io/kubernetes v1.15.4
-	k8s.io/utils v0.0.0-20190801114015-581e00157fb1
+	k8s.io/kubernetes v1.16.3
+	k8s.io/utils v0.0.0-20191114200735-6ca3b61696b6
 	sigs.k8s.io/controller-runtime v0.4.0
 )
 
