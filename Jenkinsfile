@@ -56,6 +56,10 @@ pipeline {
         // Set below via a script, must *not* be set here as it can't be overwritten.
         // BUILD_IMAGE = ""
 
+        // A running container based on BUILD_IMAGE, with volumes for everything that we
+        // need from the build host.
+        BUILD_CONTAINER = "builder"
+
         // Tag or branch name that is getting built, depending on the job.
         // Set below via a script, must *not* be set here as it can't be overwritten.
         // BUILD_TARGET = ""
@@ -64,6 +68,13 @@ pipeline {
         // TODO: Here we use "canary" which is correct for the "devel" branch, but other
         // branches may need something else to get better caching.
         PMEM_CSI_IMAGE = "${env.REGISTRY_NAME}/pmem-csi-driver:canary"
+
+        // A file stored on a sufficiently large tmpfs for use as etcd volume
+        // and its size. It has to be inside the data directory of the master node.
+        CLUSTER = "govm"
+        TEST_ETCD_TMPFS = "${WORKSPACE}/_work/${env.CLUSTER}/data/pmem-csi-${env.CLUSTER}-master/etcd-tmpfs"
+        TEST_ETCD_VOLUME = "${env.TEST_ETCD_TMPFS}/etcd-volume"
+        TEST_ETCD_VOLUME_SIZE = "1073741824" // 1GB
     }
 
     stages {
@@ -86,6 +97,13 @@ pipeline {
                 sh "git remote set-url origin git@github.com:intel/pmem-csi.git"
                 sh "git config user.name 'Intel Kubernetes CI/CD Bot'"
                 sh "git config user.email 'k8s-bot@intel.com'"
+
+                // Create a tmpfs for use as backing store for a large file that will be passed
+                // into QEMU for storing the etcd database.
+                sh "mkdir -p '${env.TEST_ETCD_TMPFS}'"
+                sh "sudo mount -osize=${env.TEST_ETCD_VOLUME_SIZE} -t tmpfs none '${env.TEST_ETCD_TMPFS}'"
+                sh "sudo truncate --size=${env.TEST_ETCD_VOLUME_SIZE} '${env.TEST_ETCD_VOLUME}'"
+
                 // known_hosts entry created and verified as described in https://serverfault.com/questions/856194/securely-add-a-host-e-g-github-to-the-ssh-known-hosts-file
                 sh "mkdir -p ~/.ssh && echo 'github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==' >>~/.ssh/known_hosts && chmod -R go-rxw ~/.ssh"
                 withDockerRegistry([ credentialsId: "e16bd38a-76cb-4900-a5cb-7f6aa3aeb22d", url: "https://${REGISTRY_NAME}" ]) {
@@ -125,15 +143,26 @@ pipeline {
                     }
                     sh "env; echo Building BUILD_IMAGE=${env.BUILD_IMAGE} for BUILD_TARGET=${env.BUILD_TARGET}, CHANGE_ID=${env.CHANGE_ID}, CACHEBUST=${env.CACHEBUST}."
                     sh "docker build --cache-from ${env.BUILD_IMAGE} --label cachebust=${env.CACHEBUST} --target build --build-arg CACHEBUST=${env.CACHEBUST} -t ${env.BUILD_IMAGE} ."
-                    // Create a running container (https://stackoverflow.com/a/38308399).
-                    sh "docker create --name=builder ${env.BUILD_IMAGE} sleep infinity"
-                    sh "docker start builder && \
+                    // Create a running container (https://stackoverflow.com/a/38308399). We keep it running
+                    // and just "docker exec" commands in it. withDockerRegistry creates the DOCKER_CONFIG directory
+                    // and deletes it when done, so we have to make a copy for later use inside the container.
+                    withDockerRegistry([ credentialsId: "e16bd38a-76cb-4900-a5cb-7f6aa3aeb22d", url: "https://${REGISTRY_NAME}" ]) {
+                        sh "mkdir -p _work"
+                        sh "cp -a $DOCKER_CONFIG _work/docker-config"
+                        sh "docker create --name=${env.BUILD_CONTAINER} \
+                                   --volume /var/run/docker.sock:/var/run/docker.sock \
+                                   --volume /usr/bin/docker:/usr/bin/docker \
+                                   --volume ${WORKSPACE}/..:${WORKSPACE}/.. \
+                                   ${env.BUILD_IMAGE} \
+                                   sleep infinity"
+                    }
+                    sh "docker start ${env.BUILD_CONTAINER} && \
                         timeout=0; \
-                        while [ \$(docker inspect --format '{{.State.Status}}' builder) != running ]; do \
+                        while [ \$(docker inspect --format '{{.State.Status}}' ${env.BUILD_CONTAINER}) != running ]; do \
                             docker ps; \
                             if [ \$timeout -ge 60 ]; then \
-                               docker inspect builder; \
-                               echo 'ERROR: builder container still not running'; \
+                               docker inspect ${env.BUILD_CONTAINER}; \
+                               echo 'ERROR: ${env.BUILD_CONTAINER} container still not running'; \
                                exit 1; \
                             fi; \
                             sleep 10; \
@@ -142,28 +171,20 @@ pipeline {
 
                     // Install additional tools:
                     // - ssh client for govm
-                    // - sudo for non-privileged user
-                    sh "docker exec builder swupd bundle-add openssh-client sudo"
+                    sh "docker exec ${env.BUILD_CONTAINER} swupd bundle-add openssh-client"
 
-                    // Allow non-root users to become root via sudo when they are part of the root group.
-                    // ${DockerBuildArgs()} includes the necessary parameters for that.
-                    sh "docker exec builder mkdir /etc/sudoers.d"
-                    sh "echo '%root ALL=(ALL) NOPASSWD: ALL' | docker exec -i builder tee /etc/sudoers.d/nopasswd >/dev/null"
+                    // Now commit those changes to ensure that the result of "swupd bundle add" gets cached.
+                    sh "docker commit ${env.BUILD_CONTAINER} ${env.BUILD_IMAGE}"
 
-                    // sudo needs a user entry for the jenkins user.
-                    sh "echo jenkins:x:`id -u`:0:Jenkins:`pwd`/..:/bin/bash | docker exec -i builder tee --append /etc/passwd >/dev/null"
-                    sh "echo 'jenkins:*:0:0:99999:0:::' | docker exec -i builder tee --append /etc/shadow >/dev/null"
+                    // Make /usr/local/bin writable for all users. Used to install kubectl.
+                    sh "docker exec ${env.BUILD_CONTAINER} sh -c 'mkdir -p /usr/local/bin && chmod a+wx /usr/local/bin'"
 
-                    // Now commit those changes for use below and clean up.
-                    sh "docker commit builder ${env.BUILD_IMAGE}"
-                    sh "docker stop builder"
-                    sh "docker rm builder"
+                    // Some tools expect a user entry for the jenkins user (like govm?)
+                    sh "echo jenkins:x:`id -u`:0:Jenkins:${WORKSPACE}/..:/bin/bash | docker exec -i ${env.BUILD_CONTAINER} tee --append /etc/passwd >/dev/null"
+                    sh "echo 'jenkins:*:0:0:99999:0:::' | docker exec -i ${env.BUILD_CONTAINER} tee --append /etc/shadow >/dev/null"
 
-                    // Verify that docker and mount work under sudo in the updated image (needed for etcd tmpfs, see start-kubernetes.sh).
-                    // sudo depends on --privileged.
-                    sh "docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} docker ps"
-                    sh "docker run --rm --privileged ${DockerBuildArgs()} ${env.BUILD_IMAGE} bash -c \
-                            'mkdir /tmp/mnt && sudo mount -osize=4096 -t tmpfs none /tmp/mnt && sudo umount /tmp/mnt'"
+                    // Verify that docker works in the updated image.
+                    sh "${RunInBuilder()} ${env.BUILD_CONTAINER} docker ps"
 
                     // Run a per-test registry on the build host.  This is where we
                     // will push images for use by the cluster during testing.
@@ -179,7 +200,7 @@ pipeline {
 
             steps {
                 script {
-                    status = sh ( script: "docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} hack/create-new-release.sh", returnStatus: true )
+                    status = sh ( script: "${RunInBuilder()} ${env.BUILD_CONTAINER} hack/create-new-release.sh", returnStatus: true )
                     if ( status == 2 ) {
                         // https://stackoverflow.com/questions/42667600/abort-current-build-from-pipeline-in-jenkins
                         currentBuild.result = 'ABORTED'
@@ -198,7 +219,7 @@ pipeline {
             }
 
             steps {
-                sh "docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} make test"
+                sh "${RunInBuilder()} ${env.BUILD_CONTAINER} make test"
             }
         }
 
@@ -211,11 +232,11 @@ pipeline {
             steps {
                 // This builds images for REGISTRY_NAME with the version automatically determined by
                 // the make rules.
-                sh "docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} make build-images"
+                sh "${RunInBuilder()} ${env.BUILD_CONTAINER} make build-images"
 
                 // For testing we have to have those same images also in a registry. Tag and push for
                 // localhost, which is the default test registry.
-                sh "imageversion=\$(docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} make print-image-version) && \
+                sh "imageversion=\$(${RunInBuilder()} ${env.BUILD_CONTAINER} make print-image-version) && \
                     for suffix in '' '-test'; do \
                         docker tag ${env.REGISTRY_NAME}/pmem-csi-driver\$suffix:\$imageversion localhost:5000/pmem-csi-driver\$suffix:\$imageversion && \
                         docker push localhost:5000/pmem-csi-driver\$suffix:\$imageversion; \
@@ -270,13 +291,25 @@ pipeline {
           Therefore it is faster.
         */
 
-        stage('production 1.16, Clear Linux') {
+        stage('production 1.14 LVM') {
+            when { not { changeRequest() } }
             options {
-                timeout(time: 90, unit: "MINUTES")
+                timeout(time: 45, unit: "MINUTES")
                 retry(2)
             }
             steps {
-                TestInVM("lvm", "production", "clear", "${env.CLEAR_LINUX_VERSION_1_16}", "")
+                TestInVM("lvm", "production", "fedora", "", "1.14")
+            }
+        }
+
+        stage('production 1.14 direct') {
+            when { not { changeRequest() } }
+            options {
+                timeout(time: 45, unit: "MINUTES")
+                retry(2)
+            }
+            steps {
+                TestInVM("direct", "production", "fedora", "", "1.14")
             }
         }
 
@@ -302,25 +335,13 @@ pipeline {
             }
         }
 
-        stage('production 1.14 LVM') {
-            when { not { changeRequest() } }
+        stage('production 1.16, Clear Linux') {
             options {
-                timeout(time: 45, unit: "MINUTES")
+                timeout(time: 90, unit: "MINUTES")
                 retry(2)
             }
             steps {
-                TestInVM("lvm", "production", "fedora", "", "1.14")
-            }
-        }
-
-        stage('production 1.14 direct') {
-            when { not { changeRequest() } }
-            options {
-                timeout(time: 45, unit: "MINUTES")
-                retry(2)
-            }
-            steps {
-                TestInVM("direct", "production", "fedora", "", "1.14")
+                TestInVM("lvm", "production", "clear", "${env.CLEAR_LINUX_VERSION_1_16}", "")
             }
         }
 
@@ -359,27 +380,27 @@ git push origin HEAD:master
             }
         }
 
+        // Pushing images uses the DOCKER_CONFIG set up inside the build container earlier.
         stage('Push images') {
             when {
                 not { changeRequest() }
                 not { environment name: 'JOB_BASE_NAME', value: 'pmem-csi-release' } // New release will be built and pushed normally.
             }
             steps {
-                withDockerRegistry([ credentialsId: "e16bd38a-76cb-4900-a5cb-7f6aa3aeb22d", url: "https://${REGISTRY_NAME}" ]) {
-                    // Push PMEM-CSI images without rebuilding them.
-                    // When building a tag, we expect the code to contain that version as image version.
-                    // When building a branch, we expect "canary" for the "devel" branch and (currently) don't publish
-                    // canary images for other branches.
-                    sh "imageversion=\$(docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} make print-image-version) && \
-                        expectedversion=\$(echo '${env.BUILD_TARGET}' | sed -e 's/devel/canary/') && \
-                        if [ \"\$imageversion\" = \"\$expectedversion\" ] ; then \
-                            docker run --rm ${DockerBuildArgs()} -e DOCKER_CONFIG=$DOCKER_CONFIG -v $DOCKER_CONFIG:$DOCKER_CONFIG ${env.BUILD_IMAGE} make push-images PUSH_IMAGE_DEP=; \
-                        else \
-                            echo \"Skipping the pushing of PMEM-CSI driver images with version \$imageversion because this build is for ${env.BUILD_TARGET}.\"; \
-                        fi"
-                    // Also push the build image, for later reuse in PR jobs.
-                    sh "docker image push ${env.BUILD_IMAGE}"
-                }
+                // Push PMEM-CSI images without rebuilding them.
+                //
+                // When building a tag, we expect the code to contain that version as image version.
+                // When building a branch, we expect "canary" for the "devel" branch and (currently) don't publish
+                // canary images for other branches.
+                sh "imageversion=\$(${RunInBuilder()} ${env.BUILD_CONTAINER} make print-image-version) && \
+                    expectedversion=\$(echo '${env.BUILD_TARGET}' | sed -e 's/devel/canary/') && \
+                    if [ \"\$imageversion\" = \"\$expectedversion\" ] ; then \
+                        ${RunInBuilder()} ${env.BUILD_CONTAINER} make push-images PUSH_IMAGE_DEP=; \
+                    else \
+                        echo \"Skipping the pushing of PMEM-CSI driver images with version \$imageversion because this build is for ${env.BUILD_TARGET}.\"; \
+                    fi"
+                // Also push the build image, for later reuse in PR jobs.
+                sh "${RunInBuilder()} ${env.BUILD_CONTAINER} docker image push ${env.BUILD_IMAGE}"
             }
         }
     }
@@ -392,37 +413,33 @@ git push origin HEAD:master
 }
 
 /*
- "docker run" parameters which:
- - make the Docker instance on the host available inside a container (socket and command)
- - set common Makefile values (cachebust, cache populated from images if available)
+ A command line for running some command inside the build container with:
+ - common Makefile values (cachebust, cache populated from images if available) in environment
  - source in current directory
  - GOPATH alongside it
  - HOME above it
- - same user inside and outside the container
- - same uid/gid/groups as on the host, plus root=0 for sudo
+ - same uid as on the host, gid same as for Docker socket
 
- "rshared" is needed for mount propagation when govm runs outside the build container.
+ Using the same uid/gid and auxiliary groups would be nicer, but "docker exec" does not
+ support --group-add.
 
  A function is used because a variable, even one which uses a closure with lazy evaluation,
  didn't actually result in a string with all variables replaced by the current values.
  Do not use lazy evaluation inside the function, that caused steps which use
  this function to get skipped silently?!
 */
-String DockerBuildArgs() {
+String RunInBuilder() {
     "\
+    docker exec \
     -e BUILD_IMAGE_ID=${env.CACHEBUST} \
     -e 'BUILD_ARGS=--cache-from ${env.BUILD_IMAGE} --cache-from ${env.PMEM_CSI_IMAGE}' \
+    -e DOCKER_CONFIG=${WORKSPACE}/_work/docker-config \
     -e REGISTRY_NAME=${env.REGISTRY_NAME} \
-    -e HOME=`pwd`/.. \
-    -e GOPATH=`pwd`/../gopath \
+    -e HOME=${WORKSPACE}/.. \
+    -e GOPATH=${WORKSPACE}/../gopath \
     -e USER=`id -nu` \
-    --user `id -u`:`id -g` \
-    --group-add `id -G | sed -e 's/ / --group-add /g'` \
-    --group-add 0 \
-    --volume /var/run/docker.sock:/var/run/docker.sock \
-    --volume /usr/bin/docker:/usr/bin/docker \
-    --volume `pwd`/..:`pwd`/..:rshared \
-    --workdir `pwd` \
+    --user `id -u`:`stat --format %g /var/run/docker.sock` \
+    --workdir ${WORKSPACE} \
     "
 }
 
@@ -438,49 +455,67 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
         GOPATH. Once we can build outside of the GOPATH, we can
         simplify that to build inside one directory.
 
-        For mounting an etcd tmpfs inside the container such that Docker
-        on the host and thus QEMU can access it, privileges (for mount)
-        and shared mount propagation are needed.
+        This spawns some long running processes. Those do not killed when the
+        main process returns when using "docker exec", so we should better clean
+        up ourselves. "make stop" was hanging and waiting for these processes to
+        exit even though there were from a different "docker exec" invocation.
 
         TODO: test in parallel (on different nodes? single node didn't work,
         https://github.com/intel/pmem-CSI/pull/309#issuecomment-504659383)
         */
         sh " \
+           loggers=; \
+           atexit () { set -x; kill \$loggers; killall sleep; }; \
+           trap atexit EXIT; \
            mkdir -p build/reports && \
            if ${env.LOGGING_JOURNALCTL}; then sudo journalctl -f; fi & \
-           ( set +x; while true; do sleep ${env.LOGGING_SAMPLING_DELAY}; top -b -n 1 -w 120 | head -n 20; df -h; done ) & \
-           docker run --rm \
-                  --privileged \
-                  -e CLUSTER=clear \
-                  -e GOVM_YAML=`pwd`/_work/clear/deployment.yaml \
+           ( set +x; while sleep ${env.LOGGING_SAMPLING_DELAY}; do top -b -n 1 -w 120 | head -n 20; df -h; done ) & \
+           loggers=\"\$loggers \$!\" && \
+           ${RunInBuilder()} \
+                  -e CLUSTER=${env.CLUSTER} \
                   -e TEST_LOCAL_REGISTRY=\$(ip addr show dev docker0 | grep ' inet ' | sed -e 's/.* inet //' -e 's;/.*;;'):5000 \
                   -e TEST_DEVICEMODE=${deviceMode} \
                   -e TEST_DEPLOYMENTMODE=${deploymentMode} \
                   -e TEST_CHECK_SIGNED_FILES=false \
+                  -e TEST_CHECK_KVM=false \
                   -e TEST_DISTRO=${distro} \
                   -e TEST_DISTRO_VERSION=${distroVersion} \
                   -e TEST_KUBERNETES_VERSION=${kubernetesVersion} \
-                  -e TEST_ETCD_VOLUME_SIZE=1073741824 \
-                  ${DockerBuildArgs()} \
-                  ${env.BUILD_IMAGE} \
+                  -e TEST_ETCD_VOLUME=${env.TEST_ETCD_VOLUME} \
+                  ${env.BUILD_CONTAINER} \
                   bash -c 'set -x; \
-                           testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}-${deviceMode}-${deploymentMode}' | sed -e s/--*/-/g | tr . _ ) && \
+                           loggers=; \
+                           atexit () { set -x; kill \$loggers; kill \$( ps --no-header -o %p ); }; \
+                           trap atexit EXIT; \
+                           echo CLUSTER=\$CLUSTER TEST_LOCAL_REGISTRY=\$TEST_LOCAL_REGISTRY TEST_DISTRO=\$TEST_DISTRO TEST_DISTRO_VERSION=\$TEST_DISTRO_VERSION TEST_KUBERNETES_VERSION=\$TEST_KUBERNETES_VERSION >_work/new-cluster-config && \
+                           if [ -e _work/\$CLUSTER/cluster-config ] && ! diff _work/\$CLUSTER/cluster-config _work/new-cluster-config; then \
+                               echo QEMU cluster configuration has changed, need to stop old cluster. && \
+                               make stop; \
+                           fi && \
                            make start && \
-                           _work/clear/ssh.0 kubectl get pods --all-namespaces -o wide && \
+                           mv _work/new-cluster-config _work/\$CLUSTER/cluster-config && \
+                           _work/${env.CLUSTER}/ssh.0 kubectl get pods --all-namespaces -o wide && \
                            for pod in ${env.LOGGING_PODS}; do \
-                               _work/clear/ssh.0 kubectl logs -f -n kube-system \$pod-pmem-csi-clear-master | sed -e \"s/^/\$pod: /\" & \
+                               _work/${env.CLUSTER}/ssh.0 kubectl logs -f -n kube-system \$pod-pmem-csi-${env.CLUSTER}-master | sed -e \"s/^/\$pod: /\" & \
+                               loggers=\"\$loggers \$!\"; \
                            done && \
-                           _work/clear/ssh.0 tar -C / -cf - usr/bin/kubectl | sudo tar -C /usr/local/bin --strip-components=2 -xf - && \
-                           for ssh in \$(ls _work/clear/ssh.[0-9]); do \
+                           _work/${env.CLUSTER}/ssh.0 tar -C / -cf - usr/bin/kubectl | tar -C /usr/local/bin --strip-components=2 -xf - && \
+                           for ssh in \$(ls _work/${env.CLUSTER}/ssh.[0-9]); do \
                                hostname=\$(\$ssh hostname) && \
+                               if ${env.LOGGING_JOURNALCTL}; then \
+                                   ( set +x; while true; do \$ssh journalctl -f; done ) & \
+                                   loggers=\"\$loggers \$!\"; \
+                               fi; \
                                ( set +x; \
-                                 if ${env.LOGGING_JOURNALCTL}; then while true; do \$ssh journalctl -f; done; fi & \
-                                 while true; do \
-                                     sleep ${env.LOGGING_SAMPLING_DELAY}; \
+                                 while sleep ${env.LOGGING_SAMPLING_DELAY}; do \
                                      \$ssh top -b -n 1 -w 120 2>&1 | head -n 20; \
-                                 done ) | sed -e \"s/^/\$hostname: /\" & \
+                                 done | sed -e \"s/^/\$hostname: /\" ) & \
+                               loggers=\"\$loggers \$!\"; \
                            done && \
-                           make test_e2e TEST_E2E_REPORT_DIR=`pwd`/build/reports.tmp/\$testrun' \
+                           testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}-${deviceMode}-${deploymentMode}' | sed -e s/--*/-/g | tr . _ ) && \
+                           make test_e2e TEST_E2E_REPORT_DIR=${WORKSPACE}/build/reports.tmp/\$testrun \
+                                         TEST_E2E_SKIP=\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]; fi) \
+                           ' \
            "
     } finally {
         // Each test run produces junit_*.xml files with testsuite name="PMEM E2E suite".
@@ -495,8 +530,5 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                     sed -e "s/PMEM E2E suite/$testrun/" -e 's/testcase name="\\([^ ]*\\) *\\(.*\\)" classname="\\([^"]*\\)"/testcase classname="\\3.\\1" name="\\2"/' $i >build/reports/$testrun.xml
                fi
            done'''
-
-        // Always shut down the cluster to free up resources.
-        sh "docker run --rm --privileged -e CLUSTER=clear ${DockerBuildArgs()} ${env.BUILD_IMAGE} make stop"
     }
 }
