@@ -13,13 +13,4 @@ _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION):
 # true in our case. So as a work around we copy/link parent go.{mod,sum} files
 # to operator folder.
 operator-generate-k8s: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
-	cd ./operator && ( \
-		ln -fs ../go.mod && \
-		ln -fs ../go.sum && \
-		trap 'rm -f go.mod go.sum' EXIT && \
-		../_work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) generate k8s \
-	)
-
-.PHONY: pmem-cis-operator
-pmem-csi-operator: check-go-version-$(GO_BINARY)
-	$(GO) build -ldflags '-X github.com/intel/pmem-csi/pkg/$@.version=${VERSION}' -a -o ${OUTPUT_DIR}/$@ ./operator/cmd/manager
+	./_work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) generate k8s
