@@ -184,7 +184,7 @@ func (d *Deployment) EnsureDefaults() {
 	}
 
 	if d.Spec.Node.Resources == nil {
-		d.Spec.Controller.Resources = &corev1.ResourceRequirements{
+		d.Spec.Node.Resources = &corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				corev1.ResourceCPU:    *resource.NewMilliQuantity(defaultNodeResourceCPU, resource.DecimalSI),
 				corev1.ResourceMemory: *resource.NewQuantity(defaultNodeResourceMemory, resource.BinarySI),

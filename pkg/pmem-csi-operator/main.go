@@ -1,18 +1,19 @@
-package main
+package pmemoperator
 
 import (
 	"context"
 	"flag"
 	"fmt"
-	"os"
 	"runtime"
 
 	"k8s.io/klog"
 
-	"github.com/intel/pmem-csi/operator/pkg/apis"
-	"github.com/intel/pmem-csi/operator/pkg/controller"
-	"github.com/intel/pmem-csi/operator/pkg/utils"
-	"github.com/intel/pmem-csi/operator/version"
+	"github.com/intel/pmem-csi/pkg/apis"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/utils"
+
+	//"github.com/intel/pmem-csi/pkg/pmem-operator/version"
+	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"github.com/operator-framework/operator-sdk/pkg/leader"
@@ -24,7 +25,7 @@ import (
 )
 
 func printVersion() {
-	klog.Info(fmt.Sprintf("Operator Version: %s", version.Version))
+	//klog.Info(fmt.Sprintf("Operator Version: %s", version.Version))
 	klog.Info(fmt.Sprintf("Go Version: %s", runtime.Version()))
 	klog.Info(fmt.Sprintf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH))
 	klog.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))
@@ -35,39 +36,38 @@ func init() {
 	flag.Set("logtostderr", "true")
 }
 
-func main() {
+func Main() int {
 	flag.Parse()
 
 	printVersion()
 
 	namespace, err := k8sutil.GetWatchNamespace()
 	if err != nil {
-		klog.Error("Failed to get watch namespace: ", err)
-		os.Exit(1)
+		pmemcommon.ExitError("Failed to get watch namespace: ", err)
+		return 1
 	}
 
 	// Get a config to talk to the apiserver
 	cfg, err := config.GetConfig()
 	if err != nil {
-		klog.Error(err)
-		os.Exit(1)
+		pmemcommon.ExitError("Failed to get configuration: ", err)
+		return 1
 	}
 
 	ctx := context.TODO()
 	// Become the leader before proceeding
 	err = leader.Become(ctx, "pmem-csi-operator-lock")
 	if err != nil {
-		klog.Error(err)
-		os.Exit(1)
+		pmemcommon.ExitError("Failed to become leader: ", err)
+		return 1
 	}
 
 	version, err := utils.GetKubernetesVersion()
 	if err != nil {
-		klog.Error(err)
-		os.Exit(1)
+		pmemcommon.ExitError("Failed retrieve kubernetes version: ", err)
+		return 1
 	}
-
-	klog.Info("Kubernetes", " Version", version)
+	klog.Info("Kubernetes Version: ", version)
 
 	// Create a new Cmd to provide shared dependencies and start components
 	mgr, err := manager.New(cfg, manager.Options{
@@ -75,29 +75,31 @@ func main() {
 		MapperProvider: restmapper.NewDynamicRESTMapper,
 	})
 	if err != nil {
-		klog.Error(err)
-		os.Exit(1)
+		pmemcommon.ExitError("Failed to create controller manager: ", err)
+		return 1
 	}
 
 	klog.Info("Registering Components.")
 
 	// Setup Scheme for all resources
 	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
-		klog.Error(err)
-		os.Exit(1)
+		pmemcommon.ExitError("Failed to add API schema: ", err)
+		return 1
 	}
 
 	// Setup all Controllers
 	if err := controller.AddToManager(mgr); err != nil {
-		klog.Error(err)
-		os.Exit(1)
+		pmemcommon.ExitError("Failed to add controller to manager: ", err)
+		return 1
 	}
 
 	klog.Info("Starting the Cmd.")
 
 	// Start the Cmd
 	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
-		klog.Error("Manager exited non-zero: ", err)
-		os.Exit(1)
+		pmemcommon.ExitError("Manager exited non-zero: ", err)
+		return 1
 	}
+
+	return 0
 }

@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"github.com/intel/pmem-csi/operator/pkg/controller/deployment"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment"
 )
 
 func init() {
