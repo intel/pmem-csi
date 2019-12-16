@@ -1,6 +1,6 @@
 # Order of init containers from lvm-patch.yaml.
 - op: add
-  path: /spec/template/spec/initContainers/0/args/-
+  path: /spec/template/spec/initContainers/0/command/-
   value: -coverprofile=/var/lib/pmem-csi-coverage/pmem-ns-init-*.out
 - op: add
   path: /spec/template/spec/initContainers/0/volumeMounts/-
@@ -8,7 +8,7 @@
     mountPath: /var/lib/pmem-csi-coverage
     name: coverage-dir
 - op: add
-  path: /spec/template/spec/initContainers/1/args/-
+  path: /spec/template/spec/initContainers/1/command/-
   value: -coverprofile=/var/lib/pmem-csi-coverage/pmem-vgm-*.out
 - op: add
   path: /spec/template/spec/initContainers/1/volumeMounts

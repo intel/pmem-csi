@@ -171,7 +171,8 @@ spec:
         app: pmem-csi-controller
     spec:
       containers:
-      - args:
+      - command:
+        - /usr/local/bin/pmem-csi-driver
         - -v=3
         - -drivername=pmem-csi.intel.com
         - -mode=controller
@@ -258,7 +259,8 @@ spec:
         app: pmem-csi-node
     spec:
       containers:
-      - args:
+      - command:
+        - /usr/local/bin/pmem-csi-driver
         - -deviceManager=lvm
         - -v=3
         - -drivername=pmem-csi.intel.com
@@ -325,12 +327,11 @@ spec:
           name: registration-dir
       hostNetwork: true
       initContainers:
-      - args:
+      - command:
+        - /usr/local/bin/pmem-ns-init
         - -v=3
         - -v=5
         - -coverprofile=/var/lib/pmem-csi-coverage/pmem-ns-init-*.out
-        command:
-        - /usr/local/bin/pmem-ns-init
         env:
         - name: TERMINATION_LOG_PATH
           value: /tmp/pmem-ns-init-termination-log
@@ -345,12 +346,11 @@ spec:
           name: sys-dir
         - mountPath: /var/lib/pmem-csi-coverage
           name: coverage-dir
-      - args:
+      - command:
+        - /usr/local/bin/pmem-vgm
         - -v=3
         - -v=5
         - -coverprofile=/var/lib/pmem-csi-coverage/pmem-vgm-*.out
-        command:
-        - /usr/local/bin/pmem-vgm
         env:
         - name: TERMINATION_LOG_PATH
           value: /tmp/pmem-vgm-termination-log

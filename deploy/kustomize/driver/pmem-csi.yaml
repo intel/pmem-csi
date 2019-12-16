@@ -37,7 +37,9 @@ spec:
       - name: pmem-driver
         image: intel/pmem-csi-driver:canary
         imagePullPolicy: Always
-        args:  [ "-v=3",
+        command: [
+                 "/usr/local/bin/pmem-csi-driver",
+                 "-v=3",
                  "-drivername=pmem-csi.intel.com",
                  "-mode=controller",
                  "-endpoint=unix:///csi/csi-controller.sock",
@@ -104,7 +106,9 @@ spec:
       - name: pmem-driver
         imagePullPolicy: Always
         image: intel/pmem-csi-driver:canary
-        args: [ "-v=3",
+        command: [
+                  "/usr/local/bin/pmem-csi-driver",
+                  "-v=3",
                   "-drivername=pmem-csi.intel.com",
                   "-mode=node",
                   "-endpoint=$(CSI_ENDPOINT)",

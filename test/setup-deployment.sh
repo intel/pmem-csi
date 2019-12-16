@@ -67,10 +67,10 @@ patchesJson6902:
 EOF
             ${SSH} "cat >'$tmpdir/my-deployment/lvm-parameters-patch.yaml'" <<EOF
 - op: add
-  path: /spec/template/spec/initContainers/0/args/-
+  path: /spec/template/spec/initContainers/0/command/-
   value: "--useforfsdax=50"
 - op: add
-  path: /spec/template/spec/initContainers/0/args/-
+  path: /spec/template/spec/initContainers/0/command/-
   value: "--useforsector=10"
 EOF
         fi

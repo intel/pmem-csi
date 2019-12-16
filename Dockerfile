@@ -116,4 +116,3 @@ RUN echo "global { use_lvmetad = 0 }" >> /etc/lvm/lvm.conf && \
     echo "activation { udev_sync = 0 udev_rules = 0 }" >> /etc/lvm/lvm.conf
 
 ENV LD_LIBRARY_PATH=/usr/lib
-ENTRYPOINT ["/usr/local/bin/pmem-csi-driver"]

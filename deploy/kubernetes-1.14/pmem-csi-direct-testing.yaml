@@ -171,7 +171,8 @@ spec:
         app: pmem-csi-controller
     spec:
       containers:
-      - args:
+      - command:
+        - /usr/local/bin/pmem-csi-driver
         - -v=3
         - -drivername=pmem-csi.intel.com
         - -mode=controller
@@ -258,7 +259,8 @@ spec:
         app: pmem-csi-node
     spec:
       containers:
-      - args:
+      - command:
+        - /usr/local/bin/pmem-csi-driver
         - -deviceManager=ndctl
         - -v=3
         - -drivername=pmem-csi.intel.com
