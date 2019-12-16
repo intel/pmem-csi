@@ -16,7 +16,7 @@
 GO_BINARY=go
 GO=GOOS=linux GO111MODULE=on GOFLAGS=-mod=vendor $(GO_BINARY)
 IMPORT_PATH=github.com/intel/pmem-csi
-CMDS=pmem-csi-driver pmem-vgm pmem-ns-init
+CMDS=pmem-csi-driver pmem-vgm pmem-ns-init pmem-csi-operator
 TEST_CMDS=$(addsuffix -test,$(CMDS))
 SHELL=bash
 export PWD=$(shell pwd)
@@ -53,8 +53,6 @@ ifneq ($(NO_PROXY),)
 endif
 
 BUILD_ARGS:=${BUILD_ARGS} --build-arg VERSION=${VERSION}
-
-include operator/operator.make
 
 # An alias for "make build" and the default target.
 all: build
@@ -119,6 +117,8 @@ clean:
 	-rm -rf $(OUTPUT_DIR)
 
 .PHONY: all build test clean $(CMDS) $(TEST_CMDS)
+
+include operator/operator.make
 
 # Add support for creating and booting a cluster under QEMU.
 # All of the commands operate on a cluster stored in _work/$(CLUSTER),

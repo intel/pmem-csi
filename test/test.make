@@ -75,7 +75,7 @@ RUNTIME_DEPS =
 # would be godeps. We list dependencies recursively, not just the
 # direct dependencies.
 # Filter out the go standard runtime packages from dependecies
-RUNTIME_DEPS += diff <($(GO) list -f '{{join .Deps "\n"}}' ./cmd/pmem-csi-driver/ ./operator/cmd/... | grep -v ^github.com/intel/pmem-csi | sort -u) \
+RUNTIME_DEPS += diff <($(GO) list -f '{{join .Deps "\n"}}' ./cmd/pmem-csi-driver/ ./cmd/pmem-csi-operator/... | grep -v ^github.com/intel/pmem-csi | sort -u) \
                 <(go list std | sort -u) | grep ^'<' | cut -f2- -d' ' |
 
 
@@ -108,6 +108,7 @@ RUNTIME_DEPS += sed \
 	-e 's;\(github.com/docker/go-units\);go-units,https://\1,9173;' \
 	-e 's;\(github.com/emicklei/go-restful\);go-restful,http://\1,10372;' \
 	-e 's;\(github.com/evanphx/json-patch\);json-patch,https://\1;' \
+	-e 's;\(github.com/go-logr/zapr\);zapr,https://\1;' \
 	-e 's;\(github.com/go-openapi/jsonpointer\);gojsonpointer,https://\1;' \
 	-e 's;\(github.com/go-openapi/jsonreference\);go-openapi jsonreference,https://\1;' \
 	-e 's;\(github.com/go-openapi/spec\);go-openapi spec,https://\1;' \
@@ -138,6 +139,7 @@ RUNTIME_DEPS += sed \
 	-e 's;gopkg.in/fsnotify.*;golang-github-fsnotify-fsnotify,https://github.com/fsnotify/fsnotify;' \
 	-e 's;gopkg.in/inf\.v.*;go-inf,https://github.com/go-inf/inf;' \
 	-e 's;gopkg.in/yaml\.v.*;go-yaml,https://https://github.com/go-yaml/yaml,9476;' \
+    -e 's;\(go.uber.org/\)\([^/]*\).*;\2,https://github.com/uber-go/\2;' \
 	-e 's;sigs.k8s.io/controller-runtime;kubernetes-sigs/controller-runtime,https://github.com/kubernetes-sigs/controller-runtime;' \
 	-e 's;sigs.k8s.io/yaml;kubernetes-sigs/yaml,https://github.com/kubernetes-sigs/yaml;' \
 	| cat |

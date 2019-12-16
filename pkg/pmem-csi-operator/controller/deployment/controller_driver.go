@@ -2,7 +2,7 @@ package deployment
 
 import (
 	"fmt"
-	pmemcsiv1alpha1 "github.com/intel/pmem-csi/operator/pkg/apis/pmemcsi/v1alpha1"
+	pmemcsiv1alpha1 "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"

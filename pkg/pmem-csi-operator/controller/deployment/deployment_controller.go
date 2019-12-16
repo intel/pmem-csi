@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	pmemcsiv1alpha1 "github.com/intel/pmem-csi/operator/pkg/apis/pmemcsi/v1alpha1"
+	pmemcsiv1alpha1 "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -101,7 +101,7 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 	for _, obj := range objects {
 		metaObj, err := meta.Accessor(obj)
 		if err != nil {
-			klog.Error("Failed to get meta object: %s", err, "(", obj, ")")
+			klog.Error("Failed to get meta object: ", err, "(", obj, ")")
 			return reconcile.Result{}, err
 		}
 
