@@ -31,6 +31,7 @@ import (
 
 	// test sources
 	_ "github.com/intel/pmem-csi/test/e2e/gotests"
+	_ "github.com/intel/pmem-csi/test/e2e/imagefile"
 	_ "github.com/intel/pmem-csi/test/e2e/storage"
 	_ "github.com/intel/pmem-csi/test/e2e/tls"
 

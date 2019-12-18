@@ -506,6 +506,7 @@ trap cleanup EXIT
 
 if init_workdir &&
    CLOUD_IMAGE=$(download_image) &&
+   ln -sf ${RESOURCES_DIRECTORY}/${CLOUD_IMAGE} ${CLUSTER_DIRECTORY}/cloud-image.qcow2 &&
    create_vms &&
    NO_PROXY=$(extend_no_proxy) &&
    init_pmem_regions &&
