@@ -144,7 +144,7 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRole() *rbacv1.ClusterRol
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
-				Resources: []string{"persistentvolumes"},
+				Resources: []string{"persistentvolumeclaims"},
 				Verbs: []string{
 					"get", "watch", "list", "update",
 				},
@@ -341,7 +341,7 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 							Name: "pmem-state-dir",
 							VolumeSource: corev1.VolumeSource{
 								HostPath: &corev1.HostPathVolumeSource{
-									Path: "/var/lib/pmem-csi.intel.com",
+									Path: "/var/lib/" + d.Spec.DriverName,
 									Type: &directoryOrCreate,
 								},
 							},
@@ -378,7 +378,7 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 		},
 	}
 
-	if d.Spec.Node.DeviceMode == "lvm" {
+	if d.Spec.DeviceMode == "lvm" {
 		ds.Spec.Template.Spec.InitContainers = []corev1.Container{
 			d.getNamespaceInitContainer(),
 			d.getVolumeGroupInitContainer(),
@@ -392,7 +392,7 @@ func (d *PmemCSIDriver) getControllerArgs() []string {
 	args := []string{
 		fmt.Sprintf("-v=%d", d.Spec.LogLevel),
 		"-mode=controller",
-		"-drivername=pmem-csi.intel.com",
+		"-drivername=" + d.Spec.DriverName,
 		"-endpoint=unix:///csi/csi-controller.sock",
 		fmt.Sprintf("-registryEndpoint=tcp://0.0.0.0:%d", controllerServicePort),
 		"-nodeid=$(KUBE_NODE_NAME)",
@@ -406,16 +406,16 @@ func (d *PmemCSIDriver) getControllerArgs() []string {
 
 func (d *PmemCSIDriver) getNodeDriverArgs() []string {
 	args := []string{
-		fmt.Sprintf("-deviceManager=%s", d.Spec.Node.DeviceMode),
+		fmt.Sprintf("-deviceManager=%s", d.Spec.DeviceMode),
 		fmt.Sprintf("-v=%d", d.Spec.LogLevel),
-		"-drivername=pmem-csi.intel.com",
+		"-drivername=" + d.Spec.DriverName,
 		"-mode=node",
 		"-endpoint=$(CSI_ENDPOINT)",
 		"-nodeid=$(KUBE_NODE_NAME)",
 		fmt.Sprintf("-controllerEndpoint=tcp://$(KUBE_POD_IP):%d", nodeControllerPort),
 		fmt.Sprintf("-registryEndpoint=$(PMEM_CSI_CONTROLLER_PORT_%d_TCP)", controllerServicePort),
 		"-caFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
-		"-statePath=/var/lib/pmem-csi.intel.com",
+		"-statePath=/var/lib/" + d.Spec.DriverName,
 		"-certFile=/certs/$(KUBE_NODE_NAME).crt",
 		"-keyFile=/certs/$(KUBE_NODE_NAME).key",
 	}
@@ -426,8 +426,8 @@ func (d *PmemCSIDriver) getNodeDriverArgs() []string {
 func (d *PmemCSIDriver) getControllerContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "pmem-driver",
-		Image:           d.Spec.Image.String(),
-		ImagePullPolicy: d.Spec.Image.PullPolicy,
+		Image:           d.Spec.Image,
+		ImagePullPolicy: d.Spec.PullPolicy,
 		Args:            d.getControllerArgs(),
 		Env: []corev1.EnvVar{
 			{
@@ -454,7 +454,7 @@ func (d *PmemCSIDriver) getControllerContainer() corev1.Container {
 				MountPath: "/csi",
 			},
 		},
-		Resources: *d.Spec.Controller.Resources,
+		Resources: *d.Spec.ControllerResources,
 	}
 }
 
@@ -463,8 +463,8 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 	true := true
 	return corev1.Container{
 		Name:            "pmem-driver",
-		Image:           d.Spec.Image.String(),
-		ImagePullPolicy: d.Spec.Image.PullPolicy,
+		Image:           d.Spec.Image,
+		ImagePullPolicy: d.Spec.PullPolicy,
 		Args:            d.getNodeDriverArgs(),
 		Env: []corev1.EnvVar{
 			{
@@ -507,14 +507,14 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 			},
 			{
 				Name:      "pmem-state-dir",
-				MountPath: "/var/lib/pmem-csi.intel.com",
+				MountPath: "/var/lib/" + d.Spec.DriverName,
 			},
 			{
 				Name:      "dev-dir",
 				MountPath: "/dev",
 			},
 		},
-		Resources: *d.Spec.Node.Resources,
+		Resources: *d.Spec.NodeResources,
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &true,
 		},
@@ -524,8 +524,8 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 func (d *PmemCSIDriver) getProvisionerContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "provisioner",
-		Image:           d.Spec.Controller.ProvisionerImage.String(),
-		ImagePullPolicy: d.Spec.Controller.ProvisionerImage.PullPolicy,
+		Image:           d.Spec.ProvisionerImage,
+		ImagePullPolicy: d.Spec.PullPolicy,
 		Args: []string{
 			"--timeout=5m",
 			fmt.Sprintf("--v=%d", d.Spec.LogLevel),
@@ -539,7 +539,7 @@ func (d *PmemCSIDriver) getProvisionerContainer() corev1.Container {
 				MountPath: "/csi",
 			},
 		},
-		Resources: *d.Spec.Controller.Resources,
+		Resources: *d.Spec.ControllerResources,
 	}
 }
 
@@ -547,8 +547,8 @@ func (d *PmemCSIDriver) getNamespaceInitContainer() corev1.Container {
 	true := true
 	return corev1.Container{
 		Name:            "pmem-ns-init",
-		Image:           d.Spec.Image.String(),
-		ImagePullPolicy: d.Spec.Image.PullPolicy,
+		Image:           d.Spec.Image,
+		ImagePullPolicy: d.Spec.PullPolicy,
 		Command: []string{
 			"/usr/local/bin/pmem-ns-init",
 		},
@@ -567,7 +567,7 @@ func (d *PmemCSIDriver) getNamespaceInitContainer() corev1.Container {
 				MountPath: "/sys",
 			},
 		},
-		Resources: *d.Spec.Node.Resources,
+		Resources: *d.Spec.NodeResources,
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &true,
 		},
@@ -578,8 +578,8 @@ func (d *PmemCSIDriver) getVolumeGroupInitContainer() corev1.Container {
 	true := true
 	return corev1.Container{
 		Name:            "pmem-vgm",
-		Image:           d.Spec.Image.String(),
-		ImagePullPolicy: d.Spec.Image.PullPolicy,
+		Image:           d.Spec.Image,
+		ImagePullPolicy: d.Spec.PullPolicy,
 		Command: []string{
 			"/usr/local/bin/pmem-vgm",
 		},
@@ -592,7 +592,7 @@ func (d *PmemCSIDriver) getVolumeGroupInitContainer() corev1.Container {
 				Value: "/tmp/pmem-vgm-termination-log",
 			},
 		},
-		Resources: *d.Spec.Node.Resources,
+		Resources: *d.Spec.NodeResources,
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &true,
 		},
@@ -602,11 +602,11 @@ func (d *PmemCSIDriver) getVolumeGroupInitContainer() corev1.Container {
 func (d *PmemCSIDriver) getNodeRegistrarContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "driver-registrar",
-		Image:           d.Spec.Node.RegistrarImage.String(),
-		ImagePullPolicy: d.Spec.Node.RegistrarImage.PullPolicy,
+		Image:           d.Spec.NodeRegistrarImage,
+		ImagePullPolicy: d.Spec.PullPolicy,
 		Args: []string{
 			fmt.Sprintf("--v=%d", d.Spec.LogLevel),
-			"--kubelet-registration-path=/var/lib/pmem-csi.intel.com/csi.sock",
+			fmt.Sprintf("--kubelet-registration-path=/var/lib/%s/csi.sock", d.Spec.DriverName),
 			"--csi-address=/pmem-csi/csi.sock",
 		},
 		VolumeMounts: []corev1.VolumeMount{
@@ -619,6 +619,6 @@ func (d *PmemCSIDriver) getNodeRegistrarContainer() corev1.Container {
 				MountPath: "/registration",
 			},
 		},
-		Resources: *d.Spec.Node.Resources,
+		Resources: *d.Spec.NodeResources,
 	}
 }

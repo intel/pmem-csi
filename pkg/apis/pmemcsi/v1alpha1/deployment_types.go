@@ -6,51 +6,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// DeviceMode type decleration for allowed driver device managers
 type DeviceMode string
 
 const (
-	DeviceModeLVM    DeviceMode = "lvm"
+	// DeviceModeLVM represents 'lvm' device manager
+	DeviceModeLVM DeviceMode = "lvm"
+	// DeviceModeDirect represents 'direct' device manager
 	DeviceModeDirect DeviceMode = "direct"
 )
-
-// ControllerDriver options used for driver running at Master as controller
-type ControllerDriver struct {
-	// ProvisionerImage CSI provisioner sidecar image
-	ProvisionerImage ImageInfo `json:"provisionerImage,omitempty"`
-	// Resources Compute resources required by Controller driver
-	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-// NodeDriver options used for driver running at Node
-type NodeDriver struct {
-	// RegistrarImage CSI node driver registrar sidecar image
-	RegistrarImage ImageInfo `json:"registrarImage,omitempty"`
-	// Resources Compute resources required by Node driver
-	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
-	// DeviceMode to use to manage PMEM devices. One of lvm, direct
-	DeviceMode DeviceMode `json:"deviceMode,omitempty"`
-}
-
-// ImageInfo defines the PMEM-CSI driver container image details
-type ImageInfo struct {
-	// Registry docker registry to use
-	Registry string `json:"registry,omitempty"`
-	// Name container image name to use, defaults to pmem-csi-driver
-	Name string `json:"name,omitempty"`
-	// Tag image tag to use
-	Tag string `json:"tag,omitempty"`
-	// PullPolicy image pull policy one of Always, Never, IfNotPresent
-	PullPolicy corev1.PullPolicy `json:"pullPolicy,omitempty"`
-}
-
-func (ii ImageInfo) String() string {
-	image := ""
-	if ii.Registry != "" {
-		image = ii.Registry + "/"
-	}
-
-	return image + ii.Name + ":" + ii.Tag
-}
 
 // DeploymentSpec defines the desired state of Deployment
 type DeploymentSpec struct {
@@ -58,16 +22,24 @@ type DeploymentSpec struct {
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 
+	//DriverName represents the name of the PMEM-CSI driver to be deployed
+	DriverName string `json:"driverName,omitempty"`
 	// Image holds container image options
-	Image ImageInfo `json:"image,omitempty"`
-	// Controller holds configuration options for driver running as controller
-	Controller ControllerDriver `json:"controller,omitempty"`
-	// Controller hodls configuration options for driver running on compute nodes
-	Node NodeDriver `json:"node,omitempty"`
+	Image string `json:"image,omitempty"`
+	// PullPolicy image pull policy one of Always, Never, IfNotPresent
+	PullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
+	// ProvisionerImage CSI provisioner sidecar image
+	ProvisionerImage string `json:"provisionerImage,omitempty"`
+	// NodeRegistrarImage CSI node driver registrar sidecar image
+	NodeRegistrarImage string `json:"nodeRegistrarImage,omitempty"`
+	// ControllerResources Compute resources required by Controller driver
+	ControllerResources *corev1.ResourceRequirements `json:"controllerResources,omitempty"`
+	// NodeResources Compute resources required by Node driver
+	NodeResources *corev1.ResourceRequirements `json:"nodeResources,omitempty"`
+	// DeviceMode to use to manage PMEM devices. One of lvm, direct
+	DeviceMode DeviceMode `json:"deviceMode,omitempty"`
 	// LogLevel number for the log verbosity
 	LogLevel uint16 `json:"logLevel,omitempty"`
-	// Namespace in which the new deployment should deploy
-	Namespace string `json:"namespace,omitempty"`
 }
 
 // DeploymentStatus defines the observed state of Deployment
@@ -104,90 +76,85 @@ func init() {
 }
 
 const (
-	defaultLogLevel        = uint16(5)
-	defaultImagePullPolicy = corev1.PullIfNotPresent
+	// DefaultDriverName default driver name to be used for a deployment
+	DefaultDriverName = "pmem-csi.intel.com"
+	// DefaultLogLevel default logging level used for the driver
+	DefaultLogLevel = uint16(5)
+	// DefaultImagePullPolicy default image pull policy for all the images used by the deployment
+	DefaultImagePullPolicy = corev1.PullIfNotPresent
 
 	defaultDriverImageName = "intel/pmem-csi-driver"
 	defaultDriverImageTag  = "canary"
+	// DefaultDriverImage default PMEM-CSI driver docker image
+	DefaultDriverImage = defaultDriverImageName + ":" + defaultDriverImageTag
 
-	defaultProvisionerImageRegistry = "quay.io"
-	defaultProvisionerImageName     = "k8scsi/csi-provisioner"
-	defaultProvisionerImageTag      = "v1.2.1"
+	defaultProvisionerImageName = "quay.io/k8scsi/csi-provisioner"
+	defaultProvisionerImageTag  = "v1.2.1"
+	// DefaultProvisionerImage default external provisioner image to use
+	DefaultProvisionerImage = defaultProvisionerImageName + ":" + defaultProvisionerImageTag
 
-	defaultRegistrarImageRegistry = "quay.io"
-	defaultRegistrarImageName     = "k8scsi/csi-node-driver-registrar"
-	defaultRegistrarImageTag      = "v1.1.0"
+	defaultRegistrarImageName = "quay.io/k8scsi/csi-node-driver-registrar"
+	defaultRegistrarImageTag  = "v1.1.0"
+	// DefaultRegistrarImage default node driver registrar image to use
+	DefaultRegistrarImage = defaultRegistrarImageName + ":" + defaultRegistrarImageTag
 
-	defaultControllerResourceCPU    = int64(100) // MilliSeconds
-	defaultControllerResourceMemory = int64(250) // MB
-	defaultNodeResourceCPU          = int64(100) // MilliSeconds
-	defaultNodeResourceMemory       = int64(250) // MB
-	defaultNodeDeviceMode           = DeviceModeLVM
+	// DefaultControllerResourceCPU default CPU resource limit used for controller pod
+	DefaultControllerResourceCPU = "100m" // MilliSeconds
+	// DefaultControllerResourceMemory default memory resource limit used for controller pod
+	DefaultControllerResourceMemory = "250Mi" // MB
+	// DefaultNodeResourceCPU default CPU resource limit used for node driver pod
+	DefaultNodeResourceCPU = "100m" // MilliSeconds
+	// DefaultNodeResourceMemory default memory resource limit used for node driver pod
+	DefaultNodeResourceMemory = "250Mi" // MB
+	// DefaultDeviceMode default device manger used for deployment
+	DefaultDeviceMode = DeviceModeLVM
 )
 
 // EnsureDefaults make sure that the deployment object has all defaults set properly
 func (d *Deployment) EnsureDefaults() {
-	if d.Spec.Image.Name == "" {
-		d.Spec.Image.Name = defaultDriverImageName
+	if d.Spec.DriverName == "" {
+		d.Spec.DriverName = DefaultDriverName
 	}
-	if d.Spec.Image.Tag == "" {
-		d.Spec.Image.Tag = defaultDriverImageTag
+	if d.Spec.Image == "" {
+		d.Spec.Image = DefaultDriverImage
 	}
-	if d.Spec.Image.PullPolicy == "" {
-		d.Spec.Image.PullPolicy = defaultImagePullPolicy
+	if d.Spec.PullPolicy == "" {
+		d.Spec.PullPolicy = DefaultImagePullPolicy
 	}
 	if d.Spec.LogLevel == 0 {
-		d.Spec.LogLevel = defaultLogLevel
+		d.Spec.LogLevel = DefaultLogLevel
 	}
 
 	/* Controller Defaults */
 
-	if d.Spec.Controller.ProvisionerImage.Registry == "" {
-		d.Spec.Controller.ProvisionerImage.Registry = defaultProvisionerImageRegistry
-	}
-	if d.Spec.Controller.ProvisionerImage.Name == "" {
-		d.Spec.Controller.ProvisionerImage.Name = defaultProvisionerImageName
-	}
-	if d.Spec.Controller.ProvisionerImage.Tag == "" {
-		d.Spec.Controller.ProvisionerImage.Tag = defaultProvisionerImageTag
-	}
-	if d.Spec.Controller.ProvisionerImage.PullPolicy == "" {
-		d.Spec.Controller.ProvisionerImage.PullPolicy = defaultImagePullPolicy
+	if d.Spec.ProvisionerImage == "" {
+		d.Spec.ProvisionerImage = DefaultProvisionerImage
 	}
 
-	if d.Spec.Controller.Resources == nil {
-		d.Spec.Controller.Resources = &corev1.ResourceRequirements{
+	if d.Spec.ControllerResources == nil {
+		d.Spec.ControllerResources = &corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    *resource.NewMilliQuantity(defaultControllerResourceCPU, resource.DecimalSI),
-				corev1.ResourceMemory: *resource.NewQuantity(defaultControllerResourceMemory, resource.BinarySI),
+				corev1.ResourceCPU:    resource.MustParse(DefaultControllerResourceCPU),
+				corev1.ResourceMemory: resource.MustParse(DefaultControllerResourceMemory),
 			},
 		}
 	}
 
 	/* Node Defaults */
 
-	if d.Spec.Node.DeviceMode == "" {
-		d.Spec.Node.DeviceMode = defaultNodeDeviceMode
+	if d.Spec.DeviceMode == "" {
+		d.Spec.DeviceMode = DefaultDeviceMode
 	}
 
-	if d.Spec.Node.RegistrarImage.Registry == "" {
-		d.Spec.Node.RegistrarImage.Registry = defaultRegistrarImageRegistry
-	}
-	if d.Spec.Node.RegistrarImage.Name == "" {
-		d.Spec.Node.RegistrarImage.Name = defaultRegistrarImageName
-	}
-	if d.Spec.Node.RegistrarImage.Tag == "" {
-		d.Spec.Node.RegistrarImage.Tag = defaultRegistrarImageTag
-	}
-	if d.Spec.Node.RegistrarImage.PullPolicy == "" {
-		d.Spec.Node.RegistrarImage.PullPolicy = defaultImagePullPolicy
+	if d.Spec.NodeRegistrarImage == "" {
+		d.Spec.NodeRegistrarImage = DefaultRegistrarImage
 	}
 
-	if d.Spec.Node.Resources == nil {
-		d.Spec.Node.Resources = &corev1.ResourceRequirements{
+	if d.Spec.NodeResources == nil {
+		d.Spec.NodeResources = &corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    *resource.NewMilliQuantity(defaultNodeResourceCPU, resource.DecimalSI),
-				corev1.ResourceMemory: *resource.NewQuantity(defaultNodeResourceMemory, resource.BinarySI),
+				corev1.ResourceCPU:    resource.MustParse(DefaultNodeResourceCPU),
+				corev1.ResourceMemory: resource.MustParse(DefaultNodeResourceMemory),
 			},
 		}
 	}
