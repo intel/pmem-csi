@@ -16,7 +16,7 @@ spec:
   node:
     deviceMode: lvm
     resources:
-      request:
+      requests:
         cpu: "200m"
         memory: "100Mi"
 

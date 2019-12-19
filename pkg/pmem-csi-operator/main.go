@@ -12,6 +12,7 @@ import (
 
 	"github.com/intel/pmem-csi/pkg/apis"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/utils"
 
 	//"github.com/intel/pmem-csi/pkg/pmem-operator/version"
@@ -95,11 +96,22 @@ func Main() int {
 		return 1
 	}
 
+	klog.Info("Registering Deployment CRD.")
+	if err := deployment.EnsureCRDInstalled(cfg); err != nil {
+		pmemcommon.ExitError("Failed to install deployment CRD: ", err)
+		return 1
+	}
+
 	klog.Info("Starting the Cmd.")
 
 	// Start the Cmd
 	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
 		pmemcommon.ExitError("Manager exited non-zero: ", err)
+		return 1
+	}
+
+	if err := deployment.DeleteCRD(cfg); err != nil {
+		pmemcommon.ExitError("Failed to delete deployment CRD: ", err)
 		return 1
 	}
 
