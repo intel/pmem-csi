@@ -37,7 +37,7 @@ enabled=1
 gpgcheck=1
 gpgkey=https://download.docker.com/linux/centos/gpg
 EOF
-    packages+=" docker-ce-3:19.03.2-3.el7"
+    packages+=" docker-ce-3:19.03.5-3.el7"
 
     # Install according to https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
     modprobe br_netfilter
@@ -59,10 +59,10 @@ EOF
     # List generated with:
     # for v in 1.13 1.14 1.15 1.16; do for i in kubelet kubeadm kubectl; do echo "$i-$(sudo yum --showduplicates list kubelet | grep " $v"  | sed -e 's/.* \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/' | sort -u  | tail -n 1)"; done; done
     case ${TEST_KUBERNETES_VERSION} in
-        1.13) packages+=" kubelet-1.13.9-0 kubeadm-1.13.9-0 kubectl-1.13.9-0";;
-        1.14) packages+=" kubelet-1.14.7-0 kubeadm-1.14.7-0 kubectl-1.14.7-0";;
-        1.15) packages+=" kubelet-1.15.4-0 kubeadm-1.15.4-0 kubectl-1.15.4-0";;
-        1.16) packages+=" kubelet-1.16.0-0 kubeadm-1.16.0-0 kubectl-1.16.0-0";;
+        1.13) packages+=" kubelet-1.13.12-0 kubeadm-1.13.12-0 kubectl-1.13.12-0";;
+        1.14) packages+=" kubelet-1.14.10-0 kubeadm-1.14.10-0 kubectl-1.14.10-0";;
+        1.15) packages+=" kubelet-1.15.8-0 kubeadm-1.15.8-0 kubectl-1.15.8-0";;
+        1.16) packages+=" kubelet-1.16.5-0 kubeadm-1.16.5-0 kubectl-1.16.5-0";;
         *) echo >&2 "Kubernetes version ${TEST_KUBERNETES_VERSION} not supported, package list in $0 must be updated."; exit 1;;
     esac
     packages+=" --disableexcludes=kubernetes"
