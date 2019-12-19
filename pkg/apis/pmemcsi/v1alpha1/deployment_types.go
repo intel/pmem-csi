@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -155,5 +156,88 @@ func (d *Deployment) EnsureDefaults() {
 				corev1.ResourceMemory: resource.MustParse(DefaultNodeResourceMemory),
 			},
 		}
+	}
+}
+
+func GetDeploymentCRDSchema() *apiextensions.JSONSchemaProps {
+	return &apiextensions.JSONSchemaProps{
+		Type:        "object",
+		Description: "https://github.com/intel/pmem-csi.git",
+		Properties: map[string]apiextensions.JSONSchemaProps{
+			"spec": apiextensions.JSONSchemaProps{
+				Type:        "object",
+				Description: "DeploymentSpec defines the desired state of Deployment",
+				Properties: map[string]apiextensions.JSONSchemaProps{
+					"driverName": apiextensions.JSONSchemaProps{
+						Type:        "string",
+						Description: "CSI Driver name",
+					},
+					"logLevel": apiextensions.JSONSchemaProps{
+						Type:        "integer",
+						Description: "logging level",
+					},
+					"deviceMode": apiextensions.JSONSchemaProps{
+						Type:        "string",
+						Description: "CSI Driver mode for device management: 'lvm' or 'direct'",
+						Enum: []apiextensions.JSON{
+							apiextensions.JSON{Raw: []byte("\"" + DeviceModeLVM + "\"")},
+							apiextensions.JSON{Raw: []byte("\"" + DeviceModeDirect + "\"")},
+						},
+					},
+					"image": apiextensions.JSONSchemaProps{
+						Type:        "string",
+						Description: "PMEM-CSI driver docker image",
+					},
+					"provisionerImage": apiextensions.JSONSchemaProps{
+						Type:        "string",
+						Description: "CSI provisioner docker image",
+					},
+					"nodeRegistrarImage": apiextensions.JSONSchemaProps{
+						Type:        "string",
+						Description: "CSI node driver registrar docker image",
+					},
+					"imagePullPolicy": apiextensions.JSONSchemaProps{
+						Type:        "string",
+						Description: "Docker image pull policy: Always, Never, IfNotPresent",
+						Enum: []apiextensions.JSON{
+							apiextensions.JSON{Raw: []byte("\"" + corev1.PullAlways + "\"")},
+							apiextensions.JSON{Raw: []byte("\"" + corev1.PullIfNotPresent + "\"")},
+							apiextensions.JSON{Raw: []byte("\"" + corev1.PullNever + "\"")},
+						},
+					},
+					"controllerResources": getResourceRequestsSchema(),
+					"nodeResources":       getResourceRequestsSchema(),
+				},
+			},
+		},
+	}
+}
+
+func getResourceRequestsSchema() apiextensions.JSONSchemaProps {
+	return apiextensions.JSONSchemaProps{
+		Type:        "object",
+		Description: "Compute resource requirements for controller driver Pod",
+		Properties: map[string]apiextensions.JSONSchemaProps{
+			"limits": apiextensions.JSONSchemaProps{
+				Type:        "object",
+				Description: "The maximum amount of compute resources allowed",
+				AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{
+					Allows: true,
+					Schema: &apiextensions.JSONSchemaProps{
+						Type: "string",
+					},
+				},
+			},
+			"requests": apiextensions.JSONSchemaProps{
+				Type:        "object",
+				Description: "The minimum amount of compute resources required",
+				AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{
+					Allows: true,
+					Schema: &apiextensions.JSONSchemaProps{
+						Type: "string",
+					},
+				},
+			},
+		},
 	}
 }
