@@ -351,7 +351,28 @@ function init_kubernetes_cluster() (
     echo "Installing dependencies on cloud images, this process may take some minutes"
     vm_id=0
     pids=""
-    for ip in $(print_ips); do
+    IPS=$(print_ips)
+    # in Fedora-31 case, add a flag to kernel cmdline and reboot
+    if [ "$TEST_DISTRO" = "fedora" -a "$TEST_DISTRO_VERSION" = "31" ]; then
+        SYSTEMD_UNIFIED_CGROUP_HIERARCHY=systemd.unified_cgroup_hierarchy
+        for ip in ${IPS}; do
+            ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo sed -i 's/n8\"/n8 ${SYSTEMD_UNIFIED_CGROUP_HIERARCHY}=0\"/g' /etc/default/grub"
+            ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo grub2-mkconfig -o /boot/grub2/grub.cfg"
+            # use --force to speed up shutdown as nothing important running yet to wait for
+            ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo systemctl --force reboot"
+        done
+        for ip in ${IPS}; do
+            SECONDS=0
+            echo "After reboot: Waiting for ssh connectivity on vm with ip $ip"
+            # Verify that system runs with added cmdline parameter
+            while ! ssh $SSH_ARGS ${CLOUD_USER}@${ip} "grep -q ${SYSTEMD_UNIFIED_CGROUP_HIERARCHY} /proc/cmdline"; do
+                if [ "$SECONDS" -gt "$SSH_TIMEOUT" ]; then
+                    die "timeout waiting for ${ip} to reboot with changed kernel parameters"
+                fi
+            done
+        done
+    fi
+    for ip in ${IPS}; do
         vm_name=$(govm list -f '{{select (filterRegexp . "IP" "'${ip}'") "Name"}}') || die "failed to find VM for IP $ip"
         log_name=${WORKING_DIRECTORY}/${vm_name}.log
         ssh_script=${WORKING_DIRECTORY}/ssh.${vm_id}
