@@ -67,7 +67,7 @@ The PMEM-CSI driver can operate in two different device modes: *LVM* and *direct
 |What is served     |LVM logical volume     |pmem block device   |
 |Region affinity<sup>2</sup>    |yes: one LVM volume group is created per region, and a volume has to be in one volume group  |yes: namespace can belong to one region only  |
 |Startup            |two extra stages: pmem-ns-init (creates namespaces), vgm (creates volume groups)   |no extra steps at startup |
-|Namespace modes    |*fsdax, sector* mode<sup>3</sup> namespaces pre-created as pools   |namespace in required mode created directly, no need to pre-create pools   |
+|Namespace modes    |*fsdax* mode<sup>3</sup> namespaces pre-created as pools   |namespace in `fsdax` mode created directly, no need to pre-create pools   |
 |Limiting space usage | can leave part of device unused during pools creation  |no limits, creates namespaces on device until runs out of space  |
 | *Name* field in namespace | *Name* gets set to 'pmem-csi' to achieve own vs. foreign marking | *Name* gets set to VolumeID, without attempting own vs. foreign marking  |
 |Minimum volume size| 4 MB                   | 1 GB (see also alignment adjustment below) |
@@ -84,7 +84,7 @@ A simplified example: This state develops after steps: create 63 GB namespace, c
 
 <sup>2 </sup> *Region affinity* means that all parts of a provisioned file system are physically located on device(s) that belong to same PMEM region. This is important on multi-socket systems where media access time may vary based on where the storage device(s) are physically attached.
 
-<sup>3 </sup> *fsdax, sector* modes refer to the modes of NVDIMM
+<sup>3 </sup> *fsdax* mode refers to the modes of NVDIMM
 namespaces. See [Persistent Memory
 Programming](https://pmem.io/ndctl/ndctl-create-namespace.html) for
 details. The *devdax* mode is not supported. It might make sense for a
@@ -121,24 +121,18 @@ starts serving CSI API requests.
 
 #### Namespace modes in LVM device mode
 
-The PMEM-CSI driver can pre-create namespaces in two modes, forming
-corresponding LVM volume groups, to serve volumes based on `fsdax` or
-`sector` (alias `safe`) mode namespaces. The amount of space to be
-used is determined using two options `-useforfsdax` and
-`-useforsector` given to _pmem-ns-init_. These options specify an
-integer presenting limit as percentage, which is applied separately in
-each region. The default values are `useforfsdax=100` and
-`useforsector=0`. A CSI request for volume can specify the namespace
-mode using the driver-specific argument `nsmode` which has a value of
-either "fsdax" (default) or "sector". A volume provisioned in `fsdax`
-mode will have the `dax` option added to mount options.
+The PMEM-CSI driver pre-creates namespaces in `fsdax` mode forming
+the corresponding LVM volume group. The amount of space to be
+used is determined using the option `-useforfsdax` given to _pmem-ns-init_.
+This options specifies an integer presenting limit as percentage.
+The default value is `useforfsdax=100`.
 
 #### Using limited amount of total space in LVM device mode
 
 The PMEM-CSI driver can leave space on devices for others, and
 recognize "own" namespaces. Leaving space for others can be achieved
-by specifying lower-than-100 values to `-useforfsdax` and/or
-`-useforsector` options. The distinction "own" vs. "foreign" is
+by specifying lower-than-100 value to `-useforfsdax` options 
+The distinction "own" vs. "foreign" is
 implemented by setting the _Name_ field in namespace to a static
 string "pmem-csi" during namespace creation. When adding physical
 volumes to volume groups, only those physical volumes that are based on
@@ -411,7 +405,6 @@ Volume requests embedded in Pod spec are provisioned as ephemeral volumes. The v
 |key|meaning|optional|values|
 |---|-------|--------|-------------|
 |`size`|Size of the requested ephemeral volume|No||
-|`nsmode`|PMEM namespace mode of requested<br> ephemeral volume|Yes|`fsdax` (default),<br> `sector`|
 |`eraseAfter`|Clear all data after use and before<br> deleting the volume|Yes|`true` (default),<br> `false`|
 
 Check with provided [example application](deploy/kubernetes-1.15/pmem-app-ephemeral.yaml) for
@@ -659,9 +652,6 @@ for `kubectl kustomize`. For example:
      - op: add
        path: /spec/template/spec/initContainers/0/args/-
        value: "--useforfsdax=90"
-     - op: add
-       path: /spec/template/spec/initContainers/0/args/-
-       value: "--useforsector=0"
      EOF
      $ kubectl create --kustomize my-pmem-csi-deployment
      ```
@@ -752,34 +742,6 @@ one with ext4-format and another with xfs-format file system.
     $ kubectl exec my-csi-app-2 -- mount |grep /data
     /dev/ndbus0region0fsdax/5cc9b19e-551d-11e9-a584-928299ac4b17 on /data type xfs (rw,relatime,attr2,dax,inode64,noquota)
 ```
-
-#### Note about using the sector mode
-
-PMEM-CSI can create a namespace in the *sector* (alias safe) mode instead of default *fsdax* mode. See [Persistent Memory Programming](https://pmem.io/ndctl/ndctl-create-namespace.html) for more details about namespace modes. The main difference in PMEM-CSI context is that a sector-mode volume will not get 'dax' mount option. The deployment examples do not describe sector mode to keep the amount of combinations smaller. Here are the changes to be made to deploy volumes in sector mode:
-
-- add `nsmode: "sector"` line in parameters section in the storageclass definition file pmem-storageclass-XYZ.yaml:
-```
-parameters:
-  csi.storage.k8s.io/fstype: ext4
-  eraseafter: "true"
-  nsmode: "sector"                   <-- add this
-```
-
-* Only if using LVM device mode: Modify pmem-ns-init options to create sector-mode pools in addition to fsdax-mode pools. Add `-useforfsdax` and `-useforsector` options to pmem-ns-init arguments in pmem-csi-lvm.yaml (select the percentage values that fit your needs):
-```
-       initContainers:
-       - args:
-         - -v=3
-         - -useforfsdax=60                   <-- add this
-         - -useforsector=40                  <-- add this
-         command:
-         - /go/bin/pmem-ns-init
-```
-
-  This change can be made either by copying and editing a deployment
-  yaml file or on-the-fly with `kustomize` as explained in [Run
-  PMEM-CSI on Kubernetes](#run-pmem-csi-on-kubernetes).
-
 
 #### Note about raw block volumes
 

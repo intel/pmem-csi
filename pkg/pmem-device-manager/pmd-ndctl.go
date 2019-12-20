@@ -49,18 +49,16 @@ func NewPmemDeviceManagerNdctl() (PmemDeviceManager, error) {
 	return &pmemNdctl{}, nil
 }
 
-func (pmem *pmemNdctl) GetCapacity() (map[string]uint64, error) {
+func (pmem *pmemNdctl) GetCapacity() (uint64, error) {
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
 
 	ndctx, err := ndctl.NewContext()
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	defer ndctx.Free()
 
-	Capacity := map[string]uint64{}
-	nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
 	var capacity uint64
 	for _, bus := range ndctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
@@ -76,16 +74,12 @@ func (pmem *pmemNdctl) GetCapacity() (map[string]uint64, error) {
 			}
 		}
 	}
-	// we set same capacity for all namespace modes
-	// TODO: we should maintain all modes capacity when adding or subtracting
+	// TODO: we should maintain capacity when adding or subtracting
 	// from upper layer, not done right now!!
-	for _, nsmod := range nsmodes {
-		Capacity[string(nsmod)] = capacity
-	}
-	return Capacity, nil
+	return capacity, nil
 }
 
-func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64, nsmode string) error {
+func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64) error {
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
 
@@ -116,7 +110,7 @@ func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64, nsmode string)
 		Name:  volumeId,
 		Size:  size,
 		Align: ndctlAlign,
-		Mode:  ndctl.NamespaceMode(nsmode),
+		Mode:  "fsdax",
 	})
 	if err != nil {
 		return err

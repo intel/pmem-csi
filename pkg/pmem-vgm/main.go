@@ -52,23 +52,19 @@ func prepareVolumeGroups(ctx *ndctl.Context) {
 		klog.V(5).Infof("CheckVG: Bus: %v", bus.DeviceName())
 		for _, r := range bus.ActiveRegions() {
 			klog.V(5).Infof("Region: %v", r.DeviceName())
-			nsmodes := []ndctl.NamespaceMode{ndctl.FsdaxMode, ndctl.SectorMode}
-			for _, nsmod := range nsmodes {
-				klog.V(5).Infof("NsMode: %v", nsmod)
-				vgName := vgName(bus, r, nsmod)
-				if err := createVolumesForRegion(r, vgName, nsmod); err != nil {
-					klog.Errorf("Failed volumegroup creation: %s", err.Error())
-				}
+			vgName := vgName(bus, r)
+			if err := createVolumesForRegion(r, vgName); err != nil {
+				klog.Errorf("Failed volumegroup creation: %s", err.Error())
 			}
 		}
 	}
 }
 
-func vgName(bus *ndctl.Bus, region *ndctl.Region, nsmode ndctl.NamespaceMode) string {
-	return bus.DeviceName() + region.DeviceName() + string(nsmode)
+func vgName(bus *ndctl.Bus, region *ndctl.Region) string {
+	return bus.DeviceName() + region.DeviceName()
 }
 
-func createVolumesForRegion(r *ndctl.Region, vgName string, nsmode ndctl.NamespaceMode) error {
+func createVolumesForRegion(r *ndctl.Region, vgName string) error {
 	cmd := ""
 	cmdArgs := []string{"--force", vgName}
 	nsArray := r.ActiveNamespaces()
@@ -77,11 +73,9 @@ func createVolumesForRegion(r *ndctl.Region, vgName string, nsmode ndctl.Namespa
 		return nil
 	}
 	for _, ns := range nsArray {
-		// consider only namespaces in asked namespacemode,
-		// and having name given by this driver, to exclude foreign ones
-		if ns.Mode() == ndctl.NamespaceMode(nsmode) && ns.Name() == "pmem-csi" {
+		// consider only namespaces having name given by this driver, to exclude foreign ones
+		if ns.Name() == "pmem-csi" {
 			devName := "/dev/" + ns.BlockDeviceName()
-			klog.V(4).Infof("createVolumesForRegion: %s has nsmode %s", ns.BlockDeviceName(), nsmode)
 			/* check if this pv is already part of a group, if yes ignore this pv
 			if not add to arg list */
 			output, err := pmemexec.RunCommand("pvs", "--noheadings", "-o", "vg_name", devName)
@@ -106,7 +100,5 @@ func createVolumesForRegion(r *ndctl.Region, vgName string, nsmode ndctl.Namespa
 	if err != nil {
 		return err
 	}
-	// Tag add works without error if repeated, so it is safe to run without checking for existing
-	_, err = pmemexec.RunCommand("vgchange", "--addtag", string(nsmode), vgName)
 	return err
 }

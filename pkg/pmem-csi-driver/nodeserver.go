@@ -155,10 +155,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 			return nil, err
 		}
 		srcPath = device.Path
-		params := req.GetVolumeContext()
-		if nsmode, ok := params[pmemParameterKeyNamespaceMode]; !ok || nsmode == pmemNamespaceModeFsdax {
-			mountFlags = append(mountFlags, "dax")
-		}
+		mountFlags = append(mountFlags, "dax")
 	} else {
 		if device, err = ns.cs.dm.GetDevice(req.VolumeId); err != nil {
 			if errors.Is(err, pmdmanager.ErrDeviceNotFound) {
@@ -365,14 +362,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		}
 	}
 
-	// FIXME(avalluri): we shouldn't depend on volumecontext to determine the device mode,
-	// instead PmemDeviceInfo should hold the device mode in which it was created.
-	if params := req.GetVolumeContext(); params != nil {
-		if nsmode, ok := params[pmemParameterKeyNamespaceMode]; !ok || nsmode == pmemNamespaceModeFsdax {
-			// Add dax option if namespacemode == fsdax
-			mountOptions = append(mountOptions, "dax")
-		}
-	}
+	mountOptions = append(mountOptions, "dax")
 
 	if err = ns.mount(device.Path, stagingtargetPath, mountOptions); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -445,10 +435,6 @@ func (ns *nodeServer) createEphemeralDevice(ctx context.Context, req *csi.NodePu
 				return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("failed to parse size(%s) of ephemeral inline volume: %s", val, err.Error()))
 			}
 			size = &s
-		case pmemParameterKeyNamespaceMode:
-			if val != pmemNamespaceModeFsdax && val != pmemNamespaceModeSector {
-				return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid namespace mode(nsmode) '%s' provided for ephemeral inline volume", val))
-			}
 		case pmemParameterKeyEraseAfter:
 			if _, err := strconv.ParseBool(val); err != nil {
 				return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("failed to parse volume attribute(%s) value(%s) of ephemeral inline volume: %s", key, val, err.Error()))

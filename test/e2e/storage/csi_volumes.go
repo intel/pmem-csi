@@ -273,7 +273,7 @@ func (m *manifestDriver) finalPatchOptions(f *framework.Framework) utils.PatchCS
 }
 
 func (m *manifestDriver) GetVolume(config *testsuites.PerTestConfig, volumeNumber int) (map[string]string, bool, bool) {
-	attributes := map[string]string{"size": m.claimSize, "nsmode": "fsdax"}
+	attributes := map[string]string{"size": m.claimSize}
 	shared := false
 	readOnly := false
 

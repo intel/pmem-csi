@@ -28,11 +28,7 @@ import (
 )
 
 const (
-	pmemParameterKeyNamespaceMode = "nsmode"
-	pmemParameterKeyEraseAfter    = "eraseafter"
-
-	pmemNamespaceModeFsdax  = "fsdax"
-	pmemNamespaceModeSector = "sector"
+	pmemParameterKeyEraseAfter = "eraseafter"
 )
 
 type nodeVolume struct {
@@ -128,7 +124,6 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 	var vol *nodeVolume
 	topology := []*csi.Topology{}
 	volumeID := ""
-	nsmode := pmemNamespaceModeFsdax
 
 	var resp *csi.CreateVolumeResponse
 
@@ -150,11 +145,6 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 
 	params := req.GetParameters()
 	if params != nil {
-		if val, ok := params[pmemParameterKeyNamespaceMode]; ok {
-			if val == pmemNamespaceModeFsdax || val == pmemNamespaceModeSector {
-				nsmode = val
-			}
-		}
 		if val, ok := params["_id"]; ok {
 			/* use master controller provided volume uid */
 			volumeID = val
@@ -213,7 +203,7 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 			// It will get rounded up by below layer to meet the alignment.
 			asked = 1
 		}
-		if err := cs.dm.CreateDevice(volumeID, uint64(asked), nsmode); err != nil {
+		if err := cs.dm.CreateDevice(volumeID, uint64(asked)); err != nil {
 			return nil, status.Errorf(codes.Internal, "Node CreateVolume: failed to create volume: %s", err.Error())
 		}
 
@@ -356,19 +346,7 @@ func (cs *nodeControllerServer) GetCapacity(ctx context.Context, req *csi.GetCap
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 
-	nsmode := "fsdax"
-	params := req.GetParameters()
-	if params != nil {
-		if mode, ok := params[pmemParameterKeyNamespaceMode]; ok {
-			nsmode = mode
-		}
-	}
-
-	if c, ok := cap[nsmode]; ok {
-		capacity = int64(c)
-	} else {
-		return nil, fmt.Errorf("Unknown namespace mode :%s", nsmode)
-	}
+	capacity = int64(cap)
 
 	return &csi.GetCapacityResponse{
 		AvailableCapacity: capacity,

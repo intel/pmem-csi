@@ -208,10 +208,6 @@ Specific arguments to pmem-ns-init
 argument name      | meaning                                                | type | range
 -------------------|--------------------------------------------------------|------|---
 -useforfsdax int   | Percentage of total to use in Fsdax mode (default 100) | int  | 0..100
--useforsector int  | Percentage of total to use in Sector mode (default 0)  | int  | 0..100
-
-Note: useforfsdax + useforsector must be <=100
-
 
 Specific arguments to pmem-vgm
 -------------------------------
