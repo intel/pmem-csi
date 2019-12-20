@@ -353,10 +353,10 @@ to applications using
 [`StorageClass
 Parameters`](https://kubernetes.io/docs/concepts/storage/storage-classes/#parameters). An
 optional `persistencyModel` parameter differentiates how the
-provisioned volume can be used.
+provisioned volume can be used:
 
-* if no `persistencyModel` parameter specified in `StorageClass` then
-  it is treated as normal Kubernetes persistent volume. In this case
+* no `persistencyModel` parameter or `persistencyModel: normal` in `StorageClass`  
+  A normal Kubernetes persistent volume. In this case
   PMEM-CSI creates PMEM volume on a node and the application that
   claims to use this volume is supposed to be scheduled onto this node
   by Kubernetes. Choosing of node is depend on StorageClass
@@ -404,7 +404,7 @@ Volume requests embedded in Pod spec are provisioned as ephemeral volumes. The v
 
 |key|meaning|optional|values|
 |---|-------|--------|-------------|
-|`size`|Size of the requested ephemeral volume|No||
+|`size`|Size of the requested ephemeral volume, binary units are supported ("1k" == 1024 bytes)|No||
 |`eraseAfter`|Clear all data after use and before<br> deleting the volume|Yes|`true` (default),<br> `false`|
 
 Check with provided [example application](deploy/kubernetes-1.15/pmem-app-ephemeral.yaml) for

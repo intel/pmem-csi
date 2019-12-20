@@ -23,20 +23,15 @@ import (
 	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/util/mount"
 
-	units "github.com/docker/go-units"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 )
 
 const (
-	// Kubernetes v1.16+ would add this option to NodePublishRequest.VolumeContext
-	// while provisioning ephemeral volume
-	volumeContextEphemeral = "csi.storage.k8s.io/ephemeral"
 	// ProvisionerIdentity is supposed to pass to NodePublish
 	// only in case of Persistent volumes that were provisioned by
 	// the driver
 	volumeProvisionerIdentity = "storage.kubernetes.io/csiProvisionerIdentity"
-	volumeContextSize         = "size"
 	defaultFilesystem         = "ext4"
 )
 
@@ -125,11 +120,13 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	mountFlags := req.GetVolumeCapability().GetMount().GetMountFlags()
 	readOnly := req.GetReadonly()
 	fsType := req.GetVolumeCapability().GetMount().GetFsType()
-	klog.V(3).Infof("NodePublishVolume request: VolID:%s targetpath:%v sourcepath:%v readonly:%v mount flags:%v fsType:%v",
-		req.GetVolumeId(), targetPath, srcPath, readOnly, mountFlags, fsType)
+	volumeContext := req.GetVolumeContext()
+	// volumeContext contains the original volume name for persistent volumes.
+	klog.V(3).Infof("NodePublishVolume request: VolID:%s targetpath:%v sourcepath:%v readonly:%v mount flags:%v fsType:%v context:%q",
+		req.GetVolumeId(), targetPath, srcPath, readOnly, mountFlags, fsType, volumeContext)
 
 	// Kubernetes v1.16+ would request ephemeral volumes via VolumeContext
-	val, ok := req.GetVolumeContext()[volumeContextEphemeral]
+	val, ok := req.GetVolumeContext()[parameterEphemeral]
 	if ok {
 		b, err := strconv.ParseBool(val)
 		if err != nil {
@@ -157,6 +154,11 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		srcPath = device.Path
 		mountFlags = append(mountFlags, "dax")
 	} else {
+		// Validate parameters. We don't actually use any of them here, but a sanity check is worthwhile anyway.
+		if _, err := parseVolumeParameters(persistentVolumeParameters, req.GetVolumeContext()); err != nil {
+			return nil, status.Error(codes.InvalidArgument, "persistent volume context: "+err.Error())
+		}
+
 		if device, err = ns.cs.dm.GetDevice(req.VolumeId); err != nil {
 			if errors.Is(err, pmdmanager.ErrDeviceNotFound) {
 				return nil, status.Errorf(codes.NotFound, "no device found with volume id %q: %v", req.VolumeId, err)
@@ -271,7 +273,15 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	}
 
 	if vol == nil {
-		return nil, status.Error(codes.NotFound, fmt.Sprintf("No volume found with volume id '%s'", req.VolumeId))
+		return nil, status.Errorf(codes.NotFound, "no volume found with volume id %q'", req.VolumeId)
+	}
+
+	parameters, err := parseVolumeParameters(nodeVolumeParameters, vol.Params)
+	if err != nil {
+		// This should never happen because PMEM-CSI itself created these parameters.
+		// But if it happens, better fail and force an admin to recover instead of
+		// potentially destroying data.
+		return nil, status.Errorf(codes.Internal, "previously stored volume parameters for volume with ID %q: %v", req.VolumeId, err)
 	}
 
 	// Check if the target path is really a mount point. If its not a mount point do nothing
@@ -282,15 +292,14 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 
 	// Unmounting the image
 	klog.V(3).Infof("NodeUnpublishVolume: unmount %s", targetPath)
-	err := ns.mounter.Unmount(targetPath)
-	if err != nil {
+	if err := ns.mounter.Unmount(targetPath); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	klog.V(5).Infof("NodeUnpublishVolume: volume id:%s targetpath:%s has been unmounted", req.VolumeId, targetPath)
 
 	os.Remove(targetPath) // nolint: gosec, errorchk
 
-	if vol.Params[pmemParameterKeyPersistencyModel] == string(pmemPersistencyModelEphemeral) {
+	if parameters.getPersistency() == persistencyEphemeral {
 		if _, err := ns.cs.DeleteVolume(ctx, &csi.DeleteVolumeRequest{VolumeId: vol.ID}); err != nil {
 			return nil, status.Error(codes.Internal, fmt.Sprintf("Failed to delete ephemeral volume %s: %s", req.VolumeId, err.Error()))
 		}
@@ -425,54 +434,30 @@ func (ns *nodeServer) NodeExpandVolume(context.Context, *csi.NodeExpandVolumeReq
 // createEphemeralDevice creates new pmem device for given req.
 // On failure it returns one of status errors.
 func (ns *nodeServer) createEphemeralDevice(ctx context.Context, req *csi.NodePublishVolumeRequest) (*pmdmanager.PmemDeviceInfo, error) {
-	var size *int64
-
-	for key, val := range req.GetVolumeContext() {
-		switch key {
-		case volumeContextSize:
-			s, err := units.FromHumanSize(val)
-			if err != nil {
-				return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("failed to parse size(%s) of ephemeral inline volume: %s", val, err.Error()))
-			}
-			size = &s
-		case pmemParameterKeyEraseAfter:
-			if _, err := strconv.ParseBool(val); err != nil {
-				return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("failed to parse volume attribute(%s) value(%s) of ephemeral inline volume: %s", key, val, err.Error()))
-			}
-		default:
-			if !strings.HasPrefix(key, "csi.storage.k8s.io/") { // System reserved attributes
-				return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("unknown volume attribute provided '%s' for ephemeral inline volume", key))
-			}
-		}
-	}
-
-	if size == nil {
-		return nil, status.Error(codes.InvalidArgument, "size not specified for ephemeral inline volume")
-	}
-
-	// Create new device
-	params := req.GetVolumeContext()
-	params[pmemParameterKeyPersistencyModel] = string(pmemPersistencyModelEphemeral)
-	createReq := &csi.CreateVolumeRequest{
-		VolumeCapabilities: []*csi.VolumeCapability{req.VolumeCapability},
-		Name:               req.VolumeId,
-		CapacityRange:      &csi.CapacityRange{RequiredBytes: *size},
-		Parameters:         params,
-	}
-
-	createResp, err := ns.cs.CreateVolume(ctx, createReq)
+	parameters, err := parseVolumeParameters(ephemeralVolumeParameters, req.GetVolumeContext())
 	if err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to create new ephemeral inline volume: %s", err.Error()))
+		return nil, status.Error(codes.InvalidArgument, "ephemeral inline volume parameters: "+err.Error())
 	}
 
-	device, err := ns.cs.dm.GetDevice(createResp.Volume.VolumeId)
+	// Create new device, using the same code that the normal CreateVolume also uses,
+	// so internally this volume will be tracked like persistent volumes.
+	volumeID, _, err := ns.cs.createVolumeInternal(ctx, parameters, req.VolumeId,
+		[]*csi.VolumeCapability{req.VolumeCapability},
+		&csi.CapacityRange{RequiredBytes: parameters.getSize()},
+	)
 	if err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("could not retrieve newly created volume with id '%s': %s", createResp.Volume.VolumeId, err.Error()))
+		// This is already a status error.
+		return nil, err
+	}
+
+	device, err := ns.cs.dm.GetDevice(volumeID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, fmt.Sprintf("ephemeral inline volume: device not found after creating volume %q: %v", volumeID, err))
 	}
 
 	// Create filesystem
 	if err := ns.provisionDevice(device, req.GetVolumeCapability().GetMount().GetFsType()); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, status.Error(codes.Internal, fmt.Sprintf("ephmeral inline volume: failed to create filesystem: %v", err))
 	}
 
 	return device, nil
