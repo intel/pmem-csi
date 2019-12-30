@@ -91,7 +91,7 @@ pipeline {
                     if command -v apt-get >/dev/null 2>&1; then \
                         sudo apt-get install procps; \
                     else \
-                        sudo yum -y install procps; \
+                        sudo dnf -y install procps; \
                     fi'
                 sh 'head -n 30 /proc/cpuinfo; echo ...; tail -n 30 /proc/cpuinfo'
                 sh "git remote set-url origin git@github.com:intel/pmem-csi.git"

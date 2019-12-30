@@ -57,7 +57,7 @@ EOF
 
     # For the sake of reproducibility, use fixed versions.
     # List generated with:
-    # for v in 1.13 1.14 1.15 1.16; do for i in kubelet kubeadm kubectl; do echo "$i-$(sudo yum --showduplicates list kubelet | grep " $v"  | sed -e 's/.* \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/' | sort -u  | tail -n 1)"; done; done
+    # for v in 1.13 1.14 1.15 1.16; do for i in kubelet kubeadm kubectl; do echo "$i-$(sudo dnf --showduplicates list kubelet | grep " $v"  | sed -e 's/.* \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/' | sort -u  | tail -n 1)"; done; done
     case ${TEST_KUBERNETES_VERSION} in
         1.13) packages+=" kubelet-1.13.12-0 kubeadm-1.13.12-0 kubectl-1.13.12-0";;
         1.14) packages+=" kubelet-1.14.10-0 kubeadm-1.14.10-0 kubectl-1.14.10-0";;
@@ -73,9 +73,9 @@ fi
 # suggests to try again after a `dnf update --refresh`, so that's what we do here for
 # a maximum of 5 attempts.
 cnt=0
-while ! yum install -y $packages; do
+while ! dnf install -y $packages; do
     if [ $cnt -ge 5 ]; then
-        echo "yum install failed repeatedly, giving up"
+        echo "dnf install failed repeatedly, giving up"
         exit 1
     fi
     cnt=$(($cnt + 1))
