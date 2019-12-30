@@ -80,9 +80,9 @@ while ! dnf install -y $packages; do
     fi
     cnt=$(($cnt + 1))
     # If it works, proceed immediately. If it fails, sleep and try again without aborting on an error.
-    if ! dnf update --refresh; then
+    if ! dnf update -y --refresh; then
         sleep 20
-        dnf update --refresh || true
+        dnf update -y --refresh || true
     fi
 done
 
