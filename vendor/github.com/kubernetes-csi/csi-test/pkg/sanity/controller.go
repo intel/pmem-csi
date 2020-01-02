@@ -114,6 +114,10 @@ var _ = DescribeSanity("Controller Service [Controller Server]", func(sc *Sanity
 	AfterEach(func() {
 		cl.DeleteVolumes()
 	})
+	count := sc.Config.IdempotentCount
+	if count == 0 {
+		count = 10
+	}
 
 	Describe("ControllerGetCapabilities", func() {
 		It("should return appropriate capabilities", func() {
@@ -1199,26 +1203,28 @@ var _ = DescribeSanity("Controller Service [Controller Server]", func(sc *Sanity
 			// ControllerPublishVolume
 			By("calling controllerpublish on that volume")
 
-			conpubvol, err := c.ControllerPublishVolume(
-				context.Background(),
-				&csi.ControllerPublishVolumeRequest{
-					VolumeId: vol.GetVolume().GetVolumeId(),
-					NodeId:   ni.GetNodeId(),
-					VolumeCapability: &csi.VolumeCapability{
-						AccessType: &csi.VolumeCapability_Mount{
-							Mount: &csi.VolumeCapability_MountVolume{},
+			for i := 0; i < count; i++ {
+				conpubvol, err := c.ControllerPublishVolume(
+					context.Background(),
+					&csi.ControllerPublishVolumeRequest{
+						VolumeId: vol.GetVolume().GetVolumeId(),
+						NodeId:   ni.GetNodeId(),
+						VolumeCapability: &csi.VolumeCapability{
+							AccessType: &csi.VolumeCapability_Mount{
+								Mount: &csi.VolumeCapability_MountVolume{},
+							},
+							AccessMode: &csi.VolumeCapability_AccessMode{
+								Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+							},
 						},
-						AccessMode: &csi.VolumeCapability_AccessMode{
-							Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
-						},
+						Readonly: false,
+						Secrets:  sc.Secrets.ControllerPublishVolumeSecret,
 					},
-					Readonly: false,
-					Secrets:  sc.Secrets.ControllerPublishVolumeSecret,
-				},
-			)
-			Expect(err).NotTo(HaveOccurred())
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(conpubvol).NotTo(BeNil())
+			}
 			cl.RegisterVolume(name, VolumeInfo{VolumeID: vol.GetVolume().GetVolumeId(), NodeID: ni.GetNodeId()})
-			Expect(conpubvol).NotTo(BeNil())
 
 			By("cleaning up unpublishing the volume")
 
