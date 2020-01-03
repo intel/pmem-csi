@@ -90,8 +90,13 @@ if $INIT_KUBERNETES; then
     # Upstream kubelet looks in /opt/cni/bin, actual files are in
     # /usr/libexec/cni from
     # containernetworking-plugins-0.8.1-1.fc30.x86_64.
-    mkdir -p /opt/cni
-    ln -s /usr/libexec/cni /opt/cni/bin
+    # There is reason why we don't create symlink /opt/cni/bin -> /usr/libexec/cni.
+    # Some CNI variants (weave) try to add binaries, which fails if bin/ is symlink
+    # We create /opt/cni/bin containing symlinks for every binary:
+    mkdir -p /opt/cni/bin
+    for i in /usr/libexec/cni/*; do
+        ln -vs $i /opt/cni/bin/
+    done
 
     # Testing may involve a Docker registry running on the build host (see
     # TEST_LOCAL_REGISTRY and TEST_PMEM_REGISTRY). We need to trust that
