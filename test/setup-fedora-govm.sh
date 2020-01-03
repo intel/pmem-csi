@@ -20,6 +20,8 @@ function error_handler(){
 }
 trap 'error_handler ${LINENO}' ERR
 
+# add own name to /etc/hosts to avoid external name lookup(s) that produce warning by kubeadm
+echo "127.0.0.1 `hostname`" >> /etc/hosts
 
 # For PMEM.
 packages+=" ndctl"
