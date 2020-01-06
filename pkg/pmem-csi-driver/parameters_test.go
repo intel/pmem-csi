@@ -11,7 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/docker/go-units"
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -21,8 +22,8 @@ func TestParameters(t *testing.T) {
 	no := false
 	cache := persistencyCache
 	foo := "foo"
-	gig := "1G"
-	gigNum := int64(1024 * 1024 * 1024)
+	gig := "1Gi"
+	gigNum := int64(1 * 1024 * 1024 * 1024)
 	name := "joe"
 
 	tests := []struct {
@@ -101,14 +102,14 @@ func TestParameters(t *testing.T) {
 				parameterEraseAfter:       "false",
 				parameterPersistencyModel: "cache",
 
-				parameterName: name,
-				"csi.storage.k8s.io/foo":  "bar",
+				parameterName:            name,
+				"csi.storage.k8s.io/foo": "bar",
 			},
 			parameters: volumeParameters{
 				cacheSize:   &five,
 				eraseAfter:  &no,
 				persistency: &cache,
-				name: &name,
+				name:        &name,
 			},
 		},
 		{
@@ -137,8 +138,8 @@ func TestParameters(t *testing.T) {
 			result := map[string]string{}
 			for key, value := range tt.stringmap {
 				if key == parameterSize {
-					bytes, _ := units.RAMInBytes(value)
-					value = fmt.Sprintf("%d", bytes)
+					quantity := resource.MustParse(value)
+					value = fmt.Sprintf("%d", quantity.Value())
 				}
 				if key != parameterVolumeID && !strings.HasPrefix(key, parameterPodInfoPrefix) {
 					result[key] = value

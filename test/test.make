@@ -100,6 +100,7 @@ RUNTIME_DEPS += sed \
 	-e 's;golang.org/x/.*;Go,https://github.com/golang/go,9051;' \
 	-e 's;k8s.io/.*\|github.com/kubernetes-csi/.*;kubernetes,https://github.com/kubernetes/kubernetes,9641;' \
 	-e 's;gopkg.in/fsnotify.*;golang-github-fsnotify-fsnotify,https://github.com/fsnotify/fsnotify;' \
+	-e 's;gopkg.in/inf.*;gopkg.in/inf,https://github.com/go-inf/inf;' \
 	-e 's;github.com/docker/go-units;go-units,https://github.com/docker/go-units,9173;' \
 	| cat |
 

@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/docker/go-units"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 type persistencyModel string
@@ -164,11 +164,11 @@ func parseVolumeParameters(origin parameterOrigin, stringmap map[string]string) 
 			u := uint(c)
 			result.cacheSize = &u
 		case parameterSize:
-			// TODO: switch to Kubernetes resource because it is more flexible and consistent.
-			s, err := units.RAMInBytes(value)
+			quantity, err := resource.ParseQuantity(value)
 			if err != nil {
 				return result, fmt.Errorf("parameter %q: failed to parse %q as int64: %v", key, value, err)
 			}
+			s := quantity.Value()
 			result.size = &s
 		case parameterEraseAfter:
 			b, err := strconv.ParseBool(value)

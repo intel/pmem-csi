@@ -404,7 +404,7 @@ Volume requests embedded in Pod spec are provisioned as ephemeral volumes. The v
 
 |key|meaning|optional|values|
 |---|-------|--------|-------------|
-|`size`|Size of the requested ephemeral volume, binary units are supported ("1k" == 1024 bytes)|No||
+|`size`|Size of the requested ephemeral volume as [Kubernetes memory string](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) ("1Mi" = 1024*1024 bytes, "1e3K = 1000000 bytes)|No||
 |`eraseAfter`|Clear all data after use and before<br> deleting the volume|Yes|`true` (default),<br> `false`|
 
 Check with provided [example application](deploy/kubernetes-1.15/pmem-app-ephemeral.yaml) for
