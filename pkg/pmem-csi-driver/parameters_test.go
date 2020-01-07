@@ -21,6 +21,7 @@ func TestParameters(t *testing.T) {
 	yes := true
 	no := false
 	cache := persistencyCache
+	normal := persistencyNormal
 	foo := "foo"
 	gig := "1Gi"
 	gigNum := int64(1 * 1024 * 1024 * 1024)
@@ -191,15 +192,32 @@ func TestParameters(t *testing.T) {
 			},
 			err: "parameter \"size\": failed to parse \"foo\" as int64: quantities must match the regular expression '^([+-]?[0-9.]+)([eEinumkKMGTP]*[-+]?[0-9]*)$'",
 		},
+
+		// Legacy state files.
+		{
+			name:   "model-none",
+			origin: nodeVolumeParameters,
+			stringmap: map[string]string{
+				parameterPersistencyModel: "none",
+			},
+			parameters: volumeParameters{
+				persistency: &normal,
+			},
+		},
 	}
 	for _, tt := range tests {
 		tt := tt
 		filteredMap := func() map[string]string {
 			result := map[string]string{}
 			for key, value := range tt.stringmap {
-				if key == parameterSize {
+				switch key {
+				case parameterSize:
 					quantity := resource.MustParse(value)
 					value = fmt.Sprintf("%d", quantity.Value())
+				case parameterPersistencyModel:
+					if value == "none" {
+						value = "normal"
+					}
 				}
 				if key != parameterVolumeID &&
 					key != parameterProvisionerID &&

@@ -157,6 +157,10 @@ func parseVolumeParameters(origin parameterOrigin, stringmap map[string]string) 
 					return result, fmt.Errorf("parameter %q: value invalid in this context: %q", key, value)
 				}
 				result.persistency = &p
+			case "none":
+				// Legacy alias from PMEM-CSI <= 0.5.0.
+				p := persistencyNormal
+				result.persistency = &p
 			default:
 				return result, fmt.Errorf("parameter %q: unknown value: %q", key, value)
 			}
