@@ -104,6 +104,7 @@ func TestParameters(t *testing.T) {
 
 				parameterName:            name,
 				"csi.storage.k8s.io/foo": "bar",
+				parameterProvisionerID:   "provisioner XYZ",
 			},
 			parameters: volumeParameters{
 				cacheSize:   &five,
@@ -130,7 +131,66 @@ func TestParameters(t *testing.T) {
 				name:        &name,
 			},
 		},
-		// TODO: more error cases
+
+		// Various parameters which are not allowed in this context.
+		{
+			name:   "invalid-parameter-create",
+			origin: createVolumeParameters,
+			stringmap: map[string]string{
+				parameterVolumeID: "volume-id-chosen-by-attacker",
+			},
+			err: "parameter \"_id\" invalid in this context",
+		},
+		{
+			name:   "invalid-parameter-create-internal",
+			origin: createVolumeInternalParameters,
+			stringmap: map[string]string{
+				parameterEphemeral: "false",
+			},
+			err: "parameter \"csi.storage.k8s.io/ephemeral\" invalid in this context",
+		},
+		{
+			name:   "invalid-ephemeral-context",
+			origin: ephemeralVolumeParameters,
+			stringmap: map[string]string{
+				parameterCacheSize: gig,
+			},
+			err: "parameter \"cacheSize\" invalid in this context",
+		},
+		{
+			name:   "invalid-persistent-context",
+			origin: persistentVolumeParameters,
+			stringmap: map[string]string{
+				"foo": "bar",
+			},
+			err: "parameter \"foo\" invalid in this context",
+		},
+		{
+			name:   "invalid-node-context",
+			origin: nodeVolumeParameters,
+			stringmap: map[string]string{
+				parameterVolumeID: "volume-id",
+			},
+			err: "parameter \"_id\" invalid in this context",
+		},
+
+		// Parse errors for size.
+		{
+			name:   "invalid-size-suffix",
+			origin: ephemeralVolumeParameters,
+			stringmap: map[string]string{
+				parameterSize: "1X",
+			},
+			err: "parameter \"size\": failed to parse \"1X\" as int64: quantities must match the regular expression '^([+-]?[0-9.]+)([eEinumkKMGTP]*[-+]?[0-9]*)$'",
+		},
+		{
+			name:   "invalid-size-string",
+			origin: ephemeralVolumeParameters,
+			stringmap: map[string]string{
+				parameterSize: "foo",
+			},
+			err: "parameter \"size\": failed to parse \"foo\" as int64: quantities must match the regular expression '^([+-]?[0-9.]+)([eEinumkKMGTP]*[-+]?[0-9]*)$'",
+		},
 	}
 	for _, tt := range tests {
 		tt := tt
@@ -141,7 +201,9 @@ func TestParameters(t *testing.T) {
 					quantity := resource.MustParse(value)
 					value = fmt.Sprintf("%d", quantity.Value())
 				}
-				if key != parameterVolumeID && !strings.HasPrefix(key, parameterPodInfoPrefix) {
+				if key != parameterVolumeID &&
+					key != parameterProvisionerID &&
+					!strings.HasPrefix(key, parameterPodInfoPrefix) {
 					result[key] = value
 				}
 			}

@@ -33,6 +33,9 @@ const (
 	// Additional, unknown parameters that are okay.
 	parameterPodInfoPrefix = "csi.storage.k8s.io/"
 
+	// Added by https://github.com/kubernetes-csi/external-provisioner/blob/feb67766f5e6af7db5c03ac0f0b16255f696c350/pkg/controller/controller.go#L584
+	parameterProvisionerID = "storage.kubernetes.io/csiProvisionerIdentity"
+
 	persistencyNormal    persistencyModel = "normal" // In releases <= 0.6.x this was called "none", but not documented.
 	persistencyCache     persistencyModel = "cache"
 	persistencyEphemeral persistencyModel = "ephemeral" // only used internally
@@ -78,7 +81,7 @@ var validParameters = map[parameterOrigin][]string{
 	// the CreateVolume parameters in the context because a future
 	// version of PMEM-CSI might need them (the current one
 	// doesn't) and add the volume name for logging purposes.
-	// Kubernetes adds pod info.
+	// Kubernetes adds pod info and provisioner ID.
 	persistentVolumeParameters: []string{
 		parameterCacheSize,
 		parameterEraseAfter,
@@ -86,6 +89,7 @@ var validParameters = map[parameterOrigin][]string{
 
 		parameterName,
 		parameterPodInfoPrefix,
+		parameterProvisionerID,
 	},
 
 	// Internally we store everything except the volume ID,
@@ -185,6 +189,7 @@ func parseVolumeParameters(origin parameterOrigin, stringmap map[string]string) 
 				p := persistencyEphemeral
 				result.persistency = &p
 			}
+		case parameterProvisionerID:
 		default:
 			if !strings.HasPrefix(key, parameterPodInfoPrefix) {
 				return result, fmt.Errorf("unknown parameter: %q", key)
