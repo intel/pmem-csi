@@ -508,7 +508,9 @@ func (ns *nodeServer) provisionDevice(device *pmdmanager.PmemDeviceInfo, fsType 
 		args = []string{"-b 4096", "-F", device.Path}
 	} else if fsType == "xfs" {
 		cmd = "mkfs.xfs"
-		args = []string{"-b", "size=4096", "-f", device.Path}
+		// reflink and DAX are mutually exclusive
+		// (http://man7.org/linux/man-pages/man8/mkfs.xfs.8.html).
+		args = []string{"-b", "size=4096", "-m", "reflink=0", "-f", device.Path}
 	} else {
 		return fmt.Errorf("Unsupported filesystem '%s'. Supported filesystems types: 'xfs', 'ext4'", fsType)
 	}
