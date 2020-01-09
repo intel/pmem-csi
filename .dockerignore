@@ -11,3 +11,4 @@
 ! vendor/**
 ! go.mod
 ! go.sum
+! operator/

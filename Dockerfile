@@ -82,13 +82,14 @@ ARG GOFLAGS=
 # image is going to be the same, to avoid unnecessary deployment
 # differences.
 RUN set -x && \
-    make VERSION=${VERSION} pmem-csi-driver${BIN_SUFFIX} pmem-vgm${BIN_SUFFIX} pmem-ns-init${BIN_SUFFIX} && \
+    make VERSION=${VERSION} pmem-csi-driver${BIN_SUFFIX} pmem-vgm${BIN_SUFFIX} pmem-ns-init${BIN_SUFFIX} pmem-csi-operator${BIN_SUFFIX} && \
     mkdir -p /usr/local/bin && \
     mv _output/pmem-csi-driver${BIN_SUFFIX} /usr/local/bin/pmem-csi-driver && \
     mv _output/pmem-vgm${BIN_SUFFIX} /usr/local/bin/pmem-vgm && \
     mv _output/pmem-ns-init${BIN_SUFFIX} /usr/local/bin/pmem-ns-init && \
+    mv _output/pmem-csi-operator${BIN_SUFFIX} /usr/local/bin/pmem-csi-operator && \
     mkdir -p /usr/local/share/package-licenses && \
-    hack/copy-modules-license.sh /usr/local/share/package-licenses ./cmd/pmem-csi-driver ./cmd/pmem-vgm ./cmd/pmem-ns-init && \
+    hack/copy-modules-license.sh /usr/local/share/package-licenses ./cmd/pmem-csi-driver ./cmd/pmem-vgm ./cmd/pmem-ns-init ./cmd/pmem-csi-operator && \
     cp /go/LICENSE /usr/local/share/package-licenses/go.LICENSE && \
     cp LICENSE /usr/local/share/package-licenses/PMEM-CSI.LICENSE
 
