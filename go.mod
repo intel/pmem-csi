@@ -6,7 +6,6 @@ require (
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/container-storage-interface/spec v1.2.0
-	github.com/docker/go-units v0.4.0
 	github.com/docker/spdystream v0.0.0-20181023171402-6480d4af844c // indirect
 	github.com/evanphx/json-patch v4.5.0+incompatible // indirect
 	github.com/gogo/protobuf v1.3.1 // indirect
@@ -27,7 +26,7 @@ require (
 	github.com/prometheus/common v0.4.1 // indirect
 	github.com/prometheus/procfs v0.0.5 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/stretchr/testify v1.4.0 // indirect
+	github.com/stretchr/testify v1.4.0
 	go.uber.org/atomic v1.4.0 // indirect
 	go.uber.org/multierr v1.2.0 // indirect
 	go.uber.org/zap v1.11.0 // indirect
@@ -42,7 +41,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/square/go-jose.v2 v2.4.0 // indirect
 	k8s.io/api v0.0.0
-	k8s.io/apimachinery v0.0.0
+	k8s.io/apimachinery v0.17.0
 	k8s.io/client-go v0.0.0
 	k8s.io/component-base v0.0.0
 	k8s.io/klog v1.0.0

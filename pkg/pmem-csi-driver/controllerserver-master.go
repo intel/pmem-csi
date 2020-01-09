@@ -33,17 +33,7 @@ const (
 	Created VolumeStatus = iota + 1
 	//Deleted volume deleted
 	Deleted
-
-	// FIXME(avalluri): Choose better naming
-	pmemParameterKeyPersistencyModel = "persistencyModel"
-	pmemParameterKeyCacheSize        = "cacheSize"
-
-	pmemPersistencyModelNone      PmemPersistencyModel = "none"
-	pmemPersistencyModelCache     PmemPersistencyModel = "cache"
-	pmemPersistencyModelEphemeral PmemPersistencyModel = "ephemeral"
 )
-
-type PmemPersistencyModel string
 
 type pmemVolume struct {
 	// VolumeID published to outside world
@@ -55,8 +45,6 @@ type pmemVolume struct {
 	// ID of nodes where the volume provisioned/attached
 	// It would be one if simple volume, else would be more than one for "cached" volume
 	nodeIDs map[string]VolumeStatus
-	// isEphemeral holds true for ephemeral volumes
-	isEphemeral bool
 }
 
 type masterController struct {
@@ -140,7 +128,6 @@ func (cs *masterController) OnNodeDeleted(ctx context.Context, node *registryser
 func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
 	var vol *pmemVolume
 	chosenNodes := map[string]VolumeStatus{}
-	ephemeral := false
 
 	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
 		klog.Errorf("invalid create volume req: %v", req)
@@ -156,6 +143,10 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 	}
 
 	asked := req.GetCapacityRange().GetRequiredBytes()
+	parameters, err := parseVolumeParameters(createVolumeParameters, req.Parameters)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 
 	outTopology := []*csi.Topology{}
 	klog.V(3).Infof("Controller CreateVolume: Name:%v required_bytes:%v limit_bytes:%v", req.Name, asked, req.GetCapacityRange().GetLimitBytes())
@@ -175,27 +166,6 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 		volumeID := hex.EncodeToString(hasher.Sum(nil))
 		klog.V(4).Infof("Controller CreateVolume: Create SHA1 hash from name:%s to form id:%s", req.Name, volumeID)
 		inTopology := []*csi.Topology{}
-		cacheCount := uint64(1)
-
-		if req.Parameters == nil {
-			req.Parameters = map[string]string{}
-		} else {
-			if val, ok := req.Parameters[pmemParameterKeyPersistencyModel]; ok {
-				volumeType := PmemPersistencyModel(val)
-				if volumeType == pmemPersistencyModelCache {
-					if val, ok := req.Parameters[pmemParameterKeyCacheSize]; ok {
-						c, err := strconv.ParseUint(val, 10, 64)
-						if err != nil {
-							klog.Warning("failed to parse '" + pmemParameterKeyCacheSize + "' parameter")
-						} else {
-							cacheCount = c
-						}
-					}
-				} else if volumeType == pmemPersistencyModelEphemeral {
-					ephemeral = true
-				}
-			}
-		}
 
 		if reqTop := req.GetAccessibilityRequirements(); reqTop != nil {
 			inTopology = reqTop.Preferred
@@ -216,10 +186,15 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 			}
 		}
 
-		// Ask all nodes to use existing volume id
-		req.Parameters["_id"] = volumeID
+		// Sent required parameters (and only those) plus the volume ID chosen by us.
+		parameters.volumeID = &volumeID
+		req.Parameters = parameters.toVolumeContext()
+		numVolumes := uint(1)
+		if parameters.getPersistency() == persistencyCache {
+			numVolumes = parameters.getCacheSize()
+		}
 		for _, top := range inTopology {
-			if cacheCount == 0 {
+			if numVolumes == 0 {
 				break
 			}
 			node := top.Segments[PmemDriverTopologyKey]
@@ -237,11 +212,9 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 				klog.Warningf("failed to create volume name:%s id:%s on %s: %s", node, req.Name, volumeID, err.Error())
 				continue
 			}
-			cacheCount = cacheCount - 1
+			numVolumes = numVolumes - 1
 			chosenNodes[node] = Created
 		}
-
-		delete(req.Parameters, "_id")
 
 		if len(chosenNodes) == 0 {
 			return nil, status.Error(codes.Unavailable, fmt.Sprintf("No node found with %v capacity", asked))
@@ -250,11 +223,10 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 		klog.V(3).Infof("Chosen nodes: %v", chosenNodes)
 
 		vol = &pmemVolume{
-			id:          volumeID,
-			name:        req.Name,
-			size:        asked,
-			nodeIDs:     chosenNodes,
-			isEphemeral: ephemeral,
+			id:      volumeID,
+			name:    req.Name,
+			size:    asked,
+			nodeIDs: chosenNodes,
 		}
 		cs.mutex.Lock()
 		defer cs.mutex.Unlock()
@@ -270,12 +242,17 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 		})
 	}
 
+	// Volume ID and name are not the same. Store the original
+	// name in the volume context for logging purposes.
+	name := req.GetName()
+	parameters.name = &name
+
 	return &csi.CreateVolumeResponse{
 		Volume: &csi.Volume{
 			VolumeId:           vol.id,
 			CapacityBytes:      asked,
 			AccessibleTopology: outTopology,
-			VolumeContext:      req.Parameters,
+			VolumeContext:      parameters.toVolumeContext(),
 		},
 	}, nil
 }
@@ -370,10 +347,7 @@ func (cs *masterController) ListVolumes(ctx context.Context, req *csi.ListVolume
 	// Copy from map into array for pagination.
 	vols := make([]*pmemVolume, 0, len(cs.pmemVolumes))
 	for _, vol := range cs.pmemVolumes {
-		// ListVolumes shall only return persistent volumes
-		if !vol.isEphemeral {
-			vols = append(vols, vol)
-		}
+		vols = append(vols, vol)
 	}
 
 	// Code originally copied from https://github.com/kubernetes-csi/csi-test/blob/f14e3d32125274e0c3a3a5df380e1f89ff7c132b/mock/service/controller.go#L309-L365

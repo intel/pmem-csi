@@ -8,7 +8,6 @@ github.com/coreos/go-systemd;go systemd;Apache License 2.0
 github.com/coreos/pkg;go utility packages;Apache License 2.0
 github.com/davecgh/go-spew;go-spew;ISC License
 github.com/docker/distribution;docker-distribution;Apache License 2.0
-github.com/docker/go-units;go-units;Apache License 2.0
 github.com/docker/spdystream;spdystream;Apache License 2.0
 github.com/evanphx/json-patch;Go-json-patch;BSD 3-clause "New" or "Revised" License
 github.com/fsnotify/fsnotify;File system notifications for Go;BSD 3-Clause "New" or "Revised" License
