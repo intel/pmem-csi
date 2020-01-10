@@ -615,7 +615,7 @@ For example, to deploy for production with LVM device mode onto Kubernetes 1.14,
 ```
 
 These variants were generated with
-`[kustomize](https://github.com/kubernetes-sigs/kustomize)`.
+[`kustomize`](https://github.com/kubernetes-sigs/kustomize).
 `kubectl` >= 1.14 includes some support for that. The sub-directories
 of `deploy/kubernetes-<kubernetes version>` can be used as bases
 for `kubectl kustomize`. For example:
