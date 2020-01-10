@@ -23,33 +23,35 @@ Furthermore, this file is based on the following code published by Intel under A
 /*
 Package imagefile contains code to create a file with the following content:
 
-	.-----------.----------.---------------.-----------.
-	| 0 - 512 B | 4 - 8 Kb |  2M - 2M+512B |    4M     |
-	|-----------+----------+---------------+-----------+
-	|   MBR #1  |   DAX    |    MBR #2     |    FS     |
-	'-----------'----------'---------------'-----------+
-	      |          |      ^      |        ^
-	      |          '-data-'      '--------'
-	      |                                 |
-	      '--------rootfs-partition---------'
+	.-----------.----------.---------------.
+	| 0 - 512 B | 4 - 8 Kb |  2M - ...     |
+	|-----------+----------+---------------+
+	|   MBR #1  |   DAX    |  FS           |
+	'-----------'----------'---------------'
+	      |         |      ^
+	      |         '-data-'
+	      |                |
+	      '--fs-partition--'
 
-                    ^          ^               ^
-          daxHeaderOffset      |               |
-                         daxHeaderSize         |
-                                          HeaderSize
+                    ^          ^
+          daxHeaderOffset      |
+                           HeaderSize
 
 
 MBR: Master boot record.
-DAX: Metadata required by the NVDIMM driver to enable DAX in the guest [1][2] (struct nd_pfn_sb).
+DAX: Metadata required by the NVDIMM driver to enable DAX in the guest (struct nd_pfn_sb).
 FS: partition that contains a filesystem.
 
-Kernels and hypervisors that support DAX/NVDIMM read the MBR #2, otherwise MBR #1 is read.
-The /dev/pmem0 device starts at the MBR which is used.
+The MBR is useful for working with the image file:
+- the `file` utility uses it to determine what the file contains
+- when binding the entire file to /dev/loop0, /dev/loop0p1 will be
+  the file system (beware that partprobe /dev/loop0 might be needed);
+  alternatively one could bind the file system directly by specifying an offset
 
 When such a file is created on a dax-capable filesystem, then it can
 be used as backing store for a [QEMU nvdimm
 device](https://github.com/qemu/qemu/blob/master/docs/nvdimm.txt) such
-that the guest kernel provides a /dev/pmem0p1 (the FS partition above)
+that the guest kernel provides a /dev/pmem0 (the FS partition above)
 which can be mounted with -odax. For full dax semantic, the QEMU
 device configuration must use the 'pmem' and 'share' flags.
 */
@@ -192,18 +194,17 @@ const (
 	// (https://github.com/torvalds/linux/blob/2187f215ebaac73ddbd814696d7c7fa34f0c3de0/drivers/nvdimm/pfn_devs.c#L438-L596).
 	daxHeaderOffset = 4 * KiB
 
-	// Start of MBR#2.
-	// Chosen so that we have enough space before it for MBR #1 and the DAX metadata,
-	// doesn't really have to be aligned.
-	daxHeaderSize = DaxAlignment
-
-	// Total size of the MBR + DAX data before the actual partition.
-	// This has to be aligned relative to MBR#2, which is at daxHeaderSize,
-	// for huge pages to work inside a VM.
-	HeaderSize = daxHeaderSize + DaxAlignment
+	// Start of the file system.
+	// Chosen so that we have enough space before it for MBR #1 and the DAX metadata.
+	HeaderSize = DaxAlignment
 
 	// Block size used for the filesystem. ext4 only supports dax with 4KiB blocks.
 	BlockSize = 4 * KiB
+
+	// /dev/pmem0 will have some fake disk geometry attached to it.
+	// We have to make the final device size a multiple of the fake
+	// head * track... even if the actual filesystem is smaller.
+	DiskAlignment = DaxAlignment * 512
 )
 
 // Create writes a complete image file of a certain total size.
@@ -265,16 +266,10 @@ func Create(filename string, size Bytes, fs FsType) error {
 	}
 	defer os.RemoveAll(tmp)
 	mbr1 := filepath.Join(tmp, "mbr1")
-	mbr2 := filepath.Join(tmp, "mbr2")
 	fsimage := filepath.Join(tmp, "fsimage")
 
 	// This is for the full image file.
 	if err := writeMBR(mbr1, fs, HeaderSize, size); err != nil {
-		return err
-	}
-
-	// This is for the image file minus the dax header.
-	if err := writeMBR(mbr2, fs, DaxAlignment, size-daxHeaderSize); err != nil {
 		return err
 	}
 
@@ -311,10 +306,7 @@ func Create(filename string, size Bytes, fs FsType) error {
 	if _, err := file.Seek(int64(daxHeaderOffset), os.SEEK_SET); err != nil {
 		return err
 	}
-	if _, err := file.Write(nsdax(uint(daxHeaderSize), uint(DaxAlignment))); err != nil {
-		return err
-	}
-	if err := dd(mbr2, filename, true, daxHeaderSize); err != nil {
+	if _, err := file.Write(nsdax(uint(HeaderSize), uint(DaxAlignment))); err != nil {
 		return err
 	}
 	if err := dd(fsimage, filename, true, HeaderSize); err != nil {

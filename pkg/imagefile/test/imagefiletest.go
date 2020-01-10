@@ -145,10 +145,9 @@ func testImageFile(t TInterface, fs imagefile.FsType, size imagefile.Bytes, expe
 		fsReadableForm = "ext2/ext3"
 	}
 	assert.Equal(t,
-		fmt.Sprintf("SUCCESS: fstype=%s partition_size=%d partition_start=%d block_size=%d",
+		fmt.Sprintf("SUCCESS: fstype=%s partition_size=%d block_size=%d",
 			fsReadableForm,
-			size-imagefile.HeaderSize,
-			imagefile.DaxAlignment,
+			fi.Size()-int64(imagefile.HeaderSize),
 			imagefile.BlockSize),
 		success, "filesystem attributes")
 }

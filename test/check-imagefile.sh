@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Produces an image file for QEMU in a tmp directory, then
-# checks that QEMU comes up with a /dev/pmem0p1 device.
+# checks that QEMU comes up with a /dev/pmem0 device.
 
 TEST_DIRECTORY=${TEST_DIRECTORY:-$(dirname $(readlink -f $0))}
 source ${TEST_CONFIG:-${TEST_DIRECTORY}/test-config.sh}
@@ -126,13 +126,12 @@ start_vm () {
 result=
 test_nvdimm () {
     ssh $SSH_ARGS ${CLOUD_USER}@${IP} sudo mkdir -p /mnt || die "cannot created /mnt"
-    if ! ssh $SSH_ARGS ${CLOUD_USER}@${IP} sudo mount -odax /dev/pmem0p1 /mnt; then
+    if ! ssh $SSH_ARGS ${CLOUD_USER}@${IP} sudo mount -odax /dev/pmem0 /mnt; then
         ssh $SSH_ARGS ${CLOUD_USER}@${IP} sudo dmesg
-        die "cannot mount /dev/pmem0p1 with -odax"
+        die "cannot mount /dev/pmem0 with -odax"
     fi
     result="fstype=$(ssh $SSH_ARGS ${CLOUD_USER}@${IP} stat --file-system -c %T /mnt)"
-    result+=" partition_size=$(($(ssh $SSH_ARGS ${CLOUD_USER}@${IP} cat /sys/class/block/pmem0p1/size) * 512))"
-    result+=" partition_start=$(($(ssh $SSH_ARGS ${CLOUD_USER}@${IP} cat /sys/class/block/pmem0p1/start) * 512))"
+    result+=" partition_size=$(($(ssh $SSH_ARGS ${CLOUD_USER}@${IP} cat /sys/class/block/pmem0/size) * 512))"
     result+=" block_size=$(ssh $SSH_ARGS ${CLOUD_USER}@${IP} stat --file-system -c %s /mnt)"
 }
 
