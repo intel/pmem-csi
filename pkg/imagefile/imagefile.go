@@ -293,7 +293,10 @@ func Create(filename string, size Bytes, fs FsType) error {
 	case Ext4:
 		args = append(args, "-b", fmt.Sprintf("%d", BlockSize))
 	case Xfs:
-		args = append(args, "-b", fmt.Sprintf("size=%d", BlockSize))
+		args = append(args,
+			"-b", fmt.Sprintf("size=%d", BlockSize),
+			"-m", "reflink=0",
+		)
 	}
 	args = append(args, fsimage)
 	cmd := exec.Command(args[0], args[1:]...)
