@@ -56,7 +56,7 @@ case ${TEST_DISTRO} in
         else
             # Either cloud.img or cloudguest.img is fine, should have the same content.
             CLOUD_IMAGE=${CLOUD_IMAGE:-$(\
-                       curl -s https://download.clearlinux.org/image/latest-images |
+                       curl -s https://download.clearlinux.org/image/latest-images.json |
                            awk '/cloud.img|cloudguest.img/ {print $0}' |
                            head -n1)}
         fi
@@ -510,7 +510,8 @@ if init_workdir &&
    create_vms &&
    NO_PROXY=$(extend_no_proxy) &&
    init_pmem_regions &&
-   init_kubernetes_cluster; then
+   init_kubernetes_cluster &&
+   ( [ $TEST_CRI = docker ] || ${TEST_DIRECTORY}/setup-kata-containers.sh ); then
     FAILED=false
 else
     exit 1

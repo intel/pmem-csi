@@ -8,6 +8,8 @@
     - [Get source code](#get-source-code)
     - [Run PMEM-CSI on Kubernetes](#run-pmem-csi-on-kubernetes)
       - [Expose persistent and cache volumes to applications](#expose-persistent-and-cache-volumes-to-applications)
+      - [Kata Containers support](#kata-containers-support)
+      - [Ephemeral inline volumes](#ephemeral-inline-volumes)
       - [Raw block volumes](#raw-block-volumes)
       - [Enable scheduler extensions](#enable-scheduler-extensions)
 - [Filing issues and contributing](#filing-issues-and-contributing)
@@ -381,12 +383,72 @@ Check with the provided
 * A node is only chosen the first time a pod starts. After that it will always restart
   on that node, because that is where the persistent volume was created.
 
-Volume requests embedded in Pod spec are provisioned as ephemeral volumes. The volume request could use below fields as [`volumeAttributes`](https://kubernetes.io/docs/concepts/storage/volumes/#csi):
+### Kata Containers support
+
+[Kata Containers support](design.md#kata-containers-support) gets enabled via
+the `kataContainers` storage class parameter. It accepts the following
+values:
+* `true/1/t/TRUE`  
+  Create the filesystem inside a partition inside a file, try to mount
+  on the host through a loop device with `-o dax` but proceed without
+  `-o dax` when the kernel does not support that. Currently Linux up
+  to and including 5.4 do not support it. In other words, on the host
+  such volumes are usable, but only without DAX. Inside Kata
+  Containers, DAX works.
+* `false/0/f/FALSE` (default)  
+  Create the filesystem directly on the volume.
+
+[Raw block volumes](#raw-block-volumes) are only supported with
+`kataContainers: false`. Attempts to create them with `kataContainers:
+true` are rejected.
+
+At the moment (= Kata Containers 1.11.0-rc0), only Kata Containers
+with QEMU enable the special support for such volumes. Without QEMU or
+with older releases of Kata Containers, the volume is still usable
+through the normal remote filesystem support (9p or virtio-fs). Support
+for Cloud Hypervisor is [in
+progress](https://github.com/kata-containers/runtime/issues/2575).
+
+With Kata Containers for QEMU, the VM must be configured appropriately
+to allow adding the PMEM volumes to their address space. This can be
+done globally by setting the `memory_offset` in the
+[`configuration-qemu.toml`
+file](https://github.com/kata-containers/runtime/blob/ee985a608015d81772901c1d9999190495fc9a0a/cli/config/configuration-qemu.toml.in#L86-L91)
+or per-pod by setting the
+[`io.katacontainers.config.hypervisor.memory_offset`
+label](https://github.com/kata-containers/documentation/blob/master/how-to/how-to-set-sandbox-config-kata.md#hypervisor-options)
+in the pod meta data. In both cases, the value has to be large enough
+for all PMEM volumes used by the pod, otherwise pod creation will fail
+with an error similar to this:
+
+```
+Error: container create failed: QMP command failed: not enough space, currently 0x8000000 in use of total space for memory devices 0x3c100000
+```
+
+The examples for usage of Kata Containers [with
+ephemeral](../deploy/common/pmem-kata-app-ephemeral.yaml) and
+[persistent](../deploy/common/pmem-kata-app.yaml) volumes use the pod
+label. They assume that the `kata-qemu` runtime class [is
+installed](https://github.com/kata-containers/packaging/tree/1.11.0-rc0/kata-deploy#run-a-sample-workload).
+
+For the QEMU test cluster,
+[`setup-kata-containers.sh`](../test/setup-kata-containers.sh) can be
+used to install Kata Containers. However, this currently only works on
+Clear Linux because on Fedora, the Docker container runtime is used
+and Kata Containers does not support that one.
+
+
+### Ephemeral inline volumes
+
+Volume requests [embedded in the pod spec]() are provisioned as
+ephemeral volumes. The volume request could use below fields as
+[`volumeAttributes`](https://kubernetes.io/docs/concepts/storage/volumes/#csi):
 
 |key|meaning|optional|values|
 |---|-------|--------|-------------|
 |`size`|Size of the requested ephemeral volume as [Kubernetes memory string](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) ("1Mi" = 1024*1024 bytes, "1e3K = 1000000 bytes)|No||
 |`eraseAfter`|Clear all data after use and before<br> deleting the volume|Yes|`true` (default),<br> `false`|
+|`kataContainers`|Prepare volume for use in Kata Containers.|Yes|`false/0/f/FALSE` (default),<br> `true/1/t/TRUE`|
 
 Check with provided [example application](/deploy/kubernetes-1.15/pmem-app-ephemeral.yaml) for
 ephemeral volume usage.

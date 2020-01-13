@@ -133,6 +133,11 @@ fi
 # to use the Kubernetes version that ships with it.
 : ${TEST_KUBERNETES_VERSION:=1.18}
 
+# If non-empty, the version of Kata Containers which is to be installed
+# in the Kubernetes cluster. Installation is done with
+# https://hub.docker.com/r/katadocker/kata-deploy
+: ${TEST_KATA_CONTAINERS_VERSION:=1.11.0-rc0}
+
 # Kubernetes node port number
 # (https://kubernetes.io/docs/concepts/services-networking/service/#nodeport)
 # that is going to be used by kube-scheduler to reach the scheduler

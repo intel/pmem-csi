@@ -162,6 +162,11 @@ spec:
           mountPath: /dev
         - name: pmem-state-dir
           mountPath: /var/lib/pmem-csi.intel.com
+          # Needed for Kata Containers: we mount the PMEM volume inside our
+          # state dir and want that to be visible also on the host, because
+          # the host will need access to the image file that we create inside
+          # that mounted fs.
+          mountPropagation: Bidirectional
       - name: driver-registrar
         imagePullPolicy: Always
         image: quay.io/k8scsi/csi-node-driver-registrar:v1.X.Y

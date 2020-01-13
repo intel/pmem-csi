@@ -314,6 +314,7 @@ spec:
         - mountPath: /dev
           name: dev-dir
         - mountPath: /var/lib/pmem-csi.intel.com
+          mountPropagation: Bidirectional
           name: pmem-state-dir
       - args:
         - -v=3
