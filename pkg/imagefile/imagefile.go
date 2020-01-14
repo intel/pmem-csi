@@ -163,7 +163,9 @@ package imagefile
 import "C"
 
 import (
+	"errors"
 	"fmt"
+	"golang.org/x/sys/unix"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -215,20 +217,16 @@ const (
 // for the size of that partition. A multiple of BlockSize
 // should be safe.
 //
-// The resulting file will have "size" bytes in use, but the nominal
-// size may be larger to accomodate aligment requirements when
-// creating a nvdimm device for QEMU. The extra bytes at the end
-// are not allocated and never should be read or written because
-// the partition ends before them.
+// The resulting file will have "size" bytes in use. If bytes is zero,
+// then the image file will be made as large as possible.
 //
 // The result will be sparse, i.e. empty parts are not actually
 // written yet, but they will be allocated, so there is no risk
 // later on that attempting to write fails due to lack of space.
 func Create(filename string, size Bytes, fs FsType) error {
-	if size <= HeaderSize {
+	if size != 0 && size <= HeaderSize {
 		return fmt.Errorf("invalid image file size %d, must be larger than HeaderSize=%d", size, HeaderSize)
 	}
-	fsSize := size - HeaderSize
 
 	dir, err := os.Open(filepath.Dir(filename))
 	if err != nil {
@@ -251,12 +249,11 @@ func Create(filename string, size Bytes, fs FsType) error {
 	defer file.Close()
 
 	// Enlarge the file and ensure that we really have enough space for it.
-	if err := file.Truncate(int64(size)); err != nil {
-		return fmt.Errorf("resize %q to %d: %w", filename, size, err)
+	size, err = allocateFile(file, size)
+	if err != nil {
+		return err
 	}
-	if err := syscall.Fallocate(int(file.Fd()), 0, 0, int64(size)); err != nil {
-		return fmt.Errorf("fallocate %q size %d: %w", filename, size, err)
-	}
+	fsSize := size - HeaderSize
 
 	// We write MBRs and rootfs into temporary files, then copy into the
 	// final image file at the end.
@@ -337,6 +334,53 @@ func Create(filename string, size Bytes, fs FsType) error {
 
 	success = true
 	return nil
+}
+
+func allocateFile(file *os.File, size Bytes) (Bytes, error) {
+	if size != 0 {
+		if err := file.Truncate(int64(size)); err != nil {
+			return 0, fmt.Errorf("resize %q to %d: %w", file.Name(), size, err)
+		}
+		if err := unix.Fallocate(int(file.Fd()), 0, 0, int64(size)); err != nil {
+			return 0, fmt.Errorf("fallocate %q size %d: %w", file.Name(), size, err)
+		}
+		return size, nil
+	}
+
+	// Determine how much space is left on the volume of the image file.
+	var stat unix.Statfs_t
+	if err := unix.Fstatfs(int(file.Fd()), &stat); err != nil {
+		return 0, fmt.Errorf("unexpected error while checking the volume statistics for %q: %v", file.Name(), err)
+	}
+
+	// We have to try how large the file can become.
+	blockOverhead := uint64(1)
+	for blockOverhead < stat.Bfree {
+		size := Bytes(int64(stat.Bfree-blockOverhead) * stat.Bsize)
+		size = (size + DaxAlignment - 1) / DaxAlignment * DaxAlignment
+		if size == 0 {
+			break
+		}
+		size, err := allocateFile(file, Bytes(size))
+		if err == nil {
+			return size, nil
+		}
+		var errno syscall.Errno
+		if !errors.As(err, &errno) || errno != syscall.ENOSPC {
+			return 0, fmt.Errorf("allocate %d bytes for file %q: %v", size, file.Name(), err)
+		}
+
+		// Double the overhead while it is still small, later just increment with a fixed amount.
+		// This way we don't make the overhead at most 64 * block size larger than it really
+		// has to be while not trying too often (which we would do when incrementing the overhead
+		// by just one from the start).
+		if blockOverhead < 64 {
+			blockOverhead *= 2
+		} else {
+			blockOverhead += 64
+		}
+	}
+	return 0, fmt.Errorf("volume of %d blocks (block size %d bytes) too small for image file", stat.Bfree, stat.Bsize)
 }
 
 // nsdax prepares 4KiB of DAX metadata.
