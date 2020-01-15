@@ -21,12 +21,7 @@ import (
 // Add creates a new Deployment Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
-}
-
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileDeployment{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return add(mgr, NewReconcileDeployment(mgr.GetClient(), mgr.GetScheme()))
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -61,7 +56,7 @@ type ReconcileDeployment struct {
 	deployments map[types.NamespacedName]*pmemcsiv1alpha1.Deployment
 }
 
-func newReconcileDeployment(c client.Client, s *runtime.Scheme) reconcile.Reconciler {
+func NewReconcileDeployment(c client.Client, s *runtime.Scheme) reconcile.Reconciler {
 	return &ReconcileDeployment{
 		client:      c,
 		scheme:      s,
