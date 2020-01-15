@@ -202,4 +202,4 @@ $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT)): test-kustomize-%: _work/kustom
 # invocation.
 .PHONY: check-go-version-%
 check-go-version-%:
-	hack/verify-go-version.sh "$*"
+	@ hack/verify-go-version.sh "$*"
