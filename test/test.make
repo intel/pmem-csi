@@ -137,6 +137,9 @@ TEST_E2E_FOCUS =
 # i.e. usually just junit_01.xml.
 TEST_E2E_REPORT_DIR=
 
+# Additional e2e.test arguments, like -ginkgo.failFast.
+TEST_E2E_ARGS =
+
 empty:=
 space:= $(empty) $(empty)
 
@@ -160,6 +163,7 @@ RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 	$(GO) test -count=1 -timeout 0 -v ./test/e2e \
                 -ginkgo.skip='$(subst $(space),|,$(strip $(TEST_E2E_SKIP_ALL)))' \
                 -ginkgo.focus='$(subst $(space),|,$(strip $(TEST_E2E_FOCUS)))' \
+	        $(TEST_E2E_ARGS) \
                 -report-dir=$(TEST_E2E_REPORT_DIR)
 test_e2e: start $(RUN_TEST_DEPS)
 	$(RUN_E2E)
