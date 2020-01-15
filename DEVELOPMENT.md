@@ -9,6 +9,7 @@ Table of Contents
 - [Release management](#release-management)
     - [Branching](#branching)
     - [Tagging](#tagging)
+    - [Release checklist](#release-checklist)
 - [APIs](#apis)
     - [CSI API](#csi-api)
     - [Network ports](#network-ports)
@@ -143,6 +144,24 @@ triggers a rebuild of the `devel` branch, but does not yet produce a
 release: the actual image only gets pushed when there is a tag that
 corresponds to the version embedded in the source code. The
 Jenkinsfile ensures that.
+
+Release checklist
+-----------------
+
+* Create a new `release-x.y` branch.
+* Run `hack/update-clear-linux-base.sh`.
+* Run `hack/set-version.sh vx.y.z` and commit the modified files.
+* Push to `origin`.
+* [Create a draft
+  release](https://github.com/intel/pmem-csi/releases/new) for that
+  new branch, including a change log gathered from new commits.
+* Review the change log.
+* Tag `vx.y.z` manually and push to origin.
+* Wait for a successful CI [build for that
+  tag](https://cloudnative-k8sci.southcentralus.cloudapp.azure.com/view/pmem-csi/job/pmem-csi/view/tags/)
+  and promotion of the resulting images to [Docker
+  Hub](https://hub.docker.com/r/intel/pmem-csi-driver/tags?page=1&ordering=last_updated).
+* Publish the GitHub release.
 
 APIs
 ============

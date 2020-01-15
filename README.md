@@ -54,6 +54,13 @@ The PMEM-CSI driver follows the [CSI
 specification](https://github.com/container-storage-interface/spec) by
 listening for API requests and provisioning volumes accordingly.
 
+The [v0.6.0
+release](https://github.com/intel/pmem-csi/releases/tag/v0.6.0) is the
+latest feature release and is [getting
+updated](./DEVELOPMENT.md#release-management) with newer base images
+regularly and with bug fixes as needed, so the latest [v0.6.x
+tag](https://github.com/intel/pmem-csi/releases/tag/v0.6.0) is what
+should be used. Older releases are no longer supported.
 
 ## Design
 
