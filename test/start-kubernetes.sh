@@ -468,6 +468,21 @@ function cleanup() (
         govm list
         echo "Docker status:"
         docker ps
+        # Pick one restarting container from the current govm cluster and dump its log, if one exists.
+        # We only need one log, other containers are probably failing for the same reason.
+        restarting=$(for i in ${NODES}; do
+                        docker ps --filter status=restarting --filter name=govm.$(id -u -n).$i --format '{{.ID}}'
+                    done | head -n 1)
+        if [ "$restarting" ]; then
+            name=$(docker ps --filter id=$restarting --format '${{.Names}}')
+            echo "Docker container $name is restarting, here's why (docker log):"
+            docker logs $restarting | sed -e "s/^/$name: /"
+        else
+            # Fall back to master node if nothing was restarting.
+            name=govm.$(id -u -n).${NODES[0]}
+            echo "Docker log for $name:"
+            docker logs $name | sed -e "s/^/$name: /"
+        fi
         for vm in $(govm list -f '{{select (filterRegexp . "Name" "^'$(node_filter ${NODES[@]})'$") "Name"}}'); do
             govm remove "$vm"
         done
