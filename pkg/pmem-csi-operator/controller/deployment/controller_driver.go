@@ -2,6 +2,7 @@ package deployment
 
 import (
 	"fmt"
+	"strings"
 
 	pmemcsiv1alpha1 "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/utils"
@@ -11,6 +12,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog"
 )
 
@@ -27,11 +29,26 @@ type PmemCSIDriver struct {
 func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 	klog.Infof("Deployment name: %q, state: %q", d.ObjectMeta.Name, d.Status.Phase)
 	switch d.Status.Phase {
-	case pmemcsiv1alpha1.DeploymentPhaseNew: /* New Deployment */
+	case pmemcsiv1alpha1.DeploymentPhaseNew, pmemcsiv1alpha1.DeploymentPhaseFailed:
+		for _, dep := range r.deployments {
+			if dep.Spec.DriverName == d.Spec.DriverName {
+				d.Status.Phase = pmemcsiv1alpha1.DeploymentPhaseFailed
+				return true, fmt.Errorf("driver name %q is already taken by deployment %q in namespace %q",
+					d.Spec.DriverName, dep.Name, dep.Namespace)
+			}
+		}
+
+		nsn := types.NamespacedName{
+			Name:      d.Name,
+			Namespace: d.Namespace,
+		}
+		r.deployments[nsn] = d.Deployment
+
 		if err := d.initiateCertificateRequests(r); err != nil {
 			return true, err
 		}
 		d.Status.Phase = pmemcsiv1alpha1.DeploymentPhasePending
+
 	case pmemcsiv1alpha1.DeploymentPhasePending:
 		ok, err := d.ensureCertificates(r)
 		if err != nil {
@@ -40,6 +57,7 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 		if ok {
 			d.Status.Phase = pmemcsiv1alpha1.DeploymentPhaseInitializing
 		}
+
 	case pmemcsiv1alpha1.DeploymentPhaseInitializing:
 		if err := d.deployObjects(r); err != nil {
 			return true, err
@@ -90,7 +108,7 @@ func (d *PmemCSIDriver) ensureCertificates(r *ReconcileDeployment) (bool, error)
 				APIVersion: "v1",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      csrName + "-secret",
+				Name:      d.Name + "-" + csrName,
 				Namespace: d.Namespace,
 			},
 		}
@@ -99,17 +117,18 @@ func (d *PmemCSIDriver) ensureCertificates(r *ReconcileDeployment) (bool, error)
 			return false, err
 		}
 		if len(secret.Data[corev1.TLSCertKey]) == 0 {
+			csrObjectName := d.Name + "-" + d.Namespace + "-" + csrName
 			csr := &certv1beta1.CertificateSigningRequest{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "certificates.k8s.io",
 					APIVersion: "v1beta1",
 				},
 				ObjectMeta: metav1.ObjectMeta{
-					Name: csrName,
+					Name: csrObjectName,
 				},
 			}
 			if err := r.Get(csr); err != nil {
-				klog.Errorf("Failed to get certificate signing request %q: %v", csrName, err)
+				klog.Errorf("Failed to get certificate signing request %q: %v", csrObjectName, err)
 				return false, err
 			}
 			approved := false
@@ -178,7 +197,9 @@ func (d *PmemCSIDriver) getCSR(csr *utils.CSR) *certv1beta1.CertificateSigningRe
 			APIVersion: "v1beta1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: csr.CommonName(),
+			// CSR is a cluster level object, hence use deployment name and namespace as
+			// object name to make it unique
+			Name: d.Name + "-" + d.Namespace + "-" + csr.CommonName(),
 			OwnerReferences: []metav1.OwnerReference{
 				d.getOwnerReference(),
 			},
@@ -201,7 +222,7 @@ func (d *PmemCSIDriver) getSecret(csr *utils.CSR) *corev1.Secret {
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      csr.CommonName() + "-secret",
+			Name:      d.Name + "-" + csr.CommonName(),
 			Namespace: d.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				d.getOwnerReference(),
@@ -223,7 +244,7 @@ func (d *PmemCSIDriver) getControllerService() *corev1.Service {
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pmem-csi-controller",
+			Name:      d.Name,
 			Namespace: d.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				d.getOwnerReference(),
@@ -250,7 +271,7 @@ func (d *PmemCSIDriver) getControllerServiceAccount() *corev1.ServiceAccount {
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pmem-csi-controller",
+			Name:      d.Name,
 			Namespace: d.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				d.getOwnerReference(),
@@ -266,7 +287,7 @@ func (d *PmemCSIDriver) getControllerProvisionerRole() *rbacv1.Role {
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pmem-csi-provisioner-role",
+			Name:      d.Name,
 			Namespace: d.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				d.getOwnerReference(),
@@ -298,7 +319,7 @@ func (d *PmemCSIDriver) getControllerProvisionerRoleBinding() *rbacv1.RoleBindin
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pmem-csi-provisioner-role-binding",
+			Name:      d.Name,
 			Namespace: d.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				d.getOwnerReference(),
@@ -307,14 +328,14 @@ func (d *PmemCSIDriver) getControllerProvisionerRoleBinding() *rbacv1.RoleBindin
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "pmem-csi-controller",
+				Name:      d.Name,
 				Namespace: d.Namespace,
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "Role",
-			Name:     "pmem-csi-provisioner-role",
+			Name:     d.Name,
 		},
 	}
 }
@@ -326,7 +347,9 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRole() *rbacv1.ClusterRol
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "pmem-csi-provisioner-cluster-role",
+			// ClusterRole is a cluster level object, hence use deployment name and namespace as
+			// object name to make it unique
+			Name: d.Name + "-" + d.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				d.getOwnerReference(),
 			},
@@ -392,7 +415,9 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRoleBinding() *rbacv1.Clu
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "pmem-csi-provisioner-cluster-role-binding",
+			// ClusterRoleBinding is a cluster level object, hence use deployment
+			// name and namespace as object name to make it unique
+			Name: d.Name + "-" + d.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				d.getOwnerReference(),
 			},
@@ -400,14 +425,14 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRoleBinding() *rbacv1.Clu
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "pmem-csi-controller",
+				Name:      d.Name,
 				Namespace: d.Namespace,
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     "pmem-csi-provisioner-cluster-role",
+			Name:     d.Name + "-" + d.Namespace,
 		},
 	}
 }
@@ -420,7 +445,7 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pmem-csi-controller",
+			Name:      d.Name + "-controller",
 			Namespace: d.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				d.getOwnerReference(),
@@ -433,7 +458,7 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 					"app": "pmem-csi-controller",
 				},
 			},
-			ServiceName: "pmem-csi-controller",
+			ServiceName: d.Name,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
@@ -441,7 +466,7 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 					},
 				},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: "pmem-csi-controller",
+					ServiceAccountName: d.Name,
 					Containers: []corev1.Container{
 						d.getControllerContainer(),
 						d.getProvisionerContainer(),
@@ -457,7 +482,7 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 							Name: "registry-cert",
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: "pmem-registry-secret",
+									SecretName: d.Name + "-pmem-registry",
 									Items: []corev1.KeyToPath{
 										{
 											Key:  "tls.crt",
@@ -488,7 +513,7 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "pmem-csi-node",
+			Name:      d.Name + "-node",
 			Namespace: d.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				d.getOwnerReference(),
@@ -574,7 +599,7 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 							Name: "controller-cert",
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: "pmem-node-controller-secret",
+									SecretName: d.Name + "-pmem-node-controller",
 									Items: []corev1.KeyToPath{
 										{
 											Key:  "tls.crt",
@@ -621,6 +646,10 @@ func (d *PmemCSIDriver) getControllerArgs() []string {
 }
 
 func (d *PmemCSIDriver) getNodeDriverArgs() []string {
+	// Form service port environment variable from Service name
+	// In our case Service name is deployment name
+	// Ref :- k8s.io/kubernetes/pkg/kubelet/envvars/envvars.go
+	pmemServiceEndpointEnv := fmt.Sprintf(strings.ToUpper(strings.Replace(d.Name, "-", "_", -1))+"_PORT_%d_TCP", controllerServicePort)
 	args := []string{
 		fmt.Sprintf("-deviceManager=%s", d.Spec.DeviceMode),
 		fmt.Sprintf("-v=%d", d.Spec.LogLevel),
@@ -629,7 +658,7 @@ func (d *PmemCSIDriver) getNodeDriverArgs() []string {
 		"-endpoint=unix:///var/lib/" + d.Spec.DriverName + "/csi.sock",
 		"-nodeid=$(KUBE_NODE_NAME)",
 		fmt.Sprintf("-controllerEndpoint=tcp://$(KUBE_POD_IP):%d", nodeControllerPort),
-		fmt.Sprintf("-registryEndpoint=$(PMEM_CSI_CONTROLLER_PORT_%d_TCP)", controllerServicePort),
+		fmt.Sprintf("-registryEndpoint=" + "$(" + pmemServiceEndpointEnv + ")"),
 		"-caFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
 		"-statePath=/var/lib/" + d.Spec.DriverName,
 		"-certFile=/certs/pmem-csi-node-controller.crt",
