@@ -2,18 +2,13 @@ package deployment
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	pmemcsiv1alpha1 "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
-	certv1beta1 "k8s.io/api/certificates/v1beta1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	certclient "k8s.io/client-go/kubernetes/typed/certificates/v1beta1"
-	"k8s.io/client-go/rest"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -31,11 +26,7 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileDeployment{
-		client: mgr.GetClient(),
-		scheme: mgr.GetScheme(),
-		config: mgr.GetConfig(),
-	}
+	return &ReconcileDeployment{client: mgr.GetClient(), scheme: mgr.GetScheme()}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -43,22 +34,14 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
 	c, err := controller.New("deployment-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
+		klog.Errorf("Deployment.Add: error: %v", err)
 		return err
 	}
 
 	// Watch for changes to primary resource Deployment
 	err = c.Watch(&source.Kind{Type: &pmemcsiv1alpha1.Deployment{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return err
-	}
-
-	// TODO(user): Modify this to be the types you create that are owned by the primary resource
-	// Watch for changes to secondary resource Pods and requeue the owner Deployment
-	err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &pmemcsiv1alpha1.Deployment{},
-	})
-	if err != nil {
+		klog.Errorf("Deployment.Add: watch error: %v", err)
 		return err
 	}
 
@@ -74,14 +57,15 @@ type ReconcileDeployment struct {
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
 	scheme *runtime.Scheme
-	config *rest.Config
+	// known deployments
+	deployments map[types.NamespacedName]*pmemcsiv1alpha1.Deployment
 }
 
-func newReconcileDeployment(c client.Client, s *runtime.Scheme, cfg *rest.Config) reconcile.Reconciler {
+func newReconcileDeployment(c client.Client, s *runtime.Scheme) reconcile.Reconciler {
 	return &ReconcileDeployment{
-		client: c,
-		scheme: s,
-		config: cfg,
+		client:      c,
+		scheme:      s,
+		deployments: map[types.NamespacedName]*pmemcsiv1alpha1.Deployment{},
 	}
 }
 
@@ -91,39 +75,57 @@ func newReconcileDeployment(c client.Client, s *runtime.Scheme, cfg *rest.Config
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+	var requeue bool
+	var err error
+
+	requeueDelay := 1 * time.Minute
+	requeueDelayOnError := 2 * time.Minute
+
 	// Fetch the Deployment instance
 	deployment := &pmemcsiv1alpha1.Deployment{}
-	err := r.client.Get(context.TODO(), request.NamespacedName, deployment)
+	err = r.client.Get(context.TODO(), request.NamespacedName, deployment)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
-			// Return and don't requeue
+			// Owned objects are automatically garbage collected.
+			// Remove the reference from our records
+			for driverName, d := range r.deployments {
+				if d.Name == request.Name && d.Namespace == request.Namespace {
+					delete(r.deployments, driverName)
+				}
+			}
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		return reconcile.Result{}, err
+		return reconcile.Result{Requeue: requeue, RequeueAfter: requeueDelayOnError}, err
 	}
 
 	deployment.EnsureDefaults()
 	d := &PmemCSIDriver{deployment}
 
-	requeue, err := d.Reconcile(r)
-	if err == nil {
-		// update status
+	requeue, err = d.Reconcile(r)
+
+	// update status
+	defer func() {
+		klog.Infof("Updating deployment status....")
 		if statusErr := r.client.Status().Update(context.TODO(), d.Deployment); statusErr != nil {
-			err = fmt.Errorf("failed to update deployment status: %v", statusErr)
-			requeue = true
+			klog.Warningf("failed to update status %q for deployment %q: %v",
+				d.Deployment.Status.Phase, d.Name, statusErr)
 		}
-	}
+	}()
 
 	klog.Infof("Requeue: %t, error: %v", requeue, err)
 
 	if !requeue {
-		return reconcile.Result{}, nil
+		return reconcile.Result{}, err
 	}
 
-	return reconcile.Result{Requeue: requeue, RequeueAfter: time.Minute}, err
+	delay := requeueDelay
+	if err != nil {
+		delay = requeueDelayOnError
+	}
+
+	return reconcile.Result{Requeue: requeue, RequeueAfter: delay}, err
 }
 
 //Get tries to retrives the Kubernetes objects
@@ -164,16 +166,4 @@ func (r *ReconcileDeployment) Update(obj runtime.Object) error {
 // Delete delete existing Kubernetes object
 func (r *ReconcileDeployment) Delete(obj runtime.Object) error {
 	return r.client.Delete(context.TODO(), obj)
-}
-
-func (r *ReconcileDeployment) ApproveCSR(csr *certv1beta1.CertificateSigningRequest) error {
-	// Default client interface provided by controller-runtime
-	// does not support certificates API, so we have to create
-	// appropriate client object
-	certClient, err := certclient.NewForConfig(r.config)
-	if err != nil {
-		return err
-	}
-	_, err = certClient.CertificateSigningRequests().UpdateApproval(csr)
-	return err
 }
