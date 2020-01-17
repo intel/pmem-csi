@@ -23,12 +23,9 @@ CLOUD="${CLOUD:-true}"
 FLAVOR="${FLAVOR:-medium}" # actual memory size and CPUs selected below
 SSH_KEY="${SSH_KEY:-${RESOURCES_DIRECTORY}/id_rsa}"
 SSH_PUBLIC_KEY="${SSH_KEY}.pub"
-# -cpu host enables nested virtualization (required for Kata Containers).
-# The build host must have the kvm_intel module loaded with
-# nested=1 (see https://wiki.archlinux.org/index.php/KVM#Nested_virtualization).
 KVM_CPU_OPTS="${KVM_CPU_OPTS:-\
  -m ${TEST_NORMAL_MEM_SIZE}M,slots=${TEST_MEM_SLOTS},maxmem=$((${TEST_NORMAL_MEM_SIZE} + ${TEST_PMEM_MEM_SIZE}))M -smp ${TEST_NUM_CPUS} \
- -cpu host \
+ -cpu ${TEST_QEMU_CPU} \
  -machine pc,accel=kvm,nvdimm=on}"
 EXTRA_QEMU_OPTS="${EXTRA_QWEMU_OPTS:-\
  -object memory-backend-file,id=mem1,share=${TEST_PMEM_SHARE},\
