@@ -23,12 +23,9 @@ CLOUD="${CLOUD:-true}"
 FLAVOR="${FLAVOR:-medium}" # actual memory size and CPUs selected below
 SSH_KEY="${SSH_KEY:-${RESOURCES_DIRECTORY}/id_rsa}"
 SSH_PUBLIC_KEY="${SSH_KEY}.pub"
-# -cpu host enables nested virtualization (required for Kata Containers).
-# The build host must have the kvm_intel module loaded with
-# nested=1 (see https://wiki.archlinux.org/index.php/KVM#Nested_virtualization).
 KVM_CPU_OPTS="${KVM_CPU_OPTS:-\
  -m ${TEST_NORMAL_MEM_SIZE}M,slots=${TEST_MEM_SLOTS},maxmem=$((${TEST_NORMAL_MEM_SIZE} + ${TEST_PMEM_MEM_SIZE}))M -smp ${TEST_NUM_CPUS} \
- -cpu host \
+ -cpu ${TEST_QEMU_CPU} \
  -machine pc,accel=kvm,nvdimm=on}"
 EXTRA_QEMU_OPTS="${EXTRA_QWEMU_OPTS:-\
  -object memory-backend-file,id=mem1,share=${TEST_PMEM_SHARE},\
@@ -436,6 +433,21 @@ function cleanup() (
         govm list
         echo "Docker status:"
         docker ps
+        # Pick one restarting container from the current govm cluster and dump its log, if one exists.
+        # We only need one log, other containers are probably failing for the same reason.
+        restarting=$(for i in ${NODES}; do
+                        docker ps --filter status=restarting --filter name=govm.$(id -u -n).$i --format '{{.ID}}'
+                    done | head -n 1)
+        if [ "$restarting" ]; then
+            name=$(docker ps --filter id=$restarting --format '${{.Names}}')
+            echo "Docker container $name is restarting, here's why (docker log):"
+            docker logs $restarting | sed -e "s/^/$name: /"
+        else
+            # Fall back to master node if nothing was restarting.
+            name=govm.$(id -u -n).${NODES[0]}
+            echo "Docker log for $name:"
+            docker logs $name | sed -e "s/^/$name: /"
+        fi
         for vm in $(govm list -f '{{select (filterRegexp . "Name" "^'$(node_filter ${NODES[@]})'$") "Name"}}'); do
             govm remove "$vm"
         done
