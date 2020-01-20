@@ -442,6 +442,13 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
         on the host and thus QEMU can access it, privileges (for mount)
         and shared mount propagation are needed.
 
+        The default QEMU cpu enables nested virtualization with "-cpu
+        host".  However, that fails on some Azure machines
+        (`qemu-system-x86_64: error: failed to set MSR 0x48b to
+        0x1582e00000000`,
+        https://www.mail-archive.com/qemu-devel@nongnu.org/msg665051.html),
+        so for now we disable VMX with -vmx.
+
         TODO: test in parallel (on different nodes? single node didn't work,
         https://github.com/intel/pmem-CSI/pull/309#issuecomment-504659383)
         */
@@ -457,6 +464,7 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                   -e TEST_DEVICEMODE=${deviceMode} \
                   -e TEST_DEPLOYMENTMODE=${deploymentMode} \
                   -e TEST_CHECK_SIGNED_FILES=false \
+                  -e TEST_QEMU_CPU=host,-vmx \
                   -e TEST_DISTRO=${distro} \
                   -e TEST_DISTRO_VERSION=${distroVersion} \
                   -e TEST_KUBERNETES_VERSION=${kubernetesVersion} \

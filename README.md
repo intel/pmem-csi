@@ -622,7 +622,7 @@ For example, to deploy for production with LVM device mode onto Kubernetes 1.14,
 ```
 
 These variants were generated with
-`[kustomize](https://github.com/kubernetes-sigs/kustomize)`.
+[`kustomize`](https://github.com/kubernetes-sigs/kustomize).
 `kubectl` >= 1.14 includes some support for that. The sub-directories
 of `deploy/kubernetes-<kubernetes version>` can be used as bases
 for `kubectl kustomize`. For example:
@@ -982,6 +982,9 @@ Information about specific usages of PMEM-CSI are described in separate document
 ## Communication and contribution
 
 Report a bug by [filing a new issue](https://github.com/intel/pmem-csi/issues).
+
+Before making your first contribution, be sure to read the [development documentation](DEVELOPMENT.md)
+for guidance on code quality and branches.
 
 Contribute by [opening a pull request](https://github.com/intel/pmem-csi/pulls).
 
