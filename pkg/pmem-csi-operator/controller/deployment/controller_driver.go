@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"strings"
 
-	pmemcsiv1alpha1 "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/utils"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog"
 )
 
@@ -22,44 +21,156 @@ const (
 )
 
 type PmemCSIDriver struct {
-	*pmemcsiv1alpha1.Deployment
+	*api.Deployment
+}
+
+// checkIfNameClash check if d.Spec.DriverName is not clashing with any of the
+// known deploments by the reconciler. If clash found reutrns the reference of
+// that deployment else nil.
+func (d *PmemCSIDriver) checkIfNameClash(r *ReconcileDeployment) *api.Deployment {
+	for _, dep := range r.deployments {
+		if dep.Spec.DriverName == d.Spec.DriverName &&
+			dep.GetNamespacedName() != d.GetNamespacedName() {
+			return dep
+		}
+	}
+
+	return nil
 }
 
 // Reconcile reconciles the driver deployment
 func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
-	klog.Infof("Deployment name: %q, state: %q", d.ObjectMeta.Name, d.Status.Phase)
-	switch d.Status.Phase {
-	case pmemcsiv1alpha1.DeploymentPhaseNew, pmemcsiv1alpha1.DeploymentPhaseFailed:
-		for _, dep := range r.deployments {
-			if dep.Spec.DriverName == d.Spec.DriverName {
-				d.Status.Phase = pmemcsiv1alpha1.DeploymentPhaseFailed
-				return true, fmt.Errorf("driver name %q is already taken by deployment %q in namespace %q",
-					d.Spec.DriverName, dep.Name, dep.Namespace)
-			}
-		}
+	nsn := d.GetNamespacedName()
+	changes := map[api.DeploymentChange]struct{}{}
+	oldDeployment, ok := r.deployments[nsn]
+	if ok {
+		changes = d.Compare(oldDeployment)
+		// We should not trust the deployment status, as it might be tampered.
+		// Use existing objects Status instead.
+		oldDeployment.Status.DeepCopyInto(&d.Status)
+	}
 
-		nsn := types.NamespacedName{
-			Name:      d.Name,
-			Namespace: d.Namespace,
+	klog.Infof("Deployment: %q, state: %q", nsn, d.Status.Phase)
+
+	switch d.Status.Phase {
+	// We treat same both new and failed deployments
+	case api.DeploymentPhaseNew, api.DeploymentPhaseFailed:
+		if dep := d.checkIfNameClash(r); dep != nil {
+			d.Status.Phase = api.DeploymentPhaseFailed
+			return true, fmt.Errorf("driver name %q is already taken by deployment %q",
+				d.Spec.DriverName, dep.GetNamespacedName())
 		}
 		r.deployments[nsn] = d.Deployment
 
 		if err := d.initDeploymentSecrests(r); err != nil {
-			d.Status.Phase = pmemcsiv1alpha1.DeploymentPhaseFailed
+			d.Status.Phase = api.DeploymentPhaseFailed
 			return true, err
 		}
-		d.Status.Phase = pmemcsiv1alpha1.DeploymentPhaseInitializing
-	case pmemcsiv1alpha1.DeploymentPhaseInitializing:
+		d.Status.Phase = api.DeploymentPhaseInitializing
+	case api.DeploymentPhaseInitializing:
+		// There might be change in deployment name
+		// Reject if any incompatible name change
+		if _, ok := changes[api.DriverName]; ok {
+			if dep := d.checkIfNameClash(r); dep != nil {
+				// Revert Deployment object
+				d.Spec.DriverName = oldDeployment.Spec.DriverName
+				if err := r.Update(d.Deployment); err != nil {
+					return true, err
+				}
+				return true, fmt.Errorf("driver name %q is already taken by deployment %q",
+					d.Spec.DriverName, dep.GetNamespacedName())
+			}
+		}
+
+		// Update local cache so that we can catch if any change in deployment
+		r.deployments[nsn] = d.Deployment
+
 		if err := d.deployObjects(r); err != nil {
 			return true, err
 		}
 
-		d.Status.Phase = pmemcsiv1alpha1.DeploymentPhaseRunning
+		d.Status.Phase = api.DeploymentPhaseRunning
 		// Deployment successfull, so no more reconcile needed for this deployment
 		return false, nil
-
+	case api.DeploymentPhaseRunning:
+		requeue, err := d.reconcileDeploymentChanges(r, oldDeployment, changes)
+		if err == nil {
+			// If everything ok, update local cache
+			r.deployments[nsn] = d.Deployment
+		}
+		return requeue, err
 	}
 	return true, nil
+}
+
+func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, existing *api.Deployment, changes map[api.DeploymentChange]struct{}) (bool, error) {
+	if len(changes) == 0 {
+		klog.Infof("No changes detected in deployment")
+		return false, nil
+	}
+
+	klog.Infof("Changes detected: %v", changes)
+
+	updateController := false
+	updateNodeDriver := false
+	updateDeployment := false
+	requeue := false
+	var err error
+
+	for c := range changes {
+		switch c {
+		case api.ControllerResources, api.ProvisionerImage:
+			updateController = true
+		case api.NodeResources, api.NodeRegistrarImage:
+			updateNodeDriver = true
+		case api.DriverImage, api.LogLevel, api.PullPolicy:
+			updateController = true
+			updateNodeDriver = true
+		case api.DriverName:
+			if dep := d.checkIfNameClash(r); dep != nil {
+				err = fmt.Errorf("cannot update deployment(%q) driver name as name %q is already taken by deployment %q",
+					d.GetNamespacedName(), d.Spec.DriverName, dep.GetNamespacedName())
+
+				// DriverName cannot be updated, revert from deployment spec
+				d.Spec.DriverName = existing.Spec.DriverName
+				updateDeployment = true
+			} else {
+				updateController = true
+				updateNodeDriver = true
+			}
+		case api.DriverMode:
+			d.Spec.DeviceMode = existing.Spec.DeviceMode
+			updateDeployment = true
+			err = fmt.Errorf("changing %q of a running deployment %q is not allowed", c, d.Name)
+		}
+	}
+
+	// Reject changes which cannot be applied
+	// by updating the deployment object
+	if updateDeployment {
+		klog.Infof("Updating deployment %q", d.GetNamespacedName())
+		if e := r.Update(d.Deployment); e != nil {
+			requeue = true
+			err = e
+		}
+	}
+
+	if updateController {
+		klog.Infof("Updating controller driver for deployment %q", d.GetNamespacedName())
+		if e := r.Update(d.getControllerStatefulSet()); e != nil {
+			requeue = true
+			err = e
+		}
+	}
+	if updateNodeDriver {
+		klog.Infof("Updating node driver for deployment %q", d.GetNamespacedName())
+		if e := r.Update(d.getNodeDaemonSet()); err != nil {
+			requeue = true
+			err = e
+		}
+	}
+
+	return requeue, err
 }
 
 func (d *PmemCSIDriver) initDeploymentSecrests(r *ReconcileDeployment) error {
