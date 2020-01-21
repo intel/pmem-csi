@@ -5,6 +5,7 @@ import (
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // DeviceMode type decleration for allowed driver device managers
@@ -258,6 +259,13 @@ func (d *Deployment) Compare(other *Deployment) map[DeploymentChange]struct{} {
 	}
 
 	return changes
+}
+
+func (d *Deployment) GetNamespacedName() types.NamespacedName {
+	return types.NamespacedName{
+		Name:      d.Name,
+		Namespace: d.Namespace,
+	}
 }
 
 func GetDeploymentCRDSchema() *apiextensions.JSONSchemaProps {
