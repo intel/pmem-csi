@@ -12,6 +12,7 @@ import (
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/kubernetes/scheme"
 )
@@ -105,6 +106,85 @@ spec:
 			nrs := d.Spec.NodeResources.Requests
 			Expect(nrs.Cpu().Cmp(resource.MustParse("2000m"))).Should(BeZero(), "node driver 'cpu' resource mismatch")
 			Expect(nrs.Memory().Cmp(resource.MustParse("100Mi"))).Should(BeZero(), "node driver 'cpu' resource mismatch")
+		})
+
+		It("compare two deployments", func() {
+			d1 := &api.Deployment{}
+			d2 := &api.Deployment{}
+			changes := map[api.DeploymentChange]struct{}{}
+			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "two empty deployments should be equal")
+
+			d1.EnsureDefaults()
+			d2.EnsureDefaults()
+			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "two default deployments should be equaval")
+
+			d2.Spec.DriverName = "new-driver"
+			changes[api.DriverName] = struct{}{}
+			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "expected to detect change in driver name")
+
+			d2.Spec.DeviceMode = api.DeviceModeDirect
+			changes[api.DriverMode] = struct{}{}
+			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "expected to detect chagned device mode")
+
+			d2.Spec.LogLevel = d2.Spec.LogLevel + 1
+			changes[api.LogLevel] = struct{}{}
+			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "expected to detect change in log level")
+
+			d2.Spec.Image = "new-driver-image"
+			changes[api.DriverImage] = struct{}{}
+			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "expected to detect change in driver image")
+
+			d2.Spec.PullPolicy = corev1.PullNever
+			changes[api.PullPolicy] = struct{}{}
+			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "expected to detect change in image pull policy")
+
+			d2.Spec.ProvisionerImage = "new-provisioner-image"
+			changes[api.ProvisionerImage] = struct{}{}
+			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "expected to detect change in provisioner image")
+
+			d2.Spec.NodeRegistrarImage = "new-node-driver-registrar-image"
+			changes[api.NodeRegistrarImage] = struct{}{}
+			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "expected to detect change in node registrar image")
+
+			d2.Spec.ControllerResources = &corev1.ResourceRequirements{}
+			changes[api.ControllerResources] = struct{}{}
+			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "expected to detect change in controller resources")
+
+			d2.Spec.ControllerResources = &corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("10m"),
+					corev1.ResourceMemory: resource.MustParse("5Gi"),
+				},
+			}
+			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "expected to detect change in controller resource requests")
+
+			d2.Spec.ControllerResources = &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("10m"),
+					corev1.ResourceMemory: resource.MustParse("5Gi"),
+				},
+			}
+			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "expected to detect change in controller resource limits")
+
+			d2.Spec.NodeResources = &corev1.ResourceRequirements{}
+			changes[api.NodeResources] = struct{}{}
+			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "expected to detect change in node resources")
+
+			d2.Spec.NodeResources = &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("10m"),
+					corev1.ResourceMemory: resource.MustParse("5Gi"),
+				},
+			}
+			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "expected to detect change in node resource limits")
+
+			d2.Spec.NodeResources = &corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("10m"),
+					corev1.ResourceMemory: resource.MustParse("5Gi"),
+				},
+			}
+			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "expected to detect change in node resource requests")
 		})
 
 		It("should have valid json schema", func() {

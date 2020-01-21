@@ -141,6 +141,35 @@ const (
 	DeploymentPhaseFailed DeploymentPhase = "Failed"
 )
 
+// DeploymentChange type declaration for changes between two deployments
+type DeploymentChange int
+
+const (
+	DriverName DeploymentChange = iota + 1
+	DriverMode
+	DriverImage
+	PullPolicy
+	LogLevel
+	ProvisionerImage
+	NodeRegistrarImage
+	ControllerResources
+	NodeResources
+)
+
+func (c DeploymentChange) String() string {
+	return map[DeploymentChange]string{
+		DriverName:          "driverName",
+		DriverMode:          "deviceMode",
+		DriverImage:         "image",
+		PullPolicy:          "imagePullPolicy",
+		LogLevel:            "logLevel",
+		ProvisionerImage:    "provisionerImage",
+		NodeRegistrarImage:  "nodeRegistrarImage",
+		ControllerResources: "controllerResources",
+		NodeResources:       "nodeResources",
+	}[c]
+}
+
 // EnsureDefaults make sure that the deployment object has all defaults set properly
 func (d *Deployment) EnsureDefaults() {
 	if d.Spec.DriverName == "" {
@@ -189,6 +218,46 @@ func (d *Deployment) EnsureDefaults() {
 			},
 		}
 	}
+}
+
+// Compare compares 'other' deployment spec with current deployment and returns
+// the all the changes. If len(changes) == 0 represents both deployment spec
+// are equivalent.
+func (d *Deployment) Compare(other *Deployment) map[DeploymentChange]struct{} {
+	changes := map[DeploymentChange]struct{}{}
+	if d == nil || other == nil {
+		return changes
+	}
+
+	if d.Spec.DriverName != other.Spec.DriverName {
+		changes[DriverName] = struct{}{}
+	}
+	if d.Spec.DeviceMode != other.Spec.DeviceMode {
+		changes[DriverMode] = struct{}{}
+	}
+	if d.Spec.Image != other.Spec.Image {
+		changes[DriverImage] = struct{}{}
+	}
+	if d.Spec.PullPolicy != other.Spec.PullPolicy {
+		changes[PullPolicy] = struct{}{}
+	}
+	if d.Spec.LogLevel != other.Spec.LogLevel {
+		changes[LogLevel] = struct{}{}
+	}
+	if d.Spec.ProvisionerImage != other.Spec.ProvisionerImage {
+		changes[ProvisionerImage] = struct{}{}
+	}
+	if d.Spec.NodeRegistrarImage != other.Spec.NodeRegistrarImage {
+		changes[NodeRegistrarImage] = struct{}{}
+	}
+	if !compareResources(d.Spec.ControllerResources, other.Spec.ControllerResources) {
+		changes[ControllerResources] = struct{}{}
+	}
+	if !compareResources(d.Spec.NodeResources, other.Spec.NodeResources) {
+		changes[NodeResources] = struct{}{}
+	}
+
+	return changes
 }
 
 func GetDeploymentCRDSchema() *apiextensions.JSONSchemaProps {
@@ -302,4 +371,24 @@ func getResourceRequestsSchema() apiextensions.JSONSchemaProps {
 			},
 		},
 	}
+}
+
+func compareResources(rsA *corev1.ResourceRequirements, rsB *corev1.ResourceRequirements) bool {
+	if rsA == nil {
+		return rsB == nil
+	}
+	if rsB == nil {
+		return false
+	}
+	if rsA == nil && rsB != nil {
+		return false
+	}
+	if !rsA.Limits.Cpu().Equal(*rsB.Limits.Cpu()) ||
+		!rsA.Limits.Memory().Equal(*rsB.Limits.Memory()) ||
+		!rsA.Requests.Cpu().Equal(*rsB.Requests.Cpu()) ||
+		!rsA.Requests.Memory().Equal(*rsB.Requests.Memory()) {
+		return false
+	}
+
+	return true
 }
