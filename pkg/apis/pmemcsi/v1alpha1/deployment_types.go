@@ -7,6 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package v1alpha1
 
 import (
+	"reflect"
+
 	corev1 "k8s.io/api/core/v1"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -62,6 +64,8 @@ type DeploymentSpec struct {
 	// CACert encoded root certificate of the CA by which the registry and node controller certificates are signed
 	// If not provided operator uses a self-signed CA certificate
 	CACert []byte `json:"caCert,omitempty"`
+	// NodeSelector node labels to use for selection of driver node
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 }
 
 // DeploymentStatus defines the observed state of Deployment
@@ -134,6 +138,11 @@ const (
 	DefaultDeviceMode = DeviceModeLVM
 )
 
+var (
+	// DefaultNodeSelector default node label used for node selection
+	DefaultNodeSelector = map[string]string{"storage": "pmem"}
+)
+
 // DeploymentPhase represents the status phase of a driver deployment
 type DeploymentPhase string
 
@@ -161,6 +170,7 @@ const (
 	NodeRegistrarImage
 	ControllerResources
 	NodeResources
+	NodeSelector
 )
 
 func (c DeploymentChange) String() string {
@@ -174,6 +184,7 @@ func (c DeploymentChange) String() string {
 		NodeRegistrarImage:  "nodeRegistrarImage",
 		ControllerResources: "controllerResources",
 		NodeResources:       "nodeResources",
+		NodeSelector:        "nodeSelector",
 	}[c]
 }
 
@@ -225,6 +236,10 @@ func (d *Deployment) EnsureDefaults() {
 			},
 		}
 	}
+
+	if d.Spec.NodeSelector == nil {
+		d.Spec.NodeSelector = DefaultNodeSelector
+	}
 }
 
 // Compare compares 'other' deployment spec with current deployment and returns
@@ -262,6 +277,10 @@ func (d *Deployment) Compare(other *Deployment) map[DeploymentChange]struct{} {
 	}
 	if !compareResources(d.Spec.NodeResources, other.Spec.NodeResources) {
 		changes[NodeResources] = struct{}{}
+	}
+
+	if !reflect.DeepEqual(d.Spec.NodeSelector, other.Spec.NodeSelector) {
+		changes[NodeSelector] = struct{}{}
 	}
 
 	return changes
@@ -341,6 +360,16 @@ func GetDeploymentCRDSchema() *apiextensions.JSONSchemaProps {
 					"nodeControllerKey": apiextensions.JSONSchemaProps{
 						Type:        "string",
 						Description: "Encoded private key used for generating pmem-node-controller certificate",
+					},
+					"nodeSelector": apiextensions.JSONSchemaProps{
+						Type:        "object",
+						Description: "Set of node labels to use to select a node to run PMEM-CSI driver",
+						AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{
+							Allows: true,
+							Schema: &apiextensions.JSONSchemaProps{
+								Type: "string",
+							},
+						},
 					},
 				},
 			},

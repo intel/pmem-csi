@@ -148,6 +148,8 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 			d.Spec.DeviceMode = existing.Spec.DeviceMode
 			updateDeployment = true
 			err = fmt.Errorf("changing %q of a running deployment %q is not allowed", c, d.Name)
+		case api.NodeSelector:
+			updateNodeDriver = true
 		}
 	}
 
@@ -619,10 +621,8 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 					},
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector: map[string]string{
-						"storage": "pmem",
-					},
-					HostNetwork: true,
+					NodeSelector: d.Spec.NodeSelector,
+					HostNetwork:  true,
 					Containers: []corev1.Container{
 						d.getNodeDriverContainer(),
 						d.getNodeRegistrarContainer(),

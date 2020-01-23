@@ -185,6 +185,12 @@ spec:
 				},
 			}
 			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "expected to detect change in node resource requests")
+
+			d2.Spec.NodeSelector = map[string]string{
+				"new-label": "value",
+			}
+			changes[api.NodeSelector] = struct{}{}
+			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "expected to detect change in node selector")
 		})
 
 		It("should have valid json schema", func() {
