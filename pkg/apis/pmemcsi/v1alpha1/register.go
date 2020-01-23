@@ -1,3 +1,9 @@
+/*
+Copyright 2020 The Kubernetes Authors.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
 // NOTE: Boilerplate only.  Ignore this file.
 
 // Package v1alpha1 contains API Schema definitions for the pmem-csi v1alpha1 API group
