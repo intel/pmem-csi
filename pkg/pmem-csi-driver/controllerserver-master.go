@@ -62,6 +62,13 @@ var volumeMutex = keymutex.NewHashed(-1)
 func GenerateVolumeID(caller string, name string) string {
 	// VolumeID is hashed from Volume Name.
 	// Hashing guarantees same ID for repeated requests.
+	// Why do we generate new VolumeID via hashing?
+	// We can not use Name directly as VolumeID because of at least 2 reasons:
+	// 1. allowed max. Name length by CSI spec is 128 chars, which does not fit
+	// into LVM volume name (for that we use VolumeID), where groupname+volumename
+	// must fit into 126 chars.
+	// Ndctl namespace name is even shorter, it can be 63 chars long.
+	// 2. CSI spec. allows characters in Name that are not allowed in LVM names.
 	hasher := sha1.New()
 	hasher.Write([]byte(name))
 	id := hex.EncodeToString(hasher.Sum(nil))
