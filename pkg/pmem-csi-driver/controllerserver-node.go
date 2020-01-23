@@ -7,8 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -179,14 +177,9 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 	// getVolumeByName.
 	parameters.name = &volumeName
 
-	// VolumeID is hashed from Volume Name if not provided by master controller.
-	// Hashing guarantees same ID for repeated requests.
 	volumeID = parameters.getVolumeID()
 	if volumeID == "" {
-		hasher := sha1.New()
-		hasher.Write([]byte(volumeName))
-		volumeID = hex.EncodeToString(hasher.Sum(nil))
-		klog.V(4).Infof("Node CreateVolume: create SHA1 hash from name:%q to form id:%s", volumeName, volumeID)
+		volumeID = GenerateVolumeID("Node CreateVolume", volumeName)
 	}
 
 	asked := capacity.GetRequiredBytes()

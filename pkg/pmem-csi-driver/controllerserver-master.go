@@ -59,6 +59,16 @@ var _ PmemService = &masterController{}
 var _ registryserver.RegistryListener = &masterController{}
 var volumeMutex = keymutex.NewHashed(-1)
 
+func GenerateVolumeID(caller string, name string) string {
+	// VolumeID is hashed from Volume Name.
+	// Hashing guarantees same ID for repeated requests.
+	hasher := sha1.New()
+	hasher.Write([]byte(name))
+	id := hex.EncodeToString(hasher.Sum(nil))
+	klog.V(4).Infof("%s: Create SHA1 hash from name:%s to form id:%s", caller, name, id)
+	return id
+}
+
 func NewMasterControllerServer(rs *registryserver.RegistryServer) *masterController {
 	serverCaps := []csi.ControllerServiceCapability_RPC_Type{
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
@@ -159,12 +169,7 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 
 		chosenNodes = vol.nodeIDs
 	} else {
-		// VolumeID is hashed from Volume Name.
-		// Hashing guarantees same ID for repeated requests.
-		hasher := sha1.New()
-		hasher.Write([]byte(req.Name))
-		volumeID := hex.EncodeToString(hasher.Sum(nil))
-		klog.V(4).Infof("Controller CreateVolume: Create SHA1 hash from name:%s to form id:%s", req.Name, volumeID)
+		volumeID := GenerateVolumeID("Controller CreateVolume", req.Name)
 		inTopology := []*csi.Topology{}
 
 		if reqTop := req.GetAccessibilityRequirements(); reqTop != nil {
