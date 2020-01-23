@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math"
@@ -69,10 +69,10 @@ func GenerateVolumeID(caller string, name string) string {
 	// must fit into 126 chars.
 	// Ndctl namespace name is even shorter, it can be 63 chars long.
 	// 2. CSI spec. allows characters in Name that are not allowed in LVM names.
-	hasher := sha1.New()
+	hasher := sha256.New224()
 	hasher.Write([]byte(name))
 	id := hex.EncodeToString(hasher.Sum(nil))
-	klog.V(4).Infof("%s: Create SHA1 hash from name:%s to form id:%s", caller, name, id)
+	klog.V(4).Infof("%s: Create hash from name:%s to form id:%s", caller, name, id)
 	return id
 }
 
