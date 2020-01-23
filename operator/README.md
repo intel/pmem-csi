@@ -58,6 +58,7 @@ Current PMEM-CSI Deployment object supports below API:
 | deviceMode | string | Device management mode to use. Supports one of `lvm` or `direct` | `lvm`
 | controllerResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for controller pod |
 | nodeResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for the pods running on node(s) |
+| nodeSelector | string map | [Labels to use for selecting Nodes](../README.md#run-pmem-csi-on-kubernetes) on which PMEM-CSI driver should run. | `{ "storage": "pmem" }`
 
 #### DeploymentStatus
 
@@ -163,6 +164,10 @@ pmem-deployment-node-6grt6     2/2     Running   0          50s
 pmem-deployment-node-msgds     2/2     Running   0          51s
 ```
 
-> **WARNING**: If one wants to run multiple driver deployments, make sure that those deployments:
->  - do not run more than one driver on the same node
->  - driver names\(`driverName`\) are unique.
+> **Note on multiple deployments**
+>
+> Though the operator allows running multiple PMEM-CSI driver deployments, one
+> has to take extreme care of such deployments by ensuring that not more than
+> one driver ends up running on the same node(s). Nodes on which a PMEM-CSI
+> driver could run can be configured by using `nodeSelector` property of
+> [`DeploymentSpec`](#deployment-crd-api).
