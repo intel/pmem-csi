@@ -61,6 +61,9 @@ type DeploymentSpec struct {
 type DeploymentStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make operator-generate-k8s" to regenerate code after modifying this file
+
+	// Phase indicates the state of the deployment
+	Phase DeploymentPhase `json:"phase,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -122,6 +125,20 @@ const (
 	DefaultNodeResourceMemory = "250Mi" // MB
 	// DefaultDeviceMode default device manger used for deployment
 	DefaultDeviceMode = DeviceModeLVM
+)
+
+// DeploymentPhase represents the status phase of a driver deployment
+type DeploymentPhase string
+
+const (
+	// DeploymentPhaseNew indicates a new deployment
+	DeploymentPhaseNew DeploymentPhase = ""
+	// DeploymentPhaseInitializing indicates deployment initialization is in progress
+	DeploymentPhaseInitializing DeploymentPhase = "Initializing"
+	// DeploymentPhaseRunning indicates that the deployment was successful
+	DeploymentPhaseRunning DeploymentPhase = "Running"
+	// DeploymentPhaseFailed indicates that the deployment was failed
+	DeploymentPhaseFailed DeploymentPhase = "Failed"
 )
 
 // EnsureDefaults make sure that the deployment object has all defaults set properly
@@ -241,6 +258,16 @@ func GetDeploymentCRDSchema() *apiextensions.JSONSchemaProps {
 					"nodeControllerKey": apiextensions.JSONSchemaProps{
 						Type:        "string",
 						Description: "Encoded private key used for generating pmem-node-controller certificate",
+					},
+				},
+			},
+			"status": apiextensions.JSONSchemaProps{
+				Type:        "object",
+				Description: "State of the deployment",
+				Properties: map[string]apiextensions.JSONSchemaProps{
+					"phase": apiextensions.JSONSchemaProps{
+						Type:        "string",
+						Description: "deployment phase",
 					},
 				},
 			},
