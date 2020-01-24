@@ -73,8 +73,6 @@ func newReconcileDeployment(c client.Client, s *runtime.Scheme) reconcile.Reconc
 
 // Reconcile reads that state of the cluster for a Deployment object and makes changes based on the state read
 // and what is in the Deployment.Spec
-// TODO(user): Modify this Reconcile function to implement your Controller logic.  This example creates
-// a Pod as an example
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
@@ -94,67 +92,64 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	deployment.EnsureDefaults()
+	d := &PmemCSIDriver{deployment}
 
-	d := PmemCSIDriver{*deployment}
-
-	objects := d.getDeploymentObjects()
-	for _, obj := range objects {
-		metaObj, err := meta.Accessor(obj)
-		if err != nil {
-			klog.Error("Failed to get meta object: ", err, "(", obj, ")")
-			return reconcile.Result{}, err
+	requeue, err := d.Reconcile(r)
+	if err == nil {
+		// update status
+		if statusErr := r.client.Status().Update(context.TODO(), d.Deployment); statusErr != nil {
+			err = fmt.Errorf("failed to update deployment status: %v", statusErr)
+			requeue = true
 		}
+	}
 
-		// Set Deployment instance as the owner and controller
-		if metaObj.GetNamespace() != "" {
-			if err := controllerutil.SetControllerReference(deployment, metaObj, r.scheme); err != nil {
-				klog.Info("Failed to set controller reference:", err)
-			}
-		}
+	klog.Infof("Requeue: %t, error: %v", requeue, err)
 
-		klog.Info(fmt.Sprintf("Checking if object %q is present in namespace %q", metaObj.GetName(), metaObj.GetNamespace()))
-		err = r.client.Get(context.TODO(), types.NamespacedName{Name: metaObj.GetName(), Namespace: metaObj.GetNamespace()}, obj)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				klog.Info("Creating a new Object(Namespace: ", metaObj.GetNamespace(), ", Name: ", metaObj.GetName())
-				if err := r.client.Create(context.TODO(), obj); err != nil {
-					klog.Error("Failed to create object:", err)
-					return reconcile.Result{}, err
-				}
-				klog.Info("Object created")
-			} else {
-			}
-		} else {
-			klog.Info("Found object: ", metaObj.GetName())
-		}
-
+	if !requeue {
+		return reconcile.Result{}, nil
 	}
 	/* // Define a new Pod object
 	pod := newPodForCR(instance)
 
-	// Set Deployment instance as the owner and controller
-	if err := controllerutil.SetControllerReference(instance, pod, r.scheme); err != nil {
-		return reconcile.Result{}, err
-	}
+	return reconcile.Result{Requeue: requeue, RequeueAfter: time.Minute}, err
+}
 
-	// Check if this Pod already exists
-	found := &corev1.Pod{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		klog.Info("Creating a new Pod(Namespace: ", pod.Namespace, ", Pod.Name: ", pod.Name, ")")
-		err = r.client.Create(context.TODO(), pod)
-		if err != nil {
-			return reconcile.Result{}, err
+//Get tries to retrives the Kubernetes objects
+func (r *ReconcileDeployment) Get(obj runtime.Object) error {
+	metaObj, err := meta.Accessor(obj)
+	if err != nil {
+		klog.Errorf("Failed to get object: %v", err)
+		return err
+	}
+	key := types.NamespacedName{Name: metaObj.GetName(), Namespace: metaObj.GetNamespace()}
+
+	return r.client.Get(context.TODO(), key, obj)
+}
+
+// Create create new Kubernetes object
+func (r *ReconcileDeployment) Create(obj runtime.Object) error {
+	err := r.Get(obj)
+	if err == nil {
+		// Already found an active object
+		return nil
+	}
+	if errors.IsNotFound(err) {
+		if err := r.client.Create(context.TODO(), obj); err != nil {
+			return err
 		}
-
-		// Pod created successfully - don't requeue
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
+	} else {
+		return err
 	}
 
-	// Pod already exists - don't requeue
-	klog.Info("Skip reconcile: Pod already exists (Namespace: ", found.Namespace, ", Name: ", found.Name, ")")
-	*/
-	return reconcile.Result{}, nil
+	return nil
+}
+
+// Update updates existing Kubernetes object
+func (r *ReconcileDeployment) Update(obj runtime.Object) error {
+	return r.client.Update(context.TODO(), obj)
+}
+
+// Delete delete existing Kubernetes object
+func (r *ReconcileDeployment) Delete(obj runtime.Object) error {
+	return r.client.Delete(context.TODO(), obj)
 }

@@ -45,9 +45,8 @@ type DeploymentSpec struct {
 
 // DeploymentStatus defines the observed state of Deployment
 type DeploymentStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
-	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
+	// Phase indicates the state of the deployment
+	Phase DeploymentPhase `json:"phase,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -109,6 +108,24 @@ const (
 	DefaultNodeResourceMemory = "250Mi" // MB
 	// DefaultDeviceMode default device manger used for deployment
 	DefaultDeviceMode = DeviceModeLVM
+)
+
+// DeploymentPhase represents the status phase of a driver deployment
+type DeploymentPhase string
+
+const (
+	// DeploymentPhaseNew indicates a new deployment
+	DeploymentPhaseNew DeploymentPhase = ""
+	// DeploymentPhasePending indicates the deployment is in pending state as
+	// as required pre-conditions have not met.
+	// For ex:- TLS certificates are not ready
+	DeploymentPhasePending DeploymentPhase = "Pending"
+	// DeploymentPhaseInitializing indicates deployment initialization is in progress
+	DeploymentPhaseInitializing DeploymentPhase = "Initializing"
+	// DeploymentPhaseRunning indicates that the deployment was successful
+	DeploymentPhaseRunning DeploymentPhase = "Running"
+	// DeploymentPhaseFailed indicates that the deployment was failed
+	DeploymentPhaseFailed DeploymentPhase = "Failed"
 )
 
 // EnsureDefaults make sure that the deployment object has all defaults set properly
@@ -209,6 +226,16 @@ func GetDeploymentCRDSchema() *apiextensions.JSONSchemaProps {
 					},
 					"controllerResources": getResourceRequestsSchema(),
 					"nodeResources":       getResourceRequestsSchema(),
+				},
+			},
+			"status": apiextensions.JSONSchemaProps{
+				Type:        "object",
+				Description: "State of the deployment",
+				Properties: map[string]apiextensions.JSONSchemaProps{
+					"phase": apiextensions.JSONSchemaProps{
+						Type:        "string",
+						Description: "deployment phase",
+					},
 				},
 			},
 		},
