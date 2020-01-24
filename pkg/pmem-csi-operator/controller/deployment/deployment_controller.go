@@ -3,17 +3,20 @@ package deployment
 import (
 	"context"
 	"fmt"
+	"time"
 
 	pmemcsiv1alpha1 "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	certv1beta1 "k8s.io/api/certificates/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	certclient "k8s.io/client-go/kubernetes/typed/certificates/v1beta1"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -28,7 +31,11 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileDeployment{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return &ReconcileDeployment{
+		client: mgr.GetClient(),
+		scheme: mgr.GetScheme(),
+		config: mgr.GetConfig(),
+	}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -67,19 +74,19 @@ type ReconcileDeployment struct {
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
 	scheme *runtime.Scheme
+	config *rest.Config
 }
 
-func newReconcileDeployment(c client.Client, s *runtime.Scheme) reconcile.Reconciler {
+func newReconcileDeployment(c client.Client, s *runtime.Scheme, cfg *rest.Config) reconcile.Reconciler {
 	return &ReconcileDeployment{
 		client: c,
 		scheme: s,
+		config: cfg,
 	}
 }
 
 // Reconcile reads that state of the cluster for a Deployment object and makes changes based on the state read
 // and what is in the Deployment.Spec
-// TODO(user): Modify this Reconcile function to implement your Controller logic.  This example creates
-// a Pod as an example
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
@@ -99,67 +106,74 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	deployment.EnsureDefaults()
+	d := &PmemCSIDriver{deployment}
 
-	d := PmemCSIDriver{*deployment}
-
-	objects := d.getDeploymentObjects()
-	for _, obj := range objects {
-		metaObj, err := meta.Accessor(obj)
-		if err != nil {
-			klog.Error("Failed to get meta object: ", err, "(", obj, ")")
-			return reconcile.Result{}, err
+	requeue, err := d.Reconcile(r)
+	if err == nil {
+		// update status
+		if statusErr := r.client.Status().Update(context.TODO(), d.Deployment); statusErr != nil {
+			err = fmt.Errorf("failed to update deployment status: %v", statusErr)
+			requeue = true
 		}
-
-		// Set Deployment instance as the owner and controller
-		if metaObj.GetNamespace() != "" {
-			if err := controllerutil.SetControllerReference(deployment, metaObj, r.scheme); err != nil {
-				klog.Info("Failed to set controller reference:", err)
-			}
-		}
-
-		klog.Info(fmt.Sprintf("Checking if object %q is present in namespace %q", metaObj.GetName(), metaObj.GetNamespace()))
-		err = r.client.Get(context.TODO(), types.NamespacedName{Name: metaObj.GetName(), Namespace: metaObj.GetNamespace()}, obj)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				klog.Info("Creating a new Object(Namespace: ", metaObj.GetNamespace(), ", Name: ", metaObj.GetName())
-				if err := r.client.Create(context.TODO(), obj); err != nil {
-					klog.Error("Failed to create object:", err)
-					return reconcile.Result{}, err
-				}
-				klog.Info("Object created")
-			} else {
-			}
-		} else {
-			klog.Info("Found object: ", metaObj.GetName())
-		}
-
-	}
-	/* // Define a new Pod object
-	pod := newPodForCR(instance)
-
-	// Set Deployment instance as the owner and controller
-	if err := controllerutil.SetControllerReference(instance, pod, r.scheme); err != nil {
-		return reconcile.Result{}, err
 	}
 
-	// Check if this Pod already exists
-	found := &corev1.Pod{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		klog.Info("Creating a new Pod(Namespace: ", pod.Namespace, ", Pod.Name: ", pod.Name, ")")
-		err = r.client.Create(context.TODO(), pod)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
+	klog.Infof("Requeue: %t, error: %v", requeue, err)
 
-		// Pod created successfully - don't requeue
+	if !requeue {
 		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
 	}
 
-	// Pod already exists - don't requeue
-	klog.Info("Skip reconcile: Pod already exists (Namespace: ", found.Namespace, ", Name: ", found.Name, ")")
-	*/
-	return reconcile.Result{}, nil
+	return reconcile.Result{Requeue: requeue, RequeueAfter: time.Minute}, err
+}
+
+//Get tries to retrives the Kubernetes objects
+func (r *ReconcileDeployment) Get(obj runtime.Object) error {
+	metaObj, err := meta.Accessor(obj)
+	if err != nil {
+		klog.Errorf("Failed to get object: %v", err)
+		return err
+	}
+	key := types.NamespacedName{Name: metaObj.GetName(), Namespace: metaObj.GetNamespace()}
+
+	return r.client.Get(context.TODO(), key, obj)
+}
+
+// Create create new Kubernetes object
+func (r *ReconcileDeployment) Create(obj runtime.Object) error {
+	err := r.Get(obj)
+	if err == nil {
+		// Already found an active object
+		return nil
+	}
+	if errors.IsNotFound(err) {
+		if err := r.client.Create(context.TODO(), obj); err != nil {
+			return err
+		}
+	} else {
+		return err
+	}
+
+	return nil
+}
+
+// Update updates existing Kubernetes object
+func (r *ReconcileDeployment) Update(obj runtime.Object) error {
+	return r.client.Update(context.TODO(), obj)
+}
+
+// Delete delete existing Kubernetes object
+func (r *ReconcileDeployment) Delete(obj runtime.Object) error {
+	return r.client.Delete(context.TODO(), obj)
+}
+
+func (r *ReconcileDeployment) ApproveCSR(csr *certv1beta1.CertificateSigningRequest) error {
+	// Default client interface provided by controller-runtime
+	// does not support certificates API, so we have to create
+	// appropriate client object
+	certClient, err := certclient.NewForConfig(r.config)
+	if err != nil {
+		return err
+	}
+	_, err = certClient.CertificateSigningRequests().UpdateApproval(csr)
+	return err
 }

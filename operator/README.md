@@ -5,6 +5,7 @@
     - [Pre-requisites](#pre-requisites)
     - [Deploy PMEM-CSI operator](#deploy-pmem-csi-operator)
     - [Deployment CRD API](#deployment-crd-api)
+    - [Driver certificates](#driver-certificates)
   - [Example Deployment](#example-deployment)
 
 <!-- /TOC -->
@@ -71,6 +72,33 @@ Current PMEM-CSI Deployment object supports below API:
 
 <sup>1</sup> Image versions depend on the Kubernetes cluster version. The operator figures out itself the appropriate image version(s). Whereas users have to handle choosing the right version(s) themselves when overriding the values.
 
+#### DeploymentStatus
+
+A PMEM-CSI Deployment's `status` field is a `DeploymentStatus` object, which has
+a `phase` field. The phase of a Deployment is high-level summary of where the
+Deployment is in it's lifecycle.
+
+The possible `phase` values and their meaning are as below:
+
+| value | meaning |
+|---|---|---|
+| Initializing | The required sub-resources of the `Deployment` are being initialized |
+| Running | All the required sub-resources of the `Deployment` are created. This does not mean that the deployed driver is fully ready to use, there might still possibility of failures. Reasons for such failures can be determined by looking into individual pod status |
+| Failed | For some reason the state of the `Deployment` failed and cannot be progressed<sup>2</sup> |
+
+<sup>2</sup> Failure reason is supposed to be carried by one of additional `DeploymentStatus` field, but not implemented yet.
+
+### Driver certificates
+
+All [PMEM-CSI driver communication is protected by mutual
+TLS](../README.md#security) to ensure that malicious or compromised entities in
+the cluster cannot interfere with its operation. So the driver deployment needs
+to be provided with those certificates and corresponding private keys using appropriate fields in deployment specification. These encoded certificates and private keys are made available to driver pods via Kubernetes [secrets](https://kubernetes.io/docs/concepts/configuration/secret/) by the operator.
+
+If the private keys and/or certificates data is missing in a deployment, the operator generates them using a self-signed CA.
+
+**NOTE:** A production deployment that is not supposed to depend on the operator's self-signed CA instead must provide the certificates generated from a trusted certificate authority.
+
 ## Example Deployment
 
 Once the [operator deployed](#deploy-PMEM-CSI-operator) is in `Running` state, it is ready to handle PMEM-CSI `Deployment` objects in `pmem-csi.intel.com` API group.
@@ -97,18 +125,48 @@ spec:
 EOF
 ```
 
-Once the above deployment installation is successful, we can see all the driver pods in `Running` state:
+Once the above deployment installation is successful, we can see all the driver
+pods in `Running` state:
 ```sh
 $ kubectl get deployments.pmem-csi.intel.com
 NAME                 AGE
 pmem-deployment      50s
 
+$ kubectl describe deployment.pmem-csi.intel.com pmem-deployment
+Name:         pmem-deployment
+Namespace:    default
+Labels:       <none>
+Annotations:  <none>
+API Version:  pmem-csi.intel.com/v1alpha1
+Kind:         Deployment
+Metadata:
+  Creation Timestamp:  2020-01-23T13:40:32Z
+  Generation:          1
+  Resource Version:    3596387
+  Self Link:           /apis/pmem-csi.intel.com/v1alpha1/namespaces/default/deployments/pmem-deployment
+  UID:                 454b5961-5aa2-41c3-b774-29fe932ae236
+Spec:
+  Controller Resources:
+    Requests:
+      Cpu:      200m
+      Memory:   100Mi
+  Device Mode:  lvm
+  Image:        localhost/pmem-csi-driver:canary
+  Node Resources:
+    Requests:
+      Cpu:     200m
+      Memory:  100Mi
+Status:
+  Phase:  Running
+Events:   <none>
+
+
 $ kubectl get po
 NAME                    READY   STATUS    RESTARTS   AGE
-pmem-csi-controller-0   2/2     Running   0          51s
-pmem-csi-node-4x7cv     2/2     Running   0          50s
-pmem-csi-node-6grt6     2/2     Running   0          50s
-pmem-csi-node-msgds     2/2     Running   0          51s
+pmem-deployment-controller-0   2/2     Running   0          51s
+pmem-deployment-node-4x7cv     2/2     Running   0          50s
+pmem-deployment-node-6grt6     2/2     Running   0          50s
+pmem-deployment-node-msgds     2/2     Running   0          51s
 ```
 
 > **WARNING**: If one wants to run multiple driver deployments, make sure that those deployments:
