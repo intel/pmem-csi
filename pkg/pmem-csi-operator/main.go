@@ -24,7 +24,6 @@ import (
 	//"github.com/intel/pmem-csi/pkg/pmem-operator/version"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 
-	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"github.com/operator-framework/operator-sdk/pkg/leader"
 	"github.com/operator-framework/operator-sdk/pkg/restmapper"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
@@ -50,12 +49,6 @@ func Main() int {
 
 	printVersion()
 
-	namespace, err := k8sutil.GetWatchNamespace()
-	if err != nil {
-		pmemcommon.ExitError("Failed to get watch namespace: ", err)
-		return 1
-	}
-
 	// Get a config to talk to the apiserver
 	cfg, err := config.GetConfig()
 	if err != nil {
@@ -80,7 +73,6 @@ func Main() int {
 
 	// Create a new Cmd to provide shared dependencies and start components
 	mgr, err := manager.New(cfg, manager.Options{
-		Namespace:      namespace,
 		MapperProvider: restmapper.NewDynamicRESTMapper,
 	})
 	if err != nil {
