@@ -113,6 +113,7 @@ func (cs *masterController) OnNodeAdded(ctx context.Context, node *registryserve
 	if err != nil {
 		return fmt.Errorf("Connection failure on given endpoint %s : %s", node.Endpoint, err.Error())
 	}
+	defer conn.Close()
 
 	csiClient := csi.NewControllerClient(conn)
 	resp, err := csiClient.ListVolumes(ctx, &csi.ListVolumesRequest{})
