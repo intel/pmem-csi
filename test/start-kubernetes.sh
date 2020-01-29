@@ -253,9 +253,16 @@ EOF
 
     vm_id=0
     pids=""
+    # Intentional separate loop for first-time connectivity after VM boot-up.
+    # In Fedora-31 case it is seen that sshd gets disabled again for short time
+    # soon after boot to perform sshd-keygen. Doing initial wait in same loop
+    # increases the risk to hit this window  on the master node, causing first
+    # actual ssh commands to fail.
+    # Doing wait in separate loop adds 2..3 seconds delay on master
+    # composed of waiting for initial connectivity of other nodes, before
+    # we start connecting to master again (in the 2nd loop below).
     for ip in ${IPS}; do
         SECONDS=0
-        NO_PROXY+=",$ip"
         #Wait for the ssh connectivity in the vms
         echo "Waiting for ssh connectivity on vm with ip $ip"
         while ! ssh $SSH_ARGS ${CLOUD_USER}@${ip} exit 2>/dev/null; do
@@ -263,7 +270,10 @@ EOF
                 die "timeout accessing ${ip} through ssh"
             fi
         done
+    done
 
+    for ip in ${IPS}; do
+        NO_PROXY+=",$ip"
         vm_name=$(govm list -f '{{select (filterRegexp . "IP" "'${ip}'") "Name"}}') || die "failed to find VM for IP $ip"
         log_name=${WORKING_DIRECTORY}/${vm_name}.log
         ssh_script=${WORKING_DIRECTORY}/ssh.${vm_id}
