@@ -326,7 +326,7 @@ func (cs *nodeControllerServer) ValidateVolumeCapabilities(ctx context.Context, 
 }
 
 func (cs *nodeControllerServer) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
-	klog.V(5).Infof("ListVolumes")
+	klog.V(5).Info("ListVolumes")
 	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_LIST_VOLUMES); err != nil {
 		klog.Errorf("invalid list volumes req: %v", req)
 		return nil, err

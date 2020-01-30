@@ -235,18 +235,18 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 	if err == nil {
 		switch opts.Mode {
 		case FsdaxMode:
-			klog.V(5).Infof("setting pfn")
+			klog.V(5).Info("setting pfn")
 			err = ns.setPfnSeed(opts.Location, opts.Align)
 		case DaxMode:
-			klog.V(5).Infof("setting dax")
+			klog.V(5).Info("setting dax")
 			err = ns.setDaxSeed(opts.Location, opts.Align)
 		case SectorMode:
-			klog.V(5).Infof("setting btt")
+			klog.V(5).Info("setting btt")
 			err = ns.setBttSeed(opts.SectorSize)
 		}
 	}
 	if err == nil {
-		klog.V(5).Infof("enabling namespace")
+		klog.V(5).Info("enabling namespace")
 		err = ns.Enable()
 	}
 

@@ -37,7 +37,7 @@ func NewPmemDeviceManagerNdctl() (PmemDeviceManager, error) {
 		if mnt.Device == "sysfs" && mnt.Path == "/sys" {
 			for _, opt := range mnt.Opts {
 				if opt == "rw" {
-					klog.V(4).Infof("NewPmemDeviceManagerNdctl: /sys mounted read-write, good")
+					klog.V(4).Info("NewPmemDeviceManagerNdctl: /sys mounted read-write, good")
 				} else if opt == "ro" {
 					return nil, fmt.Errorf("FATAL: /sys mounted read-only, can not operate")
 				}
