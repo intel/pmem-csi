@@ -33,6 +33,11 @@ for name in ${CNS}; do
 {
     "CN": "$name",
     "hosts": [
+        $(if [ "$name" = "pmem-registry" ]; then
+             # Some extra names needed for scheduler extender and webhook.
+             echo '"pmem-csi-scheduler", "pmem-csi-scheduler.default", "pmem-csi-scheduler.default.svc", "127.0.0.1",'
+          fi
+        )
         "$name"
     ],
     "key": {

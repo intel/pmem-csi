@@ -77,14 +77,56 @@ list_gates () (
     done
 )
 
-if [ ! -z ${TEST_FEATURE_GATES} ]; then
-    kubeadm_config_kubelet="$kubeadm_config_kubelet
+# We create a scheduler configuration on the master node which enables
+# the PMEM-CSI scheduler extender. Because of the "managedResources"
+# filter, the extender is only going to be called for pods which
+# explicitly enable it and thus other pods (including PMEM-CSI
+# itself!)  can be scheduled without it.
+sudo mkdir -p /var/lib/scheduler/
+sudo cp ca.crt /var/lib/scheduler/
+
+# https://github.com/kubernetes/kubernetes/blob/52d7614a8ca5b8aebc45333b6dc8fbf86a5e7ddf/staging/src/k8s.io/kube-scheduler/config/v1alpha1/types.go#L38-L107
+sudo sh -c 'cat >/var/lib/scheduler/scheduler-config.yaml' <<EOF
+apiVersion: kubescheduler.config.k8s.io/v1alpha1
+kind: KubeSchedulerConfiguration
+schedulerName: default-scheduler
+algorithmSource:
+  policy:
+    file:
+      path: /var/lib/scheduler/scheduler-policy.cfg
+clientConnection:
+  # This is where kubeadm puts it.
+  kubeconfig: /etc/kubernetes/scheduler.conf
+EOF
+
+# https://github.com/kubernetes/kubernetes/blob/52d7614a8ca5b8aebc45333b6dc8fbf86a5e7ddf/staging/src/k8s.io/kube-scheduler/config/v1/types.go#L28-L47
+sudo sh -c 'cat >/var/lib/scheduler/scheduler-policy.cfg' <<EOF
+{
+  "kind" : "Policy",
+  "apiVersion" : "v1",
+  "extenders" :
+    [{
+      "urlPrefix": "https://127.0.0.1:${TEST_SCHEDULER_EXTENDER_NODE_PORT}",
+      "filterVerb": "filter",
+      "prioritizeVerb": "prioritize",
+      "nodeCacheCapable": false,
+      "weight": 1,
+      "managedResources":
+      [{
+        "name": "pmem-csi.intel.com/scheduler",
+        "ignoredByScheduler": true
+      }]
+    }]
+}
+EOF
+
+kubeadm_config_kubelet="$kubeadm_config_kubelet
 featureGates:
 $(list_gates)"
-    kubeadm_config_proxy="$kubeadm_config_proxy
+kubeadm_config_proxy="$kubeadm_config_proxy
 featureGates:
 $(list_gates)"
-    kubeadm_config_cluster="$kubeadm_config_cluster
+kubeadm_config_cluster="$kubeadm_config_cluster
 apiServer:
   extraArgs:
     feature-gates: ${TEST_FEATURE_GATES}
@@ -92,9 +134,29 @@ controllerManager:
   extraArgs:
     feature-gates: ${TEST_FEATURE_GATES}
 scheduler:
+  extraVolumes:
+    - name: config
+      hostPath: /var/lib/scheduler
+      mountPath: /var/lib/scheduler
+      readOnly: true
+    # This is necessary to ensure that the API server accepts
+    # certificates signed by the cluster root CA when
+    # establishing an https connection to a webhook.
+    #
+    # This works because the normal trust store
+    # of the host (/etc/ssl/certs) is not mounted
+    # for the scheduler. If it was (as for the apiserver),
+    # then adding another file would either modify
+    # the host (for the mount point) or fail (when
+    # the bind mount is read-only).
+    - name: cluster-root-ca
+      hostPath: /var/lib/scheduler/ca.crt
+      mountPath: /etc/ssl/certs/ca.crt
+      readOnly: true
   extraArgs:
-    feature-gates: ${TEST_FEATURE_GATES}"
-fi
+    feature-gates: ${TEST_FEATURE_GATES}
+    config: /var/lib/scheduler/scheduler-config.yaml
+"
 
 if [ -e /dev/vdc ]; then
     # We have an extra volume specifically for etcd (see TEST_ETCD_VOLUME).

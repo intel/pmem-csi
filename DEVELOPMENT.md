@@ -187,6 +187,7 @@ Network ports are opened as configured in manifest files:
 
 - registry endpoint: typical port value 10000, used for PMEM-CSI internal communication
 - controller endpoint: typical port value 10001, used for serving CSI API
+- webhook endpoint: disabled by default, port chosen when [enabling the scheduler extensions](./README.md#enable-scheduler-extensions)
 
 
 Local sockets
@@ -252,6 +253,8 @@ argument name        | meaning                                           | type 
 -nodeid string             | node id                                        | string |              | nodeid
 -registryEndpoint string   | endpoint to connect/listen registry server     | string |              |
 -statePath                 | Directory path where to persist the state of the driver running on a node | string | absolute directory path on node | /var/lib/<drivername>
+-schedulerListen           | listen address for scheduler extender and mutating webhook | [address string](https://golang.org/pkg/net/#Listen) | controller | empty (= disabled)
+
 
 Environment variables
 ---------------------

@@ -34,6 +34,8 @@ DEPLOY=(
     pmem-storageclass-xfs.yaml
     pmem-storageclass-cache.yaml
     pmem-storageclass-late-binding.yaml
+    scheduler
+    webhook
 )
 
 # Read certificate files and turn them into Kubernetes secrets.
@@ -97,12 +99,27 @@ for deploy in ${DEPLOY[@]}; do
 bases:
   - ../$path
 EOF
-        if [ "${TEST_DEVICEMODE}" = "lvm" ]; then
-            # Test these options and kustomization by injecting some non-default values.
-            # This could be made optional to test both default and non-default values,
-            # but for now we just change this in all deployments.
-            ${SSH} "cat >>'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
+        case $deploy in
+            ${TEST_DEVICEMODE}${deployment_suffix})
+                ${SSH} "cat >>'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
 patchesJson6902:
+  - target:
+      group: apps
+      version: v1
+      kind: StatefulSet
+      name: pmem-csi-controller
+    path: scheduler-patch.yaml
+EOF
+                ${SSH} "cat >'$tmpdir/my-deployment/scheduler-patch.yaml'" <<EOF
+- op: add
+  path: /spec/template/spec/containers/0/command/-
+  value: "--schedulerListen=:8000" # Exposed to kube-scheduler via the pmem-csi-scheduler service.
+EOF
+                if [ "${TEST_DEVICEMODE}" = "lvm" ]; then
+                    # Test these options and kustomization by injecting some non-default values.
+                    # This could be made optional to test both default and non-default values,
+                    # but for now we just change this in all deployments.
+                    ${SSH} "cat >>'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
   - target:
       group: apps
       version: v1
@@ -110,12 +127,46 @@ patchesJson6902:
       name: pmem-csi-node
     path: lvm-parameters-patch.yaml
 EOF
-            ${SSH} "cat >'$tmpdir/my-deployment/lvm-parameters-patch.yaml'" <<EOF
+                    ${SSH} "cat >'$tmpdir/my-deployment/lvm-parameters-patch.yaml'" <<EOF
 - op: add
   path: /spec/template/spec/initContainers/0/command/-
   value: "--useforfsdax=50"
 EOF
-        fi
+                fi
+                ;;
+            scheduler)
+                # Change port number via JSON patch.
+                ${SSH} "cat >>'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
+patchesJson6902:
+  - target:
+      version: v1
+      kind: Service
+      name: pmem-csi-scheduler
+    path: scheduler-patch.yaml
+EOF
+                ${SSH} "cat >'$tmpdir/my-deployment/scheduler-patch.yaml'" <<EOF
+- op: add
+  path: /spec/ports/0/nodePort
+  value: ${TEST_SCHEDULER_EXTENDER_NODE_PORT}
+EOF
+                ;;
+            webhook)
+                ${SSH} "cat >>'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
+patchesJson6902:
+  - target:
+      group: admissionregistration.k8s.io
+      version: v1beta1
+      kind: MutatingWebhookConfiguration
+      name: pmem-csi-hook
+    path: webhook-patch.yaml
+EOF
+                ${SSH} "cat >'$tmpdir/my-deployment/webhook-patch.yaml'" <<EOF
+- op: replace
+  path: /webhooks/0/clientConfig/caBundle
+  value: $(base64 -w 0 _work/pmem-ca/ca.pem)
+EOF
+                ;;
+        esac
         ${KUBECTL} apply --kustomize "$tmpdir/my-deployment"
         ${SSH} rm -rf "$tmpdir"
     else
@@ -123,6 +174,8 @@ EOF
         exit 1
     fi
 done
+
+${KUBECTL} label --overwrite ns kube-system pmem-csi.intel.com/webhook=ignore
 
 cat <<EOF
 

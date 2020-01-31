@@ -183,7 +183,7 @@ var _ = Describe("pmem registry", func() {
 				"authentication handshake failed: remote error: tls: bad certificate|all SubConns are in TransientFailure",
 			},
 			{"client should detect man-in-the-middle", evilCA, evilCert, evilKey, "pmem-registry", "transport: authentication handshake failed: x509: certificate signed by unknown authority"},
-			{"client should detect wrong peer", ca, cert, key, "unknown-registry", "transport: authentication handshake failed: x509: certificate is valid for pmem-registry, not unknown-registry"},
+			{"client should detect wrong peer", ca, cert, key, "unknown-registry", "transport: authentication handshake failed: x509: certificate is valid for pmem-csi-scheduler, pmem-csi-scheduler.default, pmem-csi-scheduler.default.svc, pmem-registry, not unknown-registry"},
 			{"server should detect wrong peer", ca, wrongCert, wrongKey, "pmem-registry",
 				"transport: authentication handshake failed: remote error: tls: bad certificate|all SubConns are in TransientFailure",
 			},

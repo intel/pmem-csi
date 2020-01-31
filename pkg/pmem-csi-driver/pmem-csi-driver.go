@@ -11,6 +11,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -21,10 +22,13 @@ import (
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
 	pmemstate "github.com/intel/pmem-csi/pkg/pmem-state"
 	"github.com/intel/pmem-csi/pkg/registryserver"
+	"github.com/intel/pmem-csi/pkg/scheduler"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/status"
+	"k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 )
 
@@ -81,6 +85,10 @@ type Config struct {
 	StateBasePath string
 	//Version driver release version
 	Version string
+
+	// parameters for Kubernetes scheduler extender
+	schedulerListen string
+	client          *kubernetes.Clientset
 }
 
 type pmemDriver struct {
@@ -164,6 +172,8 @@ func (pmemd *pmemDriver) Run() error {
 		s.ForceStop()
 		s.Wait()
 	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	if pmemd.cfg.Mode == Controller {
 		rs := registryserver.New(pmemd.clientTLSConfig)
@@ -180,6 +190,11 @@ func (pmemd *pmemDriver) Run() error {
 			if err := s.Start(pmemd.cfg.Endpoint, pmemd.serverTLSConfig, ids, cs, rs); err != nil {
 				return err
 			}
+		}
+
+		// Also run scheduler extender?
+		if err := pmemd.startScheduler(ctx, cancel, rs); err != nil {
+			return err
 		}
 	} else if pmemd.cfg.Mode == Node {
 		dm, err := newDeviceManager(pmemd.cfg.DeviceManager)
@@ -221,10 +236,15 @@ func (pmemd *pmemDriver) Run() error {
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	sig := <-c
-	// Here we want to shut down cleanly, i.e. let running
-	// gRPC calls complete.
-	klog.V(3).Infof("Caught signal %s, terminating.", sig)
+	select {
+	case sig := <-c:
+		// Here we want to shut down cleanly, i.e. let running
+		// gRPC calls complete.
+		klog.V(3).Infof("Caught signal %s, terminating.", sig)
+	case <-ctx.Done():
+		// The scheduler HTTP server must have failed (to start).
+		// We quit in that case.
+	}
 	s.Stop()
 	s.Wait()
 
@@ -254,6 +274,66 @@ func (pmemd *pmemDriver) registerNodeController() error {
 		return err
 	}
 	go waitAndWatchConnection(conn, req)
+
+	return nil
+}
+
+// startScheduler starts the scheduler extender if it is enabled. It
+// logs errors and cancels the context when it runs into a problem,
+// either during the startup phase (blocking) or later at runtime (in
+// a go routine).
+func (pmemd *pmemDriver) startScheduler(ctx context.Context, cancel func(), rs *registryserver.RegistryServer) error {
+	if pmemd.cfg.schedulerListen == "" {
+		return nil
+	}
+
+	resyncPeriod := 1 * time.Hour
+	factory := informers.NewSharedInformerFactory(pmemd.cfg.client, resyncPeriod)
+	pvcLister := factory.Core().V1().PersistentVolumeClaims().Lister()
+	scLister := factory.Storage().V1().StorageClasses().Lister()
+	sched, err := scheduler.NewScheduler(
+		pmemd.cfg.DriverName,
+		scheduler.CapacityViaRegistry(rs),
+		pvcLister,
+		scLister,
+	)
+	if err != nil {
+		return fmt.Errorf("create scheduler: %v", err)
+	}
+
+	config, err := pmemgrpc.LoadServerTLS(pmemd.cfg.CAFile, pmemd.cfg.CertFile, pmemd.cfg.KeyFile, "")
+	if err != nil {
+		return fmt.Errorf("initialize HTTPS config: %v", err)
+	}
+	server := http.Server{
+		Addr:      pmemd.cfg.schedulerListen,
+		Handler:   sched,
+		TLSConfig: config,
+	}
+	factory.Start(ctx.Done())
+	cacheSyncResult := factory.WaitForCacheSync(ctx.Done())
+	klog.V(5).Infof("synchronized caches: %+v", cacheSyncResult)
+	for t, v := range cacheSyncResult {
+		if !v {
+			cancel()
+			return fmt.Errorf("failed to sync informer for type %v", t)
+		}
+	}
+
+	go func() {
+		err := server.ListenAndServeTLS(pmemd.cfg.CertFile, pmemd.cfg.KeyFile)
+		if err != http.ErrServerClosed {
+			klog.Errorf("scheduler HTTPS server error: %v", err)
+		}
+		// Also stop main thread.
+		cancel()
+	}()
+	go func() {
+		// Block until the context is done, then immediately
+		// close the server.
+		<-ctx.Done()
+		server.Close()
+	}()
 
 	return nil
 }
