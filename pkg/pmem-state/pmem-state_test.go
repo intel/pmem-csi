@@ -85,7 +85,7 @@ var _ = Describe("pmem state", func() {
 			_, err = pmemstate.NewFileState("")
 			Expect(err).To(HaveOccurred())
 
-			_, err = pmemstate.NewFileState("/unknown/base/direcotry/")
+			_, err = pmemstate.NewFileState("/unknown/base/directory/")
 			Expect(err).To(HaveOccurred())
 
 			file, err := ioutil.TempFile("", "pmemstate-file")
