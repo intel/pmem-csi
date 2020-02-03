@@ -118,6 +118,9 @@ EOF
         fi
         ${KUBECTL} apply --kustomize "$tmpdir/my-deployment"
         ${SSH} rm -rf "$tmpdir"
+    else
+        echo >&2 "$path is missing."
+        exit 1
     fi
 done
 
