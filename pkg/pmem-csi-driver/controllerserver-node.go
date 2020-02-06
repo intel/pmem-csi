@@ -103,7 +103,7 @@ func NewNodeControllerServer(nodeID string, dm pmdmanager.PmemDeviceManager, sm 
 
 		for _, id := range cleanupList {
 			if err := sm.Delete(id); err != nil {
-				klog.Warningf("Failed to delete stale volume %s from state : %s", id, err.Error())
+				klog.Warningf("Failed to delete stale volume %s from state: %s", id, err.Error())
 			}
 		}
 	}
