@@ -224,7 +224,7 @@ func (pmemd *pmemDriver) Run() error {
 	sig := <-c
 	// Here we want to shut down cleanly, i.e. let running
 	// gRPC calls complete.
-	klog.Infof("Caught signal %s, terminating.", sig)
+	klog.V(3).Infof("Caught signal %s, terminating.", sig)
 	s.Stop()
 	s.Wait()
 
@@ -270,14 +270,14 @@ func waitAndWatchConnection(conn *grpc.ClientConn, req *registry.RegisterControl
 		s := conn.GetState()
 		if s == connectivity.Ready {
 			if connectionLost {
-				klog.Info("ReConnected.")
+				klog.V(4).Info("ReConnected.")
 				if err := register(ctx, conn, req); err != nil {
 					klog.Warning(err)
 				}
 			}
 		} else {
 			connectionLost = true
-			klog.Info("Connection state: ", s)
+			klog.V(4).Info("Connection state: ", s)
 		}
 		conn.WaitForStateChange(ctx, s)
 	}
