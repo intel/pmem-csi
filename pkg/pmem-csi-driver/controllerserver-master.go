@@ -307,7 +307,7 @@ func (cs *masterController) ValidateVolumeCapabilities(ctx context.Context, req 
 
 	_, found := cs.pmemVolumes[req.VolumeId]
 	if !found {
-		return nil, status.Error(codes.NotFound, "No volume found with id %s"+req.VolumeId)
+		return nil, status.Error(codes.NotFound, "No volume found with id "+req.VolumeId)
 	}
 
 	if req.GetVolumeCapabilities() == nil {

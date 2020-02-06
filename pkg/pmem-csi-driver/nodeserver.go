@@ -273,7 +273,7 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	}
 
 	if vol == nil {
-		return nil, status.Errorf(codes.NotFound, "no volume found with volume id %q'", req.VolumeId)
+		return nil, status.Errorf(codes.NotFound, "no volume found with volume id %q", req.VolumeId)
 	}
 
 	parameters, err := parseVolumeParameters(nodeVolumeParameters, vol.Params)
