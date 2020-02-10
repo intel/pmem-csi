@@ -20,6 +20,8 @@ function error_handler(){
 }
 trap 'error_handler ${LINENO}' ERR
 
+# add own name to /etc/hosts to avoid external name lookup(s) that produce warning by kubeadm
+echo "127.0.0.1 `hostname`" >> /etc/hosts
 
 # For PMEM.
 packages+=" ndctl"
@@ -37,7 +39,7 @@ enabled=1
 gpgcheck=1
 gpgkey=https://download.docker.com/linux/centos/gpg
 EOF
-    packages+=" docker-ce-3:19.03.2-3.el7"
+    packages+=" docker-ce-3:19.03.5-3.el7"
 
     # Install according to https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
     modprobe br_netfilter
@@ -57,12 +59,12 @@ EOF
 
     # For the sake of reproducibility, use fixed versions.
     # List generated with:
-    # for v in 1.13 1.14 1.15 1.16; do for i in kubelet kubeadm kubectl; do echo "$i-$(sudo yum --showduplicates list kubelet | grep " $v"  | sed -e 's/.* \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/' | sort -u  | tail -n 1)"; done; done
+    # for v in 1.13 1.14 1.15 1.16; do for i in kubelet kubeadm kubectl; do echo "$i-$(sudo dnf --showduplicates list kubelet | grep " $v"  | sed -e 's/.* \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/' | sort -u  | tail -n 1)"; done; done
     case ${TEST_KUBERNETES_VERSION} in
-        1.13) packages+=" kubelet-1.13.9-0 kubeadm-1.13.9-0 kubectl-1.13.9-0";;
-        1.14) packages+=" kubelet-1.14.7-0 kubeadm-1.14.7-0 kubectl-1.14.7-0";;
-        1.15) packages+=" kubelet-1.15.4-0 kubeadm-1.15.4-0 kubectl-1.15.4-0";;
-        1.16) packages+=" kubelet-1.16.0-0 kubeadm-1.16.0-0 kubectl-1.16.0-0";;
+        1.13) packages+=" kubelet-1.13.12-0 kubeadm-1.13.12-0 kubectl-1.13.12-0";;
+        1.14) packages+=" kubelet-1.14.10-0 kubeadm-1.14.10-0 kubectl-1.14.10-0";;
+        1.15) packages+=" kubelet-1.15.8-0 kubeadm-1.15.8-0 kubectl-1.15.8-0";;
+        1.16) packages+=" kubelet-1.16.5-0 kubeadm-1.16.5-0 kubectl-1.16.5-0";;
         *) echo >&2 "Kubernetes version ${TEST_KUBERNETES_VERSION} not supported, package list in $0 must be updated."; exit 1;;
     esac
     packages+=" --disableexcludes=kubernetes"
@@ -73,16 +75,16 @@ fi
 # suggests to try again after a `dnf update --refresh`, so that's what we do here for
 # a maximum of 5 attempts.
 cnt=0
-while ! yum install -y $packages; do
+while ! dnf install -y $packages; do
     if [ $cnt -ge 5 ]; then
-        echo "yum install failed repeatedly, giving up"
+        echo "dnf install failed repeatedly, giving up"
         exit 1
     fi
     cnt=$(($cnt + 1))
     # If it works, proceed immediately. If it fails, sleep and try again without aborting on an error.
-    if ! dnf update --refresh; then
+    if ! dnf update -y --refresh; then
         sleep 20
-        dnf update --refresh || true
+        dnf update -y --refresh || true
     fi
 done
 
@@ -90,8 +92,13 @@ if $INIT_KUBERNETES; then
     # Upstream kubelet looks in /opt/cni/bin, actual files are in
     # /usr/libexec/cni from
     # containernetworking-plugins-0.8.1-1.fc30.x86_64.
-    mkdir -p /opt/cni
-    ln -s /usr/libexec/cni /opt/cni/bin
+    # There is reason why we don't create symlink /opt/cni/bin -> /usr/libexec/cni.
+    # Some CNI variants (weave) try to add binaries, which fails if bin/ is symlink
+    # We create /opt/cni/bin containing symlinks for every binary:
+    mkdir -p /opt/cni/bin
+    for i in /usr/libexec/cni/*; do
+        ln -vs $i /opt/cni/bin/
+    done
 
     # Testing may involve a Docker registry running on the build host (see
     # TEST_LOCAL_REGISTRY and TEST_PMEM_REGISTRY). We need to trust that

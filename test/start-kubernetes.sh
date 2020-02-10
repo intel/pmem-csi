@@ -65,9 +65,10 @@ case ${TEST_DISTRO} in
     fedora)
         CLOUD_USER=${CLOUD_USER:-fedora}
         EFI=${EFI:-false}
-        TEST_DISTRO_VERSION=${TEST_DISTRO_VERSION:-30}
+        TEST_DISTRO_VERSION=${TEST_DISTRO_VERSION:-31}
+        FEDORA_CLOUDIMG_REL=${FEDORA_CLOUDIMG_REL:-1.9}
         IMAGE_URL=${IMAGE_URL:-https://download.fedoraproject.org/pub/fedora/linux/releases/${TEST_DISTRO_VERSION}/Cloud/x86_64/images}
-        CLOUD_IMAGE=${CLOUD_IMAGE:-Fedora-Cloud-Base-${TEST_DISTRO_VERSION}-1.2.x86_64.raw.xz}
+        CLOUD_IMAGE=${CLOUD_IMAGE:-Fedora-Cloud-Base-${TEST_DISTRO_VERSION}-${FEDORA_CLOUDIMG_REL}.x86_64.raw.xz}
         ;;
 esac
 
@@ -252,9 +253,16 @@ EOF
 
     vm_id=0
     pids=""
+    # Intentional separate loop for first-time connectivity after VM boot-up.
+    # In Fedora-31 case it is seen that sshd gets disabled again for short time
+    # soon after boot to perform sshd-keygen. Doing initial wait in same loop
+    # increases the risk to hit this window  on the master node, causing first
+    # actual ssh commands to fail.
+    # Doing wait in separate loop adds 2..3 seconds delay on master
+    # composed of waiting for initial connectivity of other nodes, before
+    # we start connecting to master again (in the 2nd loop below).
     for ip in ${IPS}; do
         SECONDS=0
-        NO_PROXY+=",$ip"
         #Wait for the ssh connectivity in the vms
         echo "Waiting for ssh connectivity on vm with ip $ip"
         while ! ssh $SSH_ARGS ${CLOUD_USER}@${ip} exit 2>/dev/null; do
@@ -262,7 +270,10 @@ EOF
                 die "timeout accessing ${ip} through ssh"
             fi
         done
+    done
 
+    for ip in ${IPS}; do
+        NO_PROXY+=",$ip"
         vm_name=$(govm list -f '{{select (filterRegexp . "IP" "'${ip}'") "Name"}}') || die "failed to find VM for IP $ip"
         log_name=${WORKING_DIRECTORY}/${vm_name}.log
         ssh_script=${WORKING_DIRECTORY}/ssh.${vm_id}
@@ -350,7 +361,28 @@ function init_kubernetes_cluster() (
     echo "Installing dependencies on cloud images, this process may take some minutes"
     vm_id=0
     pids=""
-    for ip in $(print_ips); do
+    IPS=$(print_ips)
+    # in Fedora-31 case, add a flag to kernel cmdline and reboot
+    if [ "$TEST_DISTRO" = "fedora" -a "$TEST_DISTRO_VERSION" = "31" ]; then
+        SYSTEMD_UNIFIED_CGROUP_HIERARCHY=systemd.unified_cgroup_hierarchy
+        for ip in ${IPS}; do
+            ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo sed -i 's/n8\"/n8 ${SYSTEMD_UNIFIED_CGROUP_HIERARCHY}=0\"/g' /etc/default/grub"
+            ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo grub2-mkconfig -o /boot/grub2/grub.cfg"
+            # use --force to speed up shutdown as nothing important running yet to wait for
+            ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo systemctl --force reboot"
+        done
+        for ip in ${IPS}; do
+            SECONDS=0
+            echo "After reboot: Waiting for ssh connectivity on vm with ip $ip"
+            # Verify that system runs with added cmdline parameter
+            while ! ssh $SSH_ARGS ${CLOUD_USER}@${ip} "grep -q ${SYSTEMD_UNIFIED_CGROUP_HIERARCHY} /proc/cmdline"; do
+                if [ "$SECONDS" -gt "$SSH_TIMEOUT" ]; then
+                    die "timeout waiting for ${ip} to reboot with changed kernel parameters"
+                fi
+            done
+        done
+    fi
+    for ip in ${IPS}; do
         vm_name=$(govm list -f '{{select (filterRegexp . "IP" "'${ip}'") "Name"}}') || die "failed to find VM for IP $ip"
         log_name=${WORKING_DIRECTORY}/${vm_name}.log
         ssh_script=${WORKING_DIRECTORY}/ssh.${vm_id}

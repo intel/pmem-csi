@@ -47,10 +47,28 @@ nodeRegistration:
 	;;
 esac
 
-# Needed for flannel (https://clearlinux.org/documentation/clear-linux/tutorials/kubernetes).
-kubeadm_config_cluster="$kubeadm_config_cluster
+k8sversion=$(kubeadm version -o short)
+distro=`egrep "^ID=" /etc/os-release |awk -F= '{print $2}'`
+case $distro in
+    clear-linux-os)
+	# From https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/#pod-network
+	# However, the commit currently listed there for 1.16 is broken. Current master fixes some issues
+	# and works.
+	podnetworkingurl=https://raw.githubusercontent.com/coreos/flannel/960b3243b9a7faccdfe7b3c09097105e68030ea7/Documentation/kube-flannel.yml
+	# Needed for flannel (https://clearlinux.org/latest/tutorials/kubernetes.html).
+	kubeadm_config_cluster="$kubeadm_config_cluster
 networking:
   podSubnet: \"10.244.0.0/16\""
+	;;
+    fedora)
+	# Use weave on Fedora. Nothing to add to kubeconfig.
+	podnetworkingurl=https://cloud.weave.works/k8s/net?k8s-version=$k8sversion
+	;;
+    *)
+	echo "ERROR: unsupported distro=$distro"
+	exit 1
+	;;
+esac
 
 list_gates () (
     IFS=","
@@ -95,7 +113,6 @@ fi
 
 # Use a fixed version of Kubernetes for reproducability. The version gets
 # chosen when installing kubeadm. Here we use exactly that version.
-k8sversion=$(kubeadm version | sed -e 's/.*GitVersion:"*\([^ ",]*\).*/\1/')
 kubeadm_config_cluster="$kubeadm_config_cluster
 kubernetesVersion: $k8sversion
 "
@@ -152,10 +169,7 @@ kubectl get pods --all-namespaces
 
 ${TEST_CONFIGURE_POST_MASTER}
 
-# From https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/#pod-network
-# However, the commit currently listed there for 1.16 is broken. Current master fixes some issues
-# and works.
-kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/960b3243b9a7faccdfe7b3c09097105e68030ea7/Documentation/kube-flannel.yml
+kubectl apply -f $podnetworkingurl
 
 # Install addon storage CRDs, needed if certain feature gates are enabled.
 # Only applicable to Kubernetes 1.13 and older. 1.14 will have them as builtin APIs.
