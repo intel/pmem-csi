@@ -71,8 +71,17 @@ func GenerateVolumeID(caller string, name string) string {
 	// 2. CSI spec. allows characters in Name that are not allowed in LVM names.
 	hasher := sha256.New224()
 	hasher.Write([]byte(name))
-	id := hex.EncodeToString(hasher.Sum(nil))
-	klog.V(4).Infof("%s: Create hash from name:%s to form id:%s", caller, name, id)
+	hash := hex.EncodeToString(hasher.Sum(nil))
+	// Use first characters of Name in VolumeID to help humans.
+	// This also lowers collision probability even more, as an attacker
+	// attempting to cause VolumeID collision, has to find another Name
+	// producing same sha-224 hash, while also having common first N chars.
+	use := 6
+	if len(name) < 6 {
+		use = len(name)
+	}
+	id := name[0:use] + "-" + hash
+	klog.V(4).Infof("%s: Create VolumeID:%s based on name:%s", caller, id, name)
 	return id
 }
 
