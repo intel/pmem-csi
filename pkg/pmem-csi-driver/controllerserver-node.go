@@ -180,6 +180,16 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 	volumeID = parameters.getVolumeID()
 	if volumeID == "" {
 		volumeID = GenerateVolumeID("Node CreateVolume", volumeName)
+		// Check do we have entry with newly generated VolumeID already
+		if vol := cs.getVolumeByID(volumeID); vol != nil {
+			// if we have, that has to be VolumeID collision, because above we checked
+			// that we don't have entry with such Name. VolumeID collision is very-very
+			// unlikely so we should not get here in any near future, if otherwise state is good.
+			klog.V(3).Infof("Controller CreateVolume: VolumeID:%s collision: existing name:%s new name:%s",
+				volumeID, vol.Params[parameterName], volumeName)
+			statusErr = status.Error(codes.Internal, "VolumeID/hash collision, can not create unique Volume")
+			return
+		}
 	}
 
 	asked := capacity.GetRequiredBytes()
