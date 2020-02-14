@@ -13,10 +13,13 @@ package scheduler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -55,7 +58,11 @@ func (s scheduler) Handle(ctx context.Context, req admission.Request) admission.
 	}
 	klog.V(5).Infof("mutate pod %s: PMEM-CSI storage classes %v", pod.Name, targets)
 
-	if !s.usesPMEM(pod, targets) {
+	pmem, err := s.usesPMEM(pod, targets)
+	if err != nil {
+		return admission.Errored(http.StatusInternalServerError, err)
+	}
+	if !pmem {
 		klog.V(5).Infof("mutate pod %s: does not use PMEM", pod.Name)
 		return admission.Allowed("no request for PMEM-CSI")
 	}
@@ -88,26 +95,30 @@ func (s scheduler) targetStorageClasses(ctx context.Context) (map[string]bool, e
 
 	targets := make(map[string]bool)
 	for _, sc := range scs {
-		if sc.Provisioner != s.driverName {
-			continue
-		}
-		targets[sc.Name] = true
+		targets[sc.Name] = sc.Provisioner == s.driverName
 	}
 	return targets, nil
 }
 
-func (s scheduler) usesPMEM(pod *corev1.Pod, targets map[string]bool) bool {
+func (s scheduler) usesPMEM(pod *corev1.Pod, targets map[string]bool) (bool, error) {
 	for _, vol := range pod.Spec.Volumes {
 		if vol.PersistentVolumeClaim != nil {
 			pvcName := vol.PersistentVolumeClaim.ClaimName
 			pvc, err := s.pvcLister.PersistentVolumeClaims(pod.Namespace).Get(pvcName)
+			if err != nil && apierrs.IsNotFound(err) {
+				// Bypass the lister, it might not have a recently created PVC yet.
+				pvc, err = s.clientSet.CoreV1().PersistentVolumeClaims(pod.Namespace).Get(pvcName, metav1.GetOptions{})
+			}
+
 			if err != nil {
-				// A pod is getting created before its PVC or before we know about
-				// the PVC. TopoLVM returns an error in this case (https://github.com/cybozu-go/topolvm/blob/7b79ee30e997a165b220d4519c784e50eaec36c8/hook/mutate_pod.go#L129-L136),
-				// but then pod creation fails while normally it would go through.
-				// We ignore the PVC instead.
-				klog.Warningf("pod mutator: pod %q with unknown pvc %q in namespace %q, ignoring the pvc", pod.Name, pvcName, pod.Namespace)
-				continue
+				if apierrs.IsNotFound(err) {
+					// A pod is getting created before its PVC. TopoLVM returns an error in this case (https://github.com/cybozu-go/topolvm/blob/7b79ee30e997a165b220d4519c784e50eaec36c8/hook/mutate_pod.go#L129-L136),
+					// but then pod creation fails while normally it would go through.
+					// We ignore the PVC instead.
+					klog.Warningf("pod mutator: pod %q with unknown pvc %q in namespace %q, ignoring the pvc", pod.Name, pvcName, pod.Namespace)
+					continue
+				}
+				return false, fmt.Errorf("check PVC %s/%s: %v", pod.Namespace, pvcName, err)
 			}
 
 			if pvc.Spec.StorageClassName == nil {
@@ -117,18 +128,35 @@ func (s scheduler) usesPMEM(pod *corev1.Pod, targets map[string]bool) bool {
 				continue
 			}
 
-			if !targets[*pvc.Spec.StorageClassName] {
+			scName := *pvc.Spec.StorageClassName
+			usesPMEM, known := targets[scName]
+			if !known {
+				// Query API server directly.
+				sc, err := s.clientSet.StorageV1().StorageClasses().Get(scName, metav1.GetOptions{})
+				if err != nil {
+					if apierrs.IsNotFound(err) {
+						// As with non-existent PVC, assume that it isn't using PMEM.
+						continue
+					}
+					return false, fmt.Errorf("check storage class %s: %v", scName, err)
+				}
+				usesPMEM = sc.Provisioner == s.driverName
+
+				// Also cache result.
+				targets[scName] = usesPMEM
+			}
+			if !usesPMEM {
 				continue
 			}
 
 			// We don't care here whether the volume is already bound.
 			// That can be checked more reliably by the scheduler extender.
-			return true
+			return true, nil
 		} else if vol.CSI != nil {
 			if vol.CSI.Driver == s.driverName {
-				return true
+				return true, nil
 			}
 		}
 	}
-	return false
+	return false, nil
 }

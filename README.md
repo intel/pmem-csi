@@ -477,23 +477,20 @@ which intercepts the creation of all pods. If that pod uses volumes
 provided by PMEM-CSI, the webhook transparently adds the extended
 resource request.
 
-The webhook can only do that a) if the persistent volume claim (PVC)
-and its storage class have been created already and b) the webhook has
-been informed about them. The former is not guaranteed: it's okay to
-create the pod first, then later add the PVC. The pod simply won't
-start in the meantime. Even if these additional objects get created
-first, there is still a race condition because the webhook might get
-called before the controller gets a copy of the new storage class and
-PVC.
+The webhook can only do that if the persistent volume claim (PVC) and
+its storage class have been created already. This is normally not
+required: it's okay to create the pod first, then later add the
+PVC. The pod simply won't start in the meantime.
 
 The webhook deals with this uncertainty by allowing the creation of
 the pod without adding the extended resource when it lacks the
 necessary information. The alternative would be to reject the pod, but
-that is a change of behavior of the cluster that may affect also pods
+that would be a change of behavior of the cluster that may affect also pods
 that don't use PMEM-CSI at all.
 
-Because of this limitation, it is more reliable to manually add the
-resource section.
+Users must take care to create PVCs first, then the pods if they want
+to use the webhook. In practice, that is often already done because it
+is more natural, so it is not a big limitation.
 
 ## Prerequisites
 

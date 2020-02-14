@@ -21,6 +21,7 @@ import (
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	storagelisters "k8s.io/client-go/listers/storage/v1"
@@ -41,6 +42,7 @@ type Capacity interface {
 type scheduler struct {
 	driverName string
 	capacity   Capacity
+	clientSet  kubernetes.Interface
 	pvcLister  corelisters.PersistentVolumeClaimLister
 	scLister   storagelisters.StorageClassLister
 	podMutator http.Handler
@@ -51,12 +53,14 @@ type scheduler struct {
 func NewScheduler(
 	driverName string,
 	capacity Capacity,
+	clientSet kubernetes.Interface,
 	pvcLister corelisters.PersistentVolumeClaimLister,
 	scLister storagelisters.StorageClassLister,
 ) (http.Handler, error) {
 	s := &scheduler{
 		driverName: driverName,
 		capacity:   capacity,
+		clientSet:  clientSet,
 		pvcLister:  pvcLister,
 		scLister:   scLister,
 		log:        klogr.New().WithName("scheduler"),

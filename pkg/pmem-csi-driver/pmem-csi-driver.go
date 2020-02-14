@@ -294,6 +294,7 @@ func (pmemd *pmemDriver) startScheduler(ctx context.Context, cancel func(), rs *
 	sched, err := scheduler.NewScheduler(
 		pmemd.cfg.DriverName,
 		scheduler.CapacityViaRegistry(rs),
+		pmemd.cfg.client,
 		pvcLister,
 		scLister,
 	)

@@ -156,50 +156,33 @@ func (l local) testSchedulerInPod(
 		},
 	}
 
-	Eventually(func() bool {
-		By(fmt.Sprintf("Creating pod %s", pod.Name))
-		ns := f.Namespace.Name
-		podClient := f.PodClientNS(ns)
-		createdPod := podClient.Create(pod)
-		defer func() {
-			By("delete the pod")
-			podClient.DeleteSync(createdPod.Name, &metav1.DeleteOptions{}, framework.DefaultPodDeletionTimeout)
-		}()
+	By(fmt.Sprintf("Creating pod %s", pod.Name))
+	ns := f.Namespace.Name
+	podClient := f.PodClientNS(ns)
+	createdPod := podClient.Create(pod)
+	defer func() {
+		By("delete the pod")
+		podClient.DeleteSync(createdPod.Name, &metav1.DeleteOptions{}, framework.DefaultPodDeletionTimeout)
+	}()
 
-		// The webhook should have added the special extended
-		// resource. However, for non-inline volumes there is
-		// a race condition that we are likely to hit because
-		// SC and PVC get created shortly before the pod, so
-		// we may have to try again.
-		if volumeType != testpatterns.InlineVolume {
-			if createdPod.Spec.Containers[0].Resources.Requests == nil {
-				return false
-			}
-			if _, ok := createdPod.Spec.Containers[0].Resources.Requests["pmem-csi.intel.com/scheduler"]; !ok {
-				return false
-			}
-		}
-		Expect(createdPod.Spec.Containers[0].Resources).NotTo(BeNil(), "pod resources")
-		Expect(createdPod.Spec.Containers[0].Resources.Requests).NotTo(BeNil(), "pod resource requests")
-		_, ok := createdPod.Spec.Containers[0].Resources.Requests["pmem-csi.intel.com/scheduler"]
-		Expect(ok).To(BeTrue(), "PMEM-CSI extended resource request")
-		Expect(createdPod.Spec.Containers[0].Resources.Limits).NotTo(BeNil(), "pod resource requests")
-		_, ok = createdPod.Spec.Containers[0].Resources.Requests["pmem-csi.intel.com/scheduler"]
-		Expect(ok).To(BeTrue(), "PMEM-CSI extended resource limit")
+	Expect(createdPod.Spec.Containers[0].Resources).NotTo(BeNil(), "pod resources")
+	Expect(createdPod.Spec.Containers[0].Resources.Requests).NotTo(BeNil(), "pod resource requests")
+	_, ok := createdPod.Spec.Containers[0].Resources.Requests["pmem-csi.intel.com/scheduler"]
+	Expect(ok).To(BeTrue(), "PMEM-CSI extended resource request")
+	Expect(createdPod.Spec.Containers[0].Resources.Limits).NotTo(BeNil(), "pod resource requests")
+	_, ok = createdPod.Spec.Containers[0].Resources.Requests["pmem-csi.intel.com/scheduler"]
+	Expect(ok).To(BeTrue(), "PMEM-CSI extended resource limit")
 
-		podErr := e2epod.WaitForPodRunningInNamespace(f.ClientSet, createdPod)
-		framework.ExpectNoError(podErr, "running pod")
+	podErr := e2epod.WaitForPodRunningInNamespace(f.ClientSet, createdPod)
+	framework.ExpectNoError(podErr, "running pod")
 
-		// If we get here, we know that the scheduler extender
-		// worked. If it wasn't active, kube-scheduler would have
-		// tried to handle pmem-csi.intel.com/scheduler itself, which
-		// can't work because there is no node provising that
-		// resource.
+	// If we get here, we know that the scheduler extender
+	// worked. If it wasn't active, kube-scheduler would have
+	// tried to handle pmem-csi.intel.com/scheduler itself, which
+	// can't work because there is no node provising that
+	// resource.
 
-		By(fmt.Sprintf("Deleting pod %s", pod.Name))
-		err := e2epod.DeletePodWithWait(f.ClientSet, pod)
-		framework.ExpectNoError(err, "while deleting pod")
-
-		return true
-	}, "5m").Should(BeTrue(), "extended resource added")
+	By(fmt.Sprintf("Deleting pod %s", pod.Name))
+	err := e2epod.DeletePodWithWait(f.ClientSet, pod)
+	framework.ExpectNoError(err, "while deleting pod")
 }

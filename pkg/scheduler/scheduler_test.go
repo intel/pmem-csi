@@ -154,6 +154,7 @@ func newTestEnv(t *testing.T, capacity Capacity, stopCh <-chan struct{}) *testEn
 
 	handler, err := NewScheduler(driverName,
 		capacity,
+		client,
 		pvcInformer.Lister(),
 		classInformer.Lister(),
 	)
