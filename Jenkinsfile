@@ -525,6 +525,10 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                                          TEST_E2E_SKIP=\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]; fi) \
                            ' \
            "
+    } catch (exc) {
+        echo "Handling exception, get pod state and kubelet logs:"
+        sh "_work/${env.CLUSTER}/ssh.0 kubectl get pods --all-namespaces -o wide"
+        sh "for cmd in `ls _work/${env.CLUSTER}/ssh.*`; do \$cmd sudo journalctl -u kubelet; done"
     } finally {
         // Each test run produces junit_*.xml files with testsuite name="PMEM E2E suite".
         // To make test names unique in the Jenkins UI, we rename that test suite per run,
