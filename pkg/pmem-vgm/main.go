@@ -8,7 +8,7 @@ import (
 	"k8s.io/klog"
 
 	"github.com/intel/pmem-csi/pkg/ndctl"
-	"github.com/intel/pmem-csi/pkg/pmem-common"
+	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 )
 
@@ -52,16 +52,12 @@ func prepareVolumeGroups(ctx *ndctl.Context) {
 		klog.V(5).Infof("CheckVG: Bus: %v", bus.DeviceName())
 		for _, r := range bus.ActiveRegions() {
 			klog.V(5).Infof("Region: %v", r.DeviceName())
-			vgName := vgName(bus, r)
+			vgName := pmemcommon.VgName(bus, r)
 			if err := createVolumesForRegion(r, vgName); err != nil {
 				klog.Errorf("Failed volumegroup creation: %s", err.Error())
 			}
 		}
 	}
-}
-
-func vgName(bus *ndctl.Bus, region *ndctl.Region) string {
-	return bus.DeviceName() + region.DeviceName()
 }
 
 func createVolumesForRegion(r *ndctl.Region, vgName string) error {

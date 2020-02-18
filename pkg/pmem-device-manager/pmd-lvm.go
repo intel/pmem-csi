@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/intel/pmem-csi/pkg/ndctl"
+	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 	"k8s.io/klog"
 )
@@ -47,7 +48,7 @@ func NewPmemDeviceManagerLVM() (PmemDeviceManager, error) {
 	volumeGroups := []string{}
 	for _, bus := range ctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
-			vgname := vgName(bus, r)
+			vgname := pmemcommon.VgName(bus, r)
 			if _, err := pmemexec.RunCommand("vgs", vgname); err != nil {
 				klog.V(5).Infof("NewPmemDeviceManagerLVM: VG %v non-existent, skip", vgname)
 			} else {
@@ -221,10 +222,6 @@ func listDevices(volumeGroups ...string) (map[string]*PmemDeviceInfo, error) {
 		return nil, fmt.Errorf("lvs failure : %v", err)
 	}
 	return parseLVSOutput(output)
-}
-
-func vgName(bus *ndctl.Bus, region *ndctl.Region) string {
-	return bus.DeviceName() + region.DeviceName()
 }
 
 //lvs options "lv_name,lv_path,lv_size,lv_free"
