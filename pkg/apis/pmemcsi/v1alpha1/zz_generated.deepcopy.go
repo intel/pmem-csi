@@ -83,6 +83,31 @@ func (in *DeploymentSpec) DeepCopyInto(out *DeploymentSpec) {
 		*out = new(v1.ResourceRequirements)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.RegistryCert != nil {
+		in, out := &in.RegistryCert, &out.RegistryCert
+		*out = make([]byte, len(*in))
+		copy(*out, *in)
+	}
+	if in.RegistryPrivateKey != nil {
+		in, out := &in.RegistryPrivateKey, &out.RegistryPrivateKey
+		*out = make([]byte, len(*in))
+		copy(*out, *in)
+	}
+	if in.NodeControllerCert != nil {
+		in, out := &in.NodeControllerCert, &out.NodeControllerCert
+		*out = make([]byte, len(*in))
+		copy(*out, *in)
+	}
+	if in.NodeControllerPrivateKey != nil {
+		in, out := &in.NodeControllerPrivateKey, &out.NodeControllerPrivateKey
+		*out = make([]byte, len(*in))
+		copy(*out, *in)
+	}
+	if in.CACert != nil {
+		in, out := &in.CACert, &out.CACert
+		*out = make([]byte, len(*in))
+		copy(*out, *in)
+	}
 	return
 }
 
