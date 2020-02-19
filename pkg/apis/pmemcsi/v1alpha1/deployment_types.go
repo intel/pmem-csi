@@ -40,6 +40,21 @@ type DeploymentSpec struct {
 	DeviceMode DeviceMode `json:"deviceMode,omitempty"`
 	// LogLevel number for the log verbosity
 	LogLevel uint16 `json:"logLevel,omitempty"`
+	// RegistryCert encoded certificate signed by a CA for registry server authentication
+	// If not provided, provisioned one by the operator using self-signed CA
+	RegistryCert []byte `json:"registryCert,omitempty"`
+	// RegistryPrivateKey encoded private key used for registry server certificate
+	// If not provided, provisioned one by the operator
+	RegistryPrivateKey []byte `json:"registryKey,omitempty"`
+	// NodeControllerCert encoded certificate signed by a CA for node controller server authentication
+	// If not provided, provisioned one by the operator using self-signed CA
+	NodeControllerCert []byte `json:"nodeControllerCert,omitempty"`
+	// NodeControllerPrivateKey encoded private key used for node controller server certificate
+	// If not provided, provisioned one by the operator
+	NodeControllerPrivateKey []byte `json:"nodeControllerKey,omitempty"`
+	// CACert encoded root certificate of the CA by which the registry and node controller certificates are signed
+	// If not provided operator uses a self-signed CA certificate
+	CACert []byte `json:"caCert,omitempty"`
 }
 
 // DeploymentStatus defines the observed state of Deployment
@@ -207,6 +222,26 @@ func GetDeploymentCRDSchema() *apiextensions.JSONSchemaProps {
 					},
 					"controllerResources": getResourceRequestsSchema(),
 					"nodeResources":       getResourceRequestsSchema(),
+					"caCert": apiextensions.JSONSchemaProps{
+						Type:        "string",
+						Description: "Encoded CA certificate",
+					},
+					"registryCert": apiextensions.JSONSchemaProps{
+						Type:        "string",
+						Description: "Encoded pmem-registry certificate",
+					},
+					"registryKey": apiextensions.JSONSchemaProps{
+						Type:        "string",
+						Description: "Encoded private key used for generating pmem-registry certificate",
+					},
+					"nodeControllerCert": apiextensions.JSONSchemaProps{
+						Type:        "string",
+						Description: "Encoded pmem-node-controller certificate",
+					},
+					"nodeControllerKey": apiextensions.JSONSchemaProps{
+						Type:        "string",
+						Description: "Encoded private key used for generating pmem-node-controller certificate",
+					},
 				},
 			},
 		},
