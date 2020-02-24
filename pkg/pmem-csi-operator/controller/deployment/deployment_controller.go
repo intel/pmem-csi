@@ -11,6 +11,7 @@ import (
 	"time"
 
 	pmemcsiv1alpha1 "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/utils"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -56,17 +57,19 @@ var _ reconcile.Reconciler = &ReconcileDeployment{}
 type ReconcileDeployment struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client client.Client
-	scheme *runtime.Scheme
+	client    client.Client
+	scheme    *runtime.Scheme
+	namespace string
 	// known deployments
-	deployments map[types.NamespacedName]*pmemcsiv1alpha1.Deployment
+	deployments map[string]*pmemcsiv1alpha1.Deployment
 }
 
 func NewReconcileDeployment(c client.Client, s *runtime.Scheme) reconcile.Reconciler {
 	return &ReconcileDeployment{
 		client:      c,
 		scheme:      s,
-		deployments: map[types.NamespacedName]*pmemcsiv1alpha1.Deployment{},
+		namespace:   utils.GetNamespace(),
+		deployments: map[string]*pmemcsiv1alpha1.Deployment{},
 	}
 }
 
@@ -90,11 +93,7 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected.
 			// Remove the reference from our records
-			for driverName, d := range r.deployments {
-				if d.Name == request.Name && d.Namespace == request.Namespace {
-					delete(r.deployments, driverName)
-				}
-			}
+			delete(r.deployments, request.Name)
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
@@ -102,7 +101,7 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	deployment.EnsureDefaults()
-	d := &PmemCSIDriver{deployment}
+	d := &PmemCSIDriver{deployment, r.namespace}
 
 	requeue, err = d.Reconcile(r)
 
@@ -127,6 +126,10 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 	}
 
 	return reconcile.Result{Requeue: requeue, RequeueAfter: delay}, err
+}
+
+func (r *ReconcileDeployment) Namespace() string {
+	return r.namespace
 }
 
 //Get tries to retrives the Kubernetes objects

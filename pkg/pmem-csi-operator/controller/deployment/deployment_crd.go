@@ -20,7 +20,6 @@ import (
 )
 
 func EnsureCRDInstalled(config *rest.Config) error {
-
 	aeClientset, err := clientset.NewForConfig(config)
 	if err != nil {
 		return err
@@ -55,7 +54,8 @@ func EnsureCRDInstalled(config *rest.Config) error {
 				Kind:     "Deployment",
 				ListKind: "DeploymentList",
 			},
-			Scope: apiextensions.NamespaceScoped,
+			// PMEM-CSI Deployment is a cluster scoped resource
+			Scope: apiextensions.ClusterScoped,
 		},
 	}
 

@@ -28,6 +28,8 @@ const (
 
 type PmemCSIDriver struct {
 	*api.Deployment
+	// operators namespace used for creating sub-resources
+	namespace string
 }
 
 // checkIfNameClash check if d.Spec.DriverName is not clashing with any of the
@@ -36,7 +38,7 @@ type PmemCSIDriver struct {
 func (d *PmemCSIDriver) checkIfNameClash(r *ReconcileDeployment) *api.Deployment {
 	for _, dep := range r.deployments {
 		if dep.Spec.DriverName == d.Spec.DriverName &&
-			dep.GetNamespacedName() != d.GetNamespacedName() {
+			dep.Name != d.Name {
 			return dep
 		}
 	}
@@ -46,9 +48,9 @@ func (d *PmemCSIDriver) checkIfNameClash(r *ReconcileDeployment) *api.Deployment
 
 // Reconcile reconciles the driver deployment
 func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
-	nsn := d.GetNamespacedName()
+
 	changes := map[api.DeploymentChange]struct{}{}
-	oldDeployment, ok := r.deployments[nsn]
+	oldDeployment, ok := r.deployments[d.Name]
 	if ok {
 		changes = d.Compare(oldDeployment)
 		// We should not trust the deployment status, as it might be tampered.
@@ -56,7 +58,7 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 		oldDeployment.Status.DeepCopyInto(&d.Status)
 	}
 
-	klog.Infof("Deployment: %q, state: %q", nsn, d.Status.Phase)
+	klog.Infof("Deployment: %q, state: %q", d.Name, d.Status.Phase)
 
 	switch d.Status.Phase {
 	// We treat same both new and failed deployments
@@ -64,9 +66,9 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 		if dep := d.checkIfNameClash(r); dep != nil {
 			d.Status.Phase = api.DeploymentPhaseFailed
 			return true, fmt.Errorf("driver name %q is already taken by deployment %q",
-				d.Spec.DriverName, dep.GetNamespacedName())
+				d.Spec.DriverName, d.Name)
 		}
-		r.deployments[nsn] = d.Deployment
+		r.deployments[d.Name] = d.Deployment
 
 		if err := d.initDeploymentSecrests(r); err != nil {
 			d.Status.Phase = api.DeploymentPhaseFailed
@@ -84,12 +86,12 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 					return true, err
 				}
 				return true, fmt.Errorf("driver name %q is already taken by deployment %q",
-					d.Spec.DriverName, dep.GetNamespacedName())
+					d.Spec.DriverName, d.Name)
 			}
 		}
 
 		// Update local cache so that we can catch if any change in deployment
-		r.deployments[nsn] = d.Deployment
+		r.deployments[d.Name] = d.Deployment
 
 		if err := d.deployObjects(r); err != nil {
 			return true, err
@@ -102,7 +104,7 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 		requeue, err := d.reconcileDeploymentChanges(r, oldDeployment, changes)
 		if err == nil {
 			// If everything ok, update local cache
-			r.deployments[nsn] = d.Deployment
+			r.deployments[d.Name] = d.Deployment
 		}
 		return requeue, err
 	}
@@ -135,7 +137,7 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 		case api.DriverName:
 			if dep := d.checkIfNameClash(r); dep != nil {
 				err = fmt.Errorf("cannot update deployment(%q) driver name as name %q is already taken by deployment %q",
-					d.GetNamespacedName(), d.Spec.DriverName, dep.GetNamespacedName())
+					d.Name, d.Spec.DriverName, dep.Name)
 
 				// DriverName cannot be updated, revert from deployment spec
 				d.Spec.DriverName = existing.Spec.DriverName
@@ -156,7 +158,7 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 	// Reject changes which cannot be applied
 	// by updating the deployment object
 	if updateDeployment {
-		klog.Infof("Updating deployment %q", d.GetNamespacedName())
+		klog.Infof("Updating deployment %q", d.Name)
 		if e := r.Update(d.Deployment); e != nil {
 			requeue = true
 			err = e
@@ -164,14 +166,14 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 	}
 
 	if updateController {
-		klog.Infof("Updating controller driver for deployment %q", d.GetNamespacedName())
+		klog.Infof("Updating controller driver for deployment %q", d.Name)
 		if e := r.Update(d.getControllerStatefulSet()); e != nil {
 			requeue = true
 			err = e
 		}
 	}
 	if updateNodeDriver {
-		klog.Infof("Updating node driver for deployment %q", d.GetNamespacedName())
+		klog.Infof("Updating node driver for deployment %q", d.Name)
 		if e := r.Update(d.getNodeDaemonSet()); err != nil {
 			requeue = true
 			err = e
@@ -299,7 +301,7 @@ func (d *PmemCSIDriver) getSecret(cn string, ecodedKey []byte, ecnodedCert []byt
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      d.Name + "-" + cn,
-			Namespace: d.Namespace,
+			Namespace: d.namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				d.getOwnerReference(),
 			},
@@ -320,7 +322,7 @@ func (d *PmemCSIDriver) getControllerService() *corev1.Service {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      d.Name,
-			Namespace: d.Namespace,
+			Namespace: d.namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				d.getOwnerReference(),
 			},
@@ -347,7 +349,7 @@ func (d *PmemCSIDriver) getControllerServiceAccount() *corev1.ServiceAccount {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      d.Name,
-			Namespace: d.Namespace,
+			Namespace: d.namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				d.getOwnerReference(),
 			},
@@ -363,7 +365,7 @@ func (d *PmemCSIDriver) getControllerProvisionerRole() *rbacv1.Role {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      d.Name,
-			Namespace: d.Namespace,
+			Namespace: d.namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				d.getOwnerReference(),
 			},
@@ -395,7 +397,7 @@ func (d *PmemCSIDriver) getControllerProvisionerRoleBinding() *rbacv1.RoleBindin
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      d.Name,
-			Namespace: d.Namespace,
+			Namespace: d.namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				d.getOwnerReference(),
 			},
@@ -404,7 +406,7 @@ func (d *PmemCSIDriver) getControllerProvisionerRoleBinding() *rbacv1.RoleBindin
 			{
 				Kind:      "ServiceAccount",
 				Name:      d.Name,
-				Namespace: d.Namespace,
+				Namespace: d.namespace,
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
@@ -422,9 +424,7 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRole() *rbacv1.ClusterRol
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			// ClusterRole is a cluster level object, hence use deployment name and namespace as
-			// object name to make it unique
-			Name: d.Name + "-" + d.Namespace,
+			Name: d.Name,
 			OwnerReferences: []metav1.OwnerReference{
 				d.getOwnerReference(),
 			},
@@ -490,9 +490,7 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRoleBinding() *rbacv1.Clu
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			// ClusterRoleBinding is a cluster level object, hence use deployment
-			// name and namespace as object name to make it unique
-			Name: d.Name + "-" + d.Namespace,
+			Name: d.Name,
 			OwnerReferences: []metav1.OwnerReference{
 				d.getOwnerReference(),
 			},
@@ -501,13 +499,13 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRoleBinding() *rbacv1.Clu
 			{
 				Kind:      "ServiceAccount",
 				Name:      d.Name,
-				Namespace: d.Namespace,
+				Namespace: d.namespace,
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     d.Name + "-" + d.Namespace,
+			Name:     d.Name,
 		},
 	}
 }
@@ -521,7 +519,7 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      d.Name + "-controller",
-			Namespace: d.Namespace,
+			Namespace: d.namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				d.getOwnerReference(),
 			},
@@ -603,7 +601,7 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      d.Name + "-node",
-			Namespace: d.Namespace,
+			Namespace: d.namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				d.getOwnerReference(),
 			},
