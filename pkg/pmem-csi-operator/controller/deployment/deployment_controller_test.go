@@ -39,7 +39,7 @@ func TestDeploymentController(t *testing.T) {
 }
 
 type pmemDeployment struct {
-	nsn                                                 types.NamespacedName
+	name                                                string
 	driverName                                          string
 	logLevel                                            uint16
 	image, pullPolicy, provisionerImage, registrarImage string
@@ -64,10 +64,7 @@ func getDeployment(d *pmemDeployment) runtime.Object {
 apiVersion: pmem-csi.intel.com/v1alpha1
 metadata:
   name: %s
-`, d.nsn.Name)
-	if d.nsn.Namespace != "" {
-		yaml += "  namespace: " + d.nsn.Namespace + "\n"
-	}
+`, d.name)
 	yaml += "spec:\n"
 	if d.driverName != "" {
 		yaml += "  driverName: " + d.driverName + "\n"
@@ -128,11 +125,10 @@ metadata:
 	return decodeYaml(yaml)
 }
 
-func testDeploymentPhase(rc *deployment.ReconcileDeployment, nsn types.NamespacedName, expectedPhase api.DeploymentPhase) {
+func testDeploymentPhase(rc *deployment.ReconcileDeployment, name string, expectedPhase api.DeploymentPhase) {
 	depObject := &api.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      nsn.Name,
-			Namespace: nsn.Namespace,
+			Name: name,
 		},
 	}
 	err := rc.Get(depObject)
@@ -140,11 +136,10 @@ func testDeploymentPhase(rc *deployment.ReconcileDeployment, nsn types.Namespace
 	Expect(depObject.Status.Phase).Should(BeEquivalentTo(expectedPhase), "Unexpected status phase")
 }
 
-func testReconcile(rc *deployment.ReconcileDeployment, nsn types.NamespacedName, expectErr bool, expectedRequeue bool) {
+func testReconcile(rc *deployment.ReconcileDeployment, name string, expectErr bool, expectedRequeue bool) {
 	req := reconcile.Request{
 		NamespacedName: types.NamespacedName{
-			Name:      nsn.Name,
-			Namespace: nsn.Namespace,
+			Name: name,
 		},
 	}
 	resp, err := rc.Reconcile(req)
@@ -156,9 +151,9 @@ func testReconcile(rc *deployment.ReconcileDeployment, nsn types.NamespacedName,
 	Expect(resp.Requeue).Should(BeEquivalentTo(expectedRequeue), "expected requeue reconcile")
 }
 
-func testReconcilePhase(rc *deployment.ReconcileDeployment, nsn types.NamespacedName, expectErr bool, expectedRequeue bool, expectedPhase api.DeploymentPhase) {
-	testReconcile(rc, nsn, expectErr, expectedRequeue)
-	testDeploymentPhase(rc, nsn, expectedPhase)
+func testReconcilePhase(rc *deployment.ReconcileDeployment, name string, expectErr bool, expectedRequeue bool, expectedPhase api.DeploymentPhase) {
+	testReconcile(rc, name, expectErr, expectedRequeue)
+	testDeploymentPhase(rc, name, expectedPhase)
 }
 
 func getReconciler(initObjects ...runtime.Object) *deployment.ReconcileDeployment {
@@ -169,11 +164,10 @@ func getReconciler(initObjects ...runtime.Object) *deployment.ReconcileDeploymen
 
 func validateSecrets(rc *deployment.ReconcileDeployment, d *pmemDeployment) {
 	for _, name := range []string{"pmem-registry", "pmem-node-controller", "pmem-ca"} {
-		secretName := d.nsn.Name + "-" + name
+		secretName := d.name + "-" + name
 		s := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      secretName,
-				Namespace: d.nsn.Namespace,
+				Name: secretName,
 			},
 		}
 		err := rc.Get(s)
@@ -190,25 +184,22 @@ var _ = Describe("Operator", func() {
 	Context("Deployment Controller", func() {
 		It("shall allow deployment with defaults", func() {
 			d := &pmemDeployment{
-				nsn: types.NamespacedName{
-					Name:      "test-deployment",
-					Namespace: "testnamespace",
-				},
+				name: "test-deployment",
 			}
 
 			rc := getReconciler(getDeployment(d))
-			testReconcilePhase(rc, d.nsn, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, d.name, false, true, api.DeploymentPhaseInitializing)
 
 			validateSecrets(rc, d)
 
 			// Reconcile now should change Phase to running
-			testReconcilePhase(rc, d.nsn, false, false, api.DeploymentPhaseRunning)
+			testReconcilePhase(rc, d.name, false, false, api.DeploymentPhaseRunning)
 
 			ss := &appsv1.StatefulSet{}
 			err := rc.Get(ss)
 			Expect(err).Should(BeNil(), "controller stateful set is expected on a successful deployment")
 			Expect(*ss.Spec.Replicas).Should(BeEquivalentTo(1), "controller stateful set replication count mismatch")
-			Expect(ss.ObjectMeta.Namespace).Should(BeEquivalentTo(d.nsn.Namespace), "controller stateful set namespace mismatch")
+			Expect(ss.ObjectMeta.Namespace).Should(BeEquivalentTo(rc.Namespace()), "controller stateful set namespace mismatch")
 			containers := ss.Spec.Template.Spec.Containers
 			Expect(len(containers)).Should(BeEquivalentTo(2), "controller stateful set container count mismatch")
 			for _, c := range containers {
@@ -230,7 +221,7 @@ var _ = Describe("Operator", func() {
 			ds := &appsv1.DaemonSet{}
 			err = rc.Get(ds)
 			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
-			Expect(ds.ObjectMeta.Namespace).Should(BeEquivalentTo(d.nsn.Namespace), "node daemon set namespace mismatch")
+			Expect(ds.ObjectMeta.Namespace).Should(BeEquivalentTo(rc.Namespace()), "node daemon set namespace mismatch")
 			containers = ds.Spec.Template.Spec.Containers
 			Expect(len(containers)).Should(BeEquivalentTo(2), "node daemon set container count mismatch")
 			for _, c := range containers {
@@ -252,10 +243,7 @@ var _ = Describe("Operator", func() {
 
 		It("shall allow deployment with explicit values", func() {
 			d := &pmemDeployment{
-				nsn: types.NamespacedName{
-					Name:      "test-deployment",
-					Namespace: "testnamespace",
-				},
+				name:             "test-deployment",
 				driverName:       "test-pmem-driver.intel.com",
 				image:            "test-driver:v0.0.0",
 				provisionerImage: "test-provisioner-image:v0.0.0",
@@ -269,18 +257,18 @@ var _ = Describe("Operator", func() {
 			}
 
 			rc := getReconciler(getDeployment(d))
-			testReconcilePhase(rc, d.nsn, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, d.name, false, true, api.DeploymentPhaseInitializing)
 
 			validateSecrets(rc, d)
 
 			// Reconcile now should change Phase to running
-			testReconcilePhase(rc, d.nsn, false, false, api.DeploymentPhaseRunning)
+			testReconcilePhase(rc, d.name, false, false, api.DeploymentPhaseRunning)
 
 			ss := &appsv1.StatefulSet{}
 			err := rc.Get(ss)
 			Expect(err).Should(BeNil(), "controller stateful set is expected on a successful deployment")
 			Expect(*ss.Spec.Replicas).Should(BeEquivalentTo(1), "controller stateful set replication count mismatch")
-			Expect(ss.ObjectMeta.Namespace).Should(BeEquivalentTo(d.nsn.Namespace), "controller stateful set namespace mismatch")
+			Expect(ss.ObjectMeta.Namespace).Should(BeEquivalentTo(rc.Namespace()), "controller stateful set namespace mismatch")
 			containers := ss.Spec.Template.Spec.Containers
 			Expect(len(containers)).Should(BeEquivalentTo(2), "controller stateful set container count mismatch")
 			for _, c := range containers {
@@ -302,7 +290,7 @@ var _ = Describe("Operator", func() {
 			ds := &appsv1.DaemonSet{}
 			err = rc.Get(ds)
 			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
-			Expect(ds.ObjectMeta.Namespace).Should(BeEquivalentTo(d.nsn.Namespace), "node daemon set namespace mismatch")
+			Expect(ds.ObjectMeta.Namespace).Should(BeEquivalentTo(rc.Namespace()), "node daemon set namespace mismatch")
 			containers = ds.Spec.Template.Spec.Containers
 			Expect(len(containers)).Should(BeEquivalentTo(2), "node daemon set container count mismatch")
 			for _, c := range containers {
@@ -324,66 +312,53 @@ var _ = Describe("Operator", func() {
 
 		It("shall allow multiple deployments", func() {
 			d1 := &pmemDeployment{
-				nsn: types.NamespacedName{
-					Name:      "test-deployment1",
-					Namespace: "testnamespace",
-				},
+				name:       "test-deployment1",
 				driverName: "test-pmem-driver1.intel.com",
 			}
 
 			d2 := &pmemDeployment{
-				nsn: types.NamespacedName{
-					Name:      "test-deployment2",
-					Namespace: "testnamespace",
-				},
+				name:       "test-deployment2",
 				driverName: "test-pmem-driver2.intel.com",
 			}
 
 			rc := getReconciler(getDeployment(d1), getDeployment(d2))
-			testReconcilePhase(rc, d1.nsn, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, d1.name, false, true, api.DeploymentPhaseInitializing)
 
-			testReconcilePhase(rc, d2.nsn, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, d2.name, false, true, api.DeploymentPhaseInitializing)
 
 		})
 
 		It("shall not allow multiple deployments with same driver name", func() {
 			d1 := &pmemDeployment{
-				nsn: types.NamespacedName{
-					Name:      "test-deployment1",
-					Namespace: "testnamespace",
-				},
+				name:       "test-deployment1",
 				driverName: "test-pmem-driver.intel.com",
 			}
 
 			d2 := &pmemDeployment{
-				nsn: types.NamespacedName{
-					Name:      "test-deployment2",
-					Namespace: "testnamespace",
-				},
+				name:       "test-deployment2",
 				driverName: "test-pmem-driver.intel.com",
 			}
 
 			rc := getReconciler(getDeployment(d1), getDeployment(d2))
 			// First deployment expected to be successful
-			testReconcilePhase(rc, d1.nsn, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, d1.name, false, true, api.DeploymentPhaseInitializing)
 			// Second deployment expected to fail as one more deployment is active with the
 			// same driver name
-			testReconcilePhase(rc, d2.nsn, true, true, api.DeploymentPhaseFailed)
+			testReconcilePhase(rc, d2.name, true, true, api.DeploymentPhaseFailed)
 
 			// Delete fist deployment
 			dep1 := &api.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      d1.nsn.Name,
-					Namespace: d1.nsn.Namespace,
+					Name: d1.name,
 				},
 			}
 			err := rc.Delete(dep1)
 			Expect(err).Should(BeNil(), "Failed to delete deployment in failed state")
 
-			testReconcile(rc, d1.nsn, false, false)
+			testReconcile(rc, d1.name, false, false)
 
 			// After removing first deployment, sencond deployment should progress
-			testReconcilePhase(rc, d2.nsn, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, d2.name, false, true, api.DeploymentPhaseInitializing)
 		})
 		It("shall use provided private keys", func() {
 			// Generate private key
@@ -393,24 +368,20 @@ var _ = Describe("Operator", func() {
 			encodedKey := utils.EncodeKey(regKey)
 
 			d := &pmemDeployment{
-				nsn: types.NamespacedName{
-					Name:      "test-deployment",
-					Namespace: "testnamespace",
-				},
+				name:       "test-deployment",
 				driverName: "test-pmem-driver.intel.com",
 				regKey:     encodedKey,
 			}
 
 			rc := getReconciler(getDeployment(d))
 			// First deployment expected to be successful
-			testReconcilePhase(rc, d.nsn, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, d.name, false, true, api.DeploymentPhaseInitializing)
 
 			validateSecrets(rc, d)
 
 			s := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      d.nsn.Name + "-pmem-registry",
-					Namespace: d.nsn.Namespace,
+					Name: d.name + "-pmem-registry",
 				},
 			}
 			Expect(rc.Get(s)).Should(BeNil(), "failed to get registry secret: %v", err)
@@ -419,19 +390,16 @@ var _ = Describe("Operator", func() {
 
 		It("shall allow to change running deployment name", func() {
 			d := &pmemDeployment{
-				nsn: types.NamespacedName{
-					Name:      "test-deployment",
-					Namespace: "testnamespace",
-				},
+				name: "test-deployment",
 			}
 
 			rc := getReconciler(getDeployment(d))
-			testReconcilePhase(rc, d.nsn, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, d.name, false, true, api.DeploymentPhaseInitializing)
 
 			validateSecrets(rc, d)
 
 			// Reconcile now should change Phase to running
-			testReconcilePhase(rc, d.nsn, false, false, api.DeploymentPhaseRunning)
+			testReconcilePhase(rc, d.name, false, false, api.DeploymentPhaseRunning)
 
 			// Ensure both deaemonset and statefulset have default driver name
 			// before editing deployment
@@ -457,8 +425,7 @@ var _ = Describe("Operator", func() {
 			// Edit deployment name
 			dep := &api.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      d.nsn.Name,
-					Namespace: d.nsn.Namespace,
+					Name: d.name,
 				},
 			}
 			err = rc.Get(dep)
@@ -467,7 +434,7 @@ var _ = Describe("Operator", func() {
 			dep.Spec.DriverName = "test-driver-name"
 			err = rc.Update(dep)
 			Expect(err).Should(BeNil(), "failed to update deployment")
-			testReconcilePhase(rc, d.nsn, false, false, api.DeploymentPhaseRunning)
+			testReconcilePhase(rc, d.name, false, false, api.DeploymentPhaseRunning)
 
 			// Ensure the new driver name effective in sub resources
 			ss = &appsv1.StatefulSet{}
@@ -492,30 +459,23 @@ var _ = Describe("Operator", func() {
 
 		It("shall not allow duplicate driver name via update deployment", func() {
 			d1 := &pmemDeployment{
-				nsn: types.NamespacedName{
-					Name:      "test-deployment1",
-					Namespace: "testnamespace",
-				},
+				name:       "test-deployment1",
 				driverName: "test-driver1",
 			}
 
 			d2 := &pmemDeployment{
-				nsn: types.NamespacedName{
-					Name:      "test-deployment2",
-					Namespace: "testnamespace",
-				},
+				name:       "test-deployment2",
 				driverName: "test-driver2",
 			}
 
 			rc := getReconciler(getDeployment(d1), getDeployment(d2))
-			testReconcilePhase(rc, d1.nsn, false, true, api.DeploymentPhaseInitializing)
-			testReconcilePhase(rc, d2.nsn, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, d1.name, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, d2.name, false, true, api.DeploymentPhaseInitializing)
 
 			// Try to introdue duplicate name when the driver is in Initializing phase
 			dep := &api.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      d1.nsn.Name,
-					Namespace: d1.nsn.Namespace,
+					Name: d1.name,
 				},
 			}
 			err := rc.Get(dep)
@@ -524,39 +484,36 @@ var _ = Describe("Operator", func() {
 			dep.Spec.DriverName = d2.driverName
 			err = rc.Update(dep)
 			Expect(err).Should(BeNil(), "failed to update deployment")
-			testReconcilePhase(rc, d1.nsn, true, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, d1.name, true, true, api.DeploymentPhaseInitializing)
 
 			// Try to introdue duplicate name when the driver is in Initializing phase
 			dep.Spec.DriverName = d2.driverName
 			err = rc.Update(dep)
 			Expect(err).Should(BeNil(), "failed to update deployment")
-			testReconcilePhase(rc, d1.nsn, true, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, d1.name, true, true, api.DeploymentPhaseInitializing)
 
 			// Move the deployment to Running phase
-			testReconcilePhase(rc, d1.nsn, false, false, api.DeploymentPhaseRunning)
+			testReconcilePhase(rc, d1.name, false, false, api.DeploymentPhaseRunning)
 
 			// Try to introdue duplicate name when the driver is in Running phase
 			dep.Spec.DriverName = d2.driverName
 			err = rc.Update(dep)
 			Expect(err).Should(BeNil(), "failed to update deployment")
-			testReconcilePhase(rc, d1.nsn, true, false, api.DeploymentPhaseRunning)
+			testReconcilePhase(rc, d1.name, true, false, api.DeploymentPhaseRunning)
 		})
 
 		It("shall not allow to change running deployment device mode", func() {
 			d := &pmemDeployment{
-				nsn: types.NamespacedName{
-					Name:      "test-deployment",
-					Namespace: "testnamespace",
-				},
+				name: "test-deployment",
 			}
 
 			rc := getReconciler(getDeployment(d))
-			testReconcilePhase(rc, d.nsn, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, d.name, false, true, api.DeploymentPhaseInitializing)
 
 			validateSecrets(rc, d)
 
 			// Reconcile now should change Phase to running
-			testReconcilePhase(rc, d.nsn, false, false, api.DeploymentPhaseRunning)
+			testReconcilePhase(rc, d.name, false, false, api.DeploymentPhaseRunning)
 
 			// Ensure both deaemonset and statefulset have default driver name
 			// before editing deployment
@@ -574,8 +531,7 @@ var _ = Describe("Operator", func() {
 			// Edit deployment name
 			dep := &api.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      d.nsn.Name,
-					Namespace: d.nsn.Namespace,
+					Name: d.name,
 				},
 			}
 			err = rc.Get(dep)
@@ -585,15 +541,12 @@ var _ = Describe("Operator", func() {
 			err = rc.Update(dep)
 			Expect(err).Should(BeNil(), "failed to update deployment")
 			// Reconcile is expected to fail
-			testReconcilePhase(rc, d.nsn, true, false, api.DeploymentPhaseRunning)
+			testReconcilePhase(rc, d.name, true, false, api.DeploymentPhaseRunning)
 		})
 
 		It("shall allow to change container resources of a running deployment", func() {
 			d := &pmemDeployment{
-				nsn: types.NamespacedName{
-					Name:      "test-update-resource",
-					Namespace: "testnamespace",
-				},
+				name:             "test-update-resource",
 				controllerCPU:    "100m",
 				controllerMemory: "10Mi",
 				nodeCPU:          "110m",
@@ -601,12 +554,12 @@ var _ = Describe("Operator", func() {
 			}
 
 			rc := getReconciler(getDeployment(d))
-			testReconcilePhase(rc, d.nsn, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, d.name, false, true, api.DeploymentPhaseInitializing)
 
 			validateSecrets(rc, d)
 
 			// Reconcile now should change Phase to running
-			testReconcilePhase(rc, d.nsn, false, false, api.DeploymentPhaseRunning)
+			testReconcilePhase(rc, d.name, false, false, api.DeploymentPhaseRunning)
 
 			ss := &appsv1.StatefulSet{}
 			err := rc.Get(ss)
@@ -633,7 +586,7 @@ var _ = Describe("Operator", func() {
 			err = rc.Update(dep)
 			Expect(err).Should(BeNil(), "failed to update deployment")
 			// Reconcile is expected not to fail
-			testReconcilePhase(rc, d.nsn, false, false, api.DeploymentPhaseRunning)
+			testReconcilePhase(rc, d.name, false, false, api.DeploymentPhaseRunning)
 
 			// Recheck the container resources are updated
 			ss = &appsv1.StatefulSet{}
@@ -655,19 +608,16 @@ var _ = Describe("Operator", func() {
 
 		It("shall allow to change container images of a running deployment", func() {
 			d := &pmemDeployment{
-				nsn: types.NamespacedName{
-					Name:      "test-update-images",
-					Namespace: "testnamespace",
-				},
+				name: "test-update-images",
 			}
 
 			rc := getReconciler(getDeployment(d))
-			testReconcilePhase(rc, d.nsn, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, d.name, false, true, api.DeploymentPhaseInitializing)
 
 			validateSecrets(rc, d)
 
 			// Reconcile now should change Phase to running
-			testReconcilePhase(rc, d.nsn, false, false, api.DeploymentPhaseRunning)
+			testReconcilePhase(rc, d.name, false, false, api.DeploymentPhaseRunning)
 
 			ss := &appsv1.StatefulSet{}
 			Expect(rc.Get(ss)).Should(BeNil(), "stateful set object is expected on a successful deployment")
@@ -694,7 +644,7 @@ var _ = Describe("Operator", func() {
 
 			dep := getDeployment(d)
 			Expect(rc.Update(dep)).Should(BeNil(), "failed to update deployment")
-			testReconcilePhase(rc, d.nsn, false, false, api.DeploymentPhaseRunning)
+			testReconcilePhase(rc, d.name, false, false, api.DeploymentPhaseRunning)
 
 			ss = &appsv1.StatefulSet{}
 			Expect(rc.Get(ss)).Should(BeNil(), "stateful set object is expected on a successful deployment")

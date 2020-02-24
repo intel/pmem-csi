@@ -40,7 +40,7 @@ $ kubectl create -f https://github.com/intel/pmem-csi/raw/operator/operator/depl
 
 ### Deployment CRD API
 
-Current PMEM-CSI Deployment object supports below API:
+`Deployment` is a cluster-scoped Kubernetes resource in `pmem-csi.intel.com` API group. Current PMEM-CSI Deployment object supports below API:
 
 #### Deployment
 
@@ -144,7 +144,7 @@ Metadata:
   Creation Timestamp:  2020-01-23T13:40:32Z
   Generation:          1
   Resource Version:    3596387
-  Self Link:           /apis/pmem-csi.intel.com/v1alpha1/namespaces/default/deployments/pmem-deployment
+  Self Link:           /apis/pmem-csi.intel.com/v1alpha1/deployments/pmem-deployment
   UID:                 454b5961-5aa2-41c3-b774-29fe932ae236
 Spec:
   Controller Resources:
@@ -162,12 +162,13 @@ Status:
 Events:   <none>
 
 
-$ kubectl get po
-NAME                    READY   STATUS    RESTARTS   AGE
-pmem-deployment-controller-0   2/2     Running   0          51s
-pmem-deployment-node-4x7cv     2/2     Running   0          50s
-pmem-deployment-node-6grt6     2/2     Running   0          50s
-pmem-deployment-node-msgds     2/2     Running   0          51s
+$ kubectl get po -n pmem-csi
+NAME                               READY   STATUS    RESTARTS   AGE
+pmem-deployment-controller-0       2/2     Running   0          51s
+pmem-deployment-node-4x7cv         2/2     Running   0          50s
+pmem-deployment-node-6grt6         2/2     Running   0          50s
+pmem-deployment-node-msgds         2/2     Running   0          51s
+pmem-csi-operator-749c7c7c69-k5k8n 1/1     Running   0          3m
 ```
 
 > **Note on multiple deployments**
