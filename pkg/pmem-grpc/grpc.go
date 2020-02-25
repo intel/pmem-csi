@@ -85,9 +85,11 @@ func LoadServerTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, err
 	}
 
 	return &tls.Config{
-		Certificates: []tls.Certificate{*peerCert},
-		ClientCAs:    certPool,
-		ClientAuth:   tls.RequireAndVerifyClientCert,
+		MinVersion:    tls.VersionTLS12,
+		Renegotiation: tls.RenegotiateNever,
+		Certificates:  []tls.Certificate{*peerCert},
+		ClientCAs:     certPool,
+		ClientAuth:    tls.RequireAndVerifyClientCert,
 		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 			// Common name check when accepting a connection from a client.
 			if peerName == "" {
@@ -116,9 +118,11 @@ func LoadClientTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, err
 	}
 	klog.V(3).Infof("Using Servername: %s", peerName)
 	return &tls.Config{
-		ServerName:   peerName,
-		Certificates: []tls.Certificate{*peerCert},
-		RootCAs:      certPool,
+		MinVersion:    tls.VersionTLS12,
+		Renegotiation: tls.RenegotiateNever,
+		ServerName:    peerName,
+		Certificates:  []tls.Certificate{*peerCert},
+		RootCAs:       certPool,
 	}, nil
 }
 
