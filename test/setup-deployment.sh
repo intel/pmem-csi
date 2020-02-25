@@ -3,6 +3,11 @@
 set -o errexit
 set -o pipefail
 
+# This reads a file and encodes it for use in a secret.
+read_key () {
+    base64 -w 0 "$1"
+}
+
 TEST_DIRECTORY=${TEST_DIRECTORY:-$(dirname $(readlink -f $0))}
 source ${TEST_CONFIG:-${TEST_DIRECTORY}/test-config.sh}
 
@@ -30,6 +35,46 @@ DEPLOY=(
     pmem-storageclass-cache.yaml
     pmem-storageclass-late-binding.yaml
 )
+
+# Read certificate files and turn them into Kubernetes secrets.
+#
+# -caFile (controller and all nodes)
+CA=$(read_key "$1")
+shift
+# -certFile (controller)
+REGISTRY_CERT=$(read_key "$1")
+shift
+# -keyFile (controller)
+REGISTRY_KEY=$(read_key "$1")
+shift
+# -certFile (same for all nodes)
+NODE_CERT=$(read_key "$1")
+shift
+# -keyFile (same for all nodes)
+NODE_KEY=$(read_key "$1")
+shift
+
+${KUBECTL} apply -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+    name: pmem-csi-registry-secrets
+type: kubernetes.io/tls
+data:
+    ca.crt: ${CA}
+    tls.crt: ${REGISTRY_CERT}
+    tls.key: ${REGISTRY_KEY}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pmem-csi-node-secrets
+type: Opaque
+data:
+    ca.crt: ${CA}
+    tls.crt: ${NODE_CERT}
+    tls.key: ${NODE_KEY}
+EOF
 
 echo "$KUBERNETES_VERSION" > $WORK_DIRECTORY/kubernetes.version
 for deploy in ${DEPLOY[@]}; do

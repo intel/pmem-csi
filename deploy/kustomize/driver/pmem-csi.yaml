@@ -45,9 +45,9 @@ spec:
                  "-endpoint=unix:///csi/csi-controller.sock",
                  "-registryEndpoint=tcp://0.0.0.0:10000",
                  "-nodeid=$(KUBE_NODE_NAME)",
-                 "-caFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
-                 "-certFile=/certs/pmem-csi-registry.crt",
-                 "-keyFile=/certs/pmem-csi-registry.key"
+                 "-caFile=/certs/ca.crt",
+                 "-certFile=/certs/tls.crt",
+                 "-keyFile=/certs/tls.key",
                ]
         # Passing /dev to container may cause container creation error because
         # termination-log is located on /dev/ by default, re-locate to /tmp
@@ -80,11 +80,6 @@ spec:
       - name: registry-cert
         secret:
           secretName: pmem-csi-registry-secrets
-          items:
-          - key: tls.crt
-            path: pmem-csi-registry.crt
-          - key: tls.key
-            path: pmem-csi-registry.key
 ---
 kind: DaemonSet
 apiVersion: apps/v1
@@ -115,9 +110,9 @@ spec:
                   "-nodeid=$(KUBE_NODE_NAME)",
                   "-controllerEndpoint=tcp://$(KUBE_POD_IP):10001",
                   "-registryEndpoint=$(PMEM_CSI_CONTROLLER_PORT_10000_TCP)",
-                  "-caFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
-                  "-certFile=/certs/$(KUBE_NODE_NAME).crt",
-                  "-keyFile=/certs/$(KUBE_NODE_NAME).key",
+                  "-caFile=/certs/ca.crt",
+                  "-certFile=/certs/tls.crt",
+                  "-keyFile=/certs/tls.key",
                   "-statePath=/var/lib/pmem-csi.intel.com"
               ]
         # Passing /dev to container may cause container creation error because

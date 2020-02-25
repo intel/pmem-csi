@@ -275,17 +275,15 @@ components. The following common names have a special meaning:
 - `pmem-registry` is used by the [RegistryServer](#node-registry-server).
 - `pmem-node-controller` is used by [NodeControllerServers](#node-controller-server)
 
-The [`test/setup-ca-kubernetes.sh`](test/setup-ca-kubernetes.sh)
-script shows how to generate certificates signed by Kubernetes cluster
-root Certificate Authority. And the provided [deployment
-files](deploy/kubernetes/pmem-csi.yaml) shows how to use the generated
-certificates to setup the driver. The test cluster is setup using
-certificates created by that script. The
-[`test/setup-ca.sh`](test/setup-ca.sh) script also shows how to
-generate self signed certificates. These are just examples,
-administrators of a cluster must ensure that they choose key lengths
-and algorithms of sufficient strength for their purposes and manage
-certificate distribution.
+The [`test/setup-ca.sh`](test/setup-ca.sh)
+script shows how to generate self-signed certificates. The test cluster is set
+up using certificates created by that script, with secrets prepared by
+[`test/setup-deployment.sh`](test/setup-deployment.sh) before
+deploying the driver using the provided [deployment files](deploy/).
+
+Beware that these are just examples. Administrators of a cluster must
+ensure that they choose key lengths and algorithms of sufficient
+strength for their purposes and manage certificate distribution.
 
 A production deployment can improve upon that by using some other key
 delivery mechanism, like for example
