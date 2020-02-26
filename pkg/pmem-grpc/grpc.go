@@ -3,6 +3,7 @@ package pmemgrpc
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -85,26 +86,50 @@ func LoadServerTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, err
 	}
 
 	return &tls.Config{
-		MinVersion:    tls.VersionTLS12,
-		Renegotiation: tls.RenegotiateNever,
-		Certificates:  []tls.Certificate{*peerCert},
-		ClientCAs:     certPool,
-		ClientAuth:    tls.RequireAndVerifyClientCert,
-		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-			// Common name check when accepting a connection from a client.
-			if peerName == "" {
-				// All names allowed.
-				return nil
+		GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
+			if info == nil {
+				return nil, errors.New("nil client info passed")
 			}
-			if len(verifiedChains) == 0 ||
-				len(verifiedChains[0]) == 0 {
-				return fmt.Errorf("no valid certificate")
+			klog.Infof("GetConfigForClient: servername(%q)", info.ServerName)
+			ciphers := []uint16{}
+			for _, c := range info.CipherSuites {
+				// filter out all insecure ciphers from client offered list
+				switch c {
+				case tls.TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA,
+					tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
+					tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA,
+					tls.TLS_RSA_WITH_RC4_128_SHA:
+					continue
+				default:
+					ciphers = append(ciphers, c)
+				}
 			}
-			commonName := verifiedChains[0][0].Subject.CommonName
-			if commonName != peerName {
-				return fmt.Errorf("expected CN %q, got %q", peerName, commonName)
-			}
-			return nil
+
+			return &tls.Config{
+				MinVersion:    tls.VersionTLS12,
+				Renegotiation: tls.RenegotiateNever,
+				Certificates:  []tls.Certificate{*peerCert},
+				ClientCAs:     certPool,
+				ClientAuth:    tls.RequireAndVerifyClientCert,
+				CipherSuites:  ciphers,
+				VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+					// Common name check when accepting a connection from a client.
+					if peerName == "" {
+						// All names allowed.
+						return nil
+					}
+					if len(verifiedChains) == 0 ||
+						len(verifiedChains[0]) == 0 {
+						return errors.New("no valid certificate")
+					}
+					commonName := verifiedChains[0][0].Subject.CommonName
+					klog.Infof("VerifyPeerCertificate: CN=%s", commonName)
+					if commonName != peerName {
+						return fmt.Errorf("expected CN %q, got %q", peerName, commonName)
+					}
+					return nil
+				},
+			}, nil
 		},
 	}, nil
 }
