@@ -1,6 +1,6 @@
 # PMEM-CSI for Kubernetes
 
-<h2>*Note: This is Alpha code and not production ready.*</h2>
+**Note: This is Alpha code and not production ready.**
 
 Intel PMEM-CSI is a storage driver for container orchestrators like
 Kubernetes. It makes local persistent memory
