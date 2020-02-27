@@ -17,6 +17,7 @@ import (
 	"net/http"
 
 	corev1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -58,13 +59,13 @@ func (s scheduler) Handle(ctx context.Context, req admission.Request) admission.
 	}
 	klog.V(5).Infof("mutate pod %s: PMEM-CSI storage classes %v", pod.Name, targets)
 
-	pmem, err := s.usesPMEM(pod, targets)
+	filter, err := s.mustFilterPod(pod, targets)
 	if err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
-	if !pmem {
-		klog.V(5).Infof("mutate pod %s: does not use PMEM", pod.Name)
-		return admission.Allowed("no request for PMEM-CSI")
+	if !filter {
+		klog.V(5).Infof("mutate pod %s: does not use inline or delayed PMEM volumes", pod.Name)
+		return admission.Allowed("no relevant PMEM volumes")
 	}
 
 	ctnr := &pod.Spec.Containers[0]
@@ -95,12 +96,21 @@ func (s scheduler) targetStorageClasses(ctx context.Context) (map[string]bool, e
 
 	targets := make(map[string]bool)
 	for _, sc := range scs {
-		targets[sc.Name] = sc.Provisioner == s.driverName
+		targets[sc.Name] = s.mustFilterSC(sc)
 	}
 	return targets, nil
 }
 
-func (s scheduler) usesPMEM(pod *corev1.Pod, targets map[string]bool) (bool, error) {
+// mustFilter returns true iff we must mark a pod using a PVC with this storage class
+// as one which needs the scheduler extender, i.e. when the storage class uses PMEM-CSI
+// and isn't using immediate binding.
+func (s scheduler) mustFilterSC(sc *storagev1.StorageClass) bool {
+	return sc.Provisioner == s.driverName &&
+		(sc.VolumeBindingMode == nil ||
+			*sc.VolumeBindingMode != storagev1.VolumeBindingImmediate)
+}
+
+func (s scheduler) mustFilterPod(pod *corev1.Pod, targets map[string]bool) (bool, error) {
 	for _, vol := range pod.Spec.Volumes {
 		if vol.PersistentVolumeClaim != nil {
 			pvcName := vol.PersistentVolumeClaim.ClaimName
@@ -129,7 +139,7 @@ func (s scheduler) usesPMEM(pod *corev1.Pod, targets map[string]bool) (bool, err
 			}
 
 			scName := *pvc.Spec.StorageClassName
-			usesPMEM, known := targets[scName]
+			filter, known := targets[scName]
 			if !known {
 				// Query API server directly.
 				sc, err := s.clientSet.StorageV1().StorageClasses().Get(scName, metav1.GetOptions{})
@@ -140,12 +150,12 @@ func (s scheduler) usesPMEM(pod *corev1.Pod, targets map[string]bool) (bool, err
 					}
 					return false, fmt.Errorf("check storage class %s: %v", scName, err)
 				}
-				usesPMEM = sc.Provisioner == s.driverName
+				filter = s.mustFilterSC(sc)
 
 				// Also cache result.
-				targets[scName] = usesPMEM
+				targets[scName] = filter
 			}
-			if !usesPMEM {
+			if !filter {
 				continue
 			}
 

@@ -473,9 +473,12 @@ Having to add `pmem-csi.intel.com/scheduler` manually is not
 user-friendly. To simplify this, PMEM-CSI provides a [mutating
 admission
 webhook](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/)
-which intercepts the creation of all pods. If that pod uses volumes
-provided by PMEM-CSI, the webhook transparently adds the extended
-resource request.
+which intercepts the creation of all pods. If that pod uses inline
+ephemeral volumes or volumes with late binding that are provided by
+PMEM-CSI, the webhook transparently adds the extended resource
+request. PMEM-CSI volumes with immediate binding are ignored because
+for those the normal topology support ensures that unsuitable nodes
+are filtered out.
 
 The webhook can only do that if the persistent volume claim (PVC) and
 its storage class have been created already. This is normally not

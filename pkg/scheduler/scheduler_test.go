@@ -557,7 +557,7 @@ func TestScheduler(t *testing.T) {
 func TestMutatePod(t *testing.T) {
 	t.Parallel()
 	// denied := admission.Denied("pod has no containers")
-	noPMEM := admission.Allowed("no request for PMEM-CSI")
+	noFiltering := admission.Allowed("no relevant PMEM volumes")
 	noVolumes := admission.Allowed("no volumes")
 
 	type scenarioType struct {
@@ -580,11 +580,17 @@ func TestMutatePod(t *testing.T) {
 				unboundPVC,
 			},
 		},
+		"one immediate PMEM volume": {
+			pvcs: []*v1.PersistentVolumeClaim{
+				immediateUnboundPVC,
+			},
+			expectedResult: &noFiltering,
+		},
 		"one other volume": {
 			pvcs: []*v1.PersistentVolumeClaim{
 				unboundOtherPVC,
 			},
-			expectedResult: &noPMEM,
+			expectedResult: &noFiltering,
 		},
 		"two volumes": {
 			pvcs: []*v1.PersistentVolumeClaim{
@@ -594,13 +600,13 @@ func TestMutatePod(t *testing.T) {
 		},
 		"unknown pvc": {
 			pod:            makePod([]*v1.PersistentVolumeClaim{unboundPVC}, nil),
-			expectedResult: &noPMEM,
+			expectedResult: &noFiltering,
 		},
 		"unknown storage class": {
 			pvcs: []*v1.PersistentVolumeClaim{
 				unboundPVCUnknownClass,
 			},
-			expectedResult: &noPMEM,
+			expectedResult: &noFiltering,
 		},
 		"one inline volume": {
 			inline: []inlineVolume{
@@ -617,7 +623,7 @@ func TestMutatePod(t *testing.T) {
 					size:       resource.NewQuantity(GiG, resource.BinarySI).String(),
 				},
 			},
-			expectedResult: &noPMEM,
+			expectedResult: &noFiltering,
 		},
 	}
 
