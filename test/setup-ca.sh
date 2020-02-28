@@ -15,7 +15,7 @@ if [ $cfssl_found -eq 0 ]; then
 fi
 
 # Generate CA certificates.
-<<EOF cfssl gencert -initca - | cfssljson -bare ca
+<<EOF cfssl -loglevel=3 gencert -initca - | cfssljson -bare ca
 {
     "CN": "$CA",
     "key": {
@@ -29,7 +29,7 @@ EOF
 DEFAULT_CNS="pmem-registry pmem-node-controller"
 CNS="${DEFAULT_CNS} ${EXTRA_CNS:=""}"
 for name in ${CNS}; do
-  <<EOF cfssl gencert -ca=ca.pem -ca-key=ca-key.pem - | cfssljson -bare $name
+  <<EOF cfssl -loglevel=3 gencert -ca=ca.pem -ca-key=ca-key.pem - | cfssljson -bare $name
 {
     "CN": "$name",
     "hosts": [
@@ -42,5 +42,3 @@ for name in ${CNS}; do
 }
 EOF
 done
-
-echo "Generated certificates can be located at: $WORKDIR"
