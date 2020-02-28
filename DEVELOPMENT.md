@@ -20,6 +20,7 @@ Table of Contents
     - [Specific arguments to pmem-vgm](#specific-arguments-to-pmem-vgm)
     - [Specific arguments to pmem-csi-driver](#specific-arguments-to-pmem-csi-driver)
     - [Environment variables](#environment-variables)
+    - [Logging](#logging)
 - [Notes about switching device mode](#notes-about-switching-device-mode)
     - [Going from LVM device mode to direct device mode](#going-from-lvm-device-mode-to-direct-device-mode)
     - [Going from direct device mode to LVM device mode](#going-from-direct-device-mode-to-lvm-device-mode)
@@ -257,6 +258,16 @@ Environment variables
 
 TEST_WORK is used by registry server unit-test code to specify path to certificates in test system. 
 Note, THIS IS NOT USED IN PRODUCTION
+
+Logging
+-------
+
+The klog.Info statements are used via the verbosity checker using the following levels:
+- klog.V(3) - Generic information. Level 3 is the default Info log level in pmem-csi, and example deployment files set this level for production configuration.
+- klog.V(4) - Elevated verbosity messages.
+- klog.V(5) - Even more verbose messages, useful for debugging and issue resolving. This level is used in testing type of deployment examples.
+
+There are also messages using klog.Warning, klog.Error and klog.Fatal, and their formatted counterparts.
 
 Notes about switching device mode
 ================================

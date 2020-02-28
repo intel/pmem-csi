@@ -273,7 +273,7 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	}
 
 	if vol == nil {
-		return nil, status.Errorf(codes.NotFound, "no volume found with volume id %q'", req.VolumeId)
+		return nil, status.Errorf(codes.NotFound, "no volume found with volume id %q", req.VolumeId)
 	}
 
 	parameters, err := parseVolumeParameters(nodeVolumeParameters, vol.Params)
@@ -573,7 +573,7 @@ func determineFilesystemType(devicePath string) (string, error) {
 }
 
 // ensureDirectory checks if the given directory is existing, if not attempts to create it.
-// retruns true, if direcotry pre-exists, otherwise false.
+// retruns true, if directory pre-exists, otherwise false.
 func ensureDirectory(mounter mount.Interface, dir string) (bool, error) {
 	if _, err := os.Stat(dir); err != nil {
 		if os.IsNotExist(err) {

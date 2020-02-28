@@ -307,7 +307,7 @@ func (cs *masterController) ValidateVolumeCapabilities(ctx context.Context, req 
 
 	_, found := cs.pmemVolumes[req.VolumeId]
 	if !found {
-		return nil, status.Error(codes.NotFound, "No volume found with id %s"+req.VolumeId)
+		return nil, status.Error(codes.NotFound, "No volume found with id "+req.VolumeId)
 	}
 
 	if req.GetVolumeCapabilities() == nil {
@@ -335,7 +335,7 @@ func (cs *masterController) ValidateVolumeCapabilities(ctx context.Context, req 
 }
 
 func (cs *masterController) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
-	klog.V(5).Infof("ListVolumes")
+	klog.V(5).Info("ListVolumes")
 	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_LIST_VOLUMES); err != nil {
 		klog.Errorf("invalid list volumes req: %v", req)
 		return nil, err

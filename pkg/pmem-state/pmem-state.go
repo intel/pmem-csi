@@ -50,7 +50,7 @@ var _ StateManager = &fileState{}
 
 // NewFileState instantiates the file state manager with given directory
 // location. It ensures the provided directory exists.
-// Returns error, if fails to create the direcotry incase of not pre-existing.
+// Returns error, if fails to create the directory in case of not pre-existing.
 func NewFileState(directory string) (StateManager, error) {
 	if err := ensureLocation(directory); err != nil {
 		return nil, err
@@ -108,7 +108,7 @@ func (fs *fileState) Get(id string, dataPtr interface{}) error {
 }
 
 // GetAll retrieves metadata of all volumes found in fileState.location directory.
-// reads all the .json files in fileState.location direcotry and decodes the filedata
+// reads all the .json files in fileState.location directory and decodes the filedata
 func (fs *fileState) GetAll(dataPtr interface{}, f GetAllFunc) error {
 	fs.stateDirLock.Lock()
 	files, err := ioutil.ReadDir(fs.location)

@@ -81,7 +81,7 @@ func (rs *RegistryServer) ConnectToNodeController(nodeId string) (*grpc.ClientCo
 		return nil, err
 	}
 
-	klog.V(3).Infof("Connecting to node controller : %s", nodeInfo.Endpoint)
+	klog.V(3).Infof("Connecting to node controller: %s", nodeInfo.Endpoint)
 
 	return pmemgrpc.Connect(nodeInfo.Endpoint, rs.clientTLSConfig)
 }
