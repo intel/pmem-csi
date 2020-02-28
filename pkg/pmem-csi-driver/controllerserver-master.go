@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math"
@@ -58,6 +58,32 @@ var _ csi.ControllerServer = &masterController{}
 var _ PmemService = &masterController{}
 var _ registryserver.RegistryListener = &masterController{}
 var volumeMutex = keymutex.NewHashed(-1)
+
+func GenerateVolumeID(caller string, name string) string {
+	// VolumeID is hashed from Volume Name.
+	// Hashing guarantees same ID for repeated requests.
+	// Why do we generate new VolumeID via hashing?
+	// We can not use Name directly as VolumeID because of at least 2 reasons:
+	// 1. allowed max. Name length by CSI spec is 128 chars, which does not fit
+	// into LVM volume name (for that we use VolumeID), where groupname+volumename
+	// must fit into 126 chars.
+	// Ndctl namespace name is even shorter, it can be 63 chars long.
+	// 2. CSI spec. allows characters in Name that are not allowed in LVM names.
+	hasher := sha256.New224()
+	hasher.Write([]byte(name))
+	hash := hex.EncodeToString(hasher.Sum(nil))
+	// Use first characters of Name in VolumeID to help humans.
+	// This also lowers collision probability even more, as an attacker
+	// attempting to cause VolumeID collision, has to find another Name
+	// producing same sha-224 hash, while also having common first N chars.
+	use := 6
+	if len(name) < 6 {
+		use = len(name)
+	}
+	id := name[0:use] + "-" + hash
+	klog.V(4).Infof("%s: Create VolumeID:%s based on name:%s", caller, id, name)
+	return id
+}
 
 func NewMasterControllerServer(rs *registryserver.RegistryServer) *masterController {
 	serverCaps := []csi.ControllerServiceCapability_RPC_Type{
@@ -159,12 +185,16 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 
 		chosenNodes = vol.nodeIDs
 	} else {
-		// VolumeID is hashed from Volume Name.
-		// Hashing guarantees same ID for repeated requests.
-		hasher := sha1.New()
-		hasher.Write([]byte(req.Name))
-		volumeID := hex.EncodeToString(hasher.Sum(nil))
-		klog.V(4).Infof("Controller CreateVolume: Create SHA1 hash from name:%s to form id:%s", req.Name, volumeID)
+		volumeID := GenerateVolumeID("Controller CreateVolume", req.Name)
+		// Check do we have entry with newly generated VolumeID already
+		if vol := cs.getVolumeByID(volumeID); vol != nil {
+			// if we have, that has to be VolumeID collision, because above we checked
+			// that we don't have entry with such Name. VolumeID collision is very-very
+			// unlikely so we should not get here in any near future, if otherwise state is good.
+			klog.V(3).Infof("Controller CreateVolume: VolumeID:%s collision: existing name:%s new name:%s",
+				volumeID, vol.name, req.Name)
+			return nil, status.Error(codes.Internal, "VolumeID/hash collision, can not create unique Volume ID")
+		}
 		inTopology := []*csi.Topology{}
 
 		if reqTop := req.GetAccessibilityRequirements(); reqTop != nil {

@@ -7,8 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -179,14 +177,19 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 	// getVolumeByName.
 	parameters.name = &volumeName
 
-	// VolumeID is hashed from Volume Name if not provided by master controller.
-	// Hashing guarantees same ID for repeated requests.
 	volumeID = parameters.getVolumeID()
 	if volumeID == "" {
-		hasher := sha1.New()
-		hasher.Write([]byte(volumeName))
-		volumeID = hex.EncodeToString(hasher.Sum(nil))
-		klog.V(4).Infof("Node CreateVolume: create SHA1 hash from name:%q to form id:%s", volumeName, volumeID)
+		volumeID = GenerateVolumeID("Node CreateVolume", volumeName)
+		// Check do we have entry with newly generated VolumeID already
+		if vol := cs.getVolumeByID(volumeID); vol != nil {
+			// if we have, that has to be VolumeID collision, because above we checked
+			// that we don't have entry with such Name. VolumeID collision is very-very
+			// unlikely so we should not get here in any near future, if otherwise state is good.
+			klog.V(3).Infof("Controller CreateVolume: VolumeID:%s collision: existing name:%s new name:%s",
+				volumeID, vol.Params[parameterName], volumeName)
+			statusErr = status.Error(codes.Internal, "VolumeID/hash collision, can not create unique Volume")
+			return
+		}
 	}
 
 	asked := capacity.GetRequiredBytes()
