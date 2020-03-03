@@ -75,6 +75,12 @@ rules:
   verbs:
   - '*'
 - apiGroups:
+  - storage.k8s.io
+  resources:
+  - csidrivers
+  verbs:
+  - '*'
+- apiGroups:
   - apiextensions.k8s.io
   resources:
   - customresourcedefinitions
