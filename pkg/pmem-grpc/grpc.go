@@ -98,7 +98,14 @@ func LoadServerTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, err
 				case tls.TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA,
 					tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA,
 					tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA,
-					tls.TLS_RSA_WITH_RC4_128_SHA:
+					tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+					tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+					tls.TLS_RSA_WITH_RC4_128_SHA,
+					tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+					tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
+					tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+					tls.TLS_RSA_WITH_AES_256_CBC_SHA:
+
 					continue
 				default:
 					ciphers = append(ciphers, c)
