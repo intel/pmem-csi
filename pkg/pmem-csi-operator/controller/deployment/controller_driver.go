@@ -16,6 +16,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog"
@@ -269,6 +270,7 @@ func (d *PmemCSIDriver) deployObjects(r *ReconcileDeployment) error {
 
 func (d *PmemCSIDriver) getDeploymentObjects() []runtime.Object {
 	return []runtime.Object{
+		d.getCSIDriver(),
 		d.getControllerServiceAccount(),
 		d.getControllerProvisionerRole(),
 		d.getControllerProvisionerRoleBinding(),
@@ -291,6 +293,41 @@ func (d *PmemCSIDriver) getOwnerReference() metav1.OwnerReference {
 		BlockOwnerDeletion: &blockOwnerDeletion,
 		Controller:         &isController,
 	}
+}
+
+func (d *PmemCSIDriver) getCSIDriver() *storagev1beta1.CSIDriver {
+	attachRequired := false
+	podInfoOnMount := true
+
+	csiDriver := &storagev1beta1.CSIDriver{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "CSIDriver",
+			APIVersion: "v1beta1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: d.Spec.DriverName,
+			OwnerReferences: []metav1.OwnerReference{
+				d.getOwnerReference(),
+			},
+		},
+		Spec: storagev1beta1.CSIDriverSpec{
+			AttachRequired: &attachRequired,
+			PodInfoOnMount: &podInfoOnMount,
+		},
+	}
+	ver, err := utils.GetKubernetesVersion()
+	if err != nil {
+		klog.Warningf("Failed to get kubernetes version: %v", err)
+	}
+	// Volume lifecycle modes are supported only after k8s v1.16
+	if ver >= utils.CombinedVersion(1, 16) {
+		csiDriver.Spec.VolumeLifecycleModes = []storagev1beta1.VolumeLifecycleMode{
+			storagev1beta1.VolumeLifecyclePersistent,
+			storagev1beta1.VolumeLifecycleEphemeral,
+		}
+	}
+
+	return csiDriver
 }
 
 func (d *PmemCSIDriver) getSecret(cn string, ecodedKey []byte, ecnodedCert []byte) *corev1.Secret {

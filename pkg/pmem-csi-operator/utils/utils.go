@@ -10,6 +10,8 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"strconv"
+	"sync"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,7 +36,30 @@ const (
 	defaultOperatorNamespace = metav1.NamespaceSystem
 )
 
-func GetKubernetesVersion() (*version.Info, error) {
+var (
+	k8sVersion  uint64
+	versionLock sync.Mutex
+)
+
+// GetKubernetesVersion retruns kubernetes server version
+func GetKubernetesVersion() (uint64, error) {
+	versionLock.Lock()
+	defer versionLock.Unlock()
+
+	if k8sVersion == 0 {
+		ver, err := getK8sVersion()
+		if err != nil {
+			return 0, err
+		}
+		major, _ := strconv.Atoi(ver.Major)
+		minor, _ := strconv.Atoi(ver.Minor)
+		k8sVersion = CombinedVersion(uint(major), uint(minor))
+	}
+
+	return k8sVersion, nil
+}
+
+func getK8sVersion() (*version.Info, error) {
 	cfg, err := config.GetConfig()
 	if err != nil {
 		return nil, err
@@ -45,6 +70,17 @@ func GetKubernetesVersion() (*version.Info, error) {
 		return nil, err
 	}
 	return cs.Discovery().ServerVersion()
+}
+
+// CombinedVersion returns single version number for given major and minor versions
+// The assumption is that the minor version is single dit numbers
+// Ex:
+//   CombinedVersion(0, 9) ==> 9
+//   CombinedVersion(1, 16) ==> 116
+//   CombinedVersion(2, 3) ==> 203
+//   CombinedVersion(10, 10) ==> 1010
+func CombinedVersion(major, minor uint) uint64 {
+	return uint64(major)*100 + uint64(minor)
 }
 
 func GetKubeClient() (kubernetes.Interface, error) {
