@@ -53,7 +53,9 @@ listening for API requests and provisioning volumes accordingly.
 
 ### Architecture and Operation
 
-The PMEM-CSI driver can operate in two different device modes: *LVM* and *direct*. This table contains an overview and comparison of those modes. There is more detailed modes explanation down in following paragraphs.
+The PMEM-CSI driver can operate in two different device modes: *LVM* and
+*direct*. This table contains an overview and comparison of those modes.
+There is a more detailed modes explanation down in following paragraphs.
 
 |                   |`LVM`                    |`direct`              |
 |:--                |:--                    |:--                 |
@@ -67,14 +69,14 @@ The PMEM-CSI driver can operate in two different device modes: *LVM* and *direct
 |Minimum volume size| 4 MB                   | 1 GB (see also alignment adjustment below) |
 |Alignment requirements |LVM creation aligns size up to next 4MB boundary  |driver aligns  size up to next alignment boundary. The default alignment step is 1 GB. Device(s) in interleaved mode will require larger minimum as size has to be at least one alignment step. The possibly bigger alignment step is calculated as interleave-set-size multiplied by 1 GB |
 
-<sup>1 </sup> **Free space fragmentation** is a problem when there appears to be
-enough free capacity for a new namespace, but there isn't a contiguous region
-big enough to allocate it. The PMEM-CSI driver is only capable of allocating
-continguous memory to a namespace and cannot de-fragment or combine smaller
-blocks. For example, this could happen when you create a 63 GB namespace,
-follwed by a 1 GB namespace, and then delete the 63 GB namespace. Eventhough
-there is 127 GB available, the driver cannot create a namespace larger than
-64 GB. 
+<sup>1 </sup> **Free space fragmentation** is a problem when there appears to
+be enough free capacity for a new namespace, but there isn't a contiguous
+region big enough to allocate it. The PMEM-CSI driver is only capable of
+allocating continguous memory to a namespace and cannot de-fragment or combine
+smaller blocks. For example, this could happen when you create a 63 GB
+namespace, follwed by a 1 GB namespace, and then delete the 63 GB namespace.
+Eventhough there is 127 GB available, the driver cannot create a namespace
+larger than 64 GB. 
 
 ```
 ---------------------------------------------------------------------
@@ -91,7 +93,8 @@ based on where the storage device(s) are physically attached.
 namespaces. See [Persistent Memory
 Programming](https://pmem.io/ndctl/ndctl-create-namespace.html) for
 details. `devdax` mode is not supported. Though a
-raw block volume would be useful when a filesystem isn't needed, Kubernetes cannot handle [binding a character device to a loop device](https://github.com/kubernetes/kubernetes/blob/7c87b5fb55ca096c007c8739d4657a5a4e29fb09/pkg/volume/util/util.go#L531-L534).
+raw block volume would be useful when a filesystem isn't needed, Kubernetes
+cannot handle [binding a character device to a loop device](https://github.com/kubernetes/kubernetes/blob/7c87b5fb55ca096c007c8739d4657a5a4e29fb09/pkg/volume/util/util.go#L531-L534).
 
 ### LVM device mode
 
