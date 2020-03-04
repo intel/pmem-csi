@@ -55,7 +55,7 @@ listening for API requests and provisioning volumes accordingly.
 
 The PMEM-CSI driver can operate in two different device modes: *LVM* and
 *direct*. This table contains an overview and comparison of those modes.
-There is a more detailed modes explanation down in following paragraphs.
+There is a more detailed explanation in the following paragraphs.
 
 |                   |`LVM`                    |`direct`              |
 |:--                |:--                    |:--                 |
