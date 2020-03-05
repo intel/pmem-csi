@@ -88,7 +88,7 @@ type Config struct {
 
 	// parameters for Kubernetes scheduler extender
 	schedulerListen string
-	client          *kubernetes.Clientset
+	client          kubernetes.Interface
 }
 
 type pmemDriver struct {

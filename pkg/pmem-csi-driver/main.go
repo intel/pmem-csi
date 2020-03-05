@@ -13,9 +13,9 @@ import (
 	"fmt"
 
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/klog"
 
+	"github.com/intel/pmem-csi/pkg/k8sutil"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 )
 
@@ -57,22 +57,18 @@ func Main() int {
 
 	klog.V(3).Info("Version: ", version)
 
-	var client *kubernetes.Clientset
+	var client kubernetes.Interface
 	if *schedulerListenAddr != "" {
 		if DriverMode(*mode) != Controller {
 			pmemcommon.ExitError("scheduler listening", errors.New("only supported in the controller"))
 			return 1
 		}
-		config, err := rest.InClusterConfig()
+		c, err := k8sutil.NewInClusterClient()
 		if err != nil {
-			pmemcommon.ExitError("failed to build in-cluster Kubernetes client configuration", err)
+			pmemcommon.ExitError("scheduler setup", err)
 			return 1
 		}
-		client, err = kubernetes.NewForConfig(config)
-		if err != nil {
-			pmemcommon.ExitError("failed to create Kubernetes client", err)
-			return 1
-		}
+		client = c
 	}
 
 	driver, err := GetPMEMDriver(Config{
