@@ -32,6 +32,7 @@ import (
 	// test sources
 	_ "github.com/intel/pmem-csi/test/e2e/gotests"
 	_ "github.com/intel/pmem-csi/test/e2e/storage"
+	_ "github.com/intel/pmem-csi/test/e2e/tls"
 )
 
 func TestMain(m *testing.M) {
