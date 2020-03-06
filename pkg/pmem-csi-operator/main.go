@@ -18,6 +18,7 @@ import (
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/utils"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/version"
 
 	//"github.com/intel/pmem-csi/pkg/pmem-operator/version"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
@@ -62,12 +63,12 @@ func Main() int {
 		return 1
 	}
 
-	version, err := utils.GetKubernetesVersion()
+	ver, err := version.GetKubernetesVersion()
 	if err != nil {
 		pmemcommon.ExitError("Failed retrieve kubernetes version: ", err)
 		return 1
 	}
-	klog.Info("Kubernetes Version: ", version)
+	klog.Info("Kubernetes Version: ", ver)
 
 	klog.Info("Registering Deployment CRD.")
 	if err := deployment.EnsureCRDInstalled(cfg); err != nil {
