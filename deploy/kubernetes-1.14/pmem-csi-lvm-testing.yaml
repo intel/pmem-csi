@@ -263,7 +263,7 @@ spec:
         - -endpoint=$(CSI_ENDPOINT)
         - -nodeid=$(KUBE_NODE_NAME)
         - -controllerEndpoint=tcp://$(KUBE_POD_IP):10001
-        - -registryEndpoint=$(PMEM_CSI_CONTROLLER_PORT_10000_TCP)
+        - -registryEndpoint=tcp://pmem-csi-controller:10000
         - -caFile=/certs/ca.crt
         - -certFile=/certs/tls.crt
         - -keyFile=/certs/tls.key
