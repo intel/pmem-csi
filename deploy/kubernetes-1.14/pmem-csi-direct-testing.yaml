@@ -322,7 +322,6 @@ spec:
           name: pmem-state-dir
         - mountPath: /registration
           name: registration-dir
-      hostNetwork: true
       nodeSelector:
         storage: pmem
       volumes:

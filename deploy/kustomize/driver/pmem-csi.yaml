@@ -96,7 +96,6 @@ spec:
     spec:
       nodeSelector:
         storage: pmem
-      hostNetwork: true
       containers:
       - name: pmem-driver
         imagePullPolicy: Always

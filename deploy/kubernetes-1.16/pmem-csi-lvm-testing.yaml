@@ -320,7 +320,6 @@ spec:
           name: pmem-state-dir
         - mountPath: /registration
           name: registration-dir
-      hostNetwork: true
       initContainers:
       - command:
         - /usr/local/bin/pmem-ns-init
