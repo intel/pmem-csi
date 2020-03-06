@@ -149,7 +149,7 @@ metadata:
   name: pmem-csi-controller-testing
 spec:
   ports:
-  - port: 10001
+  - port: 10002
   selector:
     app: pmem-csi-controller
   type: NodePort
@@ -221,7 +221,7 @@ spec:
           name: plugin-socket-dir
       - args:
         - -s
-        - tcp-listen:10001,fork,reuseaddr
+        - tcp-listen:10002,fork,reuseaddr
         - unix-connect:/csi/csi-controller.sock
         image: alpine/socat:1.0.3
         name: socat
