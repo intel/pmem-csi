@@ -12,7 +12,8 @@ import (
 	"strings"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
-	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/utils"
+	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/version"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -205,17 +206,17 @@ func (d *PmemCSIDriver) initDeploymentSecrests(r *ReconcileDeployment) error {
 	if caCert == nil {
 		var prKey *rsa.PrivateKey
 
-		ca, err := utils.NewCA(nil, nil)
+		ca, err := pmemtls.NewCA(nil, nil)
 		if err != nil {
 			return fmt.Errorf("failed to initialize CA: %v", err)
 		}
-		caCert = ca.Certificate()
+		caCert = ca.EncodedCertificate()
 
 		if registryPrKey != nil {
-			prKey, err = utils.DecodeKey(registryPrKey)
+			prKey, err = pmemtls.DecodeKey(registryPrKey)
 		} else {
-			prKey, err = utils.NewPrivateKey()
-			registryPrKey = utils.EncodeKey(prKey)
+			prKey, err = pmemtls.NewPrivateKey()
+			registryPrKey = pmemtls.EncodeKey(prKey)
 		}
 		if err != nil {
 			return err
@@ -225,13 +226,13 @@ func (d *PmemCSIDriver) initDeploymentSecrests(r *ReconcileDeployment) error {
 		if err != nil {
 			return fmt.Errorf("failed to generate registry certificate: %v", err)
 		}
-		registryCert = utils.EncodeCert(cert)
+		registryCert = pmemtls.EncodeCert(cert)
 
 		if ncPrKey == nil {
-			prKey, err = utils.NewPrivateKey()
-			ncPrKey = utils.EncodeKey(prKey)
+			prKey, err = pmemtls.NewPrivateKey()
+			ncPrKey = pmemtls.EncodeKey(prKey)
 		} else {
-			prKey, err = utils.DecodeKey(ncPrKey)
+			prKey, err = pmemtls.DecodeKey(ncPrKey)
 		}
 		if err != nil {
 			return err
@@ -241,7 +242,7 @@ func (d *PmemCSIDriver) initDeploymentSecrests(r *ReconcileDeployment) error {
 		if err != nil {
 			return err
 		}
-		ncCert = utils.EncodeCert(cert)
+		ncCert = pmemtls.EncodeCert(cert)
 	}
 
 	secrets := []runtime.Object{
@@ -315,12 +316,12 @@ func (d *PmemCSIDriver) getCSIDriver() *storagev1beta1.CSIDriver {
 			PodInfoOnMount: &podInfoOnMount,
 		},
 	}
-	ver, err := utils.GetKubernetesVersion()
+	ver, err := version.GetKubernetesVersion()
 	if err != nil {
 		klog.Warningf("Failed to get kubernetes version: %v", err)
 	}
 	// Volume lifecycle modes are supported only after k8s v1.16
-	if ver >= utils.CombinedVersion(1, 16) {
+	if ver.Compare(1, 16) >= 0 {
 		csiDriver.Spec.VolumeLifecycleModes = []storagev1beta1.VolumeLifecycleMode{
 			storagev1beta1.VolumeLifecyclePersistent,
 			storagev1beta1.VolumeLifecycleEphemeral,

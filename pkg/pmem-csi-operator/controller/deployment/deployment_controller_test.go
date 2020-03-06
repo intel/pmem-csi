@@ -16,7 +16,7 @@ import (
 	"github.com/intel/pmem-csi/pkg/apis"
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment"
-	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/utils"
+	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -362,10 +362,10 @@ var _ = Describe("Operator", func() {
 		})
 		It("shall use provided private keys", func() {
 			// Generate private key
-			regKey, err := utils.NewPrivateKey()
+			regKey, err := pmemtls.NewPrivateKey()
 			Expect(err).Should(BeNil(), "Failed to generate a private key: %v", err)
 
-			encodedKey := utils.EncodeKey(regKey)
+			encodedKey := pmemtls.EncodeKey(regKey)
 
 			d := &pmemDeployment{
 				name:       "test-deployment",
