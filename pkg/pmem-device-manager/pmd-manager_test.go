@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"strings"
 	"testing"
 
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
@@ -61,6 +62,9 @@ func runTests(mode string) {
 			dm, err = NewPmemDeviceManagerLVMForVGs([]string{vg.name})
 		} else {
 			dm, err = NewPmemDeviceManagerNdctl()
+			if err != nil && strings.Contains(err.Error(), "/sys mounted read-only") {
+				Skip("/sys mounted read-only, cannot test direct mode")
+			}
 		}
 		Expect(err).Should(BeNil(), "Failed to create LVM device manager")
 
