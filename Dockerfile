@@ -24,9 +24,6 @@ ARG GO_VERSION="1.13.4"
 ARG CACHEBUST
 RUN echo "Updating build image from ${CLEAR_LINUX_BASE} to ${SWUPD_UPDATE_ARG:-the latest release}."
 RUN swupd update ${SWUPD_UPDATE_ARG} && swupd bundle-add ${NDCTL_BUILD_DEPS} c-basic && rm -rf /var/lib/swupd /var/tmp/swupd
-# Workaround for "pkg-config: error while loading shared libraries" when using older Docker
-# (see https://github.com/clearlinux/distribution/issues/831)
-RUN ldconfig
 RUN curl -L https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz | tar -zxf - -C / && \
     mkdir -p /usr/local/bin/ && \
     for i in /go/bin/*; do ln -s $i /usr/local/bin/; done
@@ -50,11 +47,6 @@ RUN make install && \
 # The source archive has no license file. We link to the copy in GitHub instead.
 RUN echo "For source code and licensing of ndctl, see https://github.com/pmem/ndctl/blob/v${NDCTL_VERSION}/COPYING" >/usr/local/lib/NDCTL.COPYING
 
-# Workaround for "error while loading shared libraries: libndctl.so.6" when using older Docker (?)
-# and running "make test" inside this container.
-# - same as https://github.com/clearlinux/distribution/issues/831?
-RUN ldconfig
-
 # Clean image for deploying PMEM-CSI.
 FROM ${CLEAR_LINUX_BASE} as runtime
 ARG CLEAR_LINUX_BASE
@@ -69,9 +61,6 @@ LABEL description="PMEM CSI Driver"
 ARG CACHEBUST
 RUN echo "Updating runtime image from ${CLEAR_LINUX_BASE} to ${SWUPD_UPDATE_ARG:-the latest release}."
 RUN swupd update ${SWUPD_UPDATE_ARG} && swupd bundle-add file xfsprogs storage-utils && rm -rf /var/lib/swupd /var/tmp/swupd
-# Workaround for "pkg-config: error while loading shared libraries" when using older Docker
-# (see https://github.com/clearlinux/distribution/issues/831)
-RUN ldconfig
 
 # Image in which PMEM-CSI binaries get built.
 FROM build as binaries
