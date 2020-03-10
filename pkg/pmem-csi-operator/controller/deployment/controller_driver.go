@@ -9,7 +9,6 @@ package deployment
 import (
 	"crypto/rsa"
 	"fmt"
-	"strings"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
@@ -373,7 +372,7 @@ func (d *PmemCSIDriver) getControllerService() *corev1.Service {
 				},
 			},
 			Selector: map[string]string{
-				"app": "pmem-csi-controller",
+				"app": d.Name + "-controller",
 			},
 		},
 	}
@@ -566,14 +565,14 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app": "pmem-csi-controller",
+					"app": d.Name + "-controller",
 				},
 			},
 			ServiceName: d.Name,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"app": "pmem-csi-controller",
+						"app": d.Name + "-controller",
 					},
 				},
 				Spec: corev1.PodSpec{
@@ -647,18 +646,17 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 		Spec: appsv1.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app": "pmem-csi-node",
+					"app": d.Name + "-node",
 				},
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"app": "pmem-csi-node",
+						"app": d.Name + "-node",
 					},
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector: d.Spec.NodeSelector,
-					HostNetwork:  true,
 					Containers: []corev1.Container{
 						d.getNodeDriverContainer(),
 						d.getNodeRegistrarContainer(),
@@ -783,10 +781,6 @@ func (d *PmemCSIDriver) getControllerArgs() []string {
 }
 
 func (d *PmemCSIDriver) getNodeDriverArgs() []string {
-	// Form service port environment variable from Service name
-	// In our case Service name is deployment name
-	// Ref :- k8s.io/kubernetes/pkg/kubelet/envvars/envvars.go
-	pmemServiceEndpointEnv := fmt.Sprintf(strings.ToUpper(strings.Replace(d.Name, "-", "_", -1))+"_PORT_%d_TCP", controllerServicePort)
 	args := []string{
 		fmt.Sprintf("-deviceManager=%s", d.Spec.DeviceMode),
 		fmt.Sprintf("-v=%d", d.Spec.LogLevel),
@@ -795,7 +789,8 @@ func (d *PmemCSIDriver) getNodeDriverArgs() []string {
 		"-endpoint=unix:///var/lib/" + d.Spec.DriverName + "/csi.sock",
 		"-nodeid=$(KUBE_NODE_NAME)",
 		fmt.Sprintf("-controllerEndpoint=tcp://$(KUBE_POD_IP):%d", nodeControllerPort),
-		fmt.Sprintf("-registryEndpoint=" + "$(" + pmemServiceEndpointEnv + ")"),
+		// User controller service name(== deployment name) as registry endpoint.
+		fmt.Sprintf("-registryEndpoint=tcp://%s:%d", d.Name, controllerServicePort),
 		"-statePath=/var/lib/" + d.Spec.DriverName,
 		"-caFile=/ca-certs/ca.crt",
 		"-certFile=/certs/pmem-csi-node-controller.crt",
