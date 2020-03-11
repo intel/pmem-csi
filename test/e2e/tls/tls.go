@@ -166,9 +166,18 @@ func checkTLS(f *framework.Framework, server string) {
 		}
 		// All other ports must use TLS, with exactly the
 		// ciphers that we want enabled. All of them should be rated A.
-		// The exact output depends a bit on the version of nmap and of
-		// Go that is being used for building PMEM-CSI, so this list
-		// may have to be adapted when changing either of these.
+		//
+		// The exact output depends on:
+		// - the version of nmap (locked on release branches by fixing the Clear Linux
+		//   release, varies on development branches)
+		// - the version of Go that is being used for building PMEM-CSI (locked
+		//   in our Dockerfile)
+		// - the generated keys and thus the deployment method (the
+		//   current list is for "make start" and keys created with
+		//   test/setup-ca.sh, which in turn uses cfssl as installed
+		//   by test/test.make, at least in the CI)
+		//
+		// This list may have to be adapted when changing either of these.
 		Expect(ciphers).To(Equal(`| ssl-enum-ciphers: 
 |   TLSv1.2: 
 |     ciphers: 
