@@ -18,7 +18,7 @@ import (
 
 // RunInPod optionally tars up some files or directories, unpacks them in a container,
 // and executes a shell command. Any error is treated as test failure.
-func RunInPod(f *framework.Framework, rootdir string, items []string, command string, namespace, pod, container string) {
+func RunInPod(f *framework.Framework, rootdir string, items []string, command string, namespace, pod, container string) (string, string) {
 	var input io.Reader
 	var cmdPrefix string
 	if len(items) > 0 {
@@ -57,5 +57,7 @@ func RunInPod(f *framework.Framework, rootdir string, items []string, command st
 	framework.ExpectNoError(err, "command failed in namespace %s, pod/container %s/%s:\nstderr:\n%s\nstdout:%s\n",
 		namespace, pod, container, stderr, stdout)
 	fmt.Fprintf(GinkgoWriter, "stderr:\n%s\nstdout:\n%s",
-		stdout, stderr)
+		stderr, stdout)
+
+	return stdout, stderr
 }

@@ -5,7 +5,7 @@
     image: alpine/socat:1.0.3
     args:
     - -s
-    - tcp-listen:10001,fork,reuseaddr
+    - tcp-listen:10002,fork,reuseaddr
     - unix-connect:/csi/csi-controller.sock
     volumeMounts:
     - mountPath: /csi

@@ -7,7 +7,7 @@ spec:
   selector:
     app: pmem-csi-controller
   ports:
-  - port: 10001 # port inside the pod where controller-socat-path.yaml forwards the csi.sock
+  - port: 10002 # port inside the pod where controller-socat-path.yaml forwards the csi.sock
 ---
 apiVersion: apps/v1
 kind: DaemonSet
