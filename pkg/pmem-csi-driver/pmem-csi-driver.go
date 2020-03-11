@@ -10,6 +10,7 @@ package pmemcsidriver
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -39,6 +40,21 @@ const (
 )
 
 type DriverMode string
+
+func (mode *DriverMode) Set(value string) error {
+	switch value {
+	case string(Controller), string(Node):
+		*mode = DriverMode(value)
+	default:
+		// The flag package will add the value to the final output, no need to do it here.
+		return errors.New("invalid driver mode")
+	}
+	return nil
+}
+
+func (mode *DriverMode) String() string {
+	return string(*mode)
+}
 
 const (
 	//Controller defintion for controller driver mode

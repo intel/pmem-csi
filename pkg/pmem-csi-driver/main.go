@@ -12,7 +12,6 @@ import (
 	"flag"
 	"fmt"
 
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 
 	"github.com/intel/pmem-csi/pkg/k8sutil"
@@ -20,31 +19,34 @@ import (
 )
 
 var (
-	/* generic options */
-	driverName       = flag.String("drivername", "pmem-csi.intel.com", "name of the driver")
-	nodeID           = flag.String("nodeid", "nodeid", "node id")
-	endpoint         = flag.String("endpoint", "unix:///tmp/pmem-csi.sock", "PMEM CSI endpoint")
-	testEndpoint     = flag.Bool("testEndpoint", false, "also expose controller interface via endpoint (for testing only)")
-	mode             = flag.String("mode", "controller", "driver run mode: controller or node")
-	registryEndpoint = flag.String("registryEndpoint", "", "endpoint to connect/listen registry server")
-	caFile           = flag.String("caFile", "", "Root CA certificate file to use for verifying connections")
-	certFile         = flag.String("certFile", "", "SSL certificate file to use for authenticating client connections(RegistryServer/NodeControllerServer)")
-	keyFile          = flag.String("keyFile", "", "Private key file associated to certificate")
-	clientCertFile   = flag.String("clientCertFile", "", "Client SSL certificate file to use for authenticating peer connections, defaults to 'certFile'")
-	clientKeyFile    = flag.String("clientKeyFile", "", "Client private key associated to client certificate, defaults to 'keyFile'")
-	/* Node mode options */
-	controllerEndpoint = flag.String("controllerEndpoint", "", "internal node controller endpoint")
-	deviceManager      = flag.String("deviceManager", "lvm", "device manager to use to manage pmem devices. supported types: 'lvm' or 'ndctl'")
-	showVersion        = flag.Bool("version", false, "Show release version and exit")
-	driverStatePath    = flag.String("statePath", "", "Directory path where to persist the state of the driver running on a node, defaults to /var/lib/<drivername>")
-
-	/* scheduler options */
-	schedulerListenAddr = flag.String("schedulerListen", "", "listen address (like :8000) for scheduler extender and mutating webhook, disabled by default")
-
-	version = "unknown" // Set version during build time
+	config = Config{
+		Mode: Controller,
+	}
+	showVersion = flag.Bool("version", false, "Show release version and exit")
+	version     = "unknown" // Set version during build time
 )
 
 func init() {
+	/* generic options */
+	flag.StringVar(&config.DriverName, "drivername", "pmem-csi.intel.com", "name of the driver")
+	flag.StringVar(&config.NodeID, "nodeid", "nodeid", "node id")
+	flag.StringVar(&config.Endpoint, "endpoint", "unix:///tmp/pmem-csi.sock", "PMEM CSI endpoint")
+	flag.BoolVar(&config.TestEndpoint, "testEndpoint", false, "also expose controller interface via endpoint (for testing only)")
+	flag.Var(&config.Mode, "mode", "driver run mode: controller or node")
+	flag.StringVar(&config.RegistryEndpoint, "registryEndpoint", "", "endpoint to connect/listen registry server")
+	flag.StringVar(&config.CAFile, "caFile", "", "Root CA certificate file to use for verifying connections")
+	flag.StringVar(&config.CertFile, "certFile", "", "SSL certificate file to use for authenticating client connections(RegistryServer/NodeControllerServer)")
+	flag.StringVar(&config.KeyFile, "keyFile", "", "Private key file associated to certificate")
+	flag.StringVar(&config.ClientCertFile, "clientCertFile", "", "Client SSL certificate file to use for authenticating peer connections, defaults to 'certFile'")
+	flag.StringVar(&config.ClientKeyFile, "clientKeyFile", "", "Client private key associated to client certificate, defaults to 'keyFile'")
+	/* Node mode options */
+	flag.StringVar(&config.ControllerEndpoint, "controllerEndpoint", "", "internal node controller endpoint")
+	flag.StringVar(&config.DeviceManager, "deviceManager", "lvm", "device manager to use to manage pmem devices. supported types: 'lvm' or 'ndctl'")
+	flag.StringVar(&config.StateBasePath, "statePath", "", "Directory path where to persist the state of the driver running on a node, defaults to /var/lib/<drivername>")
+
+	/* scheduler options */
+	flag.StringVar(&config.schedulerListen, "schedulerListen", "", "listen address (like :8000) for scheduler extender and mutating webhook, disabled by default")
+
 	klog.InitFlags(nil)
 	flag.Set("logtostderr", "true")
 }
@@ -57,9 +59,8 @@ func Main() int {
 
 	klog.V(3).Info("Version: ", version)
 
-	var client kubernetes.Interface
-	if *schedulerListenAddr != "" {
-		if DriverMode(*mode) != Controller {
+	if config.schedulerListen != "" {
+		if config.Mode != Controller {
 			pmemcommon.ExitError("scheduler listening", errors.New("only supported in the controller"))
 			return 1
 		}
@@ -68,28 +69,11 @@ func Main() int {
 			pmemcommon.ExitError("scheduler setup", err)
 			return 1
 		}
-		client = c
+		config.client = c
 	}
 
-	driver, err := GetPMEMDriver(Config{
-		DriverName:         *driverName,
-		NodeID:             *nodeID,
-		Endpoint:           *endpoint,
-		TestEndpoint:       *testEndpoint,
-		Mode:               DriverMode(*mode),
-		RegistryEndpoint:   *registryEndpoint,
-		CAFile:             *caFile,
-		CertFile:           *certFile,
-		KeyFile:            *keyFile,
-		ClientCertFile:     *clientCertFile,
-		ClientKeyFile:      *clientKeyFile,
-		ControllerEndpoint: *controllerEndpoint,
-		DeviceManager:      *deviceManager,
-		StateBasePath:      *driverStatePath,
-		Version:            version,
-		schedulerListen:    *schedulerListenAddr,
-		client:             client,
-	})
+	config.Version = version
+	driver, err := GetPMEMDriver(config)
 	if err != nil {
 		pmemcommon.ExitError("failed to initialize driver", err)
 		return 1
