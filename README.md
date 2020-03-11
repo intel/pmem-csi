@@ -11,7 +11,7 @@ library](https://github.com/pmem/ndctl). In this readme, we use
 *persistent memory* to refer to a non-volatile dual in-line memory
 module (NVDIMM).
 
-The [v0.6.0release](https://github.com/intel/pmem-csi/releases/tag/v0.6.0)
+The [v0.6.0 release](https://github.com/intel/pmem-csi/releases/tag/v0.6.0)
 is the latest feature release and is [regularly updated](./DEVELOPMENT.md#release-management) with newer base images
 and bug fixes. Older versions are no longer supported.
 
@@ -19,7 +19,7 @@ The PMEM-CSI driver follows the [CSI
 specification](https://github.com/container-storage-interface/spec) by
 listening for API requests and provisioning volumes accordingly.
 
-<h3>Table of Contents</h3>
+###Table of Contents
 
 - [PMEM-CSI for Kubernetes](#pmem-csi-for-kubernetes)
     - [Design](#design)
@@ -74,7 +74,7 @@ be enough free capacity for a new namespace, but there isn't a contiguous
 region big enough to allocate it. The PMEM-CSI driver is only capable of
 allocating continguous memory to a namespace and cannot de-fragment or combine
 smaller blocks. For example, this could happen when you create a 63 GB
-namespace, follwed by a 1 GB namespace, and then delete the 63 GB namespace.
+namespace, followed by a 1 GB namespace, and then delete the 63 GB namespace.
 Eventhough there is 127 GB available, the driver cannot create a namespace
 larger than 64 GB. 
 
@@ -98,7 +98,7 @@ cannot handle [binding a character device to a loop device](https://github.com/k
 
 ### LVM device mode
 
-In <abbr title="Logical Volume Management">LVM</abbr> mode the PMEM-CSI driver
+In Logical Volume Management (LVM) mode the PMEM-CSI driver
 uses LVM for logical volume Management to avoid the risk of fragmentation. The
 LVM logical volumes are served to satisfy API requests. There is one volume
 group created per region, ensuring the region-affinity of served volumes.
