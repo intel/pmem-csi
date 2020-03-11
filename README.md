@@ -19,7 +19,7 @@ The PMEM-CSI driver follows the [CSI
 specification](https://github.com/container-storage-interface/spec) by
 listening for API requests and provisioning volumes accordingly.
 
-###Table of Contents
+### Table of Contents
 
 - [PMEM-CSI for Kubernetes](#pmem-csi-for-kubernetes)
     - [Design](#design)
