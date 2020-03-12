@@ -22,6 +22,7 @@ import (
 	"k8s.io/klog"
 	"k8s.io/utils/keymutex"
 
+	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 	"github.com/intel/pmem-csi/pkg/registryserver"
 )
 
@@ -113,6 +114,7 @@ func (cs *masterController) OnNodeAdded(ctx context.Context, node *registryserve
 	if err != nil {
 		return fmt.Errorf("Connection failure on given endpoint %s : %s", node.Endpoint, err.Error())
 	}
+	defer conn.Close()
 
 	csiClient := csi.NewControllerClient(conn)
 	resp, err := csiClient.ListVolumes(ctx, &csi.ListVolumesRequest{})
@@ -169,7 +171,7 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 	}
 
 	asked := req.GetCapacityRange().GetRequiredBytes()
-	parameters, err := parseVolumeParameters(createVolumeParameters, req.Parameters)
+	p, err := parameters.Parse(parameters.CreateVolumeOrigin, req.Parameters)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -217,11 +219,11 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 		}
 
 		// Sent required parameters (and only those) plus the volume ID chosen by us.
-		parameters.volumeID = &volumeID
-		req.Parameters = parameters.toVolumeContext()
+		p.VolumeID = &volumeID
+		req.Parameters = p.ToContext()
 		numVolumes := uint(1)
-		if parameters.getPersistency() == persistencyCache {
-			numVolumes = parameters.getCacheSize()
+		if p.GetPersistency() == parameters.PersistencyCache {
+			numVolumes = p.GetCacheSize()
 		}
 		for _, top := range inTopology {
 			if numVolumes == 0 {
@@ -275,14 +277,14 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 	// Volume ID and name are not the same. Store the original
 	// name in the volume context for logging purposes.
 	name := req.GetName()
-	parameters.name = &name
+	p.Name = &name
 
 	return &csi.CreateVolumeResponse{
 		Volume: &csi.Volume{
 			VolumeId:           vol.id,
 			CapacityBytes:      asked,
 			AccessibleTopology: outTopology,
-			VolumeContext:      parameters.toVolumeContext(),
+			VolumeContext:      p.ToContext(),
 		},
 	}, nil
 }

@@ -19,6 +19,7 @@ import (
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 
+	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	pmemstate "github.com/intel/pmem-csi/pkg/pmem-state"
 	"k8s.io/utils/keymutex"
@@ -131,7 +132,7 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 		return nil, status.Error(codes.InvalidArgument, "Name missing in request")
 	}
 
-	parameters, err := parseVolumeParameters(createVolumeParameters, req.GetParameters())
+	p, err := parameters.Parse(parameters.CreateVolumeOrigin, req.GetParameters())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "persistent volume: "+err.Error())
 	}
@@ -140,7 +141,7 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 	defer nodeVolumeMutex.UnlockKey(req.Name)
 
 	volumeID, size, err := cs.createVolumeInternal(ctx,
-		parameters,
+		p,
 		req.Name,
 		req.GetVolumeCapabilities(),
 		req.GetCapacityRange(),
@@ -168,16 +169,16 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 }
 
 func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
-	parameters volumeParameters,
+	p parameters.Volume,
 	volumeName string,
 	volumeCapabilities []*csi.VolumeCapability,
 	capacity *csi.CapacityRange,
 ) (volumeID string, actual int64, statusErr error) {
 	// Keep volume name as part of volume parameters for use in
 	// getVolumeByName.
-	parameters.name = &volumeName
+	p.Name = &volumeName
 
-	volumeID = parameters.getVolumeID()
+	volumeID = p.GetVolumeID()
 	if volumeID == "" {
 		volumeID = GenerateVolumeID("Node CreateVolume", volumeName)
 		// Check do we have entry with newly generated VolumeID already
@@ -186,7 +187,7 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 			// that we don't have entry with such Name. VolumeID collision is very-very
 			// unlikely so we should not get here in any near future, if otherwise state is good.
 			klog.V(3).Infof("Controller CreateVolume: VolumeID:%s collision: existing name:%s new name:%s",
-				volumeID, vol.Params[parameterName], volumeName)
+				volumeID, vol.Params[parameters.Name], volumeName)
 			statusErr = status.Error(codes.Internal, "VolumeID/hash collision, can not create unique Volume")
 			return
 		}
@@ -206,7 +207,7 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 		vol := &nodeVolume{
 			ID:     volumeID,
 			Size:   asked,
-			Params: parameters.toVolumeContext(),
+			Params: p.ToContext(),
 		}
 		if cs.sm != nil {
 			// Persist new volume state *before* actually creating the volume.
@@ -270,7 +271,7 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 		// Already deleted.
 		return &csi.DeleteVolumeResponse{}, nil
 	}
-	parameters, err := parseVolumeParameters(nodeVolumeParameters, vol.Params)
+	p, err := parameters.Parse(parameters.NodeVolumeOrigin, vol.Params)
 	if err != nil {
 		// This should never happen because PMEM-CSI itself created these parameters.
 		// But if it happens, better fail and force an admin to recover instead of
@@ -278,7 +279,7 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 		return nil, status.Errorf(codes.Internal, "previously stored volume parameters for volume with ID %q: %v", req.VolumeId, err)
 	}
 
-	if err := cs.dm.DeleteDevice(req.VolumeId, parameters.getEraseAfter()); err != nil {
+	if err := cs.dm.DeleteDevice(req.VolumeId, p.GetEraseAfter()); err != nil {
 		if errors.Is(err, pmdmanager.ErrDeviceInUse) {
 			return nil, status.Errorf(codes.FailedPrecondition, err.Error())
 		}
@@ -381,7 +382,7 @@ func (cs *nodeControllerServer) getVolumeByName(volumeName string) *nodeVolume {
 	cs.mutex.Lock()
 	defer cs.mutex.Unlock()
 	for _, pmemVol := range cs.pmemVolumes {
-		if pmemVol.Params[parameterName] == volumeName {
+		if pmemVol.Params[parameters.Name] == volumeName {
 			return pmemVol
 		}
 	}

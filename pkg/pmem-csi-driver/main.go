@@ -8,11 +8,14 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 
+	"github.com/intel/pmem-csi/pkg/k8sutil"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 )
 
@@ -22,7 +25,7 @@ var (
 	nodeID           = flag.String("nodeid", "nodeid", "node id")
 	endpoint         = flag.String("endpoint", "unix:///tmp/pmem-csi.sock", "PMEM CSI endpoint")
 	testEndpoint     = flag.Bool("testEndpoint", false, "also expose controller interface via endpoint (for testing only)")
-	mode             = flag.String("mode", "unified", "driver run mode : controller, node or unified")
+	mode             = flag.String("mode", "controller", "driver run mode: controller or node")
 	registryEndpoint = flag.String("registryEndpoint", "", "endpoint to connect/listen registry server")
 	caFile           = flag.String("caFile", "", "Root CA certificate file to use for verifying connections")
 	certFile         = flag.String("certFile", "", "SSL certificate file to use for authenticating client connections(RegistryServer/NodeControllerServer)")
@@ -34,6 +37,9 @@ var (
 	deviceManager      = flag.String("deviceManager", "lvm", "device manager to use to manage pmem devices. supported types: 'lvm' or 'ndctl'")
 	showVersion        = flag.Bool("version", false, "Show release version and exit")
 	driverStatePath    = flag.String("statePath", "", "Directory path where to persist the state of the driver running on a node, defaults to /var/lib/<drivername>")
+
+	/* scheduler options */
+	schedulerListenAddr = flag.String("schedulerListen", "", "listen address (like :8000) for scheduler extender and mutating webhook, disabled by default")
 
 	version = "unknown" // Set version during build time
 )
@@ -51,6 +57,20 @@ func Main() int {
 
 	klog.V(3).Info("Version: ", version)
 
+	var client kubernetes.Interface
+	if *schedulerListenAddr != "" {
+		if DriverMode(*mode) != Controller {
+			pmemcommon.ExitError("scheduler listening", errors.New("only supported in the controller"))
+			return 1
+		}
+		c, err := k8sutil.NewInClusterClient()
+		if err != nil {
+			pmemcommon.ExitError("scheduler setup", err)
+			return 1
+		}
+		client = c
+	}
+
 	driver, err := GetPMEMDriver(Config{
 		DriverName:         *driverName,
 		NodeID:             *nodeID,
@@ -67,6 +87,8 @@ func Main() int {
 		DeviceManager:      *deviceManager,
 		StateBasePath:      *driverStatePath,
 		Version:            version,
+		schedulerListen:    *schedulerListenAddr,
+		client:             client,
 	})
 	if err != nil {
 		pmemcommon.ExitError("failed to initialize driver", err)

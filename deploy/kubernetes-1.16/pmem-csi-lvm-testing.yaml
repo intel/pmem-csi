@@ -169,6 +169,7 @@ spec:
     metadata:
       labels:
         app: pmem-csi-controller
+        pmem-csi.intel.com/webhook: ignore
     spec:
       containers:
       - command:
@@ -252,6 +253,7 @@ spec:
     metadata:
       labels:
         app: pmem-csi-node
+        pmem-csi.intel.com/webhook: ignore
     spec:
       containers:
       - command:

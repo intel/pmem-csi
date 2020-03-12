@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pmem-csi-scheduler
+spec:
+  selector:
+    app: pmem-csi-controller
+  type: NodePort
+  ports:
+  - targetPort: 8000
+    port: 443

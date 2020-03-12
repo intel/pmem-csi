@@ -4,8 +4,6 @@ metadata:
   name: pmem-csi-controller
   namespace: default
 ---
-# Required by StatefulSet, not actually used. See
-# https://github.com/kubernetes/kubernetes/issues/69608.
 apiVersion: v1
 kind: Service
 metadata:
@@ -31,6 +29,7 @@ spec:
     metadata:
       labels:
         app: pmem-csi-controller
+        pmem-csi.intel.com/webhook: ignore
     spec:
       serviceAccount: pmem-csi-controller
       containers:
@@ -93,6 +92,7 @@ spec:
     metadata:
       labels:
         app: pmem-csi-node
+        pmem-csi.intel.com/webhook: ignore
     spec:
       nodeSelector:
         storage: pmem

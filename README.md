@@ -9,6 +9,7 @@
         - [Communication between components](#communication-between-components)
         - [Security](#security)
         - [Volume Persistency](#volume-persistency)
+        - [Capacity-aware pod scheduling](#capacity-aware-pod-scheduling)
     - [Prerequisites](#prerequisites)
         - [Software required](#software-required)
         - [Hardware required](#hardware-required)
@@ -398,10 +399,8 @@ Check with the provided [cache
 application](deploy/common/pmem-app-cache.yaml) example.
 
 **WARNING**: late binding (`volumeBindingMode:WaitForFirstConsume`) has some caveats:
-* Kubernetes does not consider available PMEM capacity on a node while scheduling the application.
-  As a result, Kubernetes might select a node that does not have enough free PMEM space. In this case,
-  volume creation fails and the pod is stuck until enough free space becomes
-  available.
+* Pod creation may get stuck when there isn't enough capacity left for
+  the volumes; see the next section for details.
 * A node is only chosen the first time a pod starts. After that it will always restart
   on that node, because that is where the persistent volume was created.
 
@@ -414,6 +413,88 @@ Volume requests embedded in Pod spec are provisioned as ephemeral volumes. The v
 
 Check with provided [example application](deploy/kubernetes-1.15/pmem-app-ephemeral.yaml) for
 ephemeral volume usage.
+
+### Capacity-aware pod scheduling
+
+PMEM-CSI implements the CSI `GetCapacity` call, but Kubernetes
+currently doesn't call that and schedules pods onto nodes without
+being aware of available storage capacity on the nodes. The effect is
+that pods using volumes with late binding may get tentatively assigned
+to a node and then get stuck because that decision is not reconsidered
+when the volume cannot be created there ([a
+bug](https://github.com/kubernetes/kubernetes/issues/72031)). Even if
+that decision is reconsidered, the same node may get selected again
+because Kubernetes does not get informed about the insufficient
+storage. Pods with ephemeral inline volumes always get stuck because
+the decision to use the node [is final](https://github.com/kubernetes-sigs/descheduler/issues/62).
+
+Work is [under
+way](https://github.com/kubernetes/enhancements/pull/1353) to enhance
+scheduling in Kubernetes. In the meantime, PMEM-CSI provides two components
+that help with pod scheduling:
+
+#### Scheduler extender
+
+When a pod requests the special [extended
+resource](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#extended-resources)
+called `pmem-csi.intel.com/scheduler`, the Kubernetes scheduler calls
+a [scheduler
+extender](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/scheduling/scheduler_extender.md)
+provided by PMEM-CSI with a list of nodes that a pod might run
+on. This extender is implemented in the master controller and thus can
+connect to the controller on each of these nodes to check for
+capacity. PMEM-CSI then filters out all nodes which currently do not
+have enough storage left for the volumes that still need to be
+created. This considers inline ephemeral volumes and all unbound
+volumes, regardless whether they use late binding or immediate
+binding.
+
+This special scheduling can be requested manually by adding this snippet
+to one container in the pod spec:
+```
+containers:
+- name: some-container
+  ...
+  resources:
+    limits:
+      pmem-csi.intel.com/scheduler: "1"
+    requests:
+      pmem-csi.intel.com/scheduler: "1"
+```
+
+This scheduler extender is optional and not necessarily installed in
+all clusters that have PMEM-CSI. Don't add this extended resource
+unless the scheduler extender is installed, otherwise the pod won't
+start!
+
+#### Pod admission webhook
+
+Having to add `pmem-csi.intel.com/scheduler` manually is not
+user-friendly. To simplify this, PMEM-CSI provides a [mutating
+admission
+webhook](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/)
+which intercepts the creation of all pods. If that pod uses inline
+ephemeral volumes or volumes with late binding that are provided by
+PMEM-CSI, the webhook transparently adds the extended resource
+request. PMEM-CSI volumes with immediate binding are ignored because
+for those the normal topology support ensures that unsuitable nodes
+are filtered out.
+
+The webhook can only do that if the persistent volume claim (PVC) and
+its storage class have been created already. This is normally not
+required: it's okay to create the pod first, then later add the
+PVC. The pod simply won't start in the meantime.
+
+The webhook deals with this uncertainty by allowing the creation of
+the pod without adding the extended resource when it lacks the
+necessary information. The alternative would be to reject the pod, but
+that would be a change of behavior of the cluster that may affect also pods
+that don't use PMEM-CSI at all.
+
+Users must take care to create PVCs first, then the pods if they want
+to use the webhook. In practice, that is often already done because it
+is more natural, so it is not a big limitation.
+
 ## Prerequisites
 
 ### Software required
@@ -619,6 +700,11 @@ For example, to deploy for production with LVM device mode onto Kubernetes 1.14,
     $ kubectl create -f deploy/kubernetes-1.14/pmem-csi-lvm.yaml
 ```
 
+The PMEM-CSI [scheduler extender](#scheduler-extender) and
+[webhook](#pod-admission-webhook) are not enabled in this basic
+installation. See [below](#enable-scheduler-extensions) for
+instructions about that.
+
 These variants were generated with
 [`kustomize`](https://github.com/kubernetes-sigs/kustomize).
 `kubectl` >= 1.14 includes some support for that. The sub-directories
@@ -771,6 +857,189 @@ That example demonstrates how to handle some details:
 - [Kubernetes bug #85624](https://github.com/kubernetes/kubernetes/issues/85624)
   must be worked around to format and mount the raw block device.
 
+#### Enable scheduler extensions
+
+The PMEM-CSI scheduler extender and admission webhook are provided by
+the PMEM-CSI controller. They need to be enabled during deployment via
+the `--schedulerListen=[<listen address>]:<port>` parameter. The
+listen address is optional and can be left out. The port is where a
+HTTPS server will run. It uses the same certificates as the internal
+gRPC service. When using the CA creation script described above, they
+will contain alternative names for the URLs described in this section
+(service names, `127.0.0.1` IP address).
+
+This parameter can be added to one of the existing deployment files
+with `kustomize`. All of the following examples assume that the
+current directory contains the `deploy` directory from the PMEM-CSI
+repository. It is also possible to reference the base via a
+[URL](https://github.com/kubernetes-sigs/kustomize/blob/master/examples/remoteBuild.md).
+
+``` sh
+mkdir my-pmem-csi-deployment
+
+cat >my-pmem-csi-deployment/kustomization.yaml <<EOF
+bases:
+  - ../deploy/kubernetes-1.16/lvm
+patchesJson6902:
+  - target:
+      group: apps
+      version: v1
+      kind: StatefulSet
+      name: pmem-csi-controller
+    path: scheduler-patch.yaml
+EOF
+
+cat >my-pmem-csi-deployment/scheduler-patch.yaml <<EOF
+- op: add
+  path: /spec/template/spec/containers/0/command/-
+  value: "--schedulerListen=:8000"
+EOF
+
+kubectl create --kustomize my-pmem-csi-deployment
+```
+
+To enable the PMEM-CSI scheduler extender, a configuration file and an
+additional `--config` parameter for `kube-scheduler` must be added to
+the cluster control plane, or, if there is already such a
+configuration file, one new entry must be added to the `extenders`
+array. A full example is presented below.
+
+The `kube-scheduler` must be able to connect to the PMEM-CSI
+controller via the `urlPrefix` in its configuration. In some clusters
+it is possible to use cluster DNS and thus a symbolic service name. If
+that is the case, then deploy the [scheduler
+service](./deploy/kustomize/scheduler/scheduler-service.yaml) as-is
+and use `https://pmem-csi-scheduler.default.svc` as `urlPrefix`. If
+the PMEM-CSI driver is deployed in a namespace, replace `default` with
+the name of that namespace.
+
+In a cluster created with kubeadm, `kube-scheduler` is unable to use
+cluster DNS because the pod it runs in is configured with
+`hostNetwork: true` and without `dnsPolicy`. Therefore the cluster DNS
+servers are ignored. There also is no special dialer as in other
+clusters. As a workaround, the PMEM-CSI service can be exposed via a
+fixed node port like 32000 on all nodes. Then
+`https://127.0.0.1:32000` needs to be used as `urlPrefix`. Here's how
+the service can be created with that node port:
+
+``` sh
+mkdir my-scheduler
+
+cat >my-scheduler/kustomization.yaml <<EOF
+bases:
+  - ../deploy/kustomize/scheduler
+patchesJson6902:
+  - target:
+      version: v1
+      kind: Service
+      name: pmem-csi-scheduler
+    path: node-port-patch.yaml
+EOF
+
+cat >my-scheduler/node-port-patch.yaml <<EOF
+- op: add
+  path: /spec/ports/0/nodePort
+  value: 32000
+EOF
+
+kubectl create --kustomize my-scheduler
+```
+
+How to (re)configure `kube-scheduler` depends on the cluster. With
+kubeadm it is possible to set all necessary options in advance before
+creating the master node with `kubeadm init`. One additional
+complication with kubeadm is that `kube-scheduler` by default doesn't
+trust any root CA. The following kubeadm config file solves
+this together with enabling the scheduler configuration by
+bind-mounting the root certificate that was used to sign the certificate used
+by the scheduler extender into the location where the Go
+runtime will find it:
+
+``` sh
+sudo mkdir -p /var/lib/scheduler/
+sudo cp _work/pmem-ca/ca.pem /var/lib/scheduler/ca.crt
+
+sudo sh -c 'cat >/var/lib/scheduler/scheduler-policy.cfg' <<EOF
+{
+  "kind" : "Policy",
+  "apiVersion" : "v1",
+  "extenders" :
+    [{
+      "urlPrefix": "https://<service name or IP>:<port>",
+      "filterVerb": "filter",
+      "prioritizeVerb": "prioritize",
+      "nodeCacheCapable": false,
+      "weight": 1,
+      "managedResources":
+      [{
+        "name": "pmem-csi.intel.com/scheduler",
+        "ignoredByScheduler": true
+      }]
+    }]
+}
+EOF
+
+cat >kubeadm.config <<EOF
+apiVersion: kubeadm.k8s.io/v1beta1
+kind: ClusterConfiguration
+scheduler:
+  extraVolumes:
+    - name: config
+      hostPath: /var/lib/scheduler
+      mountPath: /var/lib/scheduler
+      readOnly: true
+    - name: cluster-root-ca
+      hostPath: /var/lib/scheduler/ca.crt
+      mountPath: /etc/ssl/certs/ca.crt
+      readOnly: true
+  extraArgs:
+    config: /var/lib/scheduler/scheduler-config.yaml
+EOF
+
+kubeadm init --config=kubeadm.config
+```
+
+It is possible to stop here without enabling the pod admission webhook.
+To enable also that, continue as follows.
+
+First of all, it is recommended to exclude all system pods from
+passing through the web hook. This ensures that they can still be
+created even when PMEM-CSI is down:
+
+``` sh
+kubectl label ns kube-system pmem-csi.intel.com/webhook=ignore
+```
+
+This special label is configured in [the provided web hook
+definition](./deploy/kustomize/webhook/webhook.yaml). It can also be
+used to let individual pods bypass the webhook by adding that label.
+The CA gets configured explicitly, which is supported for webhooks.
+
+``` sh
+mkdir my-webhook
+
+cat >my-webhook/kustomization.yaml <<EOF
+bases:
+  - ../deploy/kustomize/webhook
+patchesJson6902:
+  - target:
+      group: admissionregistration.k8s.io
+      version: v1beta1
+      kind: MutatingWebhookConfiguration
+      name: pmem-csi-hook
+    path: webhook-patch.yaml
+EOF
+
+cat >my-webhook/webhook-patch.yaml <<EOF
+- op: replace
+  path: /webhooks/0/clientConfig/caBundle
+  value: $(base64 -w 0 _work/pmem-ca/ca.pem)
+EOF
+
+kubectl create --kustomize my-webhook
+```
+
+
 <!-- FILL TEMPLATE:
 
   ### How to extend the plugin
@@ -792,7 +1061,6 @@ You can modify PMEM-CSI to support more xxx by changing the `variable` from Y to
 
 * If you see this error, then enter this command `blah`.
 -->
-
 
 ## Automated testing
 

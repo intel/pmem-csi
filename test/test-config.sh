@@ -125,3 +125,9 @@ fi
 # using Clear Linux as OS because with Clear Linux we have
 # to use the Kubernetes version that ships with it.
 : ${TEST_KUBERNETES_VERSION:=1.16}
+
+# Kubernetes node port number
+# (https://kubernetes.io/docs/concepts/services-networking/service/#nodeport)
+# that is going to be used by kube-scheduler to reach the scheduler
+# extender service (see deploy/scheduler/scheduler-service.yaml).
+: ${TEST_SCHEDULER_EXTENDER_NODE_PORT:=32000}

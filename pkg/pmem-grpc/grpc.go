@@ -78,7 +78,9 @@ func NewServer(endpoint string, tlsConfig *tls.Config) (*grpc.Server, net.Listen
 	return grpc.NewServer(opts...), listener, nil
 }
 
-//LoadServerTLS prepares the TLS configuration needed for a server with the given certificate files
+// LoadServerTLS prepares the TLS configuration needed for a server with the given certificate files.
+// peerName is either the name that the client is expected to have a certificate for or empty,
+// in which case any client is allowed to connect.
 func LoadServerTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, error) {
 	certPool, peerCert, err := loadCertificate(caFile, certFile, keyFile)
 	if err != nil {
@@ -113,12 +115,11 @@ func LoadServerTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, err
 				}
 			}
 
-			return &tls.Config{
+			config := &tls.Config{
 				MinVersion:    tls.VersionTLS12,
 				Renegotiation: tls.RenegotiateNever,
 				Certificates:  []tls.Certificate{*peerCert},
 				ClientCAs:     certPool,
-				ClientAuth:    tls.RequireAndVerifyClientCert,
 				CipherSuites:  ciphers,
 				VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 					// Common name check when accepting a connection from a client.
@@ -137,7 +138,11 @@ func LoadServerTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, err
 					}
 					return nil
 				},
-			}, nil
+			}
+			if peerName != "" {
+				config.ClientAuth = tls.RequireAndVerifyClientCert
+			}
+			return config, nil
 		},
 	}, nil
 }
