@@ -391,8 +391,7 @@ function init_kubernetes_cluster() (
             workers_ip+="$ip "
         fi
         ENV_VARS="env$(env_vars) HOSTNAME='$vm_name' IPADDR='$ip'"
-        scp $SSH_ARGS ${TEST_DIRECTORY}/
-        scp $SSH_ARGS ${REPO_DIRECTORY}/_work/pmem-ca/ca.pem ${CLOUD_USER}@${ip}:ca.crt
+        scp $SSH_ARGS ${REPO_DIRECTORY}/_work/pmem-ca/ca.pem ${CLOUD_USER}@${ip}:ca.crt >/dev/null || die "failed to ca.pem to $vm_name = $ip"
         scp $SSH_ARGS ${TEST_DIRECTORY}/${install_k8s_script} ${CLOUD_USER}@${ip}:. >/dev/null || die "failed to copy install scripts to $vm_name = $ip"
         ssh $SSH_ARGS ${CLOUD_USER}@${ip} "env $ENV_VARS ./$install_k8s_script" </dev/null &> >(log_lines "$vm_name" "$log_name") &
         pids+=" $!"
