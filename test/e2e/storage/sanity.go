@@ -37,7 +37,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,8 +46,9 @@ import (
 	clientexec "k8s.io/client-go/util/exec"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
-	e2essh "k8s.io/kubernetes/test/e2e/framework/ssh"
 	testutils "k8s.io/kubernetes/test/utils"
+
+	"github.com/intel/pmem-csi/test/e2e/deploy"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -56,8 +56,6 @@ import (
 
 // Run the csi-test sanity tests against a pmem-csi driver
 var _ = Describe("sanity", func() {
-	workerSocatAddresses := []string{}
-
 	config := sanity.NewTestConfig()
 	config.TestVolumeSize = 1 * 1024 * 1024
 	// The actual directories will be created as unique
@@ -84,6 +82,9 @@ var _ = Describe("sanity", func() {
 	var execOnTestNode func(args ...string) string
 	var cleanup func()
 	var prevVol map[string][]string
+	var cluster *deploy.Cluster
+
+	const socatPort = 9735
 
 	BeforeEach(func() {
 		cs := f.ClientSet
@@ -95,24 +96,19 @@ var _ = Describe("sanity", func() {
 			framework.Skipf("driver deployed in production mode")
 		}
 
-		hosts, err := e2essh.NodeSSHHosts(cs)
-		framework.ExpectNoError(err, "failed to find external/internal IPs for every node")
-		if len(hosts) <= 1 {
-			framework.Failf("not enough nodes with external IP")
-		}
-		workerSocatAddresses = nil
-		for _, sshHost := range hosts[1:] {
-			host := strings.Split(sshHost, ":")[0] // Instead of duplicating the NodeSSHHosts logic we simply strip the ssh port.
-			workerSocatAddresses = append(workerSocatAddresses, fmt.Sprintf("dns:///%s:%d", host, 9735))
-		}
+		var err error
+		cluster, err = deploy.NewCluster(cs)
+		framework.ExpectNoError(err, "query cluster")
+
 		// Node #1 is expected to have a PMEM-CSI node driver
 		// instance. If it doesn't, connecting to the PMEM-CSI
 		// node service will fail.
-		host := strings.Split(hosts[1], ":")[0]
-		config.Address = workerSocatAddresses[0]
+		config.Address = cluster.NodeServiceAddress(1, socatPort)
 		// The cluster controller service can be reached via
 		// any node, what matters is the service port.
-		config.ControllerAddress = fmt.Sprintf("dns:///%s:%d", host, getServicePort(cs, "pmem-csi-controller-testing"))
+		port, err := cluster.GetServicePort("pmem-csi-controller-testing", "default")
+		framework.ExpectNoError(err, "find controller test service")
+		config.ControllerAddress = cluster.NodeServiceAddress(0, port)
 
 		// f.ExecCommandInContainerWithFullOutput assumes that we want a pod in the test's namespace,
 		// so we have to set one.
@@ -133,7 +129,7 @@ var _ = Describe("sanity", func() {
 			if socat != nil {
 				return socat
 			}
-			socat = getAppInstance(cs, "pmem-csi-node-testing", host)
+			socat = cluster.WaitForAppInstance("pmem-csi-node-testing", cluster.NodeIP(1), "default")
 			return socat
 		}
 
@@ -496,10 +492,12 @@ var _ = Describe("sanity", func() {
 			)
 
 			BeforeEach(func() {
+				// Worker nodes with PMEM.
 				nodes = make(map[string]nodeClient)
-				for i, addr := range workerSocatAddresses {
+				for i := 1; i < cluster.NumNodes(); i++ {
+					addr := cluster.NodeServiceAddress(i, socatPort)
 					conn, err := sanityutils.Connect(addr, grpc.WithInsecure())
-					framework.ExpectNoError(err, "connect to socat instance on node #%d via %s", i+1, addr)
+					framework.ExpectNoError(err, "connect to socat instance on node #%d via %s", i, addr)
 					node := nodeClient{
 						host: addr,
 						conn: conn,
@@ -509,7 +507,7 @@ var _ = Describe("sanity", func() {
 					info, err := node.nc.NodeGetInfo(context.Background(), &csi.NodeGetInfoRequest{})
 					framework.ExpectNoError(err, "node name #%d", i+1)
 					initialVolumes, err := node.cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
-					framework.ExpectNoError(err, "list volumes on node #%d", i+1)
+					framework.ExpectNoError(err, "list volumes on node #%d", i)
 					node.volumes = initialVolumes.Entries
 
 					//nodes = append(nodes, node)
@@ -661,51 +659,6 @@ var _ = Describe("sanity", func() {
 	// TODO: static definition of driver capabilities (https://github.com/kubernetes-csi/csi-test/issues/143)
 	sanity.GinkgoTest(&config)
 })
-
-func getServicePort(cs clientset.Interface, serviceName string) int32 {
-	var port int32
-	Eventually(func() bool {
-		service, err := cs.CoreV1().Services("default").Get(serviceName, metav1.GetOptions{})
-		if err != nil {
-			return false
-		}
-		port = service.Spec.Ports[0].NodePort
-		return port != 0
-	}, "3m").Should(BeTrue(), "%s service running", serviceName)
-	return port
-}
-
-func getAppInstance(cs clientset.Interface, app string, ip string) *v1.Pod {
-	var pod *v1.Pod
-	Eventually(func() bool {
-		pods, err := cs.CoreV1().Pods("default").List(metav1.ListOptions{})
-		if err != nil {
-			return false
-		}
-		for _, p := range pods.Items {
-			if p.Labels["app"] == app &&
-				(p.Status.HostIP == ip || p.Status.PodIP == ip) {
-				pod = &p
-				return true
-			}
-		}
-		return false
-	}, "3m").Should(BeTrue(), "%s app running on host %s", app, ip)
-	return pod
-}
-
-func getDaemonSet(cs clientset.Interface, setName string) *appsv1.DaemonSet {
-	var set *appsv1.DaemonSet
-	Eventually(func() bool {
-		s, err := cs.AppsV1().DaemonSets("default").Get(setName, metav1.GetOptions{})
-		if err != nil {
-			return false
-		}
-		set = s
-		return set != nil
-	}, "3m").Should(BeTrue(), "%s pod running", setName)
-	return set
-}
 
 type volume struct {
 	namePrefix  string
