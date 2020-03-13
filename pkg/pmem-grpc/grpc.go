@@ -92,7 +92,6 @@ func LoadServerTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, err
 			if info == nil {
 				return nil, errors.New("nil client info passed")
 			}
-			klog.Infof("GetConfigForClient: servername(%q)", info.ServerName)
 			ciphers := []uint16{}
 			for _, c := range info.CipherSuites {
 				// filter out all insecure ciphers from client offered list
@@ -154,7 +153,6 @@ func LoadClientTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, err
 	if err != nil {
 		return nil, err
 	}
-	klog.V(3).Infof("Using Servername: %s", peerName)
 	return &tls.Config{
 		MinVersion:    tls.VersionTLS12,
 		Renegotiation: tls.RenegotiateNever,
