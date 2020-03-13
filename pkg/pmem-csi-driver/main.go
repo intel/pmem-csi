@@ -47,6 +47,10 @@ func init() {
 	/* scheduler options */
 	flag.StringVar(&config.schedulerListen, "schedulerListen", "", "listen address (like :8000) for scheduler extender and mutating webhook, disabled by default")
 
+	/* metrics options */
+	flag.StringVar(&config.metricsListen, "metricsListen", "", "listen address (like :8001) for prometheus metrics endpoint, disabled by default")
+	flag.StringVar(&config.metricsPath, "metricsPath", "/metrics", "The HTTP path where prometheus metrics will be exposed. Default is `/metrics`.")
+
 	klog.InitFlags(nil)
 	flag.Set("logtostderr", "true")
 }

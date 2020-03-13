@@ -12,6 +12,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -24,6 +25,9 @@ import (
 	pmemstate "github.com/intel/pmem-csi/pkg/pmem-state"
 	"github.com/intel/pmem-csi/pkg/registryserver"
 	"github.com/intel/pmem-csi/pkg/scheduler"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
@@ -66,7 +70,21 @@ const (
 var (
 	//PmemDriverTopologyKey key to use for topology constraint
 	PmemDriverTopologyKey = ""
+
+	// Mirrored after https://github.com/kubernetes/component-base/blob/dae26a37dccb958eac96bc9dedcecf0eb0690f0f/metrics/version.go#L21-L37
+	// just with less information.
+	buildInfo = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "build_info",
+			Help: "A metric with a constant '1' value labeled by version.",
+		},
+		[]string{"version"},
+	)
 )
+
+func init() {
+	prometheus.MustRegister(buildInfo)
+}
 
 //Config type for driver configuration
 type Config struct {
@@ -105,6 +123,10 @@ type Config struct {
 	// parameters for Kubernetes scheduler extender
 	schedulerListen string
 	client          kubernetes.Interface
+
+	// parameters for Prometheus metrics
+	metricsListen string
+	metricsPath   string
 }
 
 type pmemDriver struct {
@@ -168,6 +190,10 @@ func GetPMEMDriver(cfg Config) (*pmemDriver, error) {
 
 	PmemDriverTopologyKey = cfg.DriverName + "/node"
 
+	// Should GetPMEMDriver get called more than once per process,
+	// all of them will record their version.
+	buildInfo.With(prometheus.Labels{"version": cfg.Version}).Set(1)
+
 	return &pmemDriver{
 		cfg:             cfg,
 		serverTLSConfig: serverConfig,
@@ -209,9 +235,15 @@ func (pmemd *pmemDriver) Run() error {
 		}
 
 		// Also run scheduler extender?
-		if err := pmemd.startScheduler(ctx, cancel, rs); err != nil {
+		if _, err := pmemd.startScheduler(ctx, cancel, rs); err != nil {
 			return err
 		}
+		// And metrics server?
+		addr, err := pmemd.startMetrics(ctx, cancel)
+		if err != nil {
+			return err
+		}
+		klog.V(2).Infof("Prometheus endpoint started at https://%s%s", addr, pmemd.cfg.metricsPath)
 	} else if pmemd.cfg.Mode == Node {
 		dm, err := newDeviceManager(pmemd.cfg.DeviceManager)
 		if err != nil {
@@ -298,9 +330,9 @@ func (pmemd *pmemDriver) registerNodeController() error {
 // logs errors and cancels the context when it runs into a problem,
 // either during the startup phase (blocking) or later at runtime (in
 // a go routine).
-func (pmemd *pmemDriver) startScheduler(ctx context.Context, cancel func(), rs *registryserver.RegistryServer) error {
+func (pmemd *pmemDriver) startScheduler(ctx context.Context, cancel func(), rs *registryserver.RegistryServer) (string, error) {
 	if pmemd.cfg.schedulerListen == "" {
-		return nil
+		return "", nil
 	}
 
 	resyncPeriod := 1 * time.Hour
@@ -315,32 +347,63 @@ func (pmemd *pmemDriver) startScheduler(ctx context.Context, cancel func(), rs *
 		scLister,
 	)
 	if err != nil {
-		return fmt.Errorf("create scheduler: %v", err)
-	}
-
-	config, err := pmemgrpc.LoadServerTLS(pmemd.cfg.CAFile, pmemd.cfg.CertFile, pmemd.cfg.KeyFile, "")
-	if err != nil {
-		return fmt.Errorf("initialize HTTPS config: %v", err)
-	}
-	server := http.Server{
-		Addr:      pmemd.cfg.schedulerListen,
-		Handler:   sched,
-		TLSConfig: config,
+		return "", fmt.Errorf("create scheduler: %v", err)
 	}
 	factory.Start(ctx.Done())
 	cacheSyncResult := factory.WaitForCacheSync(ctx.Done())
 	klog.V(5).Infof("synchronized caches: %+v", cacheSyncResult)
 	for t, v := range cacheSyncResult {
 		if !v {
-			cancel()
-			return fmt.Errorf("failed to sync informer for type %v", t)
+			return "", fmt.Errorf("failed to sync informer for type %v", t)
 		}
 	}
+	return pmemd.startHTTPSServer(ctx, cancel, pmemd.cfg.schedulerListen, sched)
+}
 
+// startMetrics starts the HTTPS server for the Prometheus endpoint, if one is configured.
+// Error handling is the same as for startScheduler.
+func (pmemd *pmemDriver) startMetrics(ctx context.Context, cancel func()) (string, error) {
+	if pmemd.cfg.metricsListen == "" {
+		return "", nil
+	}
+
+	// We use the default Prometheus handler here and thus return all data that
+	// is registered globally, including (but not limited to!) our own metrics
+	// data. For example, some Go runtime information (https://povilasv.me/prometheus-go-metrics/)
+	// are included, which may be useful.
+	mux := http.NewServeMux()
+	mux.Handle(pmemd.cfg.metricsPath, promhttp.Handler())
+	return pmemd.startHTTPSServer(ctx, cancel, pmemd.cfg.metricsListen, mux)
+}
+
+// startHTTPSServer contains the common logic for starting and
+// stopping an HTTPS server.  Returns an error or the address that can
+// be used in Dial("tcp") to reach the server (useful for testing when
+// "listen" does not include a port).
+func (pmemd *pmemDriver) startHTTPSServer(ctx context.Context, cancel func(), listen string, handler http.Handler) (string, error) {
+	config, err := pmemgrpc.LoadServerTLS(pmemd.cfg.CAFile, pmemd.cfg.CertFile, pmemd.cfg.KeyFile, "")
+	if err != nil {
+		return "", fmt.Errorf("initialize HTTPS config: %v", err)
+	}
+	server := http.Server{
+		Addr: listen,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			klog.V(5).Infof("HTTP request: %s %q from %s %s", r.Method, r.URL.Path, r.RemoteAddr, r.UserAgent())
+			handler.ServeHTTP(w, r)
+		}),
+		TLSConfig: config,
+	}
+	listener, err := net.Listen("tcp", listen)
+	if err != nil {
+		return "", fmt.Errorf("listen on TCP address %q: %v", listen, err)
+	}
+	tcpListener := listener.(*net.TCPListener)
 	go func() {
-		err := server.ListenAndServeTLS(pmemd.cfg.CertFile, pmemd.cfg.KeyFile)
+		defer tcpListener.Close()
+
+		err := server.ServeTLS(listener, pmemd.cfg.CertFile, pmemd.cfg.KeyFile)
 		if err != http.ErrServerClosed {
-			klog.Errorf("scheduler HTTPS server error: %v", err)
+			klog.Errorf("%s HTTPS server error: %v", listen, err)
 		}
 		// Also stop main thread.
 		cancel()
@@ -352,7 +415,7 @@ func (pmemd *pmemDriver) startScheduler(ctx context.Context, cancel func(), rs *
 		server.Close()
 	}()
 
-	return nil
+	return tcpListener.Addr().String(), nil
 }
 
 // waitAndWatchConnection Keeps watching for connection changes, and whenever the
