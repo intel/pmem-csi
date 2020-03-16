@@ -48,15 +48,13 @@ test_runtime_deps: check-go-version-$(GO_BINARY)
 
 RUNTIME_DEPS =
 
-# We use "go list" because it is readily available. A good replacement
-# would be godeps. We list dependencies recursively, not just the
-# direct dependencies.
-# Filter out the go standard runtime packages from dependecies
-RUNTIME_DEPS += diff <($(GO) list -f '{{join .Deps "\n"}}' ./cmd/pmem-csi-driver/ | grep -v ^github.com/intel/pmem-csi | sort -u) \
+# List direct imports of our commands, ignoring the go standard runtime packages.
+RUNTIME_DEPS += diff <(env "GO=$(GO)" hack/list-direct-imports.sh $(IMPORT_PATH) ./cmd/... | grep -v ^github.com/intel/pmem-csi | sort -u) \
                 <(go list std | sort -u) | grep ^'<' | cut -f2- -d' ' |
 
 
 # Filter out some packages that aren't really code.
+RUNTIME_DEPS += grep -v -e '^C$$' |
 RUNTIME_DEPS += grep -v -e '^github.com/container-storage-interface/spec/lib/go/csi$$' |
 RUNTIME_DEPS += grep -v -e '^google.golang.org/genproto/googleapis/rpc/status$$' |
 RUNTIME_DEPS += grep -v -e '^github.com/go-logr/logr$$' |
