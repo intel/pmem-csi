@@ -1,10 +1,10 @@
 /*
-Copyright 2020 The Kubernetes Authors.
+Copyright 2020 Intel Coporation.
 
 SPDX-License-Identifier: Apache-2.0
 */
 
-package utils
+package k8sutil
 
 import (
 	"io/ioutil"

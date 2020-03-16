@@ -67,7 +67,7 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 		if dep := d.checkIfNameClash(r); dep != nil {
 			d.Status.Phase = api.DeploymentPhaseFailed
 			return true, fmt.Errorf("driver name %q is already taken by deployment %q",
-				d.Spec.DriverName, d.Name)
+				dep.Spec.DriverName, dep.Name)
 		}
 		r.deployments[d.Name] = d.Deployment
 
@@ -87,7 +87,7 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 					return true, err
 				}
 				return true, fmt.Errorf("driver name %q is already taken by deployment %q",
-					d.Spec.DriverName, d.Name)
+					oldDeployment.Spec.DriverName, dep.Name)
 			}
 		}
 
@@ -260,7 +260,7 @@ func (d *PmemCSIDriver) initDeploymentSecrests(r *ReconcileDeployment) error {
 }
 
 func (d *PmemCSIDriver) deployObjects(r *ReconcileDeployment) error {
-	for _, obj := range d.getDeploymentObjects() {
+	for _, obj := range d.getDeploymentObjects(r) {
 		if err := r.Create(obj); err != nil {
 			return err
 		}
@@ -268,9 +268,9 @@ func (d *PmemCSIDriver) deployObjects(r *ReconcileDeployment) error {
 	return nil
 }
 
-func (d *PmemCSIDriver) getDeploymentObjects() []runtime.Object {
+func (d *PmemCSIDriver) getDeploymentObjects(r *ReconcileDeployment) []runtime.Object {
 	return []runtime.Object{
-		d.getCSIDriver(),
+		d.getCSIDriver(r.k8sVersion),
 		d.getControllerServiceAccount(),
 		d.getControllerProvisionerRole(),
 		d.getControllerProvisionerRoleBinding(),
@@ -295,7 +295,7 @@ func (d *PmemCSIDriver) getOwnerReference() metav1.OwnerReference {
 	}
 }
 
-func (d *PmemCSIDriver) getCSIDriver() *storagev1beta1.CSIDriver {
+func (d *PmemCSIDriver) getCSIDriver(k8sVersion *version.Version) *storagev1beta1.CSIDriver {
 	attachRequired := false
 	podInfoOnMount := true
 
@@ -315,12 +315,9 @@ func (d *PmemCSIDriver) getCSIDriver() *storagev1beta1.CSIDriver {
 			PodInfoOnMount: &podInfoOnMount,
 		},
 	}
-	ver, err := version.GetKubernetesVersion()
-	if err != nil {
-		klog.Warningf("Failed to get kubernetes version: %v", err)
-	}
+
 	// Volume lifecycle modes are supported only after k8s v1.16
-	if ver.Compare(1, 16) >= 0 {
+	if k8sVersion.Compare(1, 16) >= 0 {
 		csiDriver.Spec.VolumeLifecycleModes = []storagev1beta1.VolumeLifecycleMode{
 			storagev1beta1.VolumeLifecyclePersistent,
 			storagev1beta1.VolumeLifecycleEphemeral,
