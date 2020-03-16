@@ -71,6 +71,12 @@ ADD . /src/pmem-csi
 ENV PKG_CONFIG_PATH=/usr/lib/pkgconfig/
 WORKDIR /src/pmem-csi
 ARG BIN_SUFFIX
+
+# If "docker build" is invoked with the "vendor" directory correctly
+# populated, then this argument can be set to -mod=vendor. "make
+# build-images" does both automatically.
+ARG GOFLAGS=
+
 # Here we choose explicitly which binaries we want in the image and in
 # which flavor (production or testing). The actual binary name in the
 # image is going to be the same, to avoid unnecessary deployment
@@ -82,7 +88,7 @@ RUN set -x && \
     mv _output/pmem-vgm${BIN_SUFFIX} /usr/local/bin/pmem-vgm && \
     mv _output/pmem-ns-init${BIN_SUFFIX} /usr/local/bin/pmem-ns-init && \
     mkdir -p /usr/local/share/package-licenses && \
-    GOFLAGS=-mod=vendor hack/copy-modules-license.sh /usr/local/share/package-licenses ./cmd/pmem-csi-driver ./cmd/pmem-vgm ./cmd/pmem-ns-init && \
+    hack/copy-modules-license.sh /usr/local/share/package-licenses ./cmd/pmem-csi-driver ./cmd/pmem-vgm ./cmd/pmem-ns-init && \
     cp /go/LICENSE /usr/local/share/package-licenses/go.LICENSE && \
     cp LICENSE /usr/local/share/package-licenses/PMEM-CSI.LICENSE
 

@@ -14,7 +14,7 @@
 # limitations under the License.
 
 GO_BINARY=go
-GO=GOOS=linux GO111MODULE=on GOFLAGS=-mod=vendor $(GO_BINARY)
+GO=GOOS=linux GO111MODULE=on $(GO_BINARY)
 IMPORT_PATH=github.com/intel/pmem-csi
 CMDS=pmem-csi-driver pmem-vgm pmem-ns-init
 TEST_CMDS=$(addsuffix -test,$(CMDS))
@@ -90,8 +90,8 @@ BUILD_IMAGE_ID?=$(shell date +%Y-%m-%d)
 # with `make push-images PUSH_IMAGE_DEP=`.
 build-images: build-image build-test-image
 push-images: push-image push-test-image
-build-image build-test-image: build%-image:
-	docker build --pull --build-arg CACHEBUST=$(BUILD_IMAGE_ID) --build-arg BIN_SUFFIX=$(findstring -test,$*) $(BUILD_ARGS) -t $(IMAGE_TAG) -f ./Dockerfile . --label revision=$(VERSION)
+build-image build-test-image: build%-image: populate-vendor-dir
+	docker build --pull --build-arg CACHEBUST=$(BUILD_IMAGE_ID) --build-arg GOFLAGS=-mod=vendor --build-arg BIN_SUFFIX=$(findstring -test,$*) $(BUILD_ARGS) -t $(IMAGE_TAG) -f ./Dockerfile . --label revision=$(VERSION)
 PUSH_IMAGE_DEP = build%-image
 # "docker push" has been seen to fail temporarily with "error creating overlay mount to /var/lib/docker/overlay2/xxx/merged: device or resource busy".
 # Here we simply try three times before giving up.
@@ -108,13 +108,19 @@ push-image push-test-image: push%-image: $(PUSH_IMAGE_DEP)
 		fi; \
 	done
 
+# This ensures that all sources are available in the "vendor" directory for use
+# inside "docker build".
+populate-vendor-dir:
+	go mod tidy
+	go mod vendor
+
 .PHONY: print-image-version
 print-image-version:
 	@ echo "$(IMAGE_VERSION)"
 
 clean:
 	$(GO) clean -r -x ./cmd/...
-	-rm -rf $(OUTPUT_DIR)
+	-rm -rf $(OUTPUT_DIR) vendor
 
 .PHONY: all build test clean $(CMDS) $(TEST_CMDS)
 

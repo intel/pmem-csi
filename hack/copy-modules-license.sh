@@ -4,7 +4,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Copy the licenses of ".Deps" modules for a package to a target directory
+# Copy the licenses of ".Deps" modules for a package to a target directory.
+# The "vendor" directory must exist and must be up-to-date.
 
 set -o errexit
 set -o nounset
