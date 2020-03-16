@@ -11,7 +11,9 @@ import (
 	"time"
 
 	pmemcsiv1alpha1 "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
-	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/utils"
+	"github.com/intel/pmem-csi/pkg/k8sutil"
+	pmemcontroller "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/version"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,10 +27,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
+func init() {
+	// AddToManagerFuncs is a list of functions to create controllers and add them to a manager.
+	pmemcontroller.AddToManagerFuncs = append(pmemcontroller.AddToManagerFuncs, Add)
+}
+
 // Add creates a new Deployment Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager) error {
-	return add(mgr, NewReconcileDeployment(mgr.GetClient(), mgr.GetScheme()))
+func Add(mgr manager.Manager, opts pmemcontroller.ControllerOptions) error {
+	return add(mgr, NewReconcileDeployment(mgr.GetClient(), opts))
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -55,20 +62,30 @@ var _ reconcile.Reconciler = &ReconcileDeployment{}
 
 // ReconcileDeployment reconciles a Deployment object
 type ReconcileDeployment struct {
-	// This client, initialized using mgr.Client() above, is a split client
-	// that reads objects from the cache and writes to the apiserver
-	client    client.Client
-	scheme    *runtime.Scheme
-	namespace string
+	client     client.Client
+	namespace  string
+	k8sVersion *version.Version
 	// known deployments
 	deployments map[string]*pmemcsiv1alpha1.Deployment
 }
 
-func NewReconcileDeployment(c client.Client, s *runtime.Scheme) reconcile.Reconciler {
+// NewReconcileDeployment creates new deployment reconciler
+func NewReconcileDeployment(client client.Client, opts pmemcontroller.ControllerOptions) reconcile.Reconciler {
+	if opts.K8sVersion == nil {
+		if ver, err := k8sutil.GetKubernetesVersion(opts.Config); err != nil {
+			klog.Warningf("Failed to get kubernetes version: %v", err)
+		} else {
+			opts.K8sVersion = ver
+		}
+	}
+	if opts.Namespace == "" {
+		opts.Namespace = k8sutil.GetNamespace()
+	}
+
 	return &ReconcileDeployment{
-		client:      c,
-		scheme:      s,
-		namespace:   utils.GetNamespace(),
+		client:      client,
+		k8sVersion:  opts.K8sVersion,
+		namespace:   opts.Namespace,
 		deployments: map[string]*pmemcsiv1alpha1.Deployment{},
 	}
 }
@@ -152,6 +169,8 @@ func (r *ReconcileDeployment) Create(obj runtime.Object) error {
 		return nil
 	}
 	if errors.IsNotFound(err) {
+		metaObj, _ := meta.Accessor(obj)
+		klog.Infof("Creating: %q of type %q ", metaObj.GetName(), obj.GetObjectKind().GroupVersionKind())
 		if err := r.client.Create(context.TODO(), obj); err != nil {
 			return err
 		}

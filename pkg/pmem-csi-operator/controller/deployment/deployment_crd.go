@@ -24,40 +24,7 @@ func EnsureCRDInstalled(config *rest.Config) error {
 	if err != nil {
 		return err
 	}
-	crd := &apiextensions.CustomResourceDefinition{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apiextensions.k8s.io/v1",
-			Kind:       "CustomResourceDefinition",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "deployments.pmem-csi.intel.com",
-		},
-		Spec: apiextensions.CustomResourceDefinitionSpec{
-			Group: "pmem-csi.intel.com",
-			Versions: []apiextensions.CustomResourceDefinitionVersion{
-				{
-					Name:    "v1alpha1",
-					Served:  true,
-					Storage: true,
-					Subresources: &apiextensions.CustomResourceSubresources{
-						Status: &apiextensions.CustomResourceSubresourceStatus{},
-					},
-					Schema: &apiextensions.CustomResourceValidation{
-						OpenAPIV3Schema: pmemcsiv1alpha1.GetDeploymentCRDSchema(),
-					},
-				},
-			},
-
-			Names: apiextensions.CustomResourceDefinitionNames{
-				Singular: "deployment",
-				Plural:   "deployments",
-				Kind:     "Deployment",
-				ListKind: "DeploymentList",
-			},
-			// PMEM-CSI Deployment is a cluster scoped resource
-			Scope: apiextensions.ClusterScoped,
-		},
-	}
+	crd := GetDeploymentCRD()
 
 	if _, err := aeClientset.ApiextensionsV1().CustomResourceDefinitions().Create(crd); err != nil {
 		if errors.IsAlreadyExists(err) {
@@ -116,4 +83,41 @@ func DeleteCRD(config *rest.Config) error {
 		return err
 	}
 	return nil
+}
+
+func GetDeploymentCRD() *apiextensions.CustomResourceDefinition {
+	return &apiextensions.CustomResourceDefinition{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "apiextensions.k8s.io/v1",
+			Kind:       "CustomResourceDefinition",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "deployments.pmem-csi.intel.com",
+		},
+		Spec: apiextensions.CustomResourceDefinitionSpec{
+			Group: "pmem-csi.intel.com",
+			Versions: []apiextensions.CustomResourceDefinitionVersion{
+				{
+					Name:    "v1alpha1",
+					Served:  true,
+					Storage: true,
+					Subresources: &apiextensions.CustomResourceSubresources{
+						Status: &apiextensions.CustomResourceSubresourceStatus{},
+					},
+					Schema: &apiextensions.CustomResourceValidation{
+						OpenAPIV3Schema: pmemcsiv1alpha1.GetDeploymentCRDSchema(),
+					},
+				},
+			},
+
+			Names: apiextensions.CustomResourceDefinitionNames{
+				Singular: "deployment",
+				Plural:   "deployments",
+				Kind:     "Deployment",
+				ListKind: "DeploymentList",
+			},
+			// PMEM-CSI Deployment is a cluster scoped resource
+			Scope: apiextensions.ClusterScoped,
+		},
+	}
 }

@@ -7,11 +7,6 @@ package version
 
 import (
 	"fmt"
-	"strconv"
-
-	"k8s.io/apimachinery/pkg/version"
-	"k8s.io/client-go/kubernetes"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
 // Version type definition for handling simple version comparision
@@ -54,29 +49,4 @@ func (v *Version) Compare(major, minor uint) int {
 	}
 
 	return d
-}
-
-// GetKubernetesVersion returns kubernetes server version
-func GetKubernetesVersion() (*Version, error) {
-	ver, err := getK8sVersion()
-	if err != nil {
-		return nil, err
-	}
-	major, _ := strconv.Atoi(ver.Major)
-	minor, _ := strconv.Atoi(ver.Minor)
-
-	return NewVersion(uint(major), uint(minor)), nil
-}
-
-func getK8sVersion() (*version.Info, error) {
-	cfg, err := config.GetConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	cs, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-	return cs.Discovery().ServerVersion()
 }

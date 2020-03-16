@@ -18,8 +18,8 @@ require (
 	github.com/json-iterator/go v1.1.8-0.20191012130704-03217c3e9766 // indirect
 	github.com/kubernetes-csi/csi-lib-utils v0.6.1
 	github.com/kubernetes-csi/csi-test v1.1.2-0.20191016154743-6931aedb3df0
-	github.com/onsi/ginkgo v1.10.2
-	github.com/onsi/gomega v1.7.0
+	github.com/onsi/ginkgo v1.11.0
+	github.com/onsi/gomega v1.8.1
 	github.com/operator-framework/operator-sdk v0.13.0
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4 // indirect
@@ -37,15 +37,15 @@ require (
 	google.golang.org/grpc v1.24.0
 	gopkg.in/freddierice/go-losetup.v1 v1.0.0-20170407175016-fc9adea44124
 	gopkg.in/square/go-jose.v2 v2.4.0 // indirect
-	k8s.io/api v0.0.0
-	k8s.io/apiextensions-apiserver v0.0.0
-	k8s.io/apimachinery v0.17.0
+	k8s.io/api v0.17.2
+	k8s.io/apiextensions-apiserver v0.17.2
+	k8s.io/apimachinery v0.17.2
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/component-base v0.0.0
 	k8s.io/klog v1.0.0
 	k8s.io/kubernetes v1.17.2
-	k8s.io/utils v0.0.0-20190801114015-581e00157fb1
-	sigs.k8s.io/controller-runtime v0.4.0
+	k8s.io/utils v0.0.0-20191114184206-e782cd3c129f
+	sigs.k8s.io/controller-runtime v0.5.0
 )
 
 replace (
