@@ -476,7 +476,7 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
            trap atexit EXIT; \
            mkdir -p build/reports && \
            if ${env.LOGGING_JOURNALCTL}; then sudo journalctl -f; fi & \
-           ( set +x; while sleep ${env.LOGGING_SAMPLING_DELAY}; do top -b -n 1 -w 120 | head -n 20; df -h; done ) & \
+           ( set +x; while sleep ${env.LOGGING_SAMPLING_DELAY}; do top -i -b -n 1 -w 120; df -h; done ) & \
            loggers=\"\$loggers \$!\" && \
            ${RunInBuilder()} \
                   -e CLUSTER=${env.CLUSTER} \
@@ -516,7 +516,7 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                                fi; \
                                ( set +x; \
                                  while sleep ${env.LOGGING_SAMPLING_DELAY}; do \
-                                     \$ssh top -b -n 1 -w 120 2>&1 | head -n 20; \
+                                     \$ssh top -i -b -n 1 -w 120 2>&1; \
                                  done | sed -e \"s/^/\$hostname: /\" ) & \
                                loggers=\"\$loggers \$!\"; \
                            done && \
