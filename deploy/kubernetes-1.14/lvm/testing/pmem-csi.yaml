@@ -1,12 +1,16 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
+  labels:
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-controller
   namespace: default
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
+  labels:
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-external-provisioner-cfg
   namespace: default
 rules:
@@ -36,6 +40,8 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  labels:
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-external-provisioner-runner
 rules:
 - apiGroups:
@@ -109,6 +115,8 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
+  labels:
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-csi-provisioner-role-cfg
   namespace: default
 roleRef:
@@ -123,6 +131,8 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
+  labels:
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-csi-provisioner-role
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -136,38 +146,52 @@ subjects:
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-controller
+  namespace: default
 spec:
   ports:
   - port: 10000
   selector:
     app: pmem-csi-controller
+    pmem-csi.intel.com/deployment: lvm-testing
 ---
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-controller-testing
+  namespace: default
 spec:
   ports:
   - port: 10002
   selector:
     app: pmem-csi-controller
+    pmem-csi.intel.com/deployment: lvm-testing
   type: NodePort
 ---
 apiVersion: v1
 kind: Service
 metadata:
+  labels:
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-metrics
+  namespace: default
 spec:
   ports:
   - port: 10010
   selector:
     app: pmem-csi-controller
+    pmem-csi.intel.com/deployment: lvm-testing
   type: NodePort
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
+  labels:
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-controller
   namespace: default
 spec:
@@ -175,11 +199,13 @@ spec:
   selector:
     matchLabels:
       app: pmem-csi-controller
+      pmem-csi.intel.com/deployment: lvm-testing
   serviceName: pmem-csi-controller
   template:
     metadata:
       labels:
         app: pmem-csi-controller
+        pmem-csi.intel.com/deployment: lvm-testing
         pmem-csi.intel.com/webhook: ignore
     spec:
       containers:
@@ -256,15 +282,20 @@ spec:
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
+  labels:
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-node
+  namespace: default
 spec:
   selector:
     matchLabels:
       app: pmem-csi-node
+      pmem-csi.intel.com/deployment: lvm-testing
   template:
     metadata:
       labels:
         app: pmem-csi-node
+        pmem-csi.intel.com/deployment: lvm-testing
         pmem-csi.intel.com/webhook: ignore
     spec:
       containers:
@@ -409,15 +440,20 @@ spec:
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
+  labels:
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-node-testing
+  namespace: default
 spec:
   selector:
     matchLabels:
       app: pmem-csi-node-testing
+      pmem-csi.intel.com/deployment: lvm-testing
   template:
     metadata:
       labels:
         app: pmem-csi-node-testing
+        pmem-csi.intel.com/deployment: lvm-testing
     spec:
       containers:
       - args:
@@ -455,6 +491,8 @@ spec:
 apiVersion: storage.k8s.io/v1beta1
 kind: CSIDriver
 metadata:
+  labels:
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi.intel.com
 spec:
   attachRequired: false

@@ -179,9 +179,6 @@ ${KUBECTL} label --overwrite ns kube-system pmem-csi.intel.com/webhook=ignore
 
 cat <<EOF
 
-The test cluster is ready. Log in with ${WORK_DIRECTORY}/ssh-${CLUSTER}, run kubectl once logged in.
-Alternatively, KUBECONFIG=${WORK_DIRECTORY}/kube.config can also be used directly.
-
 To try out the pmem-csi driver persistent volumes:
    cat deploy/kubernetes-${KUBERNETES_VERSION}/pmem-pvc.yaml | ${KUBECTL} create -f -
    cat deploy/kubernetes-${KUBERNETES_VERSION}/pmem-app.yaml | ${KUBECTL} create -f -

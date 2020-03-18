@@ -33,10 +33,13 @@ import (
 	_ "github.com/intel/pmem-csi/test/e2e/gotests"
 	_ "github.com/intel/pmem-csi/test/e2e/storage"
 	_ "github.com/intel/pmem-csi/test/e2e/tls"
+
+	"github.com/intel/pmem-csi/test/e2e/deploy"
 )
 
 func TestMain(m *testing.M) {
 	klog.SetOutput(GinkgoWriter)
+	deploy.DefineTests()
 
 	logs.InitLogs()
 	config.CopyFlags(config.Flags, flag.CommandLine)

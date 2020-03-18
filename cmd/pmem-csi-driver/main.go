@@ -11,8 +11,14 @@ import (
 	"flag"
 	"os"
 
+	"k8s.io/klog"
+
 	"github.com/intel/pmem-csi/pkg/pmem-csi-driver"
 )
+
+func init() {
+	klog.InitFlags(nil)
+}
 
 func main() {
 	flag.Parse()

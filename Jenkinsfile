@@ -226,7 +226,6 @@ pipeline {
         stage('Build test image') {
             options {
                 timeout(time: 60, unit: "MINUTES")
-                retry(2)
             }
 
             steps {
@@ -244,104 +243,41 @@ pipeline {
             }
         }
 
-        stage('testing 1.16 LVM') {
-            options {
-                timeout(time: 90, unit: "MINUTES")
-                retry(2)
-            }
-            steps {
-                TestInVM("lvm", "testing", "fedora", "", "1.16")
-            }
-        }
-
-        stage('testing 1.16 direct') {
+        stage('testing 1.16') {
             options {
                 timeout(time: 180, unit: "MINUTES")
-                retry(2)
             }
             steps {
-                TestInVM("direct", "testing", "fedora", "", "1.16")
+                TestInVM("fedora", "", "1.16")
             }
         }
 
-        stage('testing 1.14 LVM') {
-            when { not { changeRequest() } }
-            options {
-                timeout(time: 90, unit: "MINUTES")
-                retry(2)
-            }
-            steps {
-                TestInVM("lvm", "testing", "fedora", "", "1.14")
-            }
-        }
-
-        stage('testing 1.14 direct') {
+        stage('testing 1.15') {
             when { not { changeRequest() } }
             options {
                 timeout(time: 180, unit: "MINUTES")
-                retry(2)
             }
             steps {
-                TestInVM("direct", "testing", "fedora", "", "1.14")
+                TestInVM("fedora", "", "1.15")
             }
         }
 
-        /*
-          In production we can only run E2E testing, no sanity testing.
-          Therefore it is faster.
-        */
-
-        stage('production 1.14 LVM') {
+        stage('testing 1.14') {
             when { not { changeRequest() } }
             options {
-                timeout(time: 45, unit: "MINUTES")
-                retry(2)
+                timeout(time: 180, unit: "MINUTES")
             }
             steps {
-                TestInVM("lvm", "production", "fedora", "", "1.14")
+                TestInVM("fedora", "", "1.14")
             }
         }
 
-        stage('production 1.14 direct') {
-            when { not { changeRequest() } }
+        stage('Clear Linux') {
             options {
-                timeout(time: 45, unit: "MINUTES")
-                retry(2)
+                timeout(time: 180, unit: "MINUTES")
             }
             steps {
-                TestInVM("direct", "production", "fedora", "", "1.14")
-            }
-        }
-
-        stage('production 1.15 LVM') {
-            when { not { changeRequest() } }
-            options {
-                timeout(time: 45, unit: "MINUTES")
-                retry(2)
-            }
-            steps {
-                TestInVM("lvm", "production", "fedora", "", "1.15")
-            }
-        }
-
-        stage('production 1.15 direct') {
-            when { not { changeRequest() } }
-            options {
-                timeout(time: 45, unit: "MINUTES")
-                retry(2)
-            }
-            steps {
-                TestInVM("direct", "production", "fedora", "", "1.15")
-            }
-        }
-
-        stage('production 1.17, Clear Linux') {
-            options {
-                timeout(time: 90, unit: "MINUTES")
-                retry(2)
-            }
-            steps {
-                TestInVM("lvm", "production", "clear", "${env.CLEAR_LINUX_VERSION_1_17}", "")
+                TestInVM("clear", "${env.CLEAR_LINUX_VERSION_1_17}", "")
             }
         }
 
@@ -443,7 +379,7 @@ String RunInBuilder() {
     "
 }
 
-void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersion) {
+void TestInVM(distro, distroVersion, kubernetesVersion) {
     try {
         /*
         We have to run "make start" in the current directory
@@ -481,8 +417,6 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
            ${RunInBuilder()} \
                   -e CLUSTER=${env.CLUSTER} \
                   -e TEST_LOCAL_REGISTRY=\$(ip addr show dev docker0 | grep ' inet ' | sed -e 's/.* inet //' -e 's;/.*;;'):5000 \
-                  -e TEST_DEVICEMODE=${deviceMode} \
-                  -e TEST_DEPLOYMENTMODE=${deploymentMode} \
                   -e TEST_CHECK_SIGNED_FILES=false \
                   -e TEST_CHECK_KVM=false \
                   -e TEST_QEMU_CPU=host,-vmx \
@@ -495,13 +429,7 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                            loggers=; \
                            atexit () { set -x; kill \$loggers; kill \$( ps --no-header -o %p ); }; \
                            trap atexit EXIT; \
-                           echo CLUSTER=\$CLUSTER TEST_LOCAL_REGISTRY=\$TEST_LOCAL_REGISTRY TEST_DISTRO=\$TEST_DISTRO TEST_DISTRO_VERSION=\$TEST_DISTRO_VERSION TEST_KUBERNETES_VERSION=\$TEST_KUBERNETES_VERSION >_work/new-cluster-config && \
-                           if [ -e _work/\$CLUSTER/cluster-config ] && ! diff _work/\$CLUSTER/cluster-config _work/new-cluster-config; then \
-                               echo QEMU cluster configuration has changed, need to stop old cluster. && \
-                               make stop; \
-                           fi && \
                            make start && \
-                           mv _work/new-cluster-config _work/\$CLUSTER/cluster-config && \
                            _work/${env.CLUSTER}/ssh.0 kubectl get pods --all-namespaces -o wide && \
                            for pod in ${env.LOGGING_PODS}; do \
                                _work/${env.CLUSTER}/ssh.0 kubectl logs -f -n kube-system \$pod-pmem-csi-${env.CLUSTER}-master | sed -e \"s/^/\$pod: /\" & \
@@ -520,7 +448,7 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                                  done | sed -e \"s/^/\$hostname: /\" ) & \
                                loggers=\"\$loggers \$!\"; \
                            done && \
-                           testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}-${deviceMode}-${deploymentMode}' | sed -e s/--*/-/g | tr . _ ) && \
+                           testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}' | sed -e s/--*/-/g | tr . _ ) && \
                            make test_e2e TEST_E2E_REPORT_DIR=${WORKSPACE}/build/reports.tmp/\$testrun \
                                          TEST_E2E_SKIP=\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]; fi) \
                            ' \

@@ -2,6 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: pmem-csi-controller-testing
+  namespace: default
 spec:
   type: NodePort
   selector:
@@ -13,6 +14,7 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: pmem-csi-node-testing
+  namespace: default
 spec:
   selector:
     matchLabels:

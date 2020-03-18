@@ -20,7 +20,8 @@ import (
 
 var (
 	config = Config{
-		Mode: Controller,
+		Mode:          Controller,
+		DeviceManager: LVM,
 	}
 	showVersion = flag.Bool("version", false, "Show release version and exit")
 	version     = "unknown" // Set version during build time
@@ -41,7 +42,7 @@ func init() {
 	flag.StringVar(&config.ClientKeyFile, "clientKeyFile", "", "Client private key associated to client certificate, defaults to 'keyFile'")
 	/* Node mode options */
 	flag.StringVar(&config.ControllerEndpoint, "controllerEndpoint", "", "internal node controller endpoint")
-	flag.StringVar(&config.DeviceManager, "deviceManager", "lvm", "device manager to use to manage pmem devices. supported types: 'lvm' or 'ndctl'")
+	flag.Var(&config.DeviceManager, "deviceManager", "device manager to use to manage pmem devices, supported types: 'lvm' or 'direct' (= 'ndctl')")
 	flag.StringVar(&config.StateBasePath, "statePath", "", "Directory path where to persist the state of the driver running on a node, defaults to /var/lib/<drivername>")
 
 	/* scheduler options */
@@ -51,7 +52,6 @@ func init() {
 	flag.StringVar(&config.metricsListen, "metricsListen", "", "listen address (like :8001) for prometheus metrics endpoint, disabled by default")
 	flag.StringVar(&config.metricsPath, "metricsPath", "/metrics", "The HTTP path where prometheus metrics will be exposed. Default is `/metrics`.")
 
-	klog.InitFlags(nil)
 	flag.Set("logtostderr", "true")
 }
 

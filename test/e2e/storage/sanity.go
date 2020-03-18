@@ -48,14 +48,22 @@ import (
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	testutils "k8s.io/kubernetes/test/utils"
 
+	"github.com/intel/pmem-csi/pkg/pmem-csi-driver"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
+var (
+	numSanityWorkers = flag.Int("pmem.sanity.workers", 10, "number of worker creating volumes in parallel and thus also the maximum number of volumes at any time")
+	// 0 = default is overridden below.
+	numSanityVolumes = flag.Int("pmem.sanity.volumes", 0, "number of total volumes to create")
+	sanityVolumeSize = flag.String("pmem.sanity.volume-size", "15Mi", "size of each volume")
+)
+
 // Run the csi-test sanity tests against a pmem-csi driver
-var _ = Describe("sanity", func() {
+var _ = deploy.DescribeForAll("sanity", func(d *deploy.Deployment) {
 	config := sanity.NewTestConfig()
 	config.TestVolumeSize = 1 * 1024 * 1024
 	// The actual directories will be created as unique
@@ -92,7 +100,7 @@ var _ = Describe("sanity", func() {
 		// This test expects that PMEM-CSI was deployed with
 		// socat port forwarding enabled (see deploy/kustomize/testing/README.md).
 		// This is not the case when deployed in production mode.
-		if os.Getenv("TEST_DEPLOYMENTMODE") == "production" {
+		if !d.Testing {
 			framework.Skipf("driver deployed in production mode")
 		}
 
@@ -106,7 +114,7 @@ var _ = Describe("sanity", func() {
 		config.Address = cluster.NodeServiceAddress(1, socatPort)
 		// The cluster controller service can be reached via
 		// any node, what matters is the service port.
-		port, err := cluster.GetServicePort("pmem-csi-controller-testing", "default")
+		port, err := cluster.GetServicePort("pmem-csi-controller-testing", d.Namespace)
 		framework.ExpectNoError(err, "find controller test service")
 		config.ControllerAddress = cluster.NodeServiceAddress(0, port)
 
@@ -114,7 +122,7 @@ var _ = Describe("sanity", func() {
 		// so we have to set one.
 		f.Namespace = &v1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "default",
+				Name: d.Namespace,
 			},
 		}
 
@@ -129,7 +137,7 @@ var _ = Describe("sanity", func() {
 			if socat != nil {
 				return socat
 			}
-			socat = cluster.WaitForAppInstance("pmem-csi-node-testing", cluster.NodeIP(1), "default")
+			socat = cluster.WaitForAppInstance("pmem-csi-node-testing", cluster.NodeIP(1), d.Namespace)
 			return socat
 		}
 
@@ -172,19 +180,23 @@ var _ = Describe("sanity", func() {
 		config.RemoveTargetPath = rmdir
 		config.RemoveStagingPath = rmdir
 		// Register list of volumes before test, using out-of-band host commands (i.e. not CSI API).
-		prevVol = GetHostVolumes()
+		prevVol = GetHostVolumes(d)
 	})
 
 	AfterEach(func() {
 		// Check list of volumes after test to detect left-overs
-		CheckForLeftoverVolumes(prevVol)
+		CheckForLeftoverVolumes(d, prevVol)
 		if cleanup != nil {
 			cleanup()
 		}
 	})
 
-	var _ = sanity.DescribeSanity("pmem csi", func(sc *sanity.TestContext) {
+	var _ = Describe("pmem csi", func() {
 		var (
+			// TODO: replace with NewTestContext once it is public
+			sc = &sanity.TestContext{
+				Config: &config,
+			}
 			cl      *sanity.Cleanup
 			nc      csi.NodeClient
 			cc, ncc csi.ControllerClient
@@ -194,6 +206,7 @@ var _ = Describe("sanity", func() {
 		)
 
 		BeforeEach(func() {
+			sc.Setup()
 			nc = csi.NewNodeClient(sc.Conn)
 			cc = csi.NewControllerClient(sc.ControllerConn)
 			ncc = csi.NewControllerClient(sc.Conn) // This works because PMEM-CSI exposes the node, controller, and ID server via its csi.sock.
@@ -225,6 +238,7 @@ var _ = Describe("sanity", func() {
 		AfterEach(func() {
 			cl.DeleteVolumes()
 			cancel()
+			sc.Teardown()
 		})
 
 		It("stores state across reboots for single volume", func() {
@@ -281,7 +295,7 @@ var _ = Describe("sanity", func() {
 
 		It("capacity is restored after controller restart", func() {
 			By("Fetching pmem-csi-controller pod name")
-			pods, err := WaitForPodsWithLabelRunningReady(f.ClientSet, "default",
+			pods, err := WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,
 				labels.Set{"app": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, time.Minute)
 			framework.ExpectNoError(err, "PMEM-CSI controller running with one replica")
 			controllerNode := pods.Items[0].Spec.NodeName
@@ -293,7 +307,7 @@ var _ = Describe("sanity", func() {
 
 			restartNode(f.ClientSet, controllerNode, sc)
 
-			_, err = WaitForPodsWithLabelRunningReady(f.ClientSet, "default",
+			_, err = WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,
 				labels.Set{"app": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, 5*time.Minute)
 			framework.ExpectNoError(err, "PMEM-CSI controller running again with one replica")
 
@@ -383,41 +397,39 @@ var _ = Describe("sanity", func() {
 			v.remove(vol, name)
 		})
 
-		var (
-			numWorkers = flag.Int("pmem.sanity.workers", 10, "number of worker creating volumes in parallel and thus also the maximum number of volumes at any time")
-			numVolumes = flag.Int("pmem.sanity.volumes",
-				func() int {
-					switch os.Getenv("TEST_DEVICEMODE") {
-					case "direct":
-						// The minimum volume size in direct mode is 2GB, which makes
-						// testing a lot slower than in LVM mode. Therefore we create less
-						// volumes.
-						return 20
-					default:
-						return 100
-					}
-				}(), "number of total volumes to create")
-			volumeSize = flag.String("pmem.sanity.volume-size", "15Mi", "size of each volume")
-		)
 		It("stress test", func() {
 			// The load here consists of n workers which
 			// create and test volumes in parallel until
 			// we've created m volumes.
 			wg := sync.WaitGroup{}
 			volumes := int64(0)
-			volSize, err := resource.ParseQuantity(*volumeSize)
-			framework.ExpectNoError(err, "parsing pmem.sanity.volume-size parameter value %s", *volumeSize)
-			wg.Add(*numWorkers)
+			volSize, err := resource.ParseQuantity(*sanityVolumeSize)
+			framework.ExpectNoError(err, "parsing pmem.sanity.volume-size parameter value %s", *sanityVolumeSize)
+			wg.Add(*numSanityWorkers)
 
 			// Constant time plus variable component for shredding.
 			// When using multiple workers, they either share IO bandwidth (parallel shredding)
 			// or do it sequentially, therefore we have to multiply by the maximum number
 			// of shredding operations.
 			secondsPerGigabyte := 10 * time.Second // 2s/GB masured for direct mode in a VM on a fast machine, probably slower elsewhere
-			timeout := 300*time.Second + time.Duration(int64(*numWorkers)*volSize.Value()/1024/1024/1024)*secondsPerGigabyte
+			timeout := 300*time.Second + time.Duration(int64(*numSanityWorkers)*volSize.Value()/1024/1024/1024)*secondsPerGigabyte
 
-			By(fmt.Sprintf("creating %d volumes of size %s in %d workers, with a timeout per volume of %s", *numVolumes, volSize.String(), *numWorkers, timeout))
-			for i := 0; i < *numWorkers; i++ {
+			// The default depends on the driver deployment and thus has to be calculated here.
+			sanityVolumes := *numSanityVolumes
+			if sanityVolumes == 0 {
+				switch d.Mode {
+				case pmemcsidriver.Direct:
+					// The minimum volume size in direct mode is 2GB, which makes
+					// testing a lot slower than in LVM mode. Therefore we create less
+					// volumes.
+					sanityVolumes = 20
+				default:
+					sanityVolumes = 100
+				}
+			}
+
+			By(fmt.Sprintf("creating %d volumes of size %s in %d workers, with a timeout per volume of %s", sanityVolumes, volSize.String(), *numSanityWorkers, timeout))
+			for i := 0; i < *numSanityWorkers; i++ {
 				i := i
 				go func() {
 					// Order is relevant (first-in-last-out): when returning,
@@ -440,7 +452,7 @@ var _ = Describe("sanity", func() {
 
 					for {
 						volume := atomic.AddInt64(&volumes, 1)
-						if volume > int64(*numVolumes) {
+						if volume > int64(sanityVolumes) {
 							return
 						}
 
@@ -459,7 +471,7 @@ var _ = Describe("sanity", func() {
 									By(fmt.Sprintf("%s: failed after %s", duration))
 
 									// Stop testing.
-									atomic.AddInt64(&volumes, int64(*numVolumes))
+									atomic.AddInt64(&volumes, int64(sanityVolumes))
 								}
 							}()
 							lv.ctx = ctx
@@ -986,16 +998,16 @@ func WaitForPodsWithLabelRunningReady(c clientset.Interface, ns string, label la
 }
 
 // Register list of volumes before test, using out-of-band host commands (i.e. not CSI API).
-func GetHostVolumes() map[string][]string {
+func GetHostVolumes(d *deploy.Deployment) map[string][]string {
 	var cmd string
 	var hdr string
-	switch os.Getenv("TEST_DEVICEMODE") {
-	case "lvm":
+	switch d.Mode {
+	case pmemcsidriver.LVM:
 		// lvs adds many space (0x20) chars at end, we could squeeze
 		// repetitions using tr here, but TrimSpace() below strips those away
 		cmd = "sudo lvs --foreign --noheadings"
 		hdr = "LVM Volumes"
-	case "direct":
+	case pmemcsidriver.Direct:
 		// ndctl produces multiline block. We want one line per namespace.
 		// Remove double quotes, delete lines dev:xyz and blockdev:xyz as these elems may change after reboot,
 		// remove newlines, then insert one at the end, clean some more.
@@ -1023,7 +1035,7 @@ func GetHostVolumes() map[string][]string {
 }
 
 // CheckForLeftovers lists volumes again after test, diff means leftovers.
-func CheckForLeftoverVolumes(volBefore map[string][]string) {
-	volNow := GetHostVolumes()
+func CheckForLeftoverVolumes(d *deploy.Deployment, volBefore map[string][]string) {
+	volNow := GetHostVolumes(d)
 	Expect(volNow).To(Equal(volBefore), "same volumes before and after the test")
 }

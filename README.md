@@ -1121,11 +1121,6 @@ Once `make start` completes, the cluster is ready for interactive use via
 set `KUBECONFIG` as shown at the end of the `make start` output
 and use `kubectl` binary on the host running VMs.
 
-When the cluster is already running, `make start` will re-deploy the
-PMEM-CSI driver without recreating the virtual machines. `kubectl
-apply` is used for this, which may limit the kind of changes that can
-be made on-the-fly.
-
 Use `make stop` to stop and remove the virtual machines.
 
 `make restart` can be used to cleanly reboot all virtual
@@ -1143,6 +1138,13 @@ the master node.
 
 `_work/pmem-govm/ssh.1` starts a shell on the first worker node.
 
+### Deploying PMEM-CSI on a test cluster
+
+After `make start`, PMEM-CSI is *not* installed yet. Either install
+manually as [described for a normal
+cluster](#run-pmem-csi-on-kubernetes) or use the
+[setup-deployment.sh](./test/setup-deployment.sh) script.
+
 ### Configuration options
 
 Several aspects of the cluster and build setup can be configured by overriding
@@ -1155,10 +1157,10 @@ Multiple different clusters can be brought up in parallel by changing
 the default `pmem-govm` cluster name via the `CLUSTER` env variable.
 
 For example, this invocation sets up a cluster using the non-default
-direct device mode:
+Fedora distro:
 
 ``` sh
-TEST_DEVICEMODE=direct CLUSTER=clear-govm-direct make start
+TEST_DISTRO=fedora CLUSTER=fedora-govm make start
 ```
 
 ### Running E2E tests

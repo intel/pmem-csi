@@ -1,6 +1,9 @@
 resources:
 - ../../kubernetes-1.15/pmem-csi-lvm-testing.yaml
 
+commonLabels:
+  pmem-csi.intel.com/deployment: lvm-testing
+
 patchesJson6902:
 - target:
     group: storage.k8s.io

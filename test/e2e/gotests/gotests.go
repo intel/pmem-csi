@@ -19,10 +19,14 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/intel/pmem-csi/test/e2e/deploy"
 	"github.com/intel/pmem-csi/test/e2e/pod"
 )
 
-var _ = Describe("gotests", func() {
+// We are using direct mode here because it needs to do less work
+// during startup than LVM and the pod is more privileged (writable
+// /sys).
+var _ = deploy.Describe("direct-testing", "gotests", func(d *deploy.Deployment) {
 	f := framework.NewDefaultFramework("gotests")
 	f.SkipNamespaceCreation = true
 

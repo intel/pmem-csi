@@ -7,19 +7,13 @@ SPDX-License-Identifier: Apache-2.0
 package deploy
 
 import (
-	"context"
-	"crypto/tls"
 	"fmt"
-	"net/http"
 	"strings"
-	"time"
 
-	"github.com/prometheus/common/expfmt"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/kubernetes/test/e2e/framework"
 	e2essh "k8s.io/kubernetes/test/e2e/framework/ssh"
 
 	. "github.com/onsi/gomega"
@@ -123,110 +117,4 @@ func (c *Cluster) WaitForDaemonSet(setName string) *appsv1.DaemonSet {
 		return err == nil
 	}, "3m").Should(BeTrue(), "%s DaemonSet running", setName)
 	return set
-}
-
-// WaitForPMEMDriver ensures that the PMEM-CSI driver is ready for use, which is
-// defined as:
-// - controller service is up and running
-// - all nodes have registered
-//
-// It returns the namespace in which the driver was found. However, at
-// the moment it only checks the "default" namespace.
-func (c *Cluster) WaitForPMEMDriver() (namespace string) {
-	namespace = "default"
-
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-	deadline, cancel := context.WithTimeout(context.Background(), framework.TestContext.SystemDaemonsetStartupTimeout)
-	defer cancel()
-
-	tlsConfig := tls.Config{
-		// We could load ca.pem with pmemgrpc.LoadClientTLS, but as we are not connecting to it
-		// via the service name, that would be enough.
-		InsecureSkipVerify: true,
-	}
-	tr := http.Transport{
-		TLSClientConfig: &tlsConfig,
-	}
-	defer tr.CloseIdleConnections()
-	client := &http.Client{
-		Transport: &tr,
-	}
-
-	ready := func() (err error) {
-		defer func() {
-			if err != nil {
-				framework.Logf("wait for PMEM-CSI: %v", err)
-			}
-		}()
-
-		// The controller service must be defined.
-		port, err := c.GetServicePort("pmem-csi-metrics", "default")
-		if err != nil {
-			return err
-		}
-
-		// We can connect to it and get metrics data.
-		url := fmt.Sprintf("https://%s:%d/metrics", c.NodeIP(0), port)
-		resp, err := client.Get(url)
-		if err != nil {
-			return fmt.Errorf("get controller metrics: %v", err)
-		}
-		if resp.StatusCode != 200 {
-			return fmt.Errorf("HTTP GET %s failed: %d", url, resp.StatusCode)
-		}
-
-		// Parse and check number of connected nodes. Dump the
-		// version number while we are at it.
-		parser := expfmt.TextParser{}
-		metrics, err := parser.TextToMetricFamilies(resp.Body)
-		if err != nil {
-			return fmt.Errorf("parse metrics response: %v", err)
-		}
-		buildInfo, ok := metrics["build_info"]
-		if !ok {
-			return fmt.Errorf("expected build_info not found in metrics: %v", metrics)
-		}
-		if len(buildInfo.Metric) != 1 {
-			return fmt.Errorf("expected build_info to have one metric, got: %v", buildInfo.Metric)
-		}
-		buildMetric := buildInfo.Metric[0]
-		if len(buildMetric.Label) != 1 {
-			return fmt.Errorf("expected build_info to have one label, got: %v", buildMetric.Label)
-		}
-		label := buildMetric.Label[0]
-		if *label.Name != "version" {
-			return fmt.Errorf("expected build_info to contain a version label, got: %s", label.Name)
-		}
-		framework.Logf("PMEM-CSI version: %s", label.Value)
-
-		pmemNodes, ok := metrics["pmem_nodes"]
-		if !ok {
-			return fmt.Errorf("expected pmem_nodes not found in metrics: %v", metrics)
-		}
-		if len(pmemNodes.Metric) != 1 {
-			return fmt.Errorf("expected pmem_nodes to have one metric, got: %v", pmemNodes.Metric)
-		}
-		nodesMetric := pmemNodes.Metric[0]
-		actualNodes := int(*nodesMetric.Gauge.Value)
-		if actualNodes != c.NumNodes()-1 {
-			return fmt.Errorf("only %d of %d nodes have registered", actualNodes, c.NumNodes()-1)
-		}
-
-		return nil
-	}
-
-	if ready() == nil {
-		return
-	}
-	for {
-		select {
-		case <-ticker.C:
-			if ready() == nil {
-				return
-			}
-		case <-deadline.Done():
-			framework.Failf("giving up waiting for PMEM-CSI to start up, check the previous warnings and log output")
-		}
-	}
 }

@@ -165,10 +165,8 @@ RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 	REPO_ROOT=`pwd` \
 	CLUSTER=$(CLUSTER) \
 	$(shell source test/test-config.sh; \
-	  echo TEST_DEPLOYMENTMODE=$$TEST_DEPLOYMENTMODE; \
-	  echo TEST_DEVICEMODE=$$TEST_DEVICEMODE; \
 	  echo TEST_KUBERNETES_VERSION=$$TEST_KUBERNETES_VERSION; \
-	  echo PMEM_CSI_IMAGE=$$TEST_LOCAL_REGISTRY/pmem-csi-driver$$(if [ $$TEST_DEPLOYMENTMODE = testing ]; then echo -test; fi):$(IMAGE_VERSION); \
+	  echo PMEM_CSI_IMAGE=$$TEST_LOCAL_REGISTRY/pmem-csi-driver:$(IMAGE_VERSION); \
 	) \
 	TEST_CMD='$(TEST_CMD)' \
 	GO='$(GO)' \
@@ -176,6 +174,7 @@ RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 	$(GO) test -count=1 -timeout 0 -v ./test/e2e \
                 -ginkgo.skip='$(subst $(space),|,$(strip $(TEST_E2E_SKIP_ALL)))' \
                 -ginkgo.focus='$(subst $(space),|,$(strip $(TEST_E2E_FOCUS)))' \
+		-ginkgo.randomizeAllSpecs=false \
 	        $(TEST_E2E_ARGS) \
                 -report-dir=$(TEST_E2E_REPORT_DIR)
 test_e2e: start $(RUN_TEST_DEPS)

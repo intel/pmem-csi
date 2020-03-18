@@ -34,8 +34,6 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework/ginkgowrapper"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"k8s.io/kubernetes/test/e2e/framework/podlogs"
-
-	"github.com/intel/pmem-csi/test/e2e/deploy"
 )
 
 // There are certain operations we only want to run once per overall test invocation
@@ -119,10 +117,6 @@ var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 	}
 	podlogs.CopyAllLogs(ctx, c, "default", to)
 	podlogs.WatchPods(ctx, c, "default", ginkgo.GinkgoWriter)
-
-	cluster, err := deploy.NewCluster(c)
-	framework.ExpectNoError(err, "get cluster")
-	cluster.WaitForPMEMDriver()
 
 	dc := c.DiscoveryClient
 

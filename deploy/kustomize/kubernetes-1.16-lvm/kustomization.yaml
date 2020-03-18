@@ -1,6 +1,9 @@
 resources:
 - ../../kubernetes-1.15/pmem-csi-lvm.yaml
 
+commonLabels:
+  pmem-csi.intel.com/deployment: lvm-production
+
 patchesJson6902:
 - target:
     group: storage.k8s.io

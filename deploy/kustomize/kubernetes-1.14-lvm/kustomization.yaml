@@ -3,6 +3,9 @@
 bases:
 - ../kubernetes-1.14/
 
+commonLabels:
+  pmem-csi.intel.com/deployment: lvm-production
+
 patchesJson6902:
 - target:
     group: apps

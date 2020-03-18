@@ -349,6 +349,15 @@ function log_lines(){
     echo "$(date +%H:%M:%S) $prefix: END OF OUTPUT"
 }
 
+function kubernetes_usage() (
+    cat <<EOF
+
+The test cluster is ready. Log in with ${WORK_DIRECTORY}/${CLUSTER}/ssh.0, run kubectl once logged in.
+Alternatively, use kubectl directly with the following env variable:
+    KUBECONFIG=${WORK_DIRECTORY}/kube.config can also be used directly.
+EOF
+)
+
 function init_kubernetes_cluster() (
     # Do nothing if INIT_CLUSTER set to false
     ${INIT_CLUSTER} || return 0
@@ -413,6 +422,8 @@ function init_kubernetes_cluster() (
         pids+=" $!"
     done
     waitall $pids || die "at least one worker failed to join the cluster"
+
+    kubernetes_usage
 )
 
 function init_workdir() (
@@ -441,6 +452,7 @@ function check_status() { # intentionally a composite command, so "exit" will ex
         deployments=$(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-master$") "Name"}}')
         if [ ! -z "$deployments" ]; then
             echo "Kubernetes cluster ${CLUSTER} is already running, using it unchanged."
+            kubernetes_usage
             exit 0
         fi
     else 
