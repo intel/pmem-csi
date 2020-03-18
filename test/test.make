@@ -20,30 +20,7 @@ test_fmt:
 fmt:
 	gofmt -l -w $$(find pkg cmd -name '*.go')
 
-
-# This ensures that the vendor directory and vendor-bom.csv are in
-# sync.  We track components by their license file. Compared to
-# focusing on components as seen by Go, this has the advantage that we
-# also find and track components with a separate license that are
-# embedded in other components (example:
-# github.com/onsi/ginkgo/reporters/stenographer/support/go-colorable).
-# The downside is that we might miss components with a missing license.
-# This has to be caught by code reviews.
-.PHONY: test_vendor_bom
-test: test_vendor_bom
-test_vendor_bom:
-	@ if ! diff -c \
-		<(tail -n +2 vendor-bom.csv | sed -e 's/;.*//') \
-		<(find vendor -name 'LICENSE*' -o -name COPYING | xargs --max-args 1 dirname | sed -e 's;^vendor/;;' | LC_ALL=C LANG=C sort -u); then \
-		echo; \
-		echo "vendor-bom.csv not in sync with vendor directory:"; \
-		echo "+ new entry, missing in vendor-bom.csv"; \
-		echo "- obsolete entry in vendor-bom.csv"; \
-		false; \
-	fi
-
-# Verify that the go.mod is up-to-date and clean and that the "vendor"
-# directory contains the matching source code.
+# Verify that the go.mod is up-to-date and clean.
 .PHONY: test_vendor
 test: test_vendor
 test_vendor:
@@ -71,15 +48,13 @@ test_runtime_deps: check-go-version-$(GO_BINARY)
 
 RUNTIME_DEPS =
 
-# We use "go list" because it is readily available. A good replacement
-# would be godeps. We list dependencies recursively, not just the
-# direct dependencies.
-# Filter out the go standard runtime packages from dependecies
-RUNTIME_DEPS += diff <($(GO) list -f '{{join .Deps "\n"}}' ./cmd/pmem-csi-driver/ | grep -v ^github.com/intel/pmem-csi | sort -u) \
+# List direct imports of our commands, ignoring the go standard runtime packages.
+RUNTIME_DEPS += diff <(env "GO=$(GO)" hack/list-direct-imports.sh $(IMPORT_PATH) ./cmd/... | grep -v ^github.com/intel/pmem-csi | sort -u) \
                 <(go list std | sort -u) | grep ^'<' | cut -f2- -d' ' |
 
 
 # Filter out some packages that aren't really code.
+RUNTIME_DEPS += grep -v -e '^C$$' |
 RUNTIME_DEPS += grep -v -e '^github.com/container-storage-interface/spec/lib/go/csi$$' |
 RUNTIME_DEPS += grep -v -e '^google.golang.org/genproto/googleapis/rpc/status$$' |
 RUNTIME_DEPS += grep -v -e '^github.com/go-logr/logr$$' |
