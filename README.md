@@ -1,5 +1,27 @@
+# PMEM-CSI for Kubernetes
+
+**Note: This is Alpha code and not production ready.**
+
+Intel PMEM-CSI is a storage driver for container orchestrators like
+Kubernetes. It makes local persistent memory
+([PMEM](https://pmem.io/)) available as a filesystem volume to
+container applications. It can currently utilize non-volatile memory
+devices that can be controlled via the [libndctl utility
+library](https://github.com/pmem/ndctl). In this readme, we use
+*persistent memory* to refer to a non-volatile dual in-line memory
+module (NVDIMM).
+
+The [v0.6.0 release](https://github.com/intel/pmem-csi/releases/tag/v0.6.0)
+is the latest feature release and is [regularly updated](./DEVELOPMENT.md#release-management) with newer base images
+and bug fixes. Older versions are no longer supported.
+
+The PMEM-CSI driver follows the [CSI
+specification](https://github.com/container-storage-interface/spec) by
+listening for API requests and provisioning volumes accordingly.
+
+### Table of Contents
+
 - [PMEM-CSI for Kubernetes](#pmem-csi-for-kubernetes)
-    - [About](#about)
     - [Design](#design)
         - [Architecture and Operation](#architecture-and-operation)
         - [LVM device mode](#lvm-device-mode)
@@ -28,61 +50,34 @@
     - [Application examples](#application-examples)
     - [Communication and contribution](#communication-and-contribution)
 
-<!-- based on template now, remaining parts marked as FILL TEMPLATE:  -->
-
-PMEM-CSI for Kubernetes
-=======================
-
-
-## About
-
----
- *Note: This is Alpha code and not production ready.*
----
-
-Intel PMEM-CSI is a storage driver for container orchestrators like
-Kubernetes. It makes local persistent memory
-([PMEM](https://pmem.io/)) available as a filesystem volume to
-container applications.
-
-It can currently utilize non-volatile memory
-devices that can be controlled via the [libndctl utility
-library](https://github.com/pmem/ndctl). In this readme, we use
-*persistent memory* to refer to a non-volatile dual in-line memory
-module (NVDIMM).
-
-The PMEM-CSI driver follows the [CSI
-specification](https://github.com/container-storage-interface/spec) by
-listening for API requests and provisioning volumes accordingly.
-
-The [v0.6.0
-release](https://github.com/intel/pmem-csi/releases/tag/v0.6.0) is the
-latest feature release and is [getting
-updated](./DEVELOPMENT.md#release-management) with newer base images
-regularly and with bug fixes as needed, so the latest [v0.6.x
-tag](https://github.com/intel/pmem-csi/releases/tag/v0.6.0) is what
-should be used. Older releases are no longer supported.
-
 ## Design
 
 ### Architecture and Operation
 
-The PMEM-CSI driver can operate in two different device modes: *LVM* and *direct*. This table contains an overview and comparison of those modes. There is more detailed modes explanation down in following paragraphs.
+The PMEM-CSI driver can operate in two different device modes: *LVM* and
+*direct*. This table contains an overview and comparison of those modes.
+There is a more detailed explanation in the following paragraphs.
 
-|                   |LVM                    |direct              |
+|                   |`LVM`                    |`direct`              |
 |:--                |:--                    |:--                 |
 |Main advantage     |avoids free space fragmentation<sup>1</sup>   |simpler, somewhat faster, but free space may get fragmented<sup>1</sup>   |
 |What is served     |LVM logical volume     |pmem block device   |
 |Region affinity<sup>2</sup>    |yes: one LVM volume group is created per region, and a volume has to be in one volume group  |yes: namespace can belong to one region only  |
 |Startup            |two extra stages: pmem-ns-init (creates namespaces), vgm (creates volume groups)   |no extra steps at startup |
-|Namespace modes    |*fsdax* mode<sup>3</sup> namespaces pre-created as pools   |namespace in `fsdax` mode created directly, no need to pre-create pools   |
+|Namespace modes    |`fsdax` mode<sup>3</sup> namespaces pre-created as pools   |namespace in `fsdax` mode created directly, no need to pre-create pools   |
 |Limiting space usage | can leave part of device unused during pools creation  |no limits, creates namespaces on device until runs out of space  |
 | *Name* field in namespace | *Name* gets set to 'pmem-csi' to achieve own vs. foreign marking | *Name* gets set to VolumeID, without attempting own vs. foreign marking  |
 |Minimum volume size| 4 MB                   | 1 GB (see also alignment adjustment below) |
 |Alignment requirements |LVM creation aligns size up to next 4MB boundary  |driver aligns  size up to next alignment boundary. The default alignment step is 1 GB. Device(s) in interleaved mode will require larger minimum as size has to be at least one alignment step. The possibly bigger alignment step is calculated as interleave-set-size multiplied by 1 GB |
 
-<sup>1 </sup> *Fragmented free space* state may develop via series of creation and deletion operations where the driver is no longer able to allocate a new namespace contiguously, although the free capacity (i.e. sum of available free section sizes) indicates the opposite. The PMEM-CSI driver is not capable of de-fragmenting the space or create allocation using combined smaller blocks. 
-A simplified example: This state develops after steps: create 63 GB namespace, create 1 GB namespace, delete 63 GB namespace. The free capacity is 127 GB, but the driver fails to create a namespace bigger than 64 GB. 
+<sup>1 </sup> **Free space fragmentation** is a problem when there appears to
+be enough free capacity for a new namespace, but there isn't a contiguous
+region big enough to allocate it. The PMEM-CSI driver is only capable of
+allocating continguous memory to a namespace and cannot de-fragment or combine
+smaller blocks. For example, this could happen when you create a 63 GB
+namespace, followed by a 1 GB namespace, and then delete the 63 GB namespace.
+Eventhough there is 127 GB available, the driver cannot create a namespace
+larger than 64 GB. 
 
 ```
 ---------------------------------------------------------------------
@@ -90,27 +85,26 @@ A simplified example: This state develops after steps: create 63 GB namespace, c
 ---------------------------------------------------------------------
 ```
 
-<sup>2 </sup> *Region affinity* means that all parts of a provisioned file system are physically located on device(s) that belong to same PMEM region. This is important on multi-socket systems where media access time may vary based on where the storage device(s) are physically attached.
+<sup>2 </sup> **Region affinity** means that all parts of a provisioned file
+system are physically located on device(s) that belong to same PMEM region.
+This is important on multi-socket systems where media access time may vary
+based on where the storage device(s) are physically attached.
 
-<sup>3 </sup> *fsdax* mode refers to the modes of NVDIMM
+<sup>3 </sup> **fsdax mode** is required for NVDIMM
 namespaces. See [Persistent Memory
 Programming](https://pmem.io/ndctl/ndctl-create-namespace.html) for
-details. The *devdax* mode is not supported. It might make sense for a
-raw block volume when the application does not need a filesystem. But
-the *devdax* mode creates a character device, something that
-Kubernetes does not expect from a storage driver and cannot handle
-when it [binds the device to a loop
-device](https://github.com/kubernetes/kubernetes/blob/7c87b5fb55ca096c007c8739d4657a5a4e29fb09/pkg/volume/util/util.go#L531-L534),
+details. `devdax` mode is not supported. Though a
+raw block volume would be useful when a filesystem isn't needed, Kubernetes
+cannot handle [binding a character device to a loop device](https://github.com/kubernetes/kubernetes/blob/7c87b5fb55ca096c007c8739d4657a5a4e29fb09/pkg/volume/util/util.go#L531-L534).
 
 ### LVM device mode
 
-The following diagram illustrates the operation in LVM device mode:
-![devicemode-lvm diagram](/docs/images/devicemodes/pmem-csi-lvm.png)
+In Logical Volume Management (LVM) mode the PMEM-CSI driver
+uses LVM for logical volume Management to avoid the risk of fragmentation. The
+LVM logical volumes are served to satisfy API requests. There is one volume
+group created per region, ensuring the region-affinity of served volumes.
 
-In LVM device mode PMEM-CSI driver uses LVM for logical volumes
-Management to avoid the risk of fragmentation. The LVM logical volumes
-are served to satisfy API requests. There is one volume group created
-per region, ensuring the region-affinity of served volumes.
+![devicemode-lvm diagram](/docs/images/devicemodes/pmem-csi-lvm.png)
 
 The driver consists of three separate binaries that form two
 initialization stages and a third API-serving stage.
@@ -118,20 +112,20 @@ initialization stages and a third API-serving stage.
 During startup, the driver scans persistent memory for regions and
 namespaces, and tries to create more namespaces using all or part
 (selectable via option) of the remaining available space. This first
-stage is performed by a separate entity _pmem-ns-init_.
+stage is performed by a separate entity `pmem-ns-init`.
 
 The second stage of initialization arranges physical volumes provided
 by namespaces into LVM volume groups. This is performed by a separate
-binary _pmem-vgm_.
+binary `pmem-vgm`.
 
-After two initialization stages, the third binary _pmem-csi-driver_
+After two initialization stages, the third binary `pmem-csi-driver`
 starts serving CSI API requests.
 
 #### Namespace modes in LVM device mode
 
 The PMEM-CSI driver pre-creates namespaces in `fsdax` mode forming
 the corresponding LVM volume group. The amount of space to be
-used is determined using the option `-useforfsdax` given to _pmem-ns-init_.
+used is determined using the option `-useforfsdax` given to `pmem-ns-init`.
 This options specifies an integer presenting limit as percentage.
 The default value is `useforfsdax=100`.
 
@@ -306,22 +300,22 @@ created. This means the applications using PMEM volume cannot freely
 move between nodes. This limitation needs to be considered when
 designing and deploying applications that are to use *local storage*.
 
-Below are the volume persistency models considered for implementation
+These are the volume persistency models considered for implementation
 in PMEM-CSI to serve different application use cases:
 
-* Persistent volumes  
+* **Persistent volumes**  
 A volume gets created independently of the application, on some node
 where there is enough free space. Applications using such a volume are
 then forced to run on that node and cannot run when the node is
 down. Data is retained until the volume gets deleted.
 
-* Ephemeral volumes  
+* **Ephemeral volumes**  
 Each time an application starts to run on a node, a new volume is
 created for it on that node. When the application stops, the volume is
 deleted. The volume cannot be shared with other applications. Data on
 this volume is retained only while the application runs.
 
-* Cache volumes  
+* **Cache volumes**  
 Volumes are pre-created on a certain set of nodes, each with its own
 local data. Applications are started on those nodes and then get to
 use the volume on their node. Data persists across application
