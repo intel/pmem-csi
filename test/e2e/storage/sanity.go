@@ -31,10 +31,11 @@ import (
 	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/kubernetes-csi/csi-test/pkg/sanity"
-	sanityutils "github.com/kubernetes-csi/csi-test/utils"
+	"github.com/kubernetes-csi/csi-test/v3/pkg/sanity"
+	sanityutils "github.com/kubernetes-csi/csi-test/v3/utils"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -56,15 +57,26 @@ import (
 // Run the csi-test sanity tests against a pmem-csi driver
 var _ = Describe("sanity", func() {
 	workerSocatAddresses := []string{}
-	config := sanity.Config{
-		TestVolumeSize: 1 * 1024 * 1024,
-		// The actual directories will be created as unique
-		// temp directories inside these directories.
-		// We intentionally do not use the real /var/lib/kubelet/pods as
-		// root for the target path, because kubelet is monitoring it
-		// and deletes all extra entries that it does not know about.
-		TargetPath:  "/var/lib/kubelet/plugins/kubernetes.io/csi/pv/pmem-sanity-target.XXXXXX",
-		StagingPath: "/var/lib/kubelet/plugins/kubernetes.io/csi/pv/pmem-sanity-staging.XXXXXX",
+
+	config := sanity.NewTestConfig()
+	config.TestVolumeSize = 1 * 1024 * 1024
+	// The actual directories will be created as unique
+	// temp directories inside these directories.
+	// We intentionally do not use the real /var/lib/kubelet/pods as
+	// root for the target path, because kubelet is monitoring it
+	// and deletes all extra entries that it does not know about.
+	config.TargetPath = "/var/lib/kubelet/plugins/kubernetes.io/csi/pv/pmem-sanity-target.XXXXXX"
+	config.StagingPath = "/var/lib/kubelet/plugins/kubernetes.io/csi/pv/pmem-sanity-staging.XXXXXX"
+	config.ControllerDialOptions = []grpc.DialOption{
+		// For our restart tests.
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			PermitWithoutStream: true,
+			// This is the minimum. Specifying it explicitly
+			// avoids some log output from gRPC.
+			Time: 10 * time.Second,
+		}),
+		// For plain HTTP.
+		grpc.WithInsecure(),
 	}
 
 	f := framework.NewDefaultFramework("pmem")
@@ -175,7 +187,7 @@ var _ = Describe("sanity", func() {
 		}
 	})
 
-	var _ = sanity.DescribeSanity("pmem csi", func(sc *sanity.SanityContext) {
+	var _ = sanity.DescribeSanity("pmem csi", func(sc *sanity.TestContext) {
 		var (
 			cl      *sanity.Cleanup
 			nc      csi.NodeClient
@@ -486,7 +498,7 @@ var _ = Describe("sanity", func() {
 			BeforeEach(func() {
 				nodes = make(map[string]nodeClient)
 				for i, addr := range workerSocatAddresses {
-					conn, err := sanityutils.Connect(addr)
+					conn, err := sanityutils.Connect(addr, grpc.WithInsecure())
 					framework.ExpectNoError(err, "connect to socat instance on node #%d via %s", i+1, addr)
 					node := nodeClient{
 						host: addr,
@@ -698,7 +710,7 @@ func getDaemonSet(cs clientset.Interface, setName string) *appsv1.DaemonSet {
 type volume struct {
 	namePrefix  string
 	ctx         context.Context
-	sc          *sanity.SanityContext
+	sc          *sanity.TestContext
 	cc          csi.ControllerClient
 	nc          csi.NodeClient
 	cl          *sanity.Cleanup
@@ -934,7 +946,7 @@ func canRestartNode(nodeID string) {
 // restartNode works only for one of the nodes in the QEMU virtual cluster.
 // It does a hard poweroff via SysRq and relies on Docker to restart the
 // "failed" node.
-func restartNode(cs clientset.Interface, nodeID string, sc *sanity.SanityContext) {
+func restartNode(cs clientset.Interface, nodeID string, sc *sanity.TestContext) {
 	cc := csi.NewControllerClient(sc.ControllerConn)
 	capacity, err := cc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
 	framework.ExpectNoError(err, "get capacity before restart")
