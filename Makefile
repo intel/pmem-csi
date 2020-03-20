@@ -66,6 +66,9 @@ build: $(CMDS) $(TEST_CMDS) check-go-version-$(GO_BINARY)
 # More tests are added elsewhere in this Makefile and test/test.make.
 test: build
 
+# "make generate" invokes code generators.
+generate: operator-generate-k8s
+
 # Build production binaries.
 $(CMDS): check-go-version-$(GO_BINARY)
 	$(GO) build -ldflags '-X github.com/intel/pmem-csi/pkg/$@.version=${VERSION}' -a -o ${OUTPUT_DIR}/$@ ./cmd/$@
