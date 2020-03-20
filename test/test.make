@@ -26,6 +26,11 @@ test: test_vendor
 test_vendor:
 	hack/verify-vendor.sh
 
+# Verify that generated code is up-to-date.
+.PHONY: test_generated
+test: test_generated
+test_generated:
+	hack/verify-generated.sh
 
 # This ensures that we know about all components that are needed at
 # runtime on a production system. Those must be scrutinized more
