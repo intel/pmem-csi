@@ -205,6 +205,16 @@ var _ = deploy.DescribeForAll("sanity", func(d *deploy.Deployment) {
 			cancel  func()
 		)
 
+		// The test context caches a connection to the CSI driver.
+		// When we re-deploy, gRPC will try to reconnect for that connection,
+		// leading to log messages about connection errors because the node port
+		// is allocated dynamically and changes when redeploying. Therefore
+		// we register a hook which clears the connection when PMEM-CSI
+		// gets re-deployed.
+		deploy.AddUninstallHook(func(deploymentName string) {
+			sc.Finalize()
+		})
+
 		BeforeEach(func() {
 			sc.Setup()
 			nc = csi.NewNodeClient(sc.Conn)

@@ -31,6 +31,27 @@ const (
 	deploymentLabel = "pmem-csi.intel.com/deployment"
 )
 
+// InstallHook is the callback function for AddInstallHook.
+type InstallHook func(Deployment *Deployment)
+
+// UninstallHook is the callback function for AddUninstallHook.
+type UninstallHook func(deploymentName string)
+
+var (
+	installHooks   []InstallHook
+	uninstallHooks []UninstallHook
+)
+
+// AddInstallHook registers a callback which is invoked after a successful driver installation.
+func AddInstallHook(h InstallHook) {
+	installHooks = append(installHooks, h)
+}
+
+// AddUninstallHook registers a callback which is invoked before a driver removal.
+func AddUninstallHook(h UninstallHook) {
+	uninstallHooks = append(uninstallHooks, h)
+}
+
 // WaitForPMEMDriver ensures that the PMEM-CSI driver is ready for use, which is
 // defined as:
 // - controller service is up and running
@@ -143,6 +164,9 @@ func RemovePMEMDriver(c *Cluster, deploymentName string) error {
 	defer ticker.Stop()
 
 	framework.Logf("deleting the %s PMEM-CSI deployment", deploymentName)
+	for _, h := range uninstallHooks {
+		h(deploymentName)
+	}
 
 	filter := metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s in (%s)", deploymentLabel, deploymentName),
@@ -405,6 +429,9 @@ func EnsureDeployment(deploymentName string) *Deployment {
 		framework.ExpectNoError(err, "create %s PMEM-CSI deployment", deployment.Name)
 
 		WaitForPMEMDriver(c, deployment.Namespace)
+		for _, h := range installHooks {
+			h(deployment)
+		}
 	})
 
 	return deployment
