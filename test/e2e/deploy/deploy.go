@@ -411,13 +411,7 @@ func EnsureDeployment(deploymentName string) *Deployment {
 		}
 
 		// At the moment, the only supported deployment method is via test/setup-deployment.sh.
-		cmd := exec.Command("test/setup-deployment.sh",
-			"_work/pmem-ca/ca.pem",
-			"_work/pmem-ca/pmem-registry.pem",
-			"_work/pmem-ca/pmem-registry-key.pem",
-			"_work/pmem-ca/pmem-node-controller.pem",
-			"_work/pmem-ca/pmem-node-controller-key.pem",
-		)
+		cmd := exec.Command("test/setup-deployment.sh")
 		cmd.Dir = os.Getenv("REPO_ROOT")
 		cmd.Env = os.Environ()
 		cmd.Env = append(cmd.Env,
