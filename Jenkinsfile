@@ -465,11 +465,24 @@ void TestInVM(distro, distroVersion, kubernetesVersion) {
         // mangle the <testcase name="..." classname="..."> such that
         // Jenkins shows them group as <testrun>/[sanity|E2E]/<test case>,
         // and place files where the 'junit' step above expects them.
+        //
+        // Example input and output (note that "gotests" only has two words in the name, not three,
+        // to prevent it from being listed under "direct-testing"):
+        //
+        // <       <testcase name="direct-production E2E [Driver: direct-production-pmem-csi] [Testpattern: Dynamic PV (ntfs)][sig-windows] provisioning should provision storage with mount options" classname="PMEM E2E suite" time="0.021836673">
+        // >       <testcase name="[Driver: direct-production-pmem-csi] [Testpattern: Dynamic PV (ntfs)][sig-windows] provisioning should provision storage with mount options" classname="fedora-1_16.direct-production.E2E" time="0.021836673">
+        //
+        // <       <testcase name="direct-testing-gotests ./pkg/pmem-csi-driver" classname="PMEM E2E suite" time="69.389477842"></testcase>
+        // >       <testcase name="./pkg/pmem-csi-driver" classname="fedora-1_16.direct-production-gotests" time="69.389477842"></testcase>
         sh '''set -x
             for i in build/reports.tmp/*/*.xml; do
                 if [ -f $i ]; then
                     testrun=$(basename $(dirname $i))
-                    sed -e "s/PMEM E2E suite/$testrun/" -e 's/testcase name="\\([^ ]*\\) *\\(.*\\)" classname="\\([^"]*\\)"/testcase classname="\\3.\\1" name="\\2"/' $i >build/reports/$testrun.xml
+                    sed -e "s/PMEM E2E suite/$testrun/" \
+                        -e 's/testcase name="\\([^ ]*\\) \\([^ ]*\\) \\(..*\\)" classname="\\([^"]*\\)"/testcase classname="\\4.\\1.\\2" name="\\3"/' \
+                        -e 's/testcase name="\\([^ ]*\\) \\(..*\\)" classname="\\([^"]*\\)"/testcase classname="\\3.\\1" name="\\2"/' \
+                        $i >build/reports/$testrun.xml
+                    diff $i build/reports/$testrun.xml || true
                fi
            done'''
     }

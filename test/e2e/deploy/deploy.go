@@ -431,40 +431,62 @@ func EnsureDeployment(deploymentName string) *Deployment {
 	return deployment
 }
 
+var allDeployments = []string{
+	"lvm-testing",
+	"lvm-production",
+	"direct-testing",
+	"direct-production",
+}
+
 // DescribeForAll registers tests like gomega.Describe does, except that
 // each test will then be invoked for each supported PMEM-CSI deployment.
 func DescribeForAll(what string, f func(d *Deployment)) bool {
-	Describe("lvm-testing", what, f)
-	Describe("lvm-production", what, f)
-	Describe("direct-testing", what, f)
-	Describe("direct-production", what, f)
+	for _, deploymentName := range allDeployments {
+		Describe(deploymentName, deploymentName, what, f)
+	}
 
 	return true
 }
 
-var tests = map[string][]func(d *Deployment){}
+// deployment name -> top level describe string -> list of test functions for that combination
+var tests = map[string]map[string][]func(d *Deployment){}
 
 // Describe remembers a certain test. The actual registration in
 // Ginkgo happens in DefineTests, ordered such that all tests with the
-// same "deployment" string are grouped together.
-func Describe(deployment, what string, f func(d *Deployment)) bool {
-	tests[deployment] = append(tests[deployment], func(d *Deployment) {
+// same "deployment" string are defined on after the after with the
+// given "describe" string.
+//
+// When "describe" is already unique, "what" can be left empty.
+func Describe(deployment, describe, what string, f func(d *Deployment)) bool {
+	group := tests[deployment]
+	if group == nil {
+		group = map[string][]func(d *Deployment){}
+	}
+	group[describe] = append(group[describe], func(d *Deployment) {
+		if what == "" {
+			// Skip one nesting layer.
+			f(d)
+			return
+		}
 		ginkgo.Describe(what, func() {
 			f(d)
 		})
 	})
+	tests[deployment] = group
 
 	return true
 }
 
 // DefineTests must be called to register all tests defined so far via Describe.
 func DefineTests() {
-	for deploymentName, funcs := range tests {
-		ginkgo.Describe(deploymentName, func() {
-			deployment := EnsureDeployment(deploymentName)
-			for _, f := range funcs {
-				f(deployment)
-			}
-		})
+	for deploymentName, group := range tests {
+		for describe, funcs := range group {
+			ginkgo.Describe(describe, func() {
+				deployment := EnsureDeployment(deploymentName)
+				for _, f := range funcs {
+					f(deployment)
+				}
+			})
+		}
 	}
 }
