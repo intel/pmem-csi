@@ -243,12 +243,17 @@ pipeline {
             }
         }
 
+        // Some stages are skipped entirely when testing PRs, the
+        // others skip certain tests in that case:
+        // - production deployment is only tested on Clear Linux
+        //   and testing deployment only on Fedora
+
         stage('testing 1.16') {
             options {
                 timeout(time: 180, unit: "MINUTES")
             }
             steps {
-                TestInVM("fedora", "", "1.16")
+                TestInVM("fedora", "", "1.16", "Top.Level..[[:alpha:]]*-production[[:space:]]")
             }
         }
 
@@ -258,7 +263,7 @@ pipeline {
                 timeout(time: 180, unit: "MINUTES")
             }
             steps {
-                TestInVM("fedora", "", "1.15")
+                TestInVM("fedora", "", "1.15", "")
             }
         }
 
@@ -268,7 +273,7 @@ pipeline {
                 timeout(time: 180, unit: "MINUTES")
             }
             steps {
-                TestInVM("fedora", "", "1.14")
+                TestInVM("fedora", "", "1.14", "")
             }
         }
 
@@ -277,7 +282,7 @@ pipeline {
                 timeout(time: 180, unit: "MINUTES")
             }
             steps {
-                TestInVM("clear", "${env.CLEAR_LINUX_VERSION_1_17}", "")
+                TestInVM("clear", "${env.CLEAR_LINUX_VERSION_1_17}", "",  "Top.Level..[[:alpha:]]*-testing[[:space:]]")
             }
         }
 
@@ -379,7 +384,7 @@ String RunInBuilder() {
     "
 }
 
-void TestInVM(distro, distroVersion, kubernetesVersion) {
+void TestInVM(distro, distroVersion, kubernetesVersion, skipIfPR) {
     try {
         /*
         We have to run "make start" in the current directory
@@ -450,7 +455,7 @@ void TestInVM(distro, distroVersion, kubernetesVersion) {
                            done && \
                            testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}' | sed -e s/--*/-/g | tr . _ ) && \
                            make test_e2e TEST_E2E_REPORT_DIR=${WORKSPACE}/build/reports.tmp/\$testrun \
-                                         TEST_E2E_SKIP=\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]; fi) \
+                                         TEST_E2E_SKIP=\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]@${skipIfPR}; fi) \
                            ' \
            "
     } catch (exc) {
