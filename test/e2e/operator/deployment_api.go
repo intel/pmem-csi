@@ -1,0 +1,612 @@
+/*
+Copyright 2019 Intel Corporation.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+package operator
+
+import (
+	"fmt"
+
+	"github.com/intel/pmem-csi/pkg/apis"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
+
+	corev1 "k8s.io/api/core/v1"
+	storagev1beta1 "k8s.io/api/storage/v1beta1"
+	apierrs "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/kubernetes/test/e2e/framework"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+)
+
+var (
+	pmemDeploymentRes = schema.GroupVersionResource{
+		Group:    api.SchemeGroupVersion.Group,
+		Version:  api.SchemeGroupVersion.Version,
+		Resource: "deployments",
+	}
+
+	scheme = runtime.NewScheme()
+)
+
+var _ = DescribeForAll("pmem-csi", func(o *Operator, f *framework.Framework) {
+
+	Context("deployment", func() {
+		// We use intentionally use this non-existing driver image
+		// so that the driver running from these tests does not pollute
+		// cluster by filling up the space in lvm mode
+		// NOTE: Make sure that deployments every test use this image
+		dummyImage := "unexisting/pmem-csi-driver"
+
+		BeforeEach(func() {
+			api.SchemeBuilder.Register(&api.Deployment{}, &api.DeploymentList{})
+
+			err := apis.AddToScheme(scheme)
+			Expect(err).ShouldNot(HaveOccurred(), "initialize scheme")
+		})
+
+		tests := map[string]*unstructured.Unstructured{
+			"with defaults": &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": api.SchemeGroupVersion.String(),
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name": "test-deployment-with-defaults",
+					},
+					"spec": map[string]interface{}{
+						"image": dummyImage,
+					},
+				},
+			},
+			"with explicit values": &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": api.SchemeGroupVersion.String(),
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name": "test-deployment-with-explicit",
+					},
+					"spec": map[string]interface{}{
+						"driverName":      "test-csi-driver",
+						"deviceMode":      "direct",
+						"imagePullPolicy": "Never",
+						"image":           dummyImage,
+						"controllerResources": map[string]interface{}{
+							"limits": map[string]interface{}{
+								"cpu":    "200m",
+								"memory": "100Mi",
+							},
+						},
+						"nodeResources": map[string]interface{}{
+							"limits": map[string]interface{}{
+								"cpu":    "500m",
+								"memory": "500Mi",
+							},
+						},
+					},
+				},
+			},
+		}
+
+		for name, dep := range tests {
+			It(name, func() {
+				deployment, err := toDeployment(dep)
+				Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
+
+				createDeployment(f, dep)
+				defer deleteDeployment(f, deployment.Name)
+				validateDriverDeployment(f, o, deployment)
+			})
+		}
+
+		It("shall be able to edit running deployment", func() {
+			dep := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": api.SchemeGroupVersion.String(),
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name": "test-deployment-update",
+					},
+					"spec": map[string]interface{}{
+						"driverName": "update-deployment.test.com",
+						"image":      dummyImage,
+					},
+				},
+			}
+
+			deployment, err := toDeployment(dep)
+			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
+
+			createDeployment(f, dep)
+			defer deleteDeployment(f, deployment.Name)
+			validateDriverDeployment(f, o, deployment)
+
+			dep = getDeployment(f, deployment.Name)
+
+			/* Update fields */
+			spec := dep.Object["spec"].(map[string]interface{})
+			spec["logLevel"] = api.DefaultLogLevel + 1
+			spec["image"] = "test-driver-image"
+			spec["imagePullPolicy"] = "Never"
+			spec["provisionerImage"] = "test-provisioner"
+			spec["controllerResources"] = map[string]interface{}{
+				"limits": map[string]interface{}{
+					"cpu":    "150m",
+					"memory": "1Mi",
+				},
+			}
+			spec["nodeResources"] = map[string]interface{}{
+				"limits": map[string]interface{}{
+					"cpu":    "350m",
+					"memory": "2Mi",
+				},
+			}
+
+			deployment, err = toDeployment(dep)
+			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
+
+			ss, err := f.ClientSet.AppsV1().StatefulSets(o.Namespace).Get(deployment.Name+"-controller", metav1.GetOptions{})
+			Expect(err).Should(BeNil(), "existence of controller stateful set")
+			ssVersion := ss.GetResourceVersion()
+
+			ds, err := f.ClientSet.AppsV1().DaemonSets(o.Namespace).Get(deployment.Name+"-node", metav1.GetOptions{})
+			Expect(err).Should(BeNil(), "existence of node daemonst set")
+			dsVersion := ds.GetResourceVersion()
+
+			updateDeployment(f, dep)
+
+			// Wait till the sub-resources get updated
+			// As a interm solution we are depending on subresoure(deaemon set, stateful set)
+			// versions to make sure the resource got updated. Instead, operator should update
+			// deployment status with appropriate events/condtion messages.
+			Eventually(func() bool {
+				ss, err := f.ClientSet.AppsV1().StatefulSets(o.Namespace).Get(deployment.Name+"-controller", metav1.GetOptions{})
+				if err != nil {
+					framework.Logf("Get stateful set error: %v", err)
+					return false
+				}
+				ds, err := f.ClientSet.AppsV1().DaemonSets(o.Namespace).Get(deployment.Name+"-node", metav1.GetOptions{})
+				if err != nil {
+					framework.Logf("Get daemon set error: %v", err)
+					return false
+				}
+				return ss.GetResourceVersion() != ssVersion && ds.GetResourceVersion() != dsVersion
+			}, "3m", "1s").Should(BeTrue(), "expected both daemonset and stateupset get updated")
+
+			validateDriverDeployment(f, o, deployment)
+		})
+
+		It("shall not allow to change device manager of a running deployment", func() {
+			oldMode := api.DeviceModeDirect
+			newMode := api.DeviceModeLVM
+			dep := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": api.SchemeGroupVersion.String(),
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name": "test-update-driver-mode",
+					},
+					"spec": map[string]interface{}{
+						"driverName": "update-driver-mode.test.com",
+						"deviceMode": oldMode,
+						"image":      dummyImage,
+					},
+				},
+			}
+
+			deployment, err := toDeployment(dep)
+			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
+
+			createDeployment(f, dep)
+			defer deleteDeployment(f, deployment.Name)
+			validateDriverDeployment(f, o, deployment)
+
+			dep = getDeployment(f, deployment.Name)
+
+			/* Update fields */
+			spec := dep.Object["spec"].(map[string]interface{})
+			spec["deviceMode"] = newMode
+
+			deployment, err = toDeployment(dep)
+			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
+
+			updateDeployment(f, dep)
+
+			Eventually(func() bool {
+				updatedDep := getDeployment(f, deployment.Name)
+				spec := updatedDep.Object["spec"].(map[string]interface{})
+				mode := spec["deviceMode"].(string)
+				return mode == string(oldMode)
+			}, "3m", "2s").Should(BeTrue(), "device manager should not be updated")
+
+			// ensure that the driver is still using the old device manager
+			ds, err := f.ClientSet.AppsV1().DaemonSets(o.Namespace).Get(deployment.Name+"-node", metav1.GetOptions{})
+			Expect(err).ShouldNot(HaveOccurred(), "daemon set should exists")
+			for _, c := range ds.Spec.Template.Spec.Containers {
+				if c.Name == "pmem-driver" {
+					Expect(c.Args).Should(ContainElement("-deviceManager="+string(oldMode)), "mismatched device manager")
+				}
+			}
+		})
+
+		It("shall allow muliple deployments", func() {
+			dep1 := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": api.SchemeGroupVersion.String(),
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name": "test-deployment-1",
+					},
+					"spec": map[string]interface{}{
+						"driverName": "deployment1.test.com",
+						"image":      dummyImage,
+					},
+				},
+			}
+			dep2 := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": api.SchemeGroupVersion.String(),
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name": "test-deployment-2",
+					},
+					"spec": map[string]interface{}{
+						"driverName": "deployment2.test.com",
+						"image":      dummyImage,
+					},
+				},
+			}
+
+			deployment1, err := toDeployment(dep1)
+			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
+
+			createDeployment(f, dep1)
+			defer deleteDeployment(f, deployment1.Name)
+			validateDriverDeployment(f, o, deployment1)
+
+			deployment2, err := toDeployment(dep2)
+			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
+			createDeployment(f, dep2)
+			defer deleteDeployment(f, deployment2.Name)
+			validateDriverDeployment(f, o, deployment2)
+		})
+
+		It("shall not allow muliple deployments with same driver name", func() {
+			driverName := "deployment-name-clash.test.com"
+			dep1 := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": api.SchemeGroupVersion.String(),
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name": "test-deployment-1",
+					},
+					"spec": map[string]interface{}{
+						"driverName": driverName,
+						"image":      dummyImage,
+					},
+				},
+			}
+			dep2 := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": api.SchemeGroupVersion.String(),
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name": "test-deployment-2",
+					},
+					"spec": map[string]interface{}{
+						"driverName": driverName,
+						"image":      dummyImage,
+					},
+				},
+			}
+
+			deployment1, err := toDeployment(dep1)
+			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
+
+			createDeployment(f, dep1)
+			defer deleteDeployment(f, deployment1.Name)
+			validateDriverDeployment(f, o, deployment1)
+
+			deployment2, err := toDeployment(dep2)
+			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
+			createDeployment(f, dep2)
+			defer deleteDeployment(f, deployment2.Name)
+
+			// Deployment should be In Failure state as other
+			// deployment with that name exisits
+			validateDeploymentFailure(f, deployment2.Name)
+
+			dep2 = getDeployment(f, deployment2.Name)
+			// Resolve deployment name and update
+			dep2.Object["spec"] = map[string]interface{}{
+				"driverName": "new-driver-name",
+			}
+
+			// and redeploy with new name
+			updateDeployment(f, dep2)
+
+			deployment2, err = toDeployment(dep2)
+			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
+			// Now it should succeed
+			validateDriverDeployment(f, o, deployment2)
+		})
+
+		It("shall be able to use custom CA certificates", func() {
+			caKey, err := pmemtls.NewPrivateKey()
+			Expect(err).ShouldNot(HaveOccurred(), "creatre ca private key")
+			regKey, err := pmemtls.NewPrivateKey()
+			Expect(err).ShouldNot(HaveOccurred(), "creatre registry private key")
+			nodeControllerKey, err := pmemtls.NewPrivateKey()
+			Expect(err).ShouldNot(HaveOccurred(), "creatre node ocntroller private key")
+			ca, err := pmemtls.NewCA(nil, caKey)
+			Expect(err).ShouldNot(HaveOccurred(), "creatre ca")
+
+			regCert, err := ca.GenerateCertificate("pmem-registry", regKey)
+			Expect(err).ShouldNot(HaveOccurred(), "sign registry key")
+			nodeControllerCert, err := ca.GenerateCertificate("pmem-node-controller", regKey)
+			Expect(err).ShouldNot(HaveOccurred(), "sign node controller key")
+
+			dep := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": api.SchemeGroupVersion.String(),
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name": "test-deployment-with-certificates",
+					},
+					"spec": map[string]interface{}{
+						"driverName":         "custom-ca.test.com",
+						"image":              dummyImage,
+						"caCert":             ca.EncodedCertificate(),
+						"registryKey":        pmemtls.EncodeKey(regKey),
+						"registryCert":       pmemtls.EncodeCert(regCert),
+						"nodeControllerKey":  pmemtls.EncodeKey(nodeControllerKey),
+						"nodeControllerCert": pmemtls.EncodeCert(nodeControllerCert),
+					},
+				},
+			}
+
+			deployment, err := toDeployment(dep)
+			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
+
+			createDeployment(f, dep)
+			defer deleteDeployment(f, deployment.Name)
+			validateDriverDeployment(f, o, deployment)
+		})
+	})
+})
+
+func toDeployment(dep *unstructured.Unstructured) (*api.Deployment, error) {
+	deployment := &api.Deployment{}
+	if err := scheme.Convert(dep, deployment, nil); err != nil {
+		return nil, err
+	}
+	deployment.EnsureDefaults()
+
+	return deployment, nil
+}
+
+func createDeployment(f *framework.Framework, dep *unstructured.Unstructured) *unstructured.Unstructured {
+	var outDep *unstructured.Unstructured
+	metadata := dep.Object["metadata"].(map[string]interface{})
+	depName := metadata["name"].(string)
+	Eventually(func() error {
+		var err error
+		outDep, err = f.DynamicClient.Resource(pmemDeploymentRes).Create(dep, metav1.CreateOptions{})
+		safeLogError(err, "create deployment error: %v, will retry...", err)
+		return err
+	}, "3m", "10s").Should(BeNil(), "create deployment %q", depName)
+	By(fmt.Sprintf("Created deployment %q", depName))
+	return outDep
+}
+
+func deleteDeployment(f *framework.Framework, name string) {
+	Eventually(func() error {
+		err := f.DynamicClient.Resource(pmemDeploymentRes).Delete(name, nil)
+		if err != nil && apierrs.IsNotFound(err) {
+			return nil
+		}
+		safeLogError(err, "delete deployment error: %v, will retry...", err)
+		return err
+	}, "3m", "10s").Should(BeNil(), "delete deployment %q", name)
+	By(fmt.Sprintf("Deleted deployment %q", name))
+}
+
+func updateDeployment(f *framework.Framework, dep *unstructured.Unstructured) *unstructured.Unstructured {
+	var outDep *unstructured.Unstructured
+	metadata := dep.Object["metadata"].(map[string]interface{})
+	depName := metadata["name"].(string)
+
+	Eventually(func() error {
+		var err error
+		outDep, err = f.DynamicClient.Resource(pmemDeploymentRes).Update(dep, metav1.UpdateOptions{})
+		safeLogError(err, "update deployment error: %v, will retry...", err)
+		return err
+	}, "3m", "10s").Should(BeNil(), "update deployment: %q", depName)
+
+	By(fmt.Sprintf("Updated deployment %q", depName))
+	return outDep
+}
+
+func getDeployment(f *framework.Framework, name string) *unstructured.Unstructured {
+	var outDep *unstructured.Unstructured
+	Eventually(func() error {
+		var err error
+		outDep, err = f.DynamicClient.Resource(pmemDeploymentRes).Get(name, metav1.GetOptions{})
+		safeLogError(err, "get deployment error: %v, will retry...", err)
+		return err
+	}, "3m", "10s").Should(BeNil(), "get deployment")
+
+	return outDep
+}
+
+func validateDriverDeployment(f *framework.Framework, o *Operator, expected *api.Deployment) {
+	deployment := &api.Deployment{}
+	Eventually(func() bool {
+		dep, err := f.DynamicClient.Resource(pmemDeploymentRes).Get(expected.Name, metav1.GetOptions{})
+		if err != nil {
+			return false
+		}
+
+		if err = scheme.Convert(dep, deployment, nil); err != nil {
+			return false
+		}
+		By(fmt.Sprintf("Deployment %q is in %q phase", deployment.Name, deployment.Status.Phase))
+		return deployment.Status.Phase == api.DeploymentPhaseRunning
+	}, "3m", "5s").Should(BeTrue(), "deployment %q not running", expected.Name)
+
+	// Validate sub-resources
+
+	// Secretes
+	caSecret, err := f.ClientSet.CoreV1().Secrets(o.Namespace).Get(expected.Name+"-pmem-ca", metav1.GetOptions{})
+	Expect(err).ShouldNot(HaveOccurred(), "find ca secret")
+	if expected.Spec.CACert != nil {
+		Expect(caSecret.Data[corev1.TLSCertKey]).Should(BeEquivalentTo(expected.Spec.CACert))
+	}
+	regSecret, err := f.ClientSet.CoreV1().Secrets(o.Namespace).Get(expected.Name+"-pmem-registry", metav1.GetOptions{})
+	Expect(err).ShouldNot(HaveOccurred(), "find registry secret")
+	if expected.Spec.RegistryPrivateKey != nil {
+		Expect(regSecret.Data[corev1.TLSPrivateKeyKey]).Should(BeEquivalentTo(expected.Spec.RegistryPrivateKey))
+	}
+	if expected.Spec.RegistryCert != nil {
+		Expect(regSecret.Data[corev1.TLSCertKey]).Should(BeEquivalentTo(expected.Spec.RegistryCert))
+	}
+	nodeControllerSecret, err := f.ClientSet.CoreV1().Secrets(o.Namespace).Get(expected.Name+"-pmem-node-controller", metav1.GetOptions{})
+	Expect(err).ShouldNot(HaveOccurred(), "find node controller secret")
+	if expected.Spec.NodeControllerPrivateKey != nil {
+		Expect(nodeControllerSecret.Data[corev1.TLSPrivateKeyKey]).Should(BeEquivalentTo(expected.Spec.NodeControllerPrivateKey))
+	}
+	if expected.Spec.NodeControllerCert != nil {
+		Expect(nodeControllerSecret.Data[corev1.TLSCertKey]).Should(BeEquivalentTo(expected.Spec.NodeControllerCert))
+	}
+
+	// Statefulset and its containers
+	ss, err := f.ClientSet.AppsV1().StatefulSets(o.Namespace).Get(expected.Name+"-controller", metav1.GetOptions{})
+	Expect(err).Should(BeNil(), "existence of controller stateful set")
+	Expect(*ss.Spec.Replicas).Should(BeEquivalentTo(1), "controller stateful set replication count mismatch")
+	svcName := ss.Spec.ServiceName
+	Expect(svcName).ShouldNot(BeEmpty(), "controller should have a service ")
+	saName := ss.Spec.Template.Spec.ServiceAccountName
+	Expect(saName).ShouldNot(BeEmpty(), "controller should a service account")
+
+	findSecret := func(volumes []corev1.Volume, secret string) bool {
+		for _, v := range volumes {
+			if v.VolumeSource.Secret != nil && v.VolumeSource.Secret.SecretName == secret {
+				return true
+			}
+		}
+		return false
+	}
+	for _, secret := range []string{caSecret.Name, regSecret.Name} {
+		Expect(findSecret(ss.Spec.Template.Spec.Volumes, secret)).Should(BeTrue(), "volume sources of stateful set shall have secret %s", secret)
+	}
+
+	containers := ss.Spec.Template.Spec.Containers
+	Expect(len(containers)).Should(BeEquivalentTo(2), "controller stateful set container count mismatch")
+	for _, c := range containers {
+		cpu := c.Resources.Limits.Cpu()
+		memory := c.Resources.Limits.Memory()
+		Expect(c.ImagePullPolicy).Should(BeEquivalentTo(expected.Spec.PullPolicy), "pmem-driver: mismatched image pull policy")
+		Expect(cpu).Should(BeEquivalentTo(expected.Spec.ControllerResources.Limits.Cpu()), "controller cpu resource limit mismatch")
+		Expect(memory).Should(BeEquivalentTo(expected.Spec.ControllerResources.Limits.Memory()), "controller memory resource limit mismatch")
+		switch c.Name {
+		case "pmem-driver":
+			Expect(c.Image).Should(BeEquivalentTo(expected.Spec.Image), "mismatched driver image")
+			Expect(c.Args).Should(ContainElement("-drivername="+expected.Spec.DriverName), "mismatched driver name")
+			Expect(c.Args).Should(ContainElement(fmt.Sprintf("-v=%d", expected.Spec.LogLevel)), "mismatched logging level")
+		case "provisioner":
+			Expect(c.Image).Should(BeEquivalentTo(expected.Spec.ProvisionerImage), "mismatched provisioner image")
+		default:
+			Fail(fmt.Sprintf("Unknown container name %q in controller stateful set", c.Name))
+		}
+	}
+
+	// Daemonset and its containers
+	ds, err := f.ClientSet.AppsV1().DaemonSets(o.Namespace).Get(expected.Name+"-node", metav1.GetOptions{})
+	Expect(err).ShouldNot(HaveOccurred(), "daemon set should exists")
+	for _, secret := range []string{caSecret.Name, nodeControllerSecret.Name} {
+		Expect(findSecret(ds.Spec.Template.Spec.Volumes, secret)).Should(BeTrue(), "volume sources of daemon set shall have secret %s", secret)
+	}
+
+	Expect(len(ds.Spec.Template.Spec.Containers)).Should(BeEquivalentTo(2), "daemon set container count")
+	for _, c := range ds.Spec.Template.Spec.Containers {
+		cpu := c.Resources.Limits.Cpu()
+		memory := c.Resources.Limits.Memory()
+		Expect(c.ImagePullPolicy).Should(BeEquivalentTo(expected.Spec.PullPolicy), "pmem-driver: mismatched image pull policy")
+		Expect(cpu).Should(BeEquivalentTo(expected.Spec.NodeResources.Limits.Cpu()), "node cpu resource limit mismatch")
+		Expect(memory).Should(BeEquivalentTo(expected.Spec.NodeResources.Limits.Memory()), "node memory resource limit mismatch")
+		switch c.Name {
+		case "pmem-driver":
+			Expect(c.Image).Should(BeEquivalentTo(expected.Spec.Image), "mismatched driver image")
+			Expect(c.Args).Should(ContainElement("-drivername="+expected.Spec.DriverName), "mismatched driver name")
+			Expect(c.Args).Should(ContainElement("-deviceManager="+string(expected.Spec.DeviceMode)), "mismatched device manager")
+			Expect(c.Args).Should(ContainElement(fmt.Sprintf("-v=%d", expected.Spec.LogLevel)), "mismatched logging level")
+		case "driver-registrar":
+			Expect(c.Image).Should(BeEquivalentTo(expected.Spec.NodeRegistrarImage), "mismatched driver-registrar image")
+		default:
+			Fail(fmt.Sprintf("Unknown container name %q in controller stateful set", c.Name))
+		}
+	}
+
+	// should have a CSIDriver
+	driver, err := f.ClientSet.StorageV1beta1().CSIDrivers().Get(expected.Spec.DriverName, metav1.GetOptions{})
+	Expect(err).ShouldNot(HaveOccurred(), "expected instance of csi driver")
+	lcModes := []storagev1beta1.VolumeLifecycleMode{
+		storagev1beta1.VolumeLifecycleEphemeral,
+		storagev1beta1.VolumeLifecyclePersistent,
+	}
+	By(fmt.Sprintf("Driver: %s Lifecycle Modes: %v", driver.Name, driver.Spec.VolumeLifecycleModes))
+	Expect(driver.Spec.VolumeLifecycleModes).Should(ConsistOf(lcModes), "mismatched life cycle modes")
+
+	svc, err := f.ClientSet.CoreV1().Services(o.Namespace).Get(svcName, metav1.GetOptions{})
+	Expect(err).ShouldNot(HaveOccurred(), "missing controller service")
+	Expect(len(svc.Spec.Ports)).ShouldNot(BeZero(), "controller service should have a port defined")
+
+	// should have a service account
+	sa, err := f.ClientSet.CoreV1().ServiceAccounts(o.Namespace).Get(saName, metav1.GetOptions{})
+	Expect(err).ShouldNot(HaveOccurred(), "controller service account")
+	Expect(len(sa.Secrets)).ShouldNot(BeZero(), "controller service account should have valid secrets")
+
+	// should have defined Roles and Role bindings
+	rb, err := f.ClientSet.RbacV1().RoleBindings(o.Namespace).Get(expected.Name, metav1.GetOptions{})
+	Expect(err).ShouldNot(HaveOccurred(), "should have role binding instance")
+	Expect(len(rb.Subjects)).ShouldNot(BeZero(), "role binding have a valid subject")
+	Expect(rb.Subjects[0].Name).Should(BeEquivalentTo(saName), "rolbe binding should have a valid service account")
+
+	_, err = f.ClientSet.RbacV1().Roles(o.Namespace).Get(rb.RoleRef.Name, metav1.GetOptions{})
+	Expect(err).ShouldNot(HaveOccurred(), "roles should have been defined")
+
+	crb, err := f.ClientSet.RbacV1().ClusterRoleBindings().Get(expected.Name, metav1.GetOptions{})
+	Expect(err).ShouldNot(HaveOccurred(), "should have a cluster role binding instance")
+	Expect(len(crb.Subjects)).ShouldNot(BeZero(), "cluster role binding should have a valid subject")
+	Expect(crb.Subjects[0].Name).Should(BeEquivalentTo(saName), "cluster role binding should have a valid service account")
+	_, err = f.ClientSet.RbacV1().Roles(o.Namespace).Get(rb.RoleRef.Name, metav1.GetOptions{})
+	Expect(err).ShouldNot(HaveOccurred(), "roles should have been defined")
+}
+
+func validateDeploymentFailure(f *framework.Framework, name string) {
+	deployment := &api.Deployment{}
+	Eventually(func() bool {
+		dep, err := f.DynamicClient.Resource(pmemDeploymentRes).Get(name, metav1.GetOptions{})
+		if err != nil {
+			return false
+		}
+
+		if err = scheme.Convert(dep, deployment, nil); err != nil {
+			return false
+		}
+		By(fmt.Sprintf("Deployment %q is in %q pahse", deployment.Name, deployment.Status.Phase))
+		return deployment.Status.Phase == api.DeploymentPhaseFailed
+	}, "3m", "5s").Should(BeTrue(), "deployment %q not running", name)
+}
+
+func safeLogError(err error, format string, args ...interface{}) {
+	if err != nil {
+		framework.Logf(format, args...)
+	}
+}

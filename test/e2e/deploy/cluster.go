@@ -43,6 +43,10 @@ func NewCluster(cs kubernetes.Interface) (*Cluster, error) {
 	return cluster, nil
 }
 
+func (c *Cluster) ClientSet() kubernetes.Interface {
+	return c.cs
+}
+
 // NumNodes returns the total number of nodes in the cluster.
 // Node #0 is the master node, the rest are workers.
 func (c *Cluster) NumNodes() int {

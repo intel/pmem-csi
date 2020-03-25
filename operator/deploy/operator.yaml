@@ -136,6 +136,8 @@ spec:
     metadata:
       labels:
         name: pmem-csi-operator
+        app: pmem-csi-operator
+        pmem-csi.intel.com/webhook: ignore
     spec:
       serviceAccountName: pmem-csi-operator
       containers:
