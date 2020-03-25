@@ -79,6 +79,16 @@ data:
 EOF
 
 echo "$KUBERNETES_VERSION" > $WORK_DIRECTORY/kubernetes.version
+case "$KUBERNETES_VERSION" in
+    1.1[01234])
+        # We cannot exclude the PMEM-CSI pods from the webhook because objectSelector
+        # was only added in 1.15. Instead, we exclude the entire "default" namespace.
+        # This means our normal test applications also don't use it, but our normal
+        # instructions for checking that PMEM-CSI works still apply.
+        ${KUBECTL} label --overwrite ns default pmem-csi.intel.com/webhook=ignore
+        ;;
+esac
+
 for deploy in ${DEPLOY[@]}; do
     path="${DEPLOYMENT_DIRECTORY}/${deploy}"
     if [ -f "$path" ]; then

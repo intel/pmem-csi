@@ -1005,9 +1005,10 @@ kubectl label ns kube-system pmem-csi.intel.com/webhook=ignore
 ```
 
 This special label is configured in [the provided web hook
-definition](./deploy/kustomize/webhook/webhook.yaml). It can also be
-used to let individual pods bypass the webhook by adding that label.
-The CA gets configured explicitly, which is supported for webhooks.
+definition](./deploy/kustomize/webhook/webhook.yaml). On Kubernetes >=
+1.15, it can also be used to let individual pods bypass the webhook by
+adding that label. The CA gets configured explicitly, which is
+supported for webhooks.
 
 ``` sh
 mkdir my-webhook
