@@ -36,6 +36,8 @@ for name in ${CNS}; do
         $(if [ "$name" = "pmem-registry" ]; then
              # Some extra names needed for scheduler extender and webhook.
              echo '"pmem-csi-scheduler", "pmem-csi-scheduler.default", "pmem-csi-scheduler.default.svc", "127.0.0.1",'
+             # And for metrics server.
+             echo '"pmem-csi-metrics", "pmem-csi-metrics.default", "pmem-csi-metrics.default.svc",'
           fi
         )
         "$name"

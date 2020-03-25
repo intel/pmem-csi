@@ -2,6 +2,9 @@ bases:
 - ../kubernetes-1.14-direct/
 - ../testing/
 
+commonLabels:
+  pmem-csi.intel.com/deployment: direct-testing
+
 patchesJson6902:
 - target:
     group: apps

@@ -92,7 +92,6 @@ func LoadServerTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, err
 			if info == nil {
 				return nil, errors.New("nil client info passed")
 			}
-			klog.Infof("GetConfigForClient: servername(%q)", info.ServerName)
 			ciphers := []uint16{}
 			for _, c := range info.CipherSuites {
 				// filter out all insecure ciphers from client offered list
@@ -148,39 +147,46 @@ func LoadServerTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, err
 }
 
 //LoadClientTLS prepares the TLS configuration that can be used by a client while connecting to a server.
-// peerName must be provided when expecting the server to offer a certificate with that CommonName
+// peerName must be provided when expecting the server to offer a certificate with that CommonName. caFile, certFile, and keyFile are all optional.
 func LoadClientTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, error) {
 	certPool, peerCert, err := loadCertificate(caFile, certFile, keyFile)
 	if err != nil {
 		return nil, err
 	}
-	klog.V(3).Infof("Using Servername: %s", peerName)
-	return &tls.Config{
+	tlsConfig := &tls.Config{
 		MinVersion:    tls.VersionTLS12,
 		Renegotiation: tls.RenegotiateNever,
 		ServerName:    peerName,
-		Certificates:  []tls.Certificate{*peerCert},
 		RootCAs:       certPool,
-	}, nil
+	}
+	if peerCert != nil {
+		tlsConfig.Certificates = append(tlsConfig.Certificates, *peerCert)
+	}
+	return tlsConfig, nil
 }
 
-func loadCertificate(caFile, certFile, keyFile string) (*x509.CertPool, *tls.Certificate, error) {
-	peerCert, err := tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		return nil, nil, err
+func loadCertificate(caFile, certFile, keyFile string) (certPool *x509.CertPool, peerCert *tls.Certificate, err error) {
+	if certFile != "" || keyFile != "" {
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return nil, nil, err
+		}
+		peerCert = &cert
 	}
 
-	caCert, err := ioutil.ReadFile(caFile)
-	if err != nil {
-		return nil, nil, err
+	if caFile != "" {
+		caCert, err := ioutil.ReadFile(caFile)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		certPool = x509.NewCertPool()
+		if ok := certPool.AppendCertsFromPEM(caCert); !ok {
+			return nil, nil, fmt.Errorf("failed to append certs from %s", caFile)
+		}
 	}
 
-	certPool := x509.NewCertPool()
-	if ok := certPool.AppendCertsFromPEM(caCert); !ok {
-		return nil, nil, fmt.Errorf("failed to append certs from %s", caFile)
-	}
-
-	return certPool, &peerCert, nil
+	return
 }
 
 func parseEndpoint(ep string) (string, string, error) {

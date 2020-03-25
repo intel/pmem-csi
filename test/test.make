@@ -134,7 +134,7 @@ RUN_TEST_DEPS = _work/pmem-ca/.ca-stamp _work/evil-ca/.ca-stamp check-go-version
 run_tests: $(RUN_TEST_DEPS)
 	$(RUN_TESTS)
 
-# E2E tests which are known to be unsuitable (space separated list of regular expressions).
+# E2E tests which are known to be unsuitable (space or @ separated list of regular expressions).
 TEST_E2E_SKIP =
 TEST_E2E_SKIP_ALL = $(TEST_E2E_SKIP)
 
@@ -165,17 +165,16 @@ RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 	REPO_ROOT=`pwd` \
 	CLUSTER=$(CLUSTER) \
 	$(shell source test/test-config.sh; \
-	  echo TEST_DEPLOYMENTMODE=$$TEST_DEPLOYMENTMODE; \
-	  echo TEST_DEVICEMODE=$$TEST_DEVICEMODE; \
 	  echo TEST_KUBERNETES_VERSION=$$TEST_KUBERNETES_VERSION; \
-	  echo PMEM_CSI_IMAGE=$$TEST_LOCAL_REGISTRY/pmem-csi-driver$$(if [ $$TEST_DEPLOYMENTMODE = testing ]; then echo -test; fi):$(IMAGE_VERSION); \
+	  echo PMEM_CSI_IMAGE=$$TEST_LOCAL_REGISTRY/pmem-csi-driver:$(IMAGE_VERSION); \
 	) \
 	TEST_CMD='$(TEST_CMD)' \
 	GO='$(GO)' \
 	TEST_PKGS='$(shell for i in $(TEST_PKGS); do if ls $$i/*_test.go 2>/dev/null >&2; then echo $$i; fi; done)' \
 	$(GO) test -count=1 -timeout 0 -v ./test/e2e \
-                -ginkgo.skip='$(subst $(space),|,$(strip $(TEST_E2E_SKIP_ALL)))' \
-                -ginkgo.focus='$(subst $(space),|,$(strip $(TEST_E2E_FOCUS)))' \
+                -ginkgo.skip='$(subst $(space),|,$(strip $(subst @,$(space),$(TEST_E2E_SKIP_ALL))))' \
+                -ginkgo.focus='$(subst $(space),|,$(strip $(subst @,$(space),$(TEST_E2E_FOCUS))))' \
+		-ginkgo.randomizeAllSpecs=false \
 	        $(TEST_E2E_ARGS) \
                 -report-dir=$(TEST_E2E_REPORT_DIR)
 test_e2e: start $(RUN_TEST_DEPS)

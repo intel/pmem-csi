@@ -1,4 +1,5 @@
 Go,https://github.com/golang/go,9051
+client_golang,https://github.com/prometheus/client_golang
 golang-protobuf,https://github.com/golang/protobuf
 google uuid,https://github.com/google/uuid
 grpc-go,https://github.com/grpc/grpc-go

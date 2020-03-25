@@ -8,6 +8,7 @@ import (
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -47,6 +48,19 @@ type NodeInfo struct {
 	NodeID string
 	//Endpoint node controller endpoint
 	Endpoint string
+}
+
+var (
+	pmemNodes = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "pmem_nodes",
+			Help: "The number of PMEM-CSI nodes registered in the controller.",
+		},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(pmemNodes)
 }
 
 func New(tlsConfig *tls.Config) *RegistryServer {
@@ -117,6 +131,7 @@ func (rs *RegistryServer) RegisterController(ctx context.Context, req *registry.
 		}
 	}
 	rs.nodeClients[req.NodeId] = node
+	pmemNodes.Set(float64(len(rs.nodeClients)))
 	rs.mutex.Unlock()
 
 	if !found {
@@ -124,6 +139,7 @@ func (rs *RegistryServer) RegisterController(ctx context.Context, req *registry.
 			if err := l.OnNodeAdded(ctx, node); err != nil {
 				rs.mutex.Lock()
 				delete(rs.nodeClients, req.NodeId)
+				pmemNodes.Set(float64(len(rs.nodeClients)))
 				rs.mutex.Unlock()
 				return nil, errors.Wrap(err, "failed to register node")
 			}
@@ -144,6 +160,7 @@ func (rs *RegistryServer) UnregisterController(ctx context.Context, req *registr
 	rs.mutex.Lock()
 	node, ok := rs.nodeClients[req.NodeId]
 	delete(rs.nodeClients, req.NodeId)
+	pmemNodes.Set(float64(len(rs.nodeClients)))
 	rs.mutex.Unlock()
 
 	if ok {

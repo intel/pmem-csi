@@ -13,11 +13,13 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/kubernetes/test/e2e/framework"
 
+	"github.com/intel/pmem-csi/test/e2e/deploy"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("PMEM Cluster", func() {
+var _ = deploy.DescribeForAll("Deployment", func(d *deploy.Deployment) {
 	f := framework.NewDefaultFramework("pmem")
 
 	// This checks that cluster-driver-registrar added the

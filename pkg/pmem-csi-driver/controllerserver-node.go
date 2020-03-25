@@ -178,6 +178,22 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 	// getVolumeByName.
 	p.Name = &volumeName
 
+	asked := capacity.GetRequiredBytes()
+	if vol := cs.getVolumeByName(volumeName); vol != nil {
+		// Check if the size of existing volume can cover the new request
+		klog.V(4).Infof("Node CreateVolume: volume exists, name:%q id:%s size:%v", volumeName, vol.ID, vol.Size)
+		if vol.Size < asked {
+			statusErr = status.Error(codes.AlreadyExists, fmt.Sprintf("smaller volume with the same name %q already exists", volumeName))
+			return
+		}
+		// Use existing volume, it's the one the caller asked
+		// for earlier (idempotent call):
+		volumeID = vol.ID
+		actual = vol.Size
+		return
+	}
+
+	klog.V(4).Infof("Node CreateVolume: Name:%q req.Required:%v req.Limit:%v", volumeName, asked, capacity.GetLimitBytes())
 	volumeID = p.GetVolumeID()
 	if volumeID == "" {
 		volumeID = GenerateVolumeID("Node CreateVolume", volumeName)
@@ -193,58 +209,46 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 		}
 	}
 
-	asked := capacity.GetRequiredBytes()
-	if vol := cs.getVolumeByName(volumeName); vol != nil {
-		// Check if the size of existing volume can cover the new request
-		klog.V(4).Infof("Node CreateVolume: volume exists, name:%q id:%s size:%v", volumeName, vol.ID, vol.Size)
-		if vol.Size < asked {
-			statusErr = status.Error(codes.AlreadyExists, fmt.Sprintf("smaller volume with the same name %q already exists", volumeName))
-			return
-		}
-		actual = vol.Size
-	} else {
-		klog.V(4).Infof("Node CreateVolume: Name:%q req.Required:%v req.Limit:%v", volumeName, asked, capacity.GetLimitBytes())
-		vol := &nodeVolume{
-			ID:     volumeID,
-			Size:   asked,
-			Params: p.ToContext(),
-		}
-		if cs.sm != nil {
-			// Persist new volume state *before* actually creating the volume.
-			// Writing this state after creating the volume has the risk that
-			// we leak the volume if we don't get around to storing the state.
-			if err := cs.sm.Create(volumeID, vol); err != nil {
-				statusErr = status.Error(codes.Internal, "Node CreateVolume: "+err.Error())
-				return
-			}
-			defer func() {
-				// In case of failure, remove volume from state again because it wasn't created.
-				// This is allowed to fail because orphaned entries will be detected eventually.
-				if statusErr != nil {
-					if err := cs.sm.Delete(volumeID); err != nil {
-						klog.Warningf("Delete volume state for id '%s' failed with error: %v", volumeID, err)
-					}
-				}
-			}()
-		}
-		if asked <= 0 {
-			// Allocating volumes of zero size isn't supported.
-			// We use some arbitrary small minimum size instead.
-			// It will get rounded up by below layer to meet the alignment.
-			asked = 1
-		}
-		if err := cs.dm.CreateDevice(volumeID, uint64(asked)); err != nil {
-			statusErr = status.Errorf(codes.Internal, "Node CreateVolume: device creation failed: %v", err)
-			return
-		}
-		// TODO(?): determine and return actual size here?
-		actual = asked
-
-		cs.mutex.Lock()
-		defer cs.mutex.Unlock()
-		cs.pmemVolumes[volumeID] = vol
-		klog.V(3).Infof("Node CreateVolume: Record new volume as %v", *vol)
+	vol := &nodeVolume{
+		ID:     volumeID,
+		Size:   asked,
+		Params: p.ToContext(),
 	}
+	if cs.sm != nil {
+		// Persist new volume state *before* actually creating the volume.
+		// Writing this state after creating the volume has the risk that
+		// we leak the volume if we don't get around to storing the state.
+		if err := cs.sm.Create(volumeID, vol); err != nil {
+			statusErr = status.Error(codes.Internal, "Node CreateVolume: "+err.Error())
+			return
+		}
+		defer func() {
+			// In case of failure, remove volume from state again because it wasn't created.
+			// This is allowed to fail because orphaned entries will be detected eventually.
+			if statusErr != nil {
+				if err := cs.sm.Delete(volumeID); err != nil {
+					klog.Warningf("Delete volume state for id '%s' failed with error: %v", volumeID, err)
+				}
+			}
+		}()
+	}
+	if asked <= 0 {
+		// Allocating volumes of zero size isn't supported.
+		// We use some arbitrary small minimum size instead.
+		// It will get rounded up by below layer to meet the alignment.
+		asked = 1
+	}
+	if err := cs.dm.CreateDevice(volumeID, uint64(asked)); err != nil {
+		statusErr = status.Errorf(codes.Internal, "Node CreateVolume: device creation failed: %v", err)
+		return
+	}
+	// TODO(?): determine and return actual size here?
+	actual = asked
+
+	cs.mutex.Lock()
+	defer cs.mutex.Unlock()
+	cs.pmemVolumes[volumeID] = vol
+	klog.V(3).Infof("Node CreateVolume: Record new volume as %v", *vol)
 
 	return
 }

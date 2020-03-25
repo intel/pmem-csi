@@ -1,6 +1,9 @@
 resources:
 - ../../kubernetes-1.15/pmem-csi-direct-testing.yaml
 
+commonLabels:
+  pmem-csi.intel.com/deployment: direct-testing
+
 patchesJson6902:
 - target:
     group: storage.k8s.io

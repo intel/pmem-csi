@@ -41,20 +41,15 @@ DEPLOY=(
 # Read certificate files and turn them into Kubernetes secrets.
 #
 # -caFile (controller and all nodes)
-CA=$(read_key "$1")
-shift
+CA=$(read_key "${TEST_CA}")
 # -certFile (controller)
-REGISTRY_CERT=$(read_key "$1")
-shift
+REGISTRY_CERT=$(read_key "${TEST_REGISTRY_CERT}")
 # -keyFile (controller)
-REGISTRY_KEY=$(read_key "$1")
-shift
+REGISTRY_KEY=$(read_key "${TEST_REGISTRY_KEY}")
 # -certFile (same for all nodes)
-NODE_CERT=$(read_key "$1")
-shift
+NODE_CERT=$(read_key "${TEST_NODE_CERT}")
 # -keyFile (same for all nodes)
-NODE_KEY=$(read_key "$1")
-shift
+NODE_KEY=$(read_key "${TEST_NODE_KEY}")
 
 ${KUBECTL} apply -f - <<EOF
 apiVersion: v1
@@ -188,9 +183,6 @@ done
 ${KUBECTL} label --overwrite ns kube-system pmem-csi.intel.com/webhook=ignore
 
 cat <<EOF
-
-The test cluster is ready. Log in with ${WORK_DIRECTORY}/ssh-${CLUSTER}, run kubectl once logged in.
-Alternatively, KUBECONFIG=${WORK_DIRECTORY}/kube.config can also be used directly.
 
 To try out the pmem-csi driver persistent volumes:
    cat deploy/kubernetes-${KUBERNETES_VERSION}/pmem-pvc.yaml | ${KUBECTL} create -f -

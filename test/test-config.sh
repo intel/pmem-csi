@@ -92,14 +92,21 @@ fi
 # featurename=true,feature=false
 : ${TEST_FEATURE_GATES:=CSINodeInfo=true,CSIDriverRegistry=true,CSIBlockVolume=true,CSIInlineVolume=true}
 
-# DeviceMode to be used during testing.
+# Device mode that test/setup-deployment.sh is using.
 # Allowed values: lvm, direct
 # This string is used as part of deployment file name.
 : ${TEST_DEVICEMODE:=lvm}
 
-# Which deployment to use during testing.
+# Which deployment test/setup-deployment.sh is using.
 # Allowed values: testing (default), production
 : ${TEST_DEPLOYMENTMODE:=testing}
+
+# TLS certificates installed by test/setup-deployment.sh.
+: ${TEST_CA:=_work/pmem-ca/ca.pem}
+: ${TEST_REGISTRY_CERT:=_work/pmem-ca/pmem-registry.pem}
+: ${TEST_REGISTRY_KEY:=_work/pmem-ca/pmem-registry-key.pem}
+: ${TEST_NODE_CERT:=_work/pmem-ca/pmem-node-controller.pem}
+: ${TEST_NODE_KEY:=_work/pmem-ca/pmem-node-controller-key.pem}
 
 # Initialize "region0" as required by PMEM-CSI.
 : ${TEST_INIT_REGION:=true}

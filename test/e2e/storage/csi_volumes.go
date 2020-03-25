@@ -24,6 +24,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/intel/pmem-csi/test/e2e/deploy"
 	"github.com/intel/pmem-csi/test/e2e/ephemeral"
 	"github.com/intel/pmem-csi/test/e2e/storage/dax"
 	"github.com/intel/pmem-csi/test/e2e/storage/scheduler"
@@ -44,14 +45,19 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("E2E", func() {
+var (
+	numWorkers = flag.Int("pmem.latebinding.workers", 10, "number of worker creating volumes in parallel and thus also the maximum number of volumes at any time")
+	numVolumes = flag.Int("pmem.latebinding.volumes", 100, "number of total volumes to create")
+)
+
+var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 	// List of testDrivers to be executed in below loop
 	var csiTestDrivers = []func() testsuites.TestDriver{
 		// pmem-csi
 		func() testsuites.TestDriver {
 			return &manifestDriver{
 				driverInfo: testsuites.DriverInfo{
-					Name:        "pmem-csi",
+					Name:        d.Name + "-pmem-csi",
 					MaxFileSize: testpatterns.FileSizeMedium,
 					SupportedFsType: sets.NewString(
 						"", "ext4", "xfs",
@@ -118,7 +124,7 @@ var _ = Describe("E2E", func() {
 			}
 			framework.ExpectNoError(err, "get storage class %s", storageClassLateBindingName)
 			// Register list of volumes before test, using out-of-band host commands (i.e. not CSI API).
-			prevVol = GetHostVolumes()
+			prevVol = GetHostVolumes(d)
 
 			claim = v1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
@@ -141,17 +147,12 @@ var _ = Describe("E2E", func() {
 
 		AfterEach(func() {
 			// Check list of volumes after test to detect left-overs
-			CheckForLeftoverVolumes(prevVol)
+			CheckForLeftoverVolumes(d, prevVol)
 		})
 
 		It("works", func() {
 			TestDynamicLateBindingProvisioning(f.ClientSet, &claim, "latebinding")
 		})
-
-		var (
-			numWorkers = flag.Int("pmem.latebinding.workers", 10, "number of worker creating volumes in parallel and thus also the maximum number of volumes at any time")
-			numVolumes = flag.Int("pmem.latebinding.volumes", 100, "number of total volumes to create")
-		)
 
 		// This test is pending because pod startup itself failed
 		// occasionally for reasons that are out of our control
