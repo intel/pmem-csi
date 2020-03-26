@@ -35,7 +35,7 @@ pipeline {
           use the Clear Linux kubelet, and a more recent kubelet than
           the control plane is unsupported.
         */
-        CLEAR_LINUX_VERSION_1_17 = "32080" // current release at the moment
+        CLEAR_LINUX_VERSION_1_17 = "32690" // current release at the moment
         CLEAR_LINUX_VERSION_1_16 = "31760"
         CLEAR_LINUX_VERSION_1_15 = "31070"
 
