@@ -206,7 +206,7 @@ To stop the cluster, use the same env variables for the
 After the previous step, `kubectl` works and is configured to use the
 new cluster. What follows next are the steps explained in more details
 in the top-level README's [Run PMEM-CSI on
-Kubernetes](../run-pmem-csi-on-kubernetes) section.
+Kubernetes](../docs/install.md#run-pmem-csi-on-kubernetes) section.
 
 First the worker nodes need to be labeled:
 

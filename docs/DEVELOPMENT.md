@@ -1,4 +1,4 @@
-# Develop and Contribute
+# Develop and contribute
 
 - [Setup](#setup)
     - [Build PMEM-CSI](#build-pmem-csi)
@@ -20,10 +20,10 @@
     - [Specific arguments to pmem-csi-driver](#specific-arguments-to-pmem-csi-driver)
     - [Environment variables](#environment-variables)
     - [Logging](#logging)
-- [Notes about switching device mode](#notes-about-switching-device-mode)
+- [Switching device mode](#switching-device-mode)
     - [Going from LVM device mode to direct device mode](#going-from-lvm-device-mode-to-direct-device-mode)
     - [Going from direct device mode to LVM device mode](#going-from-direct-device-mode-to-lvm-device-mode)
-- [Notes about accessing system directories in a container](#notes-about-accessing-system-directories-in-a-container)
+- [Accessing system directories in a container](#accessing-system-directories-in-a-container)
     - [Read-only access to /sys](#read-only-access-to-sys)
     - [Access to /dev of host](#access-to-dev-of-host)
 - [Repository elements which are generated or created separately](#repository-elements-which-are-generated-or-created-separately)
@@ -32,6 +32,7 @@
     - [Diagrams describing provisioning sequence](#diagrams-describing-provisioning-sequence)
     - [RegistryServer spec](#registryserver-spec)
     - [Table of Contents in README and DEVELOPMENT](#table-of-contents-in-readme-and-development)
+- [Edit, build, and deploy the Read the Docs site](#build-edit-and-deploy-the-read-the-docs-site)
 
 ## Setup
 
@@ -42,14 +43,14 @@
 2.  Use `make push-images` to push Docker container images to a Docker image registry. The
     default is to push to a local [Docker registry](https://docs.docker.com/registry/deploying/).
     Some other registry can be configured by setting the variables described in
-    in the [test-config.sh](test/test-config.sh) file, see the [configuration options](#configuration-options)
+    in the [test-config.sh](/test/test-config.sh) file, see the [configuration options](autotest.md#configuration-options)
     section below. Alternatively, the registry can also be set with a make variable:
     `make push-images REGISTRY_NAME=my-registry:5000`
 
-See the [Makefile](Makefile) for additional make targets and possible make variables.
+See the [Makefile](/Makefile) for additional make targets and possible make variables.
 
 The source code gets developed and tested using the version of Go that
-is set with `GO_VERSION` in the [Dockerfile](Dockerfile). Some other
+is set with `GO_VERSION` in the [Dockerfile](/Dockerfile). Some other
 version may or may not work. In particular, `test_fmt` and
 `test_vendor` are known to be sensitive to the version of Go.
 
@@ -174,7 +175,7 @@ Network ports are opened as configured in manifest files:
 
 - registry endpoint: typical port value 10000, used for PMEM-CSI internal communication
 - controller endpoint: typical port value 10001, used for serving CSI API
-- webhook endpoint: disabled by default, port chosen when [enabling the scheduler extensions](./README.md#enable-scheduler-extensions)
+- webhook endpoint: disabled by default, port chosen when [enabling the scheduler extensions](../README.md#enable-scheduler-extensions)
 
 
 ### Local sockets
@@ -250,7 +251,7 @@ The klog.Info statements are used via the verbosity checker using the following 
 
 There are also messages using klog.Warning, klog.Error and klog.Fatal, and their formatted counterparts.
 
-## Notes about switching device mode
+## Switching device mode
 
 If device mode is switched between LVM and direct(aka ndctl), please keep
 in mind that PMEM-CSI driver does not clean up or reclaim namespaces,
@@ -264,7 +265,7 @@ will create trouble in another device mode.
 - examine LV physical volumes state on a node: `pvs`
 - delete LV groups before deleting namespaces to avoid orphaned volume groups: `vgremove VGNAME`
 
-NOTE: The next **WILL DELETE ALL NAMESPACES** so be careful!
+NOTE: The following **WILL DELETE ALL NAMESPACES** so be careful!
 
 - Delete namespaces on a node using CLI: `ndctl destroy-namespace all --force`
 
@@ -279,7 +280,7 @@ those (LVM device mode does honor "foreign" namespaces and leaves those
 alone) if you have enough space, or you can choose to delete those
 using `ndctl` on node.
 
-## Notes about accessing system directories in a container
+## Accessing system directories in a container
 
 The PMEM-CSI driver will run as container, but it needs access to
 system directories /sys and /dev. Two related potential problems have
@@ -345,7 +346,8 @@ $ git clone https://github.com/golang/protobuf.git && cd protobuf
 $ make # installs needed binary in $GOPATH/bin/protoc-gen-go
 ```
 
-- generate by running in ~/go/src/github.com/intel/pmem-csi/pkg/pmem-registry:
+- generate by running in \~/go/src/github.com/intel/pmem-csi/pkg/pmem-registry:
+
 ```sh
 protoc --plugin=protoc-gen-go=$GOPATH/bin/protoc-gen-go --go_out=plugins=grpc:./ pmem-registry.proto
 ```
@@ -364,3 +366,117 @@ Note that pandoc is known to produce incorrect TOC entries if headers contain sp
 means TOC generation will be more reliable if we avoid non-letter-or-number characters in the headers.
 
 - Another method is to use emacs command markdown-toc-generate-toc and manually check and edit the generated part: we do not show generated 3rd-level headings in README.md.
+
+## Build, edit, and deploy the Read the Docs site
+
+The PMEM-CSI documentation is available as in-repo READMEs and as a GitHub\*
+hosted [website](https://intel.github.io/pmem-csi). The website is created
+using the [Sphinx](https://www.sphinx-doc.org/) documentation generator and
+the well-known [Read the Docs](https://sphinx-rtd-theme.readthedocs.io/)
+theme. 
+
+### Build
+
+Building the documentation requires Python 3.x and venv.
+
+```bash
+make vhtml
+```
+
+### Edit
+
+Sphinx uses [reStructuredText](https://docutils.sourceforge.io/docs/ref/rst/restructuredtext.html) (reST) as the primary document source type but can be
+extended to use Markdown by adding the ``recommonmark`` and 
+``sphinx_markdown_tables`` extensions (see [conf.json](/conf.json)).
+
+Change the navigation tree or add documents by updating the ``toctree``. The
+main ``toctree`` is in ``index.rst``:
+
+``` rst
+.. toctree::
+   :maxdepth: 2
+
+   README.md
+   docs/design.md
+   docs/install.md
+   docs/DEVELOPMENT.md
+   docs/autotest.md
+   examples/readme.rst
+   Project GitHub repository <https://github.com/intel/pmem-csi>
+```
+
+reST files, Markdown files, and URLs can be added to a ``toctree``. The
+``:maxdepth:`` argument dictates the number of header levels that will be
+displayed on that page. This website replaces the ``index.html`` output of
+this project with a redirect to ``README.html`` (the conversion of the top
+level README) to closer match the in-repo documentation.
+
+Any reST or Markdown file not referenced by a ``toctree`` will generate a
+warning in the build. This document has a ``toctree`` in:
+
+1. ``index.rst``
+2.  ``examples/readme.rst``
+
+NOTE: Though GitHub can parse reST files, the ``toctree`` directive is Sphinx
+specific, so it is not understood by GitHub. ``examples/readme.rst`` is a good
+example. Adding the ``:hidden:`` argument to the ``toctree`` directive means
+that the ``toctree`` is not displayed in the Sphinx built version of the page.
+
+### Custom link handling
+
+This project has some custom capabilities added to the [conf.py](/conf.py) to
+fix or improve how Sphinx generates the HTML site.
+
+1. Markdown files: Converts references to Markdown files that include anchors.
+   ``` md
+   [configuration options](autotest.md#configuration-options)
+   ```
+2. reST files: Fixes explicit links to Markdown files.
+   ``` rst
+   `Google Cloud Engine <gce.md>`__
+   ```
+3. Markdown files: Fixes references to reST files.
+   ``` md
+   [Application examples](examples/readme.rst)
+   ```
+4. Markdown files: Fixes links to files and directories within the GitHub repo.
+   ``` md
+   [Makefile](/Makefile)
+   [deploy/kustomize](/deploy/kustomize)
+   ```
+   Links to files can be fixed one of two ways, which can be set in the
+   [conf.py](/conf.py). 
+
+   ``` python
+   baseBranch = "devel"
+   useGitHubURL = True
+   commitSHA = getenv('GITHUB_SHA')
+   githubBaseURL = "https://github.com/intelkevinputnam/pmem-csi/"
+   ```
+
+   If ``useGitHubURL`` is set to True, it will try to create links based on
+   your ``githubBaseURL`` and the SHA for the commit to the GitHub repo 
+   determined by the GitHub workflow on merge). If there is no SHA available,
+   it will use the value of ``baseBranch``.
+
+   If ``useGitHubURL`` is set to False, it will copy the files to the HTML
+   output directory and provide links to that location.
+
+   NOTE: Links to files and directories should use absolute paths relative to
+   the repo (see Makefile and deploy/kustomize above). This will work both for
+   the Sphinx build and when viewing in the GitHub repo.
+
+   Links to directories are always converted to links to the GitHub repository.
+
+### Deploying with GitHub actions
+
+The publish [workflow](/.github/workflows/publish.yml) is run each time a commit is made to the designated branch and pushes the rendered HTML to the gh-pages branch. Other rules can be created for other branches.
+
+``` yaml
+on:
+  push:
+    branches:
+        - devel
+```
+
+NOTE: Create a secret called ``ACCESS_TOKEN`` in repo>settings>secrets with a [token](https://help.github.com/en/articles/creating-a-personal-access-token-for-the-command-line) generated by a user with write privileges to enable the automated push to the gh-pages branch.
