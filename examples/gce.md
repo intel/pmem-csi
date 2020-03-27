@@ -14,7 +14,9 @@ and how to install PMEM-CSI.
 It was written for and tested with the v0.5.0 release of PMEM-CSI, but
 should also work for other versions.
 
-## Testing PMEM without Kubernetes
+## Configure and Start
+
+### Testing PMEM without Kubernetes
 
 Of the existing machine images, `debian-9` is known to support
 PMEM. When booting up that image on a suitable machine configuration,
@@ -24,7 +26,7 @@ a `/dev/pmem0` device is created:
 gcloud alpha compute instances create pmem-debian-9 --machine-type n1-highmem-96-aep  --local-nvdimm size=1600 --zone us-central1-f
 ```
 
-## Preparing the machine image
+### Preparing the machine image
 
 But the Kubernetes scripts expect to run with [Container Optimized
 OS](https://cloud.google.com/container-optimized-os/docs/). Those
@@ -157,7 +159,7 @@ As for the `debian-9` image on a GCE VM, this machine will have a `/dev/pmem0`.
 Now build a normal image ("base" or "dev") and [create a GCE image
 from it](https://cloud.google.com/container-optimized-os/docs/how-to/building-from-open-source#running_on_compute_engine).
 
-## Starting and stopping Kubernetes
+### Starting and stopping Kubernetes
 
 A modified version of the Kubernetes scripts are required. Get those with:
 
@@ -199,7 +201,7 @@ https://github.com/pohly/kubernetes/blob/gce-node-nvdimm/cluster/gce/config-defa
 To stop the cluster, use the same env variables for the
 `cluster/kube-down.sh` script.
 
-## Installing PMEM-CSI
+### Installing PMEM-CSI
 
 After the previous step, `kubectl` works and is configured to use the
 new cluster. What follows next are the steps explained in more details
@@ -256,7 +258,7 @@ kubectl create -f https://raw.githubusercontent.com/intel/pmem-csi/v0.5.0/deploy
 kubectl create -f https://raw.githubusercontent.com/intel/pmem-csi/v0.5.0/deploy/common/pmem-storageclass-xfs.yaml
 ```
 
-## Testing PMEM-CSI
+### Testing PMEM-CSI
 
 This brings up the example apps, one using `ext4`, the other `xfs`:
 ```sh
@@ -284,16 +286,16 @@ pmem-csi-node-ftd8c     2/2     Running             0          33s   10.128.0.39
 ```
 
 
-# Open issues
+## Open issues
 
-## Extend kernel config for COS
+### Extend kernel config for COS
 
 The patch from
 https://github.com/pohly/chromiumos-overlays-board-overlays/commits/lakita-4-19-pmem
 needs to be merged by Google. Then building a custom COS image is no
 longer necessary.
 
-## Support alpha instance-templates in gcloud
+### Support alpha instance-templates in gcloud
 
 It is possible to define an instance template that uses the alpha machines:
 
@@ -312,20 +314,20 @@ ERROR: (gcloud.alpha.compute.instance-groups.managed.create) Could not fetch res
 If this was supported, the Kubernetes script changes would become
 cleaner and may have a chance of getting merged upstream.
 
-## Merge support for PMEM into Kubernetes scripts
+### Merge support for PMEM into Kubernetes scripts
 
 No PR has been created for
 https://github.com/pohly/kubernetes/commits/gce-node-nvdimm at this
 time. First gcloud should be enhanced and these instructions should be
 made public.
 
-## Avoid the need to check out PMEM-CSI source code
+### Avoid the need to check out PMEM-CSI source code
 
 PMEM-CSI can be deployed almost without using its source code. The
 only exception is the creation of certificates.
 https://github.com/intel/pmem-csi/issues/321 is open regarding that.
 
-## Avoid manual LVM and ndctl commands
+### Avoid manual LVM and ndctl commands
 
 `pmem-vgm` already contains code for this, it just doesn't work on GCE
 because it ignores the existing `/dev/pmem0`. We should simplify the
@@ -334,7 +336,7 @@ be used, then have PMEM-CSI do the necessary initialization. This
 probably fits into the upcoming [installation via
 operator](https://github.com/intel/pmem-csi/issues/376).
 
-## Debian 10 and others
+### Debian 10 and others
 
 Someone needs to investigate whether Debian 10 works with PMEM under
 QEMU (may or may not work) and change the GCE image so that it also
@@ -343,10 +345,9 @@ works under GCE.
 The same would be useful for other images that users of GCE may want
 to use with PMEM.
 
+## Debugging and development
 
-# Debugging and development
-
-## Running ndctl
+### Running ndctl
 
 The COS image does not have `ndctl`. The following `DaemonSet` instead
 runs commands inside the `pmem-csi-driver` image. This is an
