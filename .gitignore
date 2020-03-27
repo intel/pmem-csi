@@ -1,3 +1,7 @@
 /vendor
 /_output
 /_work
+/.tox
+Manifest
+/_build
+
