@@ -54,7 +54,7 @@ case $distro in
 	# From https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/#pod-network
 	# However, the commit currently listed there for 1.16 is broken. Current master fixes some issues
 	# and works.
-	podnetworkingurl=https://raw.githubusercontent.com/coreos/flannel/960b3243b9a7faccdfe7b3c09097105e68030ea7/Documentation/kube-flannel.yml
+	podnetworkingurl=https://raw.githubusercontent.com/coreos/flannel/v0.12.0/Documentation/kube-flannel.yml
 	# Needed for flannel (https://clearlinux.org/latest/tutorials/kubernetes.html).
 	kubeadm_config_cluster="$kubeadm_config_cluster
 networking:
