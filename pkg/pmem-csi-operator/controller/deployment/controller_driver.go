@@ -569,7 +569,8 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"app": d.Name + "-controller",
+						"app":                        d.Name + "-controller",
+						"pmem-csi.intel.com/webhook": "ignore",
 					},
 				},
 				Spec: corev1.PodSpec{
@@ -649,7 +650,8 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"app": d.Name + "-node",
+						"app":                        d.Name + "-node",
+						"pmem-csi.intel.com/webhook": "ignore",
 					},
 				},
 				Spec: corev1.PodSpec{
