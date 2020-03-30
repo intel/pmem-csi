@@ -106,7 +106,7 @@ pipeline {
 
                 // known_hosts entry created and verified as described in https://serverfault.com/questions/856194/securely-add-a-host-e-g-github-to-the-ssh-known-hosts-file
                 sh "mkdir -p ~/.ssh && echo 'github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==' >>~/.ssh/known_hosts && chmod -R go-rxw ~/.ssh"
-                withDockerRegistry([ credentialsId: "e16bd38a-76cb-4900-a5cb-7f6aa3aeb22d", url: "https://${REGISTRY_NAME}" ]) {
+                withDockerRegistry([ credentialsId: "${env.DOCKER_REGISTRY}", url: "https://${REGISTRY_NAME}" ]) {
                     script {
                         // Despite its name, GIT_LOCAL_BRANCH contains the tag name when building a tag.
                         // At some point it also contained the branch name when building
@@ -146,7 +146,7 @@ pipeline {
                     // Create a running container (https://stackoverflow.com/a/38308399). We keep it running
                     // and just "docker exec" commands in it. withDockerRegistry creates the DOCKER_CONFIG directory
                     // and deletes it when done, so we have to make a copy for later use inside the container.
-                    withDockerRegistry([ credentialsId: "e16bd38a-76cb-4900-a5cb-7f6aa3aeb22d", url: "https://${REGISTRY_NAME}" ]) {
+                    withDockerRegistry([ credentialsId: "${env.DOCKER_REGISTRY}", url: "https://${REGISTRY_NAME}" ]) {
                         sh "mkdir -p _work"
                         sh "cp -a $DOCKER_CONFIG _work/docker-config"
                         sh "docker create --name=${env.BUILD_CONTAINER} \
@@ -417,7 +417,7 @@ void TestInVM(distro, distroVersion, kubernetesVersion, skipIfPR) {
            trap atexit EXIT; \
            mkdir -p build/reports && \
            if ${env.LOGGING_JOURNALCTL}; then sudo journalctl -f; fi & \
-           ( set +x; while sleep ${env.LOGGING_SAMPLING_DELAY}; do top -b -n 1 -w 120 | head -n 20; df -h; done ) & \
+           ( set +x; while sleep ${env.LOGGING_SAMPLING_DELAY}; do top -i -b -n 1 -w 120; df -h; done ) & \
            loggers=\"\$loggers \$!\" && \
            ${RunInBuilder()} \
                   -e CLUSTER=${env.CLUSTER} \
@@ -449,7 +449,7 @@ void TestInVM(distro, distroVersion, kubernetesVersion, skipIfPR) {
                                fi; \
                                ( set +x; \
                                  while sleep ${env.LOGGING_SAMPLING_DELAY}; do \
-                                     \$ssh top -b -n 1 -w 120 2>&1 | head -n 20; \
+                                     \$ssh top -i -b -n 1 -w 120 2>&1; \
                                  done | sed -e \"s/^/\$hostname: /\" ) & \
                                loggers=\"\$loggers \$!\"; \
                            done && \
