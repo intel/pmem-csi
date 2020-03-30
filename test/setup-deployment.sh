@@ -13,8 +13,8 @@ source ${TEST_CONFIG:-${TEST_DIRECTORY}/test-config.sh}
 
 CLUSTER=${CLUSTER:-pmem-govm}
 REPO_DIRECTORY="${REPO_DIRECTORY:-$(dirname $(dirname $(readlink -f $0)))}"
-WORK_DIRECTORY="${WORK_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
-SSH="${WORK_DIRECTORY}/ssh-${CLUSTER}"
+CLUSTER_DIRECTORY="${CLUSTER_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
+SSH="${CLUSTER_DIRECTORY}/ssh-${CLUSTER}"
 KUBECTL="${SSH} kubectl" # Always use the kubectl installed in the cluster.
 KUBERNETES_VERSION="$(${KUBECTL} version --short | grep 'Server Version' | \
         sed -e 's/.*: v\([0-9]*\)\.\([0-9]*\)\..*/\1.\2/')"
@@ -73,7 +73,7 @@ data:
     tls.key: ${NODE_KEY}
 EOF
 
-echo "$KUBERNETES_VERSION" > $WORK_DIRECTORY/kubernetes.version
+echo "$KUBERNETES_VERSION" > $CLUSTER_DIRECTORY/kubernetes.version
 case "$KUBERNETES_VERSION" in
     1.1[01234])
         # We cannot exclude the PMEM-CSI pods from the webhook because objectSelector

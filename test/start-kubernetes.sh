@@ -12,7 +12,7 @@ GOVM_YAML=${GOVM_YAML:-$(mktemp --suffix $DEPLOYMENT_ID.yml)}
 REPO_DIRECTORY=${REPO_DIRECTORY:-$(dirname $TEST_DIRECTORY)}
 TEST_DIRECTORY=${TEST_DIRECTORY:-$(dirname $(readlink -f $0))}
 RESOURCES_DIRECTORY=${RESOURCES_DIRECTORY:-${REPO_DIRECTORY}/_work/resources}
-WORKING_DIRECTORY="${WORKING_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
+CLUSTER_DIRECTORY="${CLUSTER_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
 LOCKFILE="${LOCKFILE:-${REPO_DIRECTORY}/_work/start-kubernetes.exclusivelock}"
 LOCKDELAY="${LOCKDELAY:-300}" # seconds
 NODES=(${NODES:-$DEPLOYMENT_ID-master
@@ -157,8 +157,8 @@ EOF
 
 function print_govm_yaml() (
     if [ "$TEST_ETCD_VOLUME" ]; then
-        data_path=$(echo "$TEST_ETCD_VOLUME" | sed -e "s;^$WORKING_DIRECTORY/data/$DEPLOYMENT_ID-master/;/data/;")
-        [ "$data_path" != "$TEST_ETCD_VOLUME" ] || die "TEST_ETCD_VOLUME=$TEST_ETCD_VOLUME must be inside $WORKING_DIRECTORY/data/$DEPLOYMENT_ID-master"
+        data_path=$(echo "$TEST_ETCD_VOLUME" | sed -e "s;^$CLUSTER_DIRECTORY/data/$DEPLOYMENT_ID-master/;/data/;")
+        [ "$data_path" != "$TEST_ETCD_VOLUME" ] || die "TEST_ETCD_VOLUME=$TEST_ETCD_VOLUME must be inside $CLUSTER_DIRECTORY/data/$DEPLOYMENT_ID-master"
     fi
 
     cat  <<EOF
@@ -176,7 +176,7 @@ EOF
     image: ${RESOURCES_DIRECTORY}/${CLOUD_IMAGE}
     cloud: ${CLOUD}
     flavor: ${FLAVOR}
-    workdir: ${WORKING_DIRECTORY}
+    workdir: ${CLUSTER_DIRECTORY}
     sshkey: ${SSH_PUBLIC_KEY}
     efi: ${EFI}
     ContainerEnvVars:
@@ -207,8 +207,8 @@ function extend_no_proxy() (
 
 function create_vms() (
     setup_script="setup-${TEST_DISTRO}-govm.sh"
-    STOP_VMS_SCRIPT="${WORKING_DIRECTORY}/stop.sh"
-    RESTART_VMS_SCRIPT="${WORKING_DIRECTORY}/restart.sh"
+    STOP_VMS_SCRIPT="${CLUSTER_DIRECTORY}/stop.sh"
+    RESTART_VMS_SCRIPT="${CLUSTER_DIRECTORY}/restart.sh"
     print_govm_yaml >$GOVM_YAML || die "failed to create $GOVM_YAML"
     govm compose -f ${GOVM_YAML} || die "govm failed"
     IPS=$(print_ips)
@@ -240,10 +240,10 @@ for ip in $(echo ${IPS}); do
     done
 done
 echo "Waiting for Kubernetes nodes to be ready"
-while [ \$(${WORKING_DIRECTORY}/ssh-${CLUSTER} "kubectl get nodes  -o go-template --template='{{range .items}}{{range .status.conditions }}{{if eq .type \"Ready\"}} {{if eq .status \"True\"}}{{printf \"%s\n\" .reason}}{{end}}{{end}}{{end}}{{end}}'" 2>/dev/null | wc -l) -ne \$num_nodes ]; do
+while [ \$(${CLUSTER_DIRECTORY}/ssh-${CLUSTER} "kubectl get nodes  -o go-template --template='{{range .items}}{{range .status.conditions }}{{if eq .type \"Ready\"}} {{if eq .status \"True\"}}{{printf \"%s\n\" .reason}}{{end}}{{end}}{{end}}{{end}}'" 2>/dev/null | wc -l) -ne \$num_nodes ]; do
     if [ "\$SECONDS" -gt "$SSH_TIMEOUT" ]; then
-        echo "Timeout for nodes: ${WORKING_DIRECTORY}/ssh-${CLUSTER} kubectl get nodes:"
-        ${WORKING_DIRECTORY}/ssh-${CLUSTER} kubectl get nodes
+        echo "Timeout for nodes: ${CLUSTER_DIRECTORY}/ssh-${CLUSTER} kubectl get nodes:"
+        ${CLUSTER_DIRECTORY}/ssh-${CLUSTER} kubectl get nodes
         exit 1
     fi
     sleep 3
@@ -275,8 +275,8 @@ EOF
     for ip in ${IPS}; do
         NO_PROXY+=",$ip"
         vm_name=$(govm list -f '{{select (filterRegexp . "IP" "'${ip}'") "Name"}}') || die "failed to find VM for IP $ip"
-        log_name=${WORKING_DIRECTORY}/${vm_name}.log
-        ssh_script=${WORKING_DIRECTORY}/ssh.${vm_id}
+        log_name=${CLUSTER_DIRECTORY}/${vm_name}.log
+        ssh_script=${CLUSTER_DIRECTORY}/ssh.${vm_id}
         ((vm_id=vm_id+1))
         if [[ "$vm_name" = *"worker"* ]]; then
             workers_ip+="$ip "
@@ -286,7 +286,7 @@ EOF
 
 exec ssh $SSH_ARGS ${CLOUD_USER}@${ip} "\$@"
 EOF
-            ) >${WORKING_DIRECTORY}/ssh-${CLUSTER} && chmod +x ${WORKING_DIRECTORY}/ssh-${CLUSTER} || die "failed to create ${WORKING_DIRECTORY}/ssh-${CLUSTER}"
+            ) >${CLUSTER_DIRECTORY}/ssh-${CLUSTER} && chmod +x ${CLUSTER_DIRECTORY}/ssh-${CLUSTER} || die "failed to create ${CLUSTER_DIRECTORY}/ssh-${CLUSTER}"
         fi
         ( cat <<EOF
 #!/bin/sh
@@ -352,9 +352,9 @@ function log_lines(){
 function kubernetes_usage() (
     cat <<EOF
 
-The test cluster is ready. Log in with ${WORK_DIRECTORY}/${CLUSTER}/ssh.0, run kubectl once logged in.
+The test cluster is ready. Log in with ${CLUSTER_DIRECTORY}/ssh.0, run kubectl once logged in.
 Alternatively, use kubectl directly with the following env variable:
-    KUBECONFIG=${WORK_DIRECTORY}/kube.config can also be used directly.
+    KUBECONFIG=${CLUSTER_DIRECTORY}/kube.config
 EOF
 )
 
@@ -366,7 +366,7 @@ function init_kubernetes_cluster() (
     master_ip="$(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-master$") "IP"}}')" || die "failed to find master IP"
     join_token=""
     install_k8s_script="setup-kubernetes.sh"
-    KUBECONFIG=${WORKING_DIRECTORY}/kube.config
+    KUBECONFIG=${CLUSTER_DIRECTORY}/kube.config
     echo "Installing dependencies on cloud images, this process may take some minutes"
     vm_id=0
     pids=""
@@ -393,8 +393,8 @@ function init_kubernetes_cluster() (
     fi
     for ip in ${IPS}; do
         vm_name=$(govm list -f '{{select (filterRegexp . "IP" "'${ip}'") "Name"}}') || die "failed to find VM for IP $ip"
-        log_name=${WORKING_DIRECTORY}/${vm_name}.log
-        ssh_script=${WORKING_DIRECTORY}/ssh.${vm_id}
+        log_name=${CLUSTER_DIRECTORY}/${vm_name}.log
+        ssh_script=${CLUSTER_DIRECTORY}/ssh.${vm_id}
         ((vm_id=vm_id+1))
         if [[ "$vm_name" = *"worker"* ]]; then
             workers_ip+="$ip "
@@ -416,7 +416,7 @@ function init_kubernetes_cluster() (
     for ip in ${workers_ip}; do
 
         vm_name=$(govm list -f '{{select (filterRegexp . "IP" "'${ip}'") "Name"}}') || die "could not find VM name for $ip"
-        log_name=${WORKING_DIRECTORY}/${vm_name}.log
+        log_name=${CLUSTER_DIRECTORY}/${vm_name}.log
         ( ssh $SSH_ARGS ${CLOUD_USER}@${ip} "set -x; $ENV_VARS sudo ${join_token/kubeadm/kubeadm --ignore-preflight-errors=SystemVerification}" &&
           ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} "set -x; kubectl label --overwrite node $vm_name storage=pmem" ) </dev/null &> >(log_lines "$vm_name" "$log_name") &
         pids+=" $!"
@@ -427,7 +427,7 @@ function init_kubernetes_cluster() (
 )
 
 function init_workdir() (
-    mkdir -p $WORKING_DIRECTORY || die "failed to create $WORKING_DIRECTORY"
+    mkdir -p $CLUSTER_DIRECTORY || die "failed to create $CLUSTER_DIRECTORY"
     mkdir -p $RESOURCES_DIRECTORY || die "failed to create $RESOURCES_DIRECTORY"
     (
         flock -x -w $LOCKDELAY 200
@@ -440,9 +440,9 @@ function init_workdir() (
 function init_pmem_regions() {
     if $TEST_INIT_REGION; then
         for vm_id in ${!NODES[@]}; do
-            ${WORKING_DIRECTORY}/ssh.${vm_id} sudo ndctl disable-region region0
-            ${WORKING_DIRECTORY}/ssh.${vm_id} sudo ndctl init-labels nmem0
-            ${WORKING_DIRECTORY}/ssh.${vm_id} sudo ndctl enable-region region0
+            ${CLUSTER_DIRECTORY}/ssh.${vm_id} sudo ndctl disable-region region0
+            ${CLUSTER_DIRECTORY}/ssh.${vm_id} sudo ndctl init-labels nmem0
+            ${CLUSTER_DIRECTORY}/ssh.${vm_id} sudo ndctl enable-region region0
         done
     fi
 }
@@ -496,7 +496,7 @@ function cleanup() (
         for vm in $(govm list -f '{{select (filterRegexp . "Name" "^'$(node_filter ${NODES[@]})'$") "Name"}}'); do
             govm remove "$vm"
         done
-        rm -rf $WORKING_DIRECTORY
+        rm -rf $CLUSTER_DIRECTORY
     fi
 )
 
