@@ -16,7 +16,8 @@ start: _work/pmem-ca/.ca-stamp _work/bin/govm
 # Stops the VMs and removes all files.
 stop: _work/bin/govm
 	@ if [ -f _work/$(CLUSTER)/stop.sh ]; then \
-		PATH="$(PWD)/_work/bin:$$PATH" _work/$(CLUSTER)/stop.sh; \
+		PATH="$(PWD)/_work/bin:$$PATH" _work/$(CLUSTER)/stop.sh && \
+		rm -rf _work/$(CLUSTER); \
 	else \
 		echo "Cluster $(CLUSTER) was already removed."; \
 	fi
