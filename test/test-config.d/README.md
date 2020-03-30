@@ -1,4 +1,4 @@
-# Congifure test-config.d
+# Configure test-config.d
 
 This directory can be used to override the default configuration from
 [test-config.sh](../test-config.sh). Just create one or more files
