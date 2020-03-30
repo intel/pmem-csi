@@ -240,10 +240,10 @@ for ip in $(echo ${IPS}); do
     done
 done
 echo "Waiting for Kubernetes nodes to be ready"
-while [ \$(${CLUSTER_DIRECTORY}/ssh-${CLUSTER} "kubectl get nodes  -o go-template --template='{{range .items}}{{range .status.conditions }}{{if eq .type \"Ready\"}} {{if eq .status \"True\"}}{{printf \"%s\n\" .reason}}{{end}}{{end}}{{end}}{{end}}'" 2>/dev/null | wc -l) -ne \$num_nodes ]; do
+while [ \$(${CLUSTER_DIRECTORY}/ssh.0 "kubectl get nodes  -o go-template --template='{{range .items}}{{range .status.conditions }}{{if eq .type \"Ready\"}} {{if eq .status \"True\"}}{{printf \"%s\n\" .reason}}{{end}}{{end}}{{end}}{{end}}'" 2>/dev/null | wc -l) -ne \$num_nodes ]; do
     if [ "\$SECONDS" -gt "$SSH_TIMEOUT" ]; then
-        echo "Timeout for nodes: ${CLUSTER_DIRECTORY}/ssh-${CLUSTER} kubectl get nodes:"
-        ${CLUSTER_DIRECTORY}/ssh-${CLUSTER} kubectl get nodes
+        echo "Timeout for nodes: ${CLUSTER_DIRECTORY}/ssh.0 kubectl get nodes:"
+        ${CLUSTER_DIRECTORY}/ssh.0 kubectl get nodes
         exit 1
     fi
     sleep 3
@@ -280,13 +280,6 @@ EOF
         ((vm_id=vm_id+1))
         if [[ "$vm_name" = *"worker"* ]]; then
             workers_ip+="$ip "
-        else
-            ( cat <<EOF
-#!/bin/sh
-
-exec ssh $SSH_ARGS ${CLOUD_USER}@${ip} "\$@"
-EOF
-            ) >${CLUSTER_DIRECTORY}/ssh-${CLUSTER} && chmod +x ${CLUSTER_DIRECTORY}/ssh-${CLUSTER} || die "failed to create ${CLUSTER_DIRECTORY}/ssh-${CLUSTER}"
         fi
         ( cat <<EOF
 #!/bin/sh

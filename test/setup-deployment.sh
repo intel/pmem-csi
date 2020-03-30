@@ -14,7 +14,7 @@ source ${TEST_CONFIG:-${TEST_DIRECTORY}/test-config.sh}
 CLUSTER=${CLUSTER:-pmem-govm}
 REPO_DIRECTORY="${REPO_DIRECTORY:-$(dirname $(dirname $(readlink -f $0)))}"
 CLUSTER_DIRECTORY="${CLUSTER_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
-SSH="${CLUSTER_DIRECTORY}/ssh-${CLUSTER}"
+SSH="${CLUSTER_DIRECTORY}/ssh.0"
 KUBECTL="${SSH} kubectl" # Always use the kubectl installed in the cluster.
 KUBERNETES_VERSION="$(${KUBECTL} version --short | grep 'Server Version' | \
         sed -e 's/.*: v\([0-9]*\)\.\([0-9]*\)\..*/\1.\2/')"
