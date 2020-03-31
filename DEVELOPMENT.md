@@ -1,5 +1,4 @@
-Table of Contents
-----------------
+# Develop and Contribute
 
 - [Setup](#setup)
     - [Build PMEM-CSI](#build-pmem-csi)
@@ -34,11 +33,9 @@ Table of Contents
     - [RegistryServer spec](#registryserver-spec)
     - [Table of Contents in README and DEVELOPMENT](#table-of-contents-in-readme-and-development)
 
-Setup
-============
+## Setup
 
-Build PMEM-CSI
---------------
+### Build PMEM-CSI
 
 1.  Use `make build-images` to produce Docker container images.
 
@@ -56,17 +53,14 @@ is set with `GO_VERSION` in the [Dockerfile](Dockerfile). Some other
 version may or may not work. In particular, `test_fmt` and
 `test_vendor` are known to be sensitive to the version of Go.
 
-Code quality
-============
+## Code quality
 
-Coding style
-------------
+### Coding style
 
 The normal Go style guide applies. It is enforced by `make test`, which calls `gofmt`.
 
 
-Input validation
-----------------
+### Input validation
 
 In all cases, input comes from a trusted source because network
 communication is protected by mutual TLS and the `kubectl` binaries
@@ -83,11 +77,9 @@ Nonetheless, input needs to be validated to catch mistakes:
   refuses to send messages that are larger
   (https://godoc.org/google.golang.org/grpc#MaxSendMsgSize)
 
-Release management
-==================
+## Release management
 
-Branching
----------
+### Branching
 
 The `master` branch is the main branch. It is guaranteed to have
 passed full CI testing. However, it always uses the latest Clear Linux
@@ -131,8 +123,7 @@ periodically to update a `release-x.y` branch and a new release with
 `z` increased by one is created. Other bug fixed might be added to
 that release by merging into the branch.
 
-Tagging
--------
+### Tagging
 
 The `devel` and `master` branch build and use the `canary` version of
 the PMEM-CSI driver images. Before tagging a release, all of those
@@ -146,8 +137,7 @@ release: the actual image only gets pushed when there is a tag that
 corresponds to the version embedded in the source code. The
 Jenkinsfile ensures that.
 
-Release checklist
------------------
+### Release checklist
 
 * Create a new `release-x.y` branch.
 * Run `hack/update-clear-linux-base.sh`.
@@ -164,11 +154,9 @@ Release checklist
   Hub](https://hub.docker.com/r/intel/pmem-csi-driver/tags?page=1&ordering=last_updated).
 * Publish the GitHub release.
 
-APIs
-============
+## APIs
 
-CSI API
-----------------
+### CSI API
 
 Kubernetes CSI API is exposed over Unix domain socket. CSI operations
 are executed as gRPC calls. Input data is allowed as permitted by CSI
@@ -180,8 +168,7 @@ UnstageVolume, PublishVolume, UnpublishVolume, ListVolumes,
 GetCapacity, GetCapabilities, GetPluginInfo, GetPluginCapabilities.
 
 
-Network ports
--------------
+### Network ports
 
 Network ports are opened as configured in manifest files:
 
@@ -190,8 +177,7 @@ Network ports are opened as configured in manifest files:
 - webhook endpoint: disabled by default, port chosen when [enabling the scheduler extensions](./README.md#enable-scheduler-extensions)
 
 
-Local sockets
--------------
+### Local sockets
 
 Kubernetes CSI API used over local socket inside same host.
 
@@ -200,16 +186,14 @@ Kubernetes CSI API used over local socket inside same host.
 - unix:///var/lib/kubelet/plugins/pmem-csi/csi-controller.sock
 
 
-Command line arguments
-----------------------
+### Command line arguments
 
 Note that different set of programs is used in different
 device modes. Three stages: *pmem-ns-init*, *pmem-vgm*,
 *pmem-csi-driver* run in LVM device mode. Only *pmem-csi-driver* runs
 in direct device mode.
 
-Common arguments
-----------------
+### Common arguments
 
 argument name            | meaning                                           | type   | range
 -------------------------|---------------------------------------------------|--------|---
@@ -223,20 +207,17 @@ argument name            | meaning                                           | t
 -v value                 | log level for V logs                              | int    |
 -vmodule value           | comma-separated list of pattern=N settings for file-filtered logging | string |
 
-Specific arguments to pmem-ns-init
------------------------------------
+### Specific arguments to pmem-ns-init
 
 argument name      | meaning                                                | type | range
 -------------------|--------------------------------------------------------|------|---
 -useforfsdax int   | Percentage of total to use in Fsdax mode (default 100) | int  | 0..100
 
-Specific arguments to pmem-vgm
--------------------------------
+### Specific arguments to pmem-vgm
 
 NO SPECIFIC arguments
 
-Specific arguments to pmem-csi-driver
---------------------------------------
+### Specific arguments to pmem-csi-driver
 
 argument name        | meaning                                           | type | allowed | default
 ---------------------|---------------------------------------------------|------|---------|---
@@ -255,15 +236,12 @@ argument name        | meaning                                           | type 
 -statePath                 | Directory path where to persist the state of the driver running on a node | string | absolute directory path on node | /var/lib/<drivername>
 -schedulerListen           | listen address for scheduler extender and mutating webhook | [address string](https://golang.org/pkg/net/#Listen) | controller | empty (= disabled)
 
-
-Environment variables
----------------------
+### Environment variables
 
 TEST_WORK is used by registry server unit-test code to specify path to certificates in test system. 
 Note, THIS IS NOT USED IN PRODUCTION
 
-Logging
--------
+### Logging
 
 The klog.Info statements are used via the verbosity checker using the following levels:
 - klog.V(3) - Generic information. Level 3 is the default Info log level in pmem-csi, and example deployment files set this level for production configuration.
@@ -272,8 +250,7 @@ The klog.Info statements are used via the verbosity checker using the following 
 
 There are also messages using klog.Warning, klog.Error and klog.Fatal, and their formatted counterparts.
 
-Notes about switching device mode
-================================
+## Notes about switching device mode
 
 If device mode is switched between LVM and direct(aka ndctl), please keep
 in mind that PMEM-CSI driver does not clean up or reclaim namespaces,
@@ -281,8 +258,7 @@ therefore namespaces plus other related context (LVM state)
 created in previous mode will remain stored on device and most likely
 will create trouble in another device mode.
 
-Going from LVM device mode to direct device mode
-------------------------------------------------
+### Going from LVM device mode to direct device mode
 
 - examine LV groups state on a node: `vgs`
 - examine LV physical volumes state on a node: `pvs`
@@ -292,8 +268,7 @@ NOTE: The next **WILL DELETE ALL NAMESPACES** so be careful!
 
 - Delete namespaces on a node using CLI: `ndctl destroy-namespace all --force`
 
-Going from direct device mode to LVM device mode
-----------------------------------------------
+### Going from direct device mode to LVM device mode
 
 No special steps are needed to clean up namespaces state.
 
@@ -304,15 +279,13 @@ those (LVM device mode does honor "foreign" namespaces and leaves those
 alone) if you have enough space, or you can choose to delete those
 using `ndctl` on node.
 
-Notes about accessing system directories in a container
-=======================================================
+## Notes about accessing system directories in a container
 
 The PMEM-CSI driver will run as container, but it needs access to
 system directories /sys and /dev. Two related potential problems have
 been diagnosed so far.
 
-Read-only access to /sys
-------------------------
+### Read-only access to /sys
 
 In some deployment schemes /sys remains mounted read-only in the
 container running pmsm-csi-driver. This creates problem for the
@@ -322,8 +295,7 @@ the code. An error in pod log `pmem-driver: Failed to run driver:
 FATAL: /sys mounted read-only, can not operate` is the sign of such
 state.
 
-Access to /dev of host
-----------------------
+### Access to /dev of host
 
 Containers runtime may not pass /dev from host into the
 container. If the /dev/ of the host is not accessible in the PMEM-CSI container, there will be
@@ -333,29 +305,28 @@ root cause of that problem during start-up, but only when a volume
 creation has failed. This problem can be avoided by specifying
 explicit mount of /dev in the PMEM-CSI manifest.
 
-Repository elements which are generated or created separately
-=============================================================
+## Repository elements which are generated or created separately
 
 Here are creation and update notes for these elements in the repository
 which are not hand-edited
 
-Top-level README diagrams describing LVM and Direct device modes
-----------------------------------------------------------------
+### Top-level README diagrams describing LVM and Direct device modes
+
 Two diagrams are created with [_dia_ drawing program](https://en.wikipedia.org/wiki/Dia_(software)).
 The [single source file](/docs/diagrams/pmem-csi.dia) has
 layers: {common, lvm, direct} so that two diagram variants can be produced from single source.
 Image files are produced by saving in PNG format with correct set of layers visible.
 The PNG files are committed as repository elements in docs/images/devicemodes/.
 
-Top-level README diagram describing communication channels
-----------------------------------------------------------
+### Top-level README diagram describing communication channels
+
 This diagram was created with the [_dia_ drawing program](https://en.wikipedia.org/wiki/Dia_(software)) using [source file](/docs/diagrams/pmem-csi-communication-diagram.dia).
 
 Image file is produced by saving in PNG format.
 The PNG file is committed as a [repository element](/docs/images/communication/pmem-csi-communication-diagram.png).
 
-Diagrams describing provisioning sequence
------------------------------------------
+### Diagrams describing provisioning sequence
+
 Two diagrams are generated using [plantuml program](http://plantuml.com/).
 Source files:
 - [source file for regular sequence](/docs/diagrams/sequence.wsd)
@@ -363,8 +334,8 @@ Source files:
 
 The PNG files are committed as repository elements in docs/images/sequence/.
 
-RegistryServer spec
--------------------
+### RegistryServer spec
+
 pkg/pmem-registry/pmem-registry.pb.go is generated from pkg/pmem-registry/pmem-registry.proto
 
 protoc comes from package _protobuf-compiler_ on Ubuntu 18.04
@@ -379,8 +350,8 @@ $ make # installs needed binary in $GOPATH/bin/protoc-gen-go
 protoc --plugin=protoc-gen-go=$GOPATH/bin/protoc-gen-go --go_out=plugins=grpc:./ pmem-registry.proto
 ```
 
-Table of Contents in README and DEVELOPMENT
--------------------------------------------
+### Table of Contents in README and DEVELOPMENT
+
 Table of Contents can be generated using multiple methods.
 - One possibility is to use [pandoc](https://pandoc.org/)
 
