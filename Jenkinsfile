@@ -256,12 +256,22 @@ pipeline {
         // - production deployment is only tested on Clear Linux
         //   and testing deployment only on Fedora
 
-        stage('testing 1.16') {
+        stage('testing 1.18') {
             options {
                 timeout(time: 180, unit: "MINUTES")
             }
             steps {
-                TestInVM("fedora", "", "1.16", "Top.Level..[[:alpha:]]*-production[[:space:]]")
+                TestInVM("fedora", "", "1.18", "Top.Level..[[:alpha:]]*-production[[:space:]]")
+            }
+        }
+
+        stage('testing 1.16') {
+            when { not { changeRequest() } }
+            options {
+                timeout(time: 180, unit: "MINUTES")
+            }
+            steps {
+                TestInVM("fedora", "", "1.16", "")
             }
         }
 
@@ -272,16 +282,6 @@ pipeline {
             }
             steps {
                 TestInVM("fedora", "", "1.15", "")
-            }
-        }
-
-        stage('testing 1.14') {
-            when { not { changeRequest() } }
-            options {
-                timeout(time: 180, unit: "MINUTES")
-            }
-            steps {
-                TestInVM("fedora", "", "1.14", "")
             }
         }
 
