@@ -162,7 +162,7 @@ Status:
 Events:   <none>
 
 
-$ kubectl get po -n pmem-csi
+$ kubectl get po
 NAME                               READY   STATUS    RESTARTS   AGE
 pmem-deployment-controller-0       2/2     Running   0          51s
 pmem-deployment-node-4x7cv         2/2     Running   0          50s

@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"time"
 
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 	appsv1 "k8s.io/api/apps/v1"
@@ -38,8 +37,7 @@ type Operator struct {
 
 func newOperator(name, ns string) *Operator {
 	return &Operator{
-		Name: name,
-		// TODO(avalluri): Currently we do not support choosing of namespace
+		Name:      name,
 		Namespace: ns,
 	}
 }
@@ -63,18 +61,10 @@ func WaitForOperator(c *deploy.Cluster, operator *Operator) {
 // EnsureOperatorRemoved ensures that deletes everything that has been created for a
 // PMEM-CSI operator installation (pods, daemonsets, statefulsets, driver info,
 // storage classes, etc.).
-func EnsureOperatorRemoved(c *deploy.Cluster, o *Operator) error {
+func EnsureOperatorRemoved(c *deploy.Cluster, o *Operator) {
 	cs := c.ClientSet()
 
-	// Try repeatedly, in case that communication with the API server fails temporarily.
-	// namespace deletion is a time consume task, that depends on the resources it
-	// holds.
-	deadline, cancel := context.WithTimeout(context.TODO(), 5*time.Minute)
-	defer cancel()
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-
-	for {
+	gomega.Eventually(func() bool {
 		success := true // No failures so far.
 		done := true    // Nothing left.
 		failure := func(err error) bool {
@@ -106,20 +96,12 @@ func EnsureOperatorRemoved(c *deploy.Cluster, o *Operator) error {
 			failure(deletor())
 		}
 
-		// We intentionally delete Deployment last because that is
-		// how FindPMEMOperator will find it again if we don't manage to
-		// delete the entire deployment. Here we just scale it down
-		// to trigger pod deletion.
 		if dep, err := cs.AppsV1().Deployments(o.Namespace).Get(o.Name, metav1.GetOptions{}); !getFailure(err) {
-			if *dep.Spec.Replicas != 0 {
-				framework.Logf("Reducing operator '%s/%s' replicas to 0", dep.Namespace, dep.Name)
-				*dep.Spec.Replicas = 0
-				_, err := cs.AppsV1().Deployments(dep.Namespace).Update(dep)
-				failure(err)
-			}
-
+			del(dep.ObjectMeta, func() error {
+				framework.Logf("Deleting deployment '%s/%s'", dep.Namespace, dep.Name)
+				return cs.AppsV1().Deployments(dep.Namespace).Delete(dep.Name, nil)
+			})
 		}
-
 		if role, err := cs.RbacV1().Roles(o.Namespace).Get(o.Name, metav1.GetOptions{}); !getFailure(err) {
 			del(role.ObjectMeta, func() error {
 				framework.Logf("Deleting role '%s/%s'", role.Namespace, role.Name)
@@ -154,41 +136,8 @@ func EnsureOperatorRemoved(c *deploy.Cluster, o *Operator) error {
 				return cs.CoreV1().ServiceAccounts(sa.Namespace).Delete(sa.Name, nil)
 			})
 		}
-
-		if done {
-			// Nothing else left, now delete the deployment.
-			if dep, err := cs.AppsV1().Deployments(o.Namespace).Get(o.Name, metav1.GetOptions{}); !getFailure(err) {
-				del(dep.ObjectMeta, func() error {
-					framework.Logf("Deleting deployment '%s/%s'", dep.Namespace, dep.Name)
-					return cs.AppsV1().Deployments(dep.Namespace).Delete(dep.Name, nil)
-				})
-			}
-
-			// Delete the namespace
-			if deletableNamespace(o.Namespace) {
-				if ns, err := cs.CoreV1().Namespaces().Get(o.Namespace, metav1.GetOptions{}); !getFailure(err) {
-					del(ns.ObjectMeta, func() error {
-						framework.Logf("Deleting namespace '%s'", ns.Name)
-						return cs.CoreV1().Namespaces().Delete(o.Namespace, nil)
-					})
-				}
-			}
-		}
-
-		if done && success {
-			framework.Logf("Deletion SUCCESS!!!")
-			return nil
-		}
-
-		// The actual API calls above are quick, actual deletion
-		// is slower. Here we wait for a short while and then
-		// check again whether all objects have been deleted.
-		select {
-		case <-ticker.C:
-		case <-deadline.Done():
-			return fmt.Errorf("timed out while trying to delete the PMEM-CSI operator in namespace %q", o.Namespace)
-		}
-	}
+		return done && success
+	}, "3m", "1s").Should(gomega.BeTrue(), "timed out while trying to delete the PMEM-CSI operator in namespace %q", o.Namespace)
 }
 
 // FindOperatorDeployment checks whether there is a PMEM-CSI operator
@@ -212,20 +161,19 @@ func FindOperatorDeployment(c *deploy.Cluster, o *Operator) (*appsv1.Deployment,
 // a test runs, the desired deployment exists. Deployed drivers are intentionally
 // kept running to speed up the execution of multiple tests that all want the
 // same kind of deployment.
-func EnsureOperatorDeployed(c *deploy.Cluster, o *Operator) error {
+func EnsureOperatorDeployed(c *deploy.Cluster, o *Operator) {
 	dep, err := FindOperatorDeployment(c, o)
 	framework.ExpectNoError(err, "check for PMEM-CSI driver")
 	if dep != nil {
 		framework.Logf("delete existing operator deployment '%s/%s'", dep.Namespace, dep.Name)
 		// Currently all deployments share the same driver name.
-		err := EnsureOperatorRemoved(c, o)
-		framework.ExpectNoError(err, "remove PMEM-CSI deployment")
+		EnsureOperatorRemoved(c, o)
 	}
 
 	// At the moment, the only supported deployment method is via test/start-operator.sh.
 	cmd := exec.Command("test/start-operator.sh")
 	cmd.Dir = os.Getenv("REPO_ROOT")
-	cmd.Env = os.Environ()
+	cmd.Env = append(os.Environ(), "TEST_OPERATOR_NAMESPACE="+o.Namespace)
 	cmd.Stdout = ginkgo.GinkgoWriter
 	cmd.Stderr = ginkgo.GinkgoWriter
 	err = cmd.Run()
@@ -233,8 +181,6 @@ func EnsureOperatorDeployed(c *deploy.Cluster, o *Operator) error {
 	framework.ExpectNoError(err, "create operator deployment: %q", o.Name)
 
 	WaitForOperator(c, o)
-
-	return nil
 }
 
 var tests = map[string]func(o *Operator, f *framework.Framework){}
@@ -257,43 +203,41 @@ func DefineTests() {
 	for name, testFunc := range tests {
 		ginkgo.Describe(name, func() {
 			var c *deploy.Cluster
-			// We not yet support choosing of namespace, hece using 'pmem-csi'
-			// which is the namespace used in deploy/operator.yaml
-			operator := newOperator("pmem-csi-operator", "pmem-csi")
+			var f *framework.Framework
 
-			f := framework.NewDefaultFramework("cluster")
-			f.SkipNamespaceCreation = true
+			o := newOperator("pmem-csi-operator", "")
+
+			// We have to call this before creating new framework object
+			// So that we get calls first before f.AfterEach(), where the
+			// namespace auto created by the framework gets deleted
+			ginkgo.AfterEach(func() {
+				ginkgo.By(fmt.Sprintf("tearing down operator for test %q", ginkgo.CurrentGinkgoTestDescription().FullTestText))
+				EnsureOperatorRemoved(c, o)
+			})
+
+			f = framework.NewDefaultFramework("cluster")
 
 			ginkgo.BeforeEach(func() {
 				var err error
 				ginkgo.By(fmt.Sprintf("preparing operator for test %q", ginkgo.CurrentGinkgoTestDescription().FullTestText))
 
+				// Use the namespace created by the framework
+				o.Namespace = f.Namespace.Name
+
 				c, err = deploy.NewCluster(f.ClientSet)
 				gomega.Expect(err).ShouldNot(gomega.HaveOccurred(), "get cluster information")
-				EnsureOperatorDeployed(c, operator)
+				EnsureOperatorDeployed(c, o)
 
 				ctx := context.Background()
 				to := podlogs.LogOutput{
 					StatusWriter: ginkgo.GinkgoWriter,
 					LogWriter:    ginkgo.GinkgoWriter,
 				}
-				podlogs.CopyAllLogs(ctx, f.ClientSet, operator.Namespace, to)
+				podlogs.CopyAllLogs(ctx, f.ClientSet, o.Namespace, to)
 				//podlogs.WatchPods(ctx, f.ClientSet, operator.Namespace, ginkgo.GinkgoWriter)
 			})
 
-			ginkgo.AfterEach(func() {
-				ginkgo.By(fmt.Sprintf("tearing down operator for test %q", ginkgo.CurrentGinkgoTestDescription().FullTestText))
-				if c != nil {
-					err := EnsureOperatorRemoved(c, operator)
-					framework.ExpectNoError(err, "remove PMEM-CSI deployment")
-				}
-			})
-
-			testFunc(operator, f)
+			testFunc(o, f)
 		})
 	}
-}
-
-func deletableNamespace(ns string) bool {
-	return ns != v1.NamespaceDefault && ns != metav1.NamespaceSystem && ns != metav1.NamespacePublic
 }
