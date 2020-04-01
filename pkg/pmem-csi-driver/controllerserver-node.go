@@ -83,7 +83,11 @@ func NewNodeControllerServer(nodeID string, dm pmdmanager.PmemDeviceManager, sm 
 		}
 		cleanupList := []string{}
 		v := &nodeVolume{}
-		err = sm.GetAll(v, func(id string) bool {
+		err = sm.GetAll(v, func(id string, e error) bool {
+			if e != nil {
+				klog.Warningf("failed to load volume info for id %q from state: %v", id, e)
+				return true
+			}
 			// See if the device data stored at StateManager is still valid
 			for _, devInfo := range devices {
 				if devInfo.VolumeId == id {

@@ -154,7 +154,8 @@ var _ = Describe("pmem state", func() {
 
 			// Delete and GetAll tests
 			rData := testData{}
-			err = fs.GetAll(&rData, func(id string) bool {
+			err = fs.GetAll(&rData, func(id string, e error) bool {
+				Expect(e).ShouldNot(HaveOccurred(), "error while reading %q", id)
 				found := false
 				for _, d := range data {
 					if d.Id == id {
@@ -172,7 +173,8 @@ var _ = Describe("pmem state", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should have left no file
-			err = fs.GetAll(&rData, func(id string) bool {
+			err = fs.GetAll(&rData, func(id string, e error) bool {
+				Expect(e).ShouldNot(HaveOccurred(), "error while reading %q", id)
 				Expect(id).NotTo(HaveOccurred())
 				return false
 			})
@@ -261,6 +263,8 @@ var _ = Describe("pmem state", func() {
 			wg := sync.WaitGroup{}
 			for _, d := range data {
 				wg.Add(1)
+				defer GinkgoRecover()
+
 				// Writer
 				go func(fs_ pmemstate.StateManager, d_ testData) {
 					var createError error
@@ -272,7 +276,9 @@ var _ = Describe("pmem state", func() {
 
 				wg.Add(1)
 				// Reader
+				defer GinkgoRecover()
 				go func(fs_ pmemstate.StateManager, d_ testData) {
+
 					var getErr error
 					rData := testData{}
 					fmt.Printf("<< %s\n", d_.Id)
@@ -327,6 +333,43 @@ var _ = Describe("pmem state", func() {
 			rData := testData{}
 			err = fs.Get(data.Id, &rData)
 			Expect(err).To(HaveOccurred())
+		})
+
+		It("tampered data", func() {
+			data := &testData{
+				Id:   "one",
+				Name: "tampered-data",
+				Params: map[string]string{
+					"key1": "val1",
+					"key2": "val2",
+				},
+			}
+			var err error
+
+			Expect(stateDir).ShouldNot(BeNil())
+			fs, err := pmemstate.NewFileState(stateDir)
+			Expect(err).NotTo(HaveOccurred())
+
+			err = fs.Create(data.Id, data)
+			Expect(err).NotTo(HaveOccurred())
+
+			out := &testData{}
+			err = fs.Get(data.Id, out)
+			Expect(err).ShouldNot(HaveOccurred(), "read should not fail")
+
+			fileName := path.Join(stateDir, data.Id+".json")
+
+			// read file data
+			bytes, err := ioutil.ReadFile(fileName)
+			Expect(err).ShouldNot(HaveOccurred(), "read data from file")
+
+			newData := strings.Replace(string(bytes), "key1", "newKey", 1)
+			err = ioutil.WriteFile(fileName, []byte(newData), 0)
+			Expect(err).ShouldNot(HaveOccurred(), "write data to file")
+
+			err = fs.Get(data.Id, out)
+			Expect(err).Should(HaveOccurred(), "read tampered data")
+			Expect(err.Error()).Should(HaveSuffix("hash mismatch"), "expected appropriate error")
 		})
 	})
 })

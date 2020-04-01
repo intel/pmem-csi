@@ -109,6 +109,7 @@ RUNTIME_DEPS += sed \
 	-e 's;\(github.com/prometheus/procfs\);prometheus_procfs,https://\1;' \
 	-e 's;\(github.com/spf13/pflag\);github.com\\spf13\\pflag,https://\1;' \
 	-e 's;\(github.com/vgough/grpc-proxy\);grpc-proxy,https://\1;' \
+	-e 's;\(go.uber.org/zap/buffer\);buffer,https://\1;' \
 	-e 's;gomodules.xyz/jsonpatch/v.*;gomodules jsonpatch,https://github.com/gomodules/jsonpatch;' \
 	-e 's;gopkg.in/fsnotify.*;golang-github-fsnotify-fsnotify,https://github.com/fsnotify/fsnotify;' \
 	-e 's;gopkg.in/inf\.v.*;go-inf,https://github.com/go-inf/inf;' \
