@@ -41,6 +41,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/clock"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	clientexec "k8s.io/client-go/util/exec"
@@ -891,23 +892,34 @@ func (v volume) remove(vol *csi.Volume, volName string) {
 	v.cl.UnregisterVolume(volName)
 }
 
-// retry will execute the operation rapidly until it succeeds or the
-// context times out. Each failure gets logged. This is meant for
-// operations that are slow (and therefore delay the loop themselves
-// with some explicit sleep) and unlikely to fail (hence logging all
-// failures).
+// retry will execute the operation (rapidly initially, then with
+// exponential backoff) until it succeeds or the context times
+// out. Each failure gets logged.
 func (v volume) retry(operation func() error, what string) error {
+	if v.ctx.Err() != nil {
+		return fmt.Errorf("%s: not calling %s, the deadline has been reached already", v.namePrefix, what)
+	}
+
+	// Something failed. Retry with exponential backoff.
+	// TODO: use wait.NewExponentialBackoffManager once we use K8S v1.18.
+	backoff := NewExponentialBackoffManager(
+		time.Second,    // initial backoff
+		10*time.Second, // maximum backoff
+		30*time.Second, // reset duration
+		2,              // backoff factor
+		0,              // no jitter
+		clock.RealClock{})
 	for i := 0; ; i++ {
 		err := operation()
 		if err == nil {
 			return nil
 		}
+		framework.Logf("%s: %s failed at attempt %#d: %v", v.namePrefix, what, i, err)
 		select {
 		case <-v.ctx.Done():
-			framework.Logf("%s: %s failed and deadline exceeded, giving up", v.namePrefix, what)
+			framework.Logf("%s: %s failed %d times and deadline exceeded, giving up after error: %v", v.namePrefix, what, i+1, err)
 			return err
-		default:
-			framework.Logf("%s: %s failed at attempt %#d, will try again: %s", v.namePrefix, what, i, err)
+		case <-backoff.Backoff().C():
 		}
 	}
 }
