@@ -439,6 +439,11 @@ var _ = deploy.DescribeForAll("sanity", func(d *deploy.Deployment) {
 				}
 			}
 
+			// Also adapt the overall test timeout.
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(int64(timeout)*int64(sanityVolumes)))
+			defer cancel()
+			v.ctx = ctx
+
 			By(fmt.Sprintf("creating %d volumes of size %s in %d workers, with a timeout per volume of %s", sanityVolumes, volSize.String(), *numSanityWorkers, timeout))
 			for i := 0; i < *numSanityWorkers; i++ {
 				i := i
@@ -472,14 +477,14 @@ var _ = deploy.DescribeForAll("sanity", func(d *deploy.Deployment) {
 						lv.targetPath = targetPath
 						lv.stagingPath = stagingPath
 						func() {
-							ctx, cancel := context.WithTimeout(context.Background(), timeout)
+							ctx, cancel := context.WithTimeout(v.ctx, timeout)
 							start := time.Now()
 							success := false
 							defer func() {
 								cancel()
 								if !success {
 									duration := time.Since(start)
-									By(fmt.Sprintf("%s: failed after %s", duration))
+									By(fmt.Sprintf("%s: failed after %s", lv.namePrefix, duration))
 
 									// Stop testing.
 									atomic.AddInt64(&volumes, int64(sanityVolumes))
