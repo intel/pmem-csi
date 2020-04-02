@@ -434,6 +434,7 @@ void TestInVM(distro, distroVersion, kubernetesVersion, skipIfPR) {
                            loggers=; \
                            atexit () { set -x; kill \$loggers; kill \$( ps --no-header -o %p ); }; \
                            trap atexit EXIT; \
+                           make stop && \
                            make start && \
                            _work/${env.CLUSTER}/ssh.0 kubectl get pods --all-namespaces -o wide && \
                            for pod in ${env.LOGGING_PODS}; do \
