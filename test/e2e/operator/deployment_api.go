@@ -235,6 +235,60 @@ var _ = DescribeForAll("pmem-csi", func(o *Operator, f *framework.Framework) {
 			}
 		})
 
+		It("shall not allow to change pmem percentage of a running LVM deployment", func() {
+			oldPercentage := 50
+			newPercentage := 100
+			dep := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": api.SchemeGroupVersion.String(),
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name": "test-update-pmem-space",
+					},
+					"spec": map[string]interface{}{
+						"driverName":     "update-pmem-space.test.com",
+						"image":          dummyImage,
+						"deviceMode":     api.DeviceModeLVM,
+						"pmemPercentage": oldPercentage,
+					},
+				},
+			}
+
+			deployment, err := toDeployment(dep)
+			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
+
+			createDeployment(f, dep)
+			defer deleteDeployment(f, deployment.Name)
+			validateDriverDeployment(f, o, deployment)
+
+			dep = getDeployment(f, deployment.Name)
+
+			/* Update fields */
+			spec := dep.Object["spec"].(map[string]interface{})
+			spec["pmemPercentage"] = newPercentage
+
+			deployment, err = toDeployment(dep)
+			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
+
+			updateDeployment(f, dep)
+
+			Eventually(func() bool {
+				updatedDep := getDeployment(f, deployment.Name)
+				spec := updatedDep.Object["spec"].(map[string]interface{})
+				value := spec["pmemPercentage"].(int64)
+				return int(value) == oldPercentage
+			}, "3m", "2s").Should(BeTrue(), "pmem percentage value should not be updated")
+
+			// ensure that the driver is still using the old device manager
+			ds, err := f.ClientSet.AppsV1().DaemonSets(o.Namespace).Get(deployment.Name+"-node", metav1.GetOptions{})
+			Expect(err).ShouldNot(HaveOccurred(), "daemon set should exists")
+			for _, c := range ds.Spec.Template.Spec.InitContainers {
+				if c.Name == "pmem-ns-init" {
+					Expect(c.Args).Should(ContainElement(fmt.Sprintf("--useforfsdax=%d", oldPercentage)), "mismatched pmem percentage")
+				}
+			}
+		})
+
 		It("shall allow muliple deployments", func() {
 			dep1 := &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -531,6 +585,15 @@ func validateDriverDeployment(f *framework.Framework, o *Operator, expected *api
 	Expect(err).ShouldNot(HaveOccurred(), "daemon set should exists")
 	for _, secret := range []string{caSecret.Name, nodeControllerSecret.Name} {
 		Expect(findSecret(ds.Spec.Template.Spec.Volumes, secret)).Should(BeTrue(), "volume sources of daemon set shall have secret %s", secret)
+	}
+
+	if deployment.Spec.DeviceMode == api.DeviceModeLVM {
+		Expect(len(ds.Spec.Template.Spec.InitContainers)).Should(BeEquivalentTo(2), "init container count")
+		for _, c := range ds.Spec.Template.Spec.InitContainers {
+			if c.Name == "pmem-ns-init" {
+				Expect(c.Args).Should(ContainElement(fmt.Sprintf("--useforfsdax=%d", expected.Spec.PMEMPercentage)), "mismatched pmem percentage")
+			}
+		}
 	}
 
 	Expect(len(ds.Spec.Template.Spec.Containers)).Should(BeEquivalentTo(2), "daemon set container count")

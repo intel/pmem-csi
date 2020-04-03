@@ -65,6 +65,10 @@ type DeploymentSpec struct {
 	CACert []byte `json:"caCert,omitempty"`
 	// NodeSelector node labels to use for selection of driver node
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// PMEMPercentage represents the percentage of space to be used by the driver in each PMEM region
+	// on every node. Default 100
+	// This is only valid for driver in LVM mode
+	PMEMPercentage uint16 `json:"pmemPercentage,omitempty"`
 }
 
 // DeploymentStatus defines the observed state of Deployment
@@ -135,6 +139,8 @@ const (
 	DefaultNodeResourceMemory = "250Mi" // MB
 	// DefaultDeviceMode default device manger used for deployment
 	DefaultDeviceMode = DeviceModeLVM
+	// DefaultPMEMPercentage PMEM space to reserve for the driver
+	DefaultPMEMPercentage = 100
 )
 
 var (
@@ -170,6 +176,7 @@ const (
 	ControllerResources
 	NodeResources
 	NodeSelector
+	PMEMPercentage
 )
 
 func (c DeploymentChange) String() string {
@@ -184,6 +191,7 @@ func (c DeploymentChange) String() string {
 		ControllerResources: "controllerResources",
 		NodeResources:       "nodeResources",
 		NodeSelector:        "nodeSelector",
+		PMEMPercentage:      "pmemPercentage",
 	}[c]
 }
 
@@ -239,6 +247,10 @@ func (d *Deployment) EnsureDefaults() {
 	if d.Spec.NodeSelector == nil {
 		d.Spec.NodeSelector = DefaultNodeSelector
 	}
+
+	if d.Spec.PMEMPercentage == 0 {
+		d.Spec.PMEMPercentage = DefaultPMEMPercentage
+	}
 }
 
 // Compare compares 'other' deployment spec with current deployment and returns
@@ -282,10 +294,16 @@ func (d *Deployment) Compare(other *Deployment) map[DeploymentChange]struct{} {
 		changes[NodeSelector] = struct{}{}
 	}
 
+	if d.Spec.PMEMPercentage != other.Spec.PMEMPercentage {
+		changes[PMEMPercentage] = struct{}{}
+	}
+
 	return changes
 }
 
 func GetDeploymentCRDSchema() *apiextensions.JSONSchemaProps {
+	One := float64(1)
+	Hundred := float64(100)
 	return &apiextensions.JSONSchemaProps{
 		Type:        "object",
 		Description: "https://github.com/intel/pmem-csi.git",
@@ -362,6 +380,12 @@ func GetDeploymentCRDSchema() *apiextensions.JSONSchemaProps {
 								Type: "string",
 							},
 						},
+					},
+					"pmemPercentage": apiextensions.JSONSchemaProps{
+						Type:        "integer",
+						Description: "Percentage of space to use from total available PMEM space, within range of 1 to 100",
+						Minimum:     &One,
+						Maximum:     &Hundred,
 					},
 				},
 			},

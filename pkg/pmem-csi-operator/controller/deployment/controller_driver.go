@@ -113,6 +113,7 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 }
 
 func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, existing *api.Deployment, changes map[api.DeploymentChange]struct{}) (bool, error) {
+
 	if len(changes) == 0 {
 		klog.Infof("No changes detected in deployment")
 		return false, nil
@@ -153,6 +154,10 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 			err = fmt.Errorf("changing %q of a running deployment %q is not allowed", c, d.Name)
 		case api.NodeSelector:
 			updateNodeDriver = true
+		case api.PMEMPercentage:
+			d.Spec.PMEMPercentage = existing.Spec.PMEMPercentage
+			updateDeployment = true
+			err = fmt.Errorf("changing %q of a running deployment %q is not allowed", c, d.Name)
 		}
 	}
 
@@ -940,6 +945,7 @@ func (d *PmemCSIDriver) getNamespaceInitContainer() corev1.Container {
 		},
 		Args: []string{
 			fmt.Sprintf("--v=%d", d.Spec.LogLevel),
+			fmt.Sprintf("--useforfsdax=%d", d.Spec.PMEMPercentage),
 		},
 		Env: []corev1.EnvVar{
 			{
