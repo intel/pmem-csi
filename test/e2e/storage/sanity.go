@@ -63,8 +63,13 @@ var (
 	sanityVolumeSize = flag.String("pmem.sanity.volume-size", "15Mi", "size of each volume")
 )
 
-// Run the csi-test sanity tests against a pmem-csi driver
-var _ = deploy.DescribeForAll("sanity", func(d *deploy.Deployment) {
+// Run the csi-test sanity tests against a PMEM-CSI driver.
+var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
+	// This test expects that PMEM-CSI was deployed with
+	// socat port forwarding enabled (see deploy/kustomize/testing/README.md).
+	// This is not the case when deployed in production mode.
+	return d.Testing
+}, func(d *deploy.Deployment) {
 	config := sanity.NewTestConfig()
 	config.TestVolumeSize = 1 * 1024 * 1024
 	// The actual directories will be created as unique
@@ -97,13 +102,6 @@ var _ = deploy.DescribeForAll("sanity", func(d *deploy.Deployment) {
 
 	BeforeEach(func() {
 		cs := f.ClientSet
-
-		// This test expects that PMEM-CSI was deployed with
-		// socat port forwarding enabled (see deploy/kustomize/testing/README.md).
-		// This is not the case when deployed in production mode.
-		if !d.Testing {
-			framework.Skipf("driver deployed in production mode")
-		}
 
 		var err error
 		cluster, err = deploy.NewCluster(cs)
