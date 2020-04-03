@@ -13,11 +13,18 @@ _work/bin/govm: _work/govm_$(GOVM_VERSION)_Linux_amd64.tar.gz
 start: _work/pmem-ca/.ca-stamp _work/bin/govm
 	PATH="$(PWD)/_work/bin:$$PATH" test/start-kubernetes.sh
 
-# Stops the VMs and removes all files.
+# Stops the VMs and removes all files. Beware that the simple "rm -rf" only works if we don't
+# have a tmpfs volume inside the cluster directory. In that case, we must remove everything except
+# that and accept that some directories cannot be removed.
 stop: _work/bin/govm
 	@ if [ -f _work/$(CLUSTER)/stop.sh ]; then \
 		PATH="$(PWD)/_work/bin:$$PATH" _work/$(CLUSTER)/stop.sh && \
-		rm -rf _work/$(CLUSTER); \
+		if [ "$$TEST_ETCD_VOLUME" ]; then \
+			find $$(readlink -f _work/$(CLUSTER)) \! -type d \! -path $$(readlink -f "$$TEST_ETCD_VOLUME") -print0 | xargs -0 rm && \
+			( find _work/$(CLUSTER) -depth -type d -print0 | xargs -0 rmdir 2>/dev/null || true); \
+		else \
+			rm -rf _work/$(CLUSTER); \
+		fi; \
 	else \
 		echo "Cluster $(CLUSTER) was already removed."; \
 	fi
