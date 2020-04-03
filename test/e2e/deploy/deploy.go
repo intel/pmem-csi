@@ -448,6 +448,23 @@ func DescribeForAll(what string, f func(d *Deployment)) bool {
 	return true
 }
 
+// DescribeForSome registers tests like gomega.Describe does, except that
+// each test will then be invoked for those PMEM-CSI deployments which
+// pass the filter function.
+func DescribeForSome(what string, enabled func(d *Deployment) bool, f func(d *Deployment)) bool {
+	for _, deploymentName := range allDeployments {
+		deployment, err := Parse(deploymentName)
+		if err != nil {
+			framework.Failf("internal error while parsing %s: %v", deploymentName, err)
+		}
+		if enabled(deployment) {
+			Describe(deploymentName, deploymentName, what, f)
+		}
+	}
+
+	return true
+}
+
 // deployment name -> top level describe string -> list of test functions for that combination
 var tests = map[string]map[string][]func(d *Deployment){}
 

@@ -41,6 +41,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/clock"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	clientexec "k8s.io/client-go/util/exec"
@@ -62,8 +63,13 @@ var (
 	sanityVolumeSize = flag.String("pmem.sanity.volume-size", "15Mi", "size of each volume")
 )
 
-// Run the csi-test sanity tests against a pmem-csi driver
-var _ = deploy.DescribeForAll("sanity", func(d *deploy.Deployment) {
+// Run the csi-test sanity tests against a PMEM-CSI driver.
+var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
+	// This test expects that PMEM-CSI was deployed with
+	// socat port forwarding enabled (see deploy/kustomize/testing/README.md).
+	// This is not the case when deployed in production mode.
+	return d.Testing
+}, func(d *deploy.Deployment) {
 	config := sanity.NewTestConfig()
 	config.TestVolumeSize = 1 * 1024 * 1024
 	// The actual directories will be created as unique
@@ -97,13 +103,6 @@ var _ = deploy.DescribeForAll("sanity", func(d *deploy.Deployment) {
 	BeforeEach(func() {
 		cs := f.ClientSet
 
-		// This test expects that PMEM-CSI was deployed with
-		// socat port forwarding enabled (see deploy/kustomize/testing/README.md).
-		// This is not the case when deployed in production mode.
-		if !d.Testing {
-			framework.Skipf("driver deployed in production mode")
-		}
-
 		var err error
 		cluster, err = deploy.NewCluster(cs)
 		framework.ExpectNoError(err, "query cluster")
@@ -117,6 +116,7 @@ var _ = deploy.DescribeForAll("sanity", func(d *deploy.Deployment) {
 		port, err := cluster.GetServicePort("pmem-csi-controller-testing", d.Namespace)
 		framework.ExpectNoError(err, "find controller test service")
 		config.ControllerAddress = cluster.NodeServiceAddress(0, port)
+		framework.Logf("sanity: using controller %s and node %s", config.ControllerAddress, config.Address)
 
 		// f.ExecCommandInContainerWithFullOutput assumes that we want a pod in the test's namespace,
 		// so we have to set one.
@@ -191,12 +191,26 @@ var _ = deploy.DescribeForAll("sanity", func(d *deploy.Deployment) {
 		}
 	})
 
-	var _ = Describe("pmem csi", func() {
+	// This adds several tests that just get skipped.
+	// TODO: static definition of driver capabilities (https://github.com/kubernetes-csi/csi-test/issues/143)
+	sc := sanity.GinkgoTest(&config)
+
+	// The test context caches a connection to the CSI driver.
+	// When we re-deploy, gRPC will try to reconnect for that connection,
+	// leading to log messages about connection errors because the node port
+	// is allocated dynamically and changes when redeploying. Therefore
+	// we register a hook which clears the connection when PMEM-CSI
+	// gets re-deployed.
+	deploy.AddUninstallHook(func(deploymentName string) {
+		framework.Logf("sanity: deployment %s is gone, closing test connections to controller %s and node %s.",
+			deploymentName,
+			config.ControllerAddress,
+			config.Address)
+		sc.Finalize()
+	})
+
+	var _ = Describe("PMEM-CSI", func() {
 		var (
-			// TODO: replace with NewTestContext once it is public
-			sc = &sanity.TestContext{
-				Config: &config,
-			}
 			cl      *sanity.Cleanup
 			nc      csi.NodeClient
 			cc, ncc csi.ControllerClient
@@ -204,16 +218,6 @@ var _ = deploy.DescribeForAll("sanity", func(d *deploy.Deployment) {
 			v       volume
 			cancel  func()
 		)
-
-		// The test context caches a connection to the CSI driver.
-		// When we re-deploy, gRPC will try to reconnect for that connection,
-		// leading to log messages about connection errors because the node port
-		// is allocated dynamically and changes when redeploying. Therefore
-		// we register a hook which clears the connection when PMEM-CSI
-		// gets re-deployed.
-		deploy.AddUninstallHook(func(deploymentName string) {
-			sc.Finalize()
-		})
 
 		BeforeEach(func() {
 			sc.Setup()
@@ -438,6 +442,11 @@ var _ = deploy.DescribeForAll("sanity", func(d *deploy.Deployment) {
 				}
 			}
 
+			// Also adapt the overall test timeout.
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(int64(timeout)*int64(sanityVolumes)))
+			defer cancel()
+			v.ctx = ctx
+
 			By(fmt.Sprintf("creating %d volumes of size %s in %d workers, with a timeout per volume of %s", sanityVolumes, volSize.String(), *numSanityWorkers, timeout))
 			for i := 0; i < *numSanityWorkers; i++ {
 				i := i
@@ -471,14 +480,14 @@ var _ = deploy.DescribeForAll("sanity", func(d *deploy.Deployment) {
 						lv.targetPath = targetPath
 						lv.stagingPath = stagingPath
 						func() {
-							ctx, cancel := context.WithTimeout(context.Background(), timeout)
+							ctx, cancel := context.WithTimeout(v.ctx, timeout)
 							start := time.Now()
 							success := false
 							defer func() {
 								cancel()
 								if !success {
 									duration := time.Since(start)
-									By(fmt.Sprintf("%s: failed after %s", duration))
+									By(fmt.Sprintf("%s: failed after %s", lv.namePrefix, duration))
 
 									// Stop testing.
 									atomic.AddInt64(&volumes, int64(sanityVolumes))
@@ -676,10 +685,6 @@ var _ = deploy.DescribeForAll("sanity", func(d *deploy.Deployment) {
 			})
 		})
 	})
-
-	// This adds several tests that just get skipped.
-	// TODO: static definition of driver capabilities (https://github.com/kubernetes-csi/csi-test/issues/143)
-	sanity.GinkgoTest(&config)
 })
 
 type volume struct {
@@ -891,23 +896,34 @@ func (v volume) remove(vol *csi.Volume, volName string) {
 	v.cl.UnregisterVolume(volName)
 }
 
-// retry will execute the operation rapidly until it succeeds or the
-// context times out. Each failure gets logged. This is meant for
-// operations that are slow (and therefore delay the loop themselves
-// with some explicit sleep) and unlikely to fail (hence logging all
-// failures).
+// retry will execute the operation (rapidly initially, then with
+// exponential backoff) until it succeeds or the context times
+// out. Each failure gets logged.
 func (v volume) retry(operation func() error, what string) error {
+	if v.ctx.Err() != nil {
+		return fmt.Errorf("%s: not calling %s, the deadline has been reached already", v.namePrefix, what)
+	}
+
+	// Something failed. Retry with exponential backoff.
+	// TODO: use wait.NewExponentialBackoffManager once we use K8S v1.18.
+	backoff := NewExponentialBackoffManager(
+		time.Second,    // initial backoff
+		10*time.Second, // maximum backoff
+		30*time.Second, // reset duration
+		2,              // backoff factor
+		0,              // no jitter
+		clock.RealClock{})
 	for i := 0; ; i++ {
 		err := operation()
 		if err == nil {
 			return nil
 		}
+		framework.Logf("%s: %s failed at attempt %#d: %v", v.namePrefix, what, i, err)
 		select {
 		case <-v.ctx.Done():
-			framework.Logf("%s: %s failed and deadline exceeded, giving up", v.namePrefix, what)
+			framework.Logf("%s: %s failed %d times and deadline exceeded, giving up after error: %v", v.namePrefix, what, i+1, err)
 			return err
-		default:
-			framework.Logf("%s: %s failed at attempt %#d, will try again: %s", v.namePrefix, what, i, err)
+		case <-backoff.Backoff().C():
 		}
 	}
 }
