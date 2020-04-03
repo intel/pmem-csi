@@ -118,6 +118,7 @@ var _ = deploy.DescribeForAll("sanity", func(d *deploy.Deployment) {
 		port, err := cluster.GetServicePort("pmem-csi-controller-testing", d.Namespace)
 		framework.ExpectNoError(err, "find controller test service")
 		config.ControllerAddress = cluster.NodeServiceAddress(0, port)
+		framework.Logf("sanity: using controller %s and node %s", config.ControllerAddress, config.Address)
 
 		// f.ExecCommandInContainerWithFullOutput assumes that we want a pod in the test's namespace,
 		// so we have to set one.
@@ -192,12 +193,26 @@ var _ = deploy.DescribeForAll("sanity", func(d *deploy.Deployment) {
 		}
 	})
 
-	var _ = Describe("pmem csi", func() {
+	// This adds several tests that just get skipped.
+	// TODO: static definition of driver capabilities (https://github.com/kubernetes-csi/csi-test/issues/143)
+	sc := sanity.GinkgoTest(&config)
+
+	// The test context caches a connection to the CSI driver.
+	// When we re-deploy, gRPC will try to reconnect for that connection,
+	// leading to log messages about connection errors because the node port
+	// is allocated dynamically and changes when redeploying. Therefore
+	// we register a hook which clears the connection when PMEM-CSI
+	// gets re-deployed.
+	deploy.AddUninstallHook(func(deploymentName string) {
+		framework.Logf("sanity: deployment %s is gone, closing test connections to controller %s and node %s.",
+			deploymentName,
+			config.ControllerAddress,
+			config.Address)
+		sc.Finalize()
+	})
+
+	var _ = Describe("PMEM-CSI", func() {
 		var (
-			// TODO: replace with NewTestContext once it is public
-			sc = &sanity.TestContext{
-				Config: &config,
-			}
 			cl      *sanity.Cleanup
 			nc      csi.NodeClient
 			cc, ncc csi.ControllerClient
@@ -205,16 +220,6 @@ var _ = deploy.DescribeForAll("sanity", func(d *deploy.Deployment) {
 			v       volume
 			cancel  func()
 		)
-
-		// The test context caches a connection to the CSI driver.
-		// When we re-deploy, gRPC will try to reconnect for that connection,
-		// leading to log messages about connection errors because the node port
-		// is allocated dynamically and changes when redeploying. Therefore
-		// we register a hook which clears the connection when PMEM-CSI
-		// gets re-deployed.
-		deploy.AddUninstallHook(func(deploymentName string) {
-			sc.Finalize()
-		})
 
 		BeforeEach(func() {
 			sc.Setup()
@@ -682,10 +687,6 @@ var _ = deploy.DescribeForAll("sanity", func(d *deploy.Deployment) {
 			})
 		})
 	})
-
-	// This adds several tests that just get skipped.
-	// TODO: static definition of driver capabilities (https://github.com/kubernetes-csi/csi-test/issues/143)
-	sanity.GinkgoTest(&config)
 })
 
 type volume struct {
