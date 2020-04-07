@@ -153,12 +153,16 @@ var _ = Describe("pmem state", func() {
 			}
 
 			// Delete and GetAll tests
-			rData := testData{}
-			err = fs.GetAll(&rData, func(id string) bool {
+			ids, err := fs.GetAll()
+			Expect(err).NotTo(HaveOccurred(), "retrieve records")
+			for _, id := range ids {
 				found := false
 				for _, d := range data {
 					if d.Id == id {
 						found = true
+						rData := testData{}
+						err := fs.Get(id, &rData)
+						Expect(err).NotTo(HaveOccurred(), "read record: %s", id)
 						Expect(d.IsEqual(rData)).To(Equal(true))
 
 						err = fs.Delete(id)
@@ -167,17 +171,13 @@ var _ = Describe("pmem state", func() {
 					}
 				}
 				Expect(found).To(Equal(true))
-				return true
-			})
+			}
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should have left no file
-			err = fs.GetAll(&rData, func(id string) bool {
-				Expect(id).NotTo(HaveOccurred())
-				return false
-			})
-			Expect(err).NotTo(HaveOccurred())
-
+			ids, err = fs.GetAll()
+			Expect(err).NotTo(HaveOccurred(), "retrieve records")
+			Expect(len(ids)).Should(BeZero(), "all records should have been deleted")
 		})
 
 		It("read write files", func() {
@@ -327,6 +327,52 @@ var _ = Describe("pmem state", func() {
 			rData := testData{}
 			err = fs.Get(data.Id, &rData)
 			Expect(err).To(HaveOccurred())
+		})
+
+		It("able to read/write with different parameters", func() {
+			data := []testData{
+				testData{
+					Id:   "one",
+					Name: "with multiple params",
+					Params: map[string]string{
+						"key1": "val1",
+						"key2": "val2",
+					},
+				},
+				testData{
+					Id:   "two",
+					Name: "with single params",
+					Params: map[string]string{
+						"key1": "val1",
+					},
+				},
+				testData{
+					Id:     "three",
+					Name:   "with empty params",
+					Params: map[string]string{},
+				},
+			}
+			var err error
+
+			Expect(stateDir).ShouldNot(BeNil())
+			fs, err := pmemstate.NewFileState(stateDir)
+			Expect(err).NotTo(HaveOccurred())
+
+			for _, d := range data {
+				err = fs.Create(d.Id, d)
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			ids, err := fs.GetAll()
+			Expect(err).ShouldNot(HaveOccurred(), "read all records")
+			Expect(len(ids)).Should(BeEquivalentTo(len(data)), "record count should match")
+
+			for _, id := range ids {
+				rData := testData{}
+				err = fs.Get(id, &rData)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(data).Should(ContainElement(rData), "records data shold match")
+			}
 		})
 	})
 })

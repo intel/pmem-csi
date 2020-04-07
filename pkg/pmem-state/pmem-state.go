@@ -18,10 +18,6 @@ import (
 	"k8s.io/klog"
 )
 
-// GetAllFunc callback function used for StateManager.GetAll().
-// This function is called with ID, for each entry found in the state.
-type GetAllFunc func(id string) bool
-
 // StateManager manages the driver persistent state, i.e, volumes information
 type StateManager interface {
 	// Create creates an entry in the state with given id and data
@@ -30,10 +26,8 @@ type StateManager interface {
 	Delete(id string) error
 	// Get retrives the entry data into location pointed by dataPtr.
 	Get(id string, dataPtr interface{}) error
-	// GetAll retrieves all entries found in the state, foreach functions is
-	// called with id for every entry found in the state, and entry data is filled in dataPtr.
-	// the caller has to copy the data if needed.
-	GetAll(dataPtr interface{}, foreach GetAllFunc) error
+	// GetAll retrieves ids of all entries found in the state
+	GetAll() ([]string, error)
 }
 
 // fileState Persists the state information into a file.
@@ -107,33 +101,26 @@ func (fs *fileState) Get(id string, dataPtr interface{}) error {
 	return fs.readFileData(path.Join(fs.location, id+".json"), dataPtr)
 }
 
-// GetAll retrieves metadata of all volumes found in fileState.location directory.
-// reads all the .json files in fileState.location directory and decodes the filedata
-func (fs *fileState) GetAll(dataPtr interface{}, f GetAllFunc) error {
+// GetAll retrieves the names of all .json files found in fileState.location directory
+func (fs *fileState) GetAll() ([]string, error) {
 	fs.stateDirLock.Lock()
 	files, err := ioutil.ReadDir(fs.location)
 	fs.stateDirLock.Unlock()
 	if err != nil {
-		return errors.Wrapf(err, "file-state: failed to read metadata from %s", fs.location)
+		return nil, errors.Wrapf(err, "file-state: failed to read metadata from %s", fs.location)
 	}
+
+	ids := []string{}
 	for _, fileInfo := range files {
 		fileName := fileInfo.Name()
 		if !strings.HasSuffix(fileName, ".json") {
 			continue
 		}
 
-		file := path.Join(fs.location, fileName)
-		if err := fs.readFileData(file, dataPtr); err != nil {
-			return err
-		}
-
-		id := fileName[0 : len(fileName)-len(".json")]
-		if !f(id) {
-			return nil
-		}
+		ids = append(ids, fileName[0:len(fileName)-len(".json")])
 	}
 
-	return nil
+	return ids, nil
 }
 
 func ensureLocation(directory string) error {
