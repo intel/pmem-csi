@@ -31,20 +31,6 @@ type nodeVolume struct {
 	Params map[string]string `json:"parameters"`
 }
 
-func (nv *nodeVolume) Copy() *nodeVolume {
-	nvCopy := &nodeVolume{
-		ID:     nv.ID,
-		Size:   nv.Size,
-		Params: map[string]string{},
-	}
-
-	for k, v := range nv.Params {
-		nvCopy.Params[k] = v
-	}
-
-	return nvCopy
-}
-
 type nodeControllerServer struct {
 	*DefaultControllerServer
 	nodeID      string
@@ -79,25 +65,35 @@ func NewNodeControllerServer(nodeID string, dm pmdmanager.PmemDeviceManager, sm 
 		// Get actual devices at DeviceManager
 		devices, err := dm.ListDevices()
 		if err != nil {
-			klog.Warningf("Failed to get volumes: %s", err.Error())
+			klog.Warningf("Failed to get volumes: %v", err)
 		}
 		cleanupList := []string{}
-		v := &nodeVolume{}
-		err = sm.GetAll(v, func(id string) bool {
+		ids, err := sm.GetAll()
+		if err != nil {
+			klog.Warningf("Failed to load state: %v", err)
+		}
+
+		for _, id := range ids {
+			found := false
 			// See if the device data stored at StateManager is still valid
 			for _, devInfo := range devices {
 				if devInfo.VolumeId == id {
-					ncs.pmemVolumes[id] = v.Copy()
-					return true
+					found = true
+					break
 				}
 			}
-			// if not found in DeviceManager's list, add to cleanupList
-			cleanupList = append(cleanupList, id)
 
-			return true
-		})
-		if err != nil {
-			klog.Warningf("Failed to load state on node %s: %s", nodeID, err.Error())
+			if found {
+				// retrieve volume info
+				vol := &nodeVolume{}
+				if err := sm.Get(id, vol); err != nil {
+					klog.Warningf("Failed to retrieve volume info for id %q from state: %v", id, err)
+				}
+				ncs.pmemVolumes[id] = vol
+			} else {
+				// if not found in DeviceManager's list, add to cleanupList
+				cleanupList = append(cleanupList, id)
+			}
 		}
 
 		for _, id := range cleanupList {
