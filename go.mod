@@ -93,4 +93,4 @@ replace github.com/docker/docker => github.com/moby/moby v0.7.3-0.20190826074503
 
 // Temporary fork. Can be removed once https://github.com/kubernetes/kubernetes/pull/85540
 // is merged and we update to a version >= 1.18.
-replace k8s.io/kubernetes => github.com/pohly/kubernetes v1.10.0-alpha.3.0.20191122094604-c7faaae98a14
+replace k8s.io/kubernetes => github.com/pohly/kubernetes v1.10.0-alpha.3.0.20200403121116-2ca8baa1a05a
