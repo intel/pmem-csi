@@ -556,7 +556,6 @@ func (ns *nodeServer) mount(sourcePath, targetPath string, mountOptions []string
 	}
 
 	args = append(args, sourcePath, targetPath)
-	klog.V(4).Infof("mount args: [%v]", args)
 	if _, err := pmemexec.RunCommand("mount", args...); err != nil {
 		return fmt.Errorf("mount filesystem failed: %s", err.Error())
 	}
