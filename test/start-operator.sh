@@ -30,6 +30,8 @@ EOF
   ${SSH} "cat >'$tmpdir/kustomization.yaml'" <<EOF
 resources:
 - operator.yaml
+commonLabels:
+  pmem-csi.intel.com/deployment: ${TEST_OPERATOR_DEPLOYMENT:-operator}
 EOF
 
   if [ "${TEST_OPERATOR_NAMESPACE}" != "" ]; then
