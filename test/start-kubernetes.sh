@@ -381,6 +381,7 @@ function init_kubernetes_cluster() (
                 if [ "$SECONDS" -gt "$SSH_TIMEOUT" ]; then
                     die "timeout waiting for ${ip} to reboot with changed kernel parameters"
                 fi
+		sleep 1
             done
         done
     fi
