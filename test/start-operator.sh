@@ -31,11 +31,10 @@ EOF
 resources:
 - operator.yaml
 commonLabels:
-  pmem-csi.intel.com/deployment: ${TEST_OPERATOR_DEPLOYMENT:-operator}
+  pmem-csi.intel.com/deployment: ${TEST_OPERATOR_DEPLOYMENT}
 EOF
 
-  if [ "${TEST_OPERATOR_NAMESPACE}" != "" ]; then
-    ${SSH} "cat >>'$tmpdir/kustomization.yaml'" <<EOF
+  ${SSH} "cat >>'$tmpdir/kustomization.yaml'" <<EOF
 namespace: "${TEST_OPERATOR_NAMESPACE}"
 patchesJson6902:
 - target:
@@ -45,13 +44,11 @@ patchesJson6902:
     name: pmem-csi-operator
   path: crb-sa-namespace-patch.json
 EOF
-    ${SSH} "cat >'$tmpdir/crb-sa-namespace-patch.json'" <<EOF
+  ${SSH} "cat >'$tmpdir/crb-sa-namespace-patch.json'" <<EOF
 - op: replace
   path: /subjects/0/namespace
   value: "${TEST_OPERATOR_NAMESPACE}"
 EOF
-
-  fi
 
   ${KUBECTL} apply --kustomize "$tmpdir"
 
