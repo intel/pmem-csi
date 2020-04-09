@@ -21,8 +21,11 @@ import (
 	v1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/kubernetes/test/e2e/framework"
 
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-driver"
 
 	"github.com/onsi/ginkgo"
@@ -462,7 +465,16 @@ func findOperator(c *Cluster) (*Deployment, error) {
 	return deployment, nil
 }
 
-var deploymentRE = regexp.MustCompile(`^(\w*)-(testing|production)|(operator)$`)
+var allDeployments = []string{
+	"lvm-testing",
+	"lvm-production",
+	"direct-testing",
+	"direct-production",
+	"operator",
+	"operator-lvm-production",
+	"operator-direct-production",
+}
+var deploymentRE = regexp.MustCompile(`^(operator)?-?(\w*)?-?(testing|production)?$`)
 
 // Parse the deployment name and sets fields accordingly.
 func Parse(deploymentName string) (*Deployment, error) {
@@ -475,13 +487,14 @@ func Parse(deploymentName string) (*Deployment, error) {
 	if matches == nil {
 		return nil, fmt.Errorf("unsupported deployment %s", deploymentName)
 	}
-	if matches[3] == "operator" {
+	if matches[1] == "operator" {
 		deployment.HasOperator = true
-	} else {
+	}
+	if matches[2] != "" {
 		deployment.HasDriver = true
-		deployment.Testing = matches[2] == "testing"
-		if err := deployment.Mode.Set(matches[1]); err != nil {
-			return nil, fmt.Errorf("deployment name %s: %v", err)
+		deployment.Testing = matches[3] == "testing"
+		if err := deployment.Mode.Set(matches[2]); err != nil {
+			return nil, fmt.Errorf("deployment name %s: %v", deploymentName, err)
 		}
 	}
 
@@ -537,20 +550,55 @@ func EnsureDeployment(deploymentName string) *Deployment {
 
 			WaitForOperator(c, deployment.Namespace)
 		}
-
 		if deployment.HasDriver {
-			// At the moment, the only supported deployment method is via test/setup-deployment.sh.
-			// Installation via operator can be added later.
-			cmd := exec.Command("test/setup-deployment.sh")
-			cmd.Dir = os.Getenv("REPO_ROOT")
-			cmd.Env = append(os.Environ(),
-				"TEST_DEPLOYMENTMODE="+deployment.DeploymentMode(),
-				"TEST_DEVICEMODE="+string(deployment.Mode))
-			cmd.Stdout = ginkgo.GinkgoWriter
-			cmd.Stderr = ginkgo.GinkgoWriter
-			err = cmd.Run()
-			framework.ExpectNoError(err, "create %s PMEM-CSI deployment", deployment.Name)
+			if deployment.HasOperator {
+				// Deploy driver through operator.
+				dep := &api.Deployment{
+					// TypeMeta is needed because
+					// DefaultUnstructuredConverter does not add it for us. Is there a better way?
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: api.SchemeGroupVersion.String(),
+						Kind:       "Deployment",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "pmem-csi",
+					},
+					Spec: api.DeploymentSpec{
+						Image: os.Getenv("PMEM_CSI_IMAGE"), // workaround for https://github.com/intel/pmem-csi/issues/578
+						Labels: map[string]string{
+							deploymentLabel: deployment.Name,
+						},
+						// TODO: replace pmemcsidriver.DeviceMode with api.DeviceMode everywhere
+						// and remove this cast here.
+						DeviceMode: api.DeviceMode(deployment.Mode),
+						// As in setup-deployment.sh, only 50% of the available
+						// PMEM must be used for LVM, otherwise other tests cannot
+						// run after the LVM driver was deployed once.
+						PMEMPercentage: 50,
+					},
+				}
+				hash, err := runtime.DefaultUnstructuredConverter.ToUnstructured(dep)
+				framework.ExpectNoError(err, "convert %v", dep)
+				depUnstructured := &unstructured.Unstructured{
+					Object: hash,
+				}
+				CreateDeploymentCR(f, depUnstructured)
+			} else {
+				// Deploy with script.
+				cmd := exec.Command("test/setup-deployment.sh")
+				cmd.Dir = os.Getenv("REPO_ROOT")
+				cmd.Env = append(os.Environ(),
+					"TEST_DEPLOYMENTMODE="+deployment.DeploymentMode(),
+					"TEST_DEVICEMODE="+string(deployment.Mode))
+				cmd.Stdout = ginkgo.GinkgoWriter
+				cmd.Stderr = ginkgo.GinkgoWriter
+				err = cmd.Run()
+				framework.ExpectNoError(err, "create %s PMEM-CSI deployment", deployment.Name)
+			}
 
+			// We check for a running driver the same way at the moment, by directly
+			// looking at the driver state. Long-term we want the operator to do that
+			// checking itself.
 			WaitForPMEMDriver(c, deployment.Namespace)
 		}
 
@@ -562,25 +610,31 @@ func EnsureDeployment(deploymentName string) *Deployment {
 	return deployment
 }
 
-var allDeployments = []string{
-	"lvm-testing",
-	"lvm-production",
-	"direct-testing",
-	"direct-production",
-	"operator",
-}
-
 // DescribeForAll registers tests like gomega.Describe does, except that
 // each test will then be invoked for each supported PMEM-CSI deployment
 // which has a functional PMEM-CSI driver.
 func DescribeForAll(what string, f func(d *Deployment)) bool {
-	DescribeForSome(what, HasDriver, f)
+	DescribeForSome(what, RunAllTests, f)
 	return true
 }
 
-// HasDriver is a filter function for DescribeForAll.
+// HasDriver is a filter function for DescribeForSome.
 func HasDriver(d *Deployment) bool {
 	return d.HasDriver
+}
+
+// HasOperator is a filter function for DescribeForSome.
+func HasOperator(d *Deployment) bool {
+	return d.HasOperator
+}
+
+// RunAllTests is a filter function for DescribeForSome which decides
+// against what we run the full Kubernetes storage test
+// suite. Currently do this for deployments created via .yaml files
+// whereas testing with the operator is excluded. This is meant to
+// keep overall test suite runtime reasonable and avoid duplication.
+func RunAllTests(d *Deployment) bool {
+	return d.HasDriver && !d.HasOperator
 }
 
 // DescribeForSome registers tests like gomega.Describe does, except that

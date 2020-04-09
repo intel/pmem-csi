@@ -9,32 +9,18 @@ package operator
 import (
 	"fmt"
 
-	"github.com/intel/pmem-csi/pkg/apis"
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 
 	corev1 "k8s.io/api/core/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
-	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/kubernetes/test/e2e/framework"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-)
-
-var (
-	pmemDeploymentRes = schema.GroupVersionResource{
-		Group:    api.SchemeGroupVersion.Group,
-		Version:  api.SchemeGroupVersion.Version,
-		Resource: "deployments",
-	}
-
-	scheme = runtime.NewScheme()
 )
 
 var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
@@ -49,13 +35,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		// We use intentionally use this non-existing driver image
 		// because these tests do not actually need a running driver.
 		dummyImage := "unexisting/pmem-csi-driver"
-
-		BeforeEach(func() {
-			api.SchemeBuilder.Register(&api.Deployment{}, &api.DeploymentList{})
-
-			err := apis.AddToScheme(scheme)
-			Expect(err).ShouldNot(HaveOccurred(), "initialize scheme")
-		})
 
 		tests := map[string]*unstructured.Unstructured{
 			"with defaults": &unstructured.Unstructured{
@@ -104,8 +83,8 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				deployment, err := toDeployment(dep)
 				Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
 
-				createDeployment(f, dep)
-				defer deleteDeployment(f, deployment.Name)
+				deploy.CreateDeploymentCR(f, dep)
+				defer deploy.DeleteDeploymentCR(f, deployment.Name)
 				validateDriverDeployment(f, d, deployment)
 			})
 		}
@@ -128,11 +107,11 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			deployment, err := toDeployment(dep)
 			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
 
-			createDeployment(f, dep)
-			defer deleteDeployment(f, deployment.Name)
+			deploy.CreateDeploymentCR(f, dep)
+			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 			validateDriverDeployment(f, d, deployment)
 
-			dep = getDeployment(f, deployment.Name)
+			dep = deploy.GetDeploymentCR(f, deployment.Name)
 
 			/* Update fields */
 			spec := dep.Object["spec"].(map[string]interface{})
@@ -164,7 +143,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			Expect(err).Should(BeNil(), "existence of node daemonst set")
 			dsVersion := ds.GetResourceVersion()
 
-			updateDeployment(f, dep)
+			deploy.UpdateDeploymentCR(f, dep)
 
 			// Wait till the sub-resources get updated
 			// As a interm solution we are depending on subresoure(deaemon set, stateful set)
@@ -208,11 +187,11 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			deployment, err := toDeployment(dep)
 			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
 
-			createDeployment(f, dep)
-			defer deleteDeployment(f, deployment.Name)
+			deploy.CreateDeploymentCR(f, dep)
+			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 			validateDriverDeployment(f, d, deployment)
 
-			dep = getDeployment(f, deployment.Name)
+			dep = deploy.GetDeploymentCR(f, deployment.Name)
 
 			/* Update fields */
 			spec := dep.Object["spec"].(map[string]interface{})
@@ -221,10 +200,10 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			deployment, err = toDeployment(dep)
 			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
 
-			updateDeployment(f, dep)
+			deploy.UpdateDeploymentCR(f, dep)
 
 			Eventually(func() bool {
-				updatedDep := getDeployment(f, deployment.Name)
+				updatedDep := deploy.GetDeploymentCR(f, deployment.Name)
 				spec := updatedDep.Object["spec"].(map[string]interface{})
 				mode := spec["deviceMode"].(string)
 				return mode == string(oldMode)
@@ -262,11 +241,11 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			deployment, err := toDeployment(dep)
 			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
 
-			createDeployment(f, dep)
-			defer deleteDeployment(f, deployment.Name)
+			deploy.CreateDeploymentCR(f, dep)
+			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 			validateDriverDeployment(f, d, deployment)
 
-			dep = getDeployment(f, deployment.Name)
+			dep = deploy.GetDeploymentCR(f, deployment.Name)
 
 			/* Update fields */
 			spec := dep.Object["spec"].(map[string]interface{})
@@ -275,10 +254,10 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			deployment, err = toDeployment(dep)
 			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
 
-			updateDeployment(f, dep)
+			deploy.UpdateDeploymentCR(f, dep)
 
 			Eventually(func() bool {
-				updatedDep := getDeployment(f, deployment.Name)
+				updatedDep := deploy.GetDeploymentCR(f, deployment.Name)
 				spec := updatedDep.Object["spec"].(map[string]interface{})
 				value := spec["pmemPercentage"].(int64)
 				return int(value) == oldPercentage
@@ -321,11 +300,11 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			deployment, err := toDeployment(dep)
 			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
 
-			createDeployment(f, dep)
-			defer deleteDeployment(f, deployment.Name)
+			deploy.CreateDeploymentCR(f, dep)
+			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 			validateDriverDeployment(f, d, deployment)
 
-			dep = getDeployment(f, deployment.Name)
+			dep = deploy.GetDeploymentCR(f, deployment.Name)
 
 			/* Update fields */
 			spec := dep.Object["spec"].(map[string]interface{})
@@ -334,10 +313,10 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			deployment, err = toDeployment(dep)
 			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
 
-			updateDeployment(f, dep)
+			deploy.UpdateDeploymentCR(f, dep)
 
 			Eventually(func() bool {
-				updatedDep := getDeployment(f, deployment.Name)
+				updatedDep := deploy.GetDeploymentCR(f, deployment.Name)
 				spec := updatedDep.Object["spec"].(map[string]interface{})
 				labels := spec["labels"].(map[string]interface{})
 				// We cannot use reflect.DeepEqual here because the types are different.
@@ -390,14 +369,14 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			deployment1, err := toDeployment(dep1)
 			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
 
-			createDeployment(f, dep1)
-			defer deleteDeployment(f, deployment1.Name)
+			deploy.CreateDeploymentCR(f, dep1)
+			defer deploy.DeleteDeploymentCR(f, deployment1.Name)
 			validateDriverDeployment(f, d, deployment1)
 
 			deployment2, err := toDeployment(dep2)
 			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
-			createDeployment(f, dep2)
-			defer deleteDeployment(f, deployment2.Name)
+			deploy.CreateDeploymentCR(f, dep2)
+			defer deploy.DeleteDeploymentCR(f, deployment2.Name)
 			validateDriverDeployment(f, d, deployment2)
 		})
 
@@ -433,27 +412,27 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			deployment1, err := toDeployment(dep1)
 			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
 
-			createDeployment(f, dep1)
-			defer deleteDeployment(f, deployment1.Name)
+			deploy.CreateDeploymentCR(f, dep1)
+			defer deploy.DeleteDeploymentCR(f, deployment1.Name)
 			validateDriverDeployment(f, d, deployment1)
 
 			deployment2, err := toDeployment(dep2)
 			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
-			createDeployment(f, dep2)
-			defer deleteDeployment(f, deployment2.Name)
+			deploy.CreateDeploymentCR(f, dep2)
+			defer deploy.DeleteDeploymentCR(f, deployment2.Name)
 
 			// Deployment should be In Failure state as other
 			// deployment with that name exisits
 			validateDeploymentFailure(f, deployment2.Name)
 
-			dep2 = getDeployment(f, deployment2.Name)
+			dep2 = deploy.GetDeploymentCR(f, deployment2.Name)
 			// Resolve deployment name and update
 			dep2.Object["spec"] = map[string]interface{}{
 				"driverName": "new-driver-name",
 			}
 
 			// and redeploy with new name
-			updateDeployment(f, dep2)
+			deploy.UpdateDeploymentCR(f, dep2)
 
 			deployment2, err = toDeployment(dep2)
 			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
@@ -498,8 +477,8 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			deployment, err := toDeployment(dep)
 			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
 
-			createDeployment(f, dep)
-			defer deleteDeployment(f, deployment.Name)
+			deploy.CreateDeploymentCR(f, dep)
+			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 			validateDriverDeployment(f, d, deployment)
 		})
 	})
@@ -507,7 +486,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 func toDeployment(dep *unstructured.Unstructured) (*api.Deployment, error) {
 	deployment := &api.Deployment{}
-	if err := scheme.Convert(dep, deployment, nil); err != nil {
+	if err := deploy.Scheme.Convert(dep, deployment, nil); err != nil {
 		return nil, err
 	}
 	deployment.EnsureDefaults()
@@ -515,69 +494,15 @@ func toDeployment(dep *unstructured.Unstructured) (*api.Deployment, error) {
 	return deployment, nil
 }
 
-func createDeployment(f *framework.Framework, dep *unstructured.Unstructured) *unstructured.Unstructured {
-	var outDep *unstructured.Unstructured
-	metadata := dep.Object["metadata"].(map[string]interface{})
-	depName := metadata["name"].(string)
-	Eventually(func() error {
-		var err error
-		outDep, err = f.DynamicClient.Resource(pmemDeploymentRes).Create(dep, metav1.CreateOptions{})
-		safeLogError(err, "create deployment error: %v, will retry...", err)
-		return err
-	}, "3m", "10s").Should(BeNil(), "create deployment %q", depName)
-	By(fmt.Sprintf("Created deployment %q", depName))
-	return outDep
-}
-
-func deleteDeployment(f *framework.Framework, name string) {
-	Eventually(func() error {
-		err := f.DynamicClient.Resource(pmemDeploymentRes).Delete(name, nil)
-		if err != nil && apierrs.IsNotFound(err) {
-			return nil
-		}
-		safeLogError(err, "delete deployment error: %v, will retry...", err)
-		return err
-	}, "3m", "10s").Should(BeNil(), "delete deployment %q", name)
-	By(fmt.Sprintf("Deleted deployment %q", name))
-}
-
-func updateDeployment(f *framework.Framework, dep *unstructured.Unstructured) *unstructured.Unstructured {
-	var outDep *unstructured.Unstructured
-	metadata := dep.Object["metadata"].(map[string]interface{})
-	depName := metadata["name"].(string)
-
-	Eventually(func() error {
-		var err error
-		outDep, err = f.DynamicClient.Resource(pmemDeploymentRes).Update(dep, metav1.UpdateOptions{})
-		safeLogError(err, "update deployment error: %v, will retry...", err)
-		return err
-	}, "3m", "10s").Should(BeNil(), "update deployment: %q", depName)
-
-	By(fmt.Sprintf("Updated deployment %q", depName))
-	return outDep
-}
-
-func getDeployment(f *framework.Framework, name string) *unstructured.Unstructured {
-	var outDep *unstructured.Unstructured
-	Eventually(func() error {
-		var err error
-		outDep, err = f.DynamicClient.Resource(pmemDeploymentRes).Get(name, metav1.GetOptions{})
-		safeLogError(err, "get deployment error: %v, will retry...", err)
-		return err
-	}, "3m", "10s").Should(BeNil(), "get deployment")
-
-	return outDep
-}
-
 func validateDriverDeployment(f *framework.Framework, d *deploy.Deployment, expected *api.Deployment) {
 	deployment := &api.Deployment{}
 	Eventually(func() bool {
-		dep, err := f.DynamicClient.Resource(pmemDeploymentRes).Get(expected.Name, metav1.GetOptions{})
+		dep, err := f.DynamicClient.Resource(deploy.DeploymentResource).Get(expected.Name, metav1.GetOptions{})
 		if err != nil {
 			return false
 		}
 
-		if err = scheme.Convert(dep, deployment, nil); err != nil {
+		if err = deploy.Scheme.Convert(dep, deployment, nil); err != nil {
 			return false
 		}
 		By(fmt.Sprintf("Deployment %q is in %q phase", deployment.Name, deployment.Status.Phase))
@@ -729,21 +654,15 @@ func validateDriverDeployment(f *framework.Framework, d *deploy.Deployment, expe
 func validateDeploymentFailure(f *framework.Framework, name string) {
 	deployment := &api.Deployment{}
 	Eventually(func() bool {
-		dep, err := f.DynamicClient.Resource(pmemDeploymentRes).Get(name, metav1.GetOptions{})
+		dep, err := f.DynamicClient.Resource(deploy.DeploymentResource).Get(name, metav1.GetOptions{})
 		if err != nil {
 			return false
 		}
 
-		if err = scheme.Convert(dep, deployment, nil); err != nil {
+		if err = deploy.Scheme.Convert(dep, deployment, nil); err != nil {
 			return false
 		}
 		By(fmt.Sprintf("Deployment %q is in %q pahse", deployment.Name, deployment.Status.Phase))
 		return deployment.Status.Phase == api.DeploymentPhaseFailed
 	}, "3m", "5s").Should(BeTrue(), "deployment %q not running", name)
-}
-
-func safeLogError(err error, format string, args ...interface{}) {
-	if err != nil {
-		framework.Logf(format, args...)
-	}
 }
