@@ -1035,9 +1035,10 @@ func GetHostVolumes(d *deploy.Deployment) map[string][]string {
 		hdr = "LVM Volumes"
 	case pmemcsidriver.Direct:
 		// ndctl produces multiline block. We want one line per namespace.
-		// Remove double quotes, delete lines dev:xyz and blockdev:xyz as these elems may change after reboot,
-		// remove newlines, then insert one at the end, clean some more.
-		cmd = "sudo ndctl list |tr -d '\"' |grep -v '^    dev:' |grep	-v '^    blockdev:' |tr -d '\n' |tr ']' '\n' |tr -d '[{}' |tr -d ' '"
+		// Pick uuid, mode, size for comparison. Note that sorting changes the order so lines
+		// are not grouped by volume, but keeping volume order would need more complex parsing
+		// and this is not meant to be pretty-printed for human, just to detect the change.
+		cmd = "sudo ndctl list |tr -d '\"' |egrep 'uuid|mode|^ *size' |sort |tr -d ' \n'"
 		hdr = "Namespaces"
 	}
 	result := make(map[string][]string)
