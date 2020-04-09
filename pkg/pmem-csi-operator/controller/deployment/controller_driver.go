@@ -158,6 +158,10 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 			d.Spec.PMEMPercentage = existing.Spec.PMEMPercentage
 			updateDeployment = true
 			err = fmt.Errorf("changing %q of a running deployment %q is not allowed", c, d.Name)
+		case api.Labels:
+			d.Spec.Labels = existing.Spec.Labels
+			updateDeployment = true
+			err = fmt.Errorf("changing %q of a running deployment %q is not allowed", c, d.Name)
 		}
 	}
 
@@ -309,12 +313,7 @@ func (d *PmemCSIDriver) getCSIDriver(k8sVersion *version.Version) *storagev1beta
 			Kind:       "CSIDriver",
 			APIVersion: "v1beta1",
 		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: d.Spec.DriverName,
-			OwnerReferences: []metav1.OwnerReference{
-				d.getOwnerReference(),
-			},
-		},
+		ObjectMeta: d.getObjectMeta(d.Spec.DriverName),
 		Spec: storagev1beta1.CSIDriverSpec{
 			AttachRequired: &attachRequired,
 			PodInfoOnMount: &podInfoOnMount,
@@ -338,14 +337,8 @@ func (d *PmemCSIDriver) getSecret(cn string, ecodedKey []byte, ecnodedCert []byt
 			Kind:       "Secret",
 			APIVersion: "v1",
 		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      d.Name + "-" + cn,
-			Namespace: d.namespace,
-			OwnerReferences: []metav1.OwnerReference{
-				d.getOwnerReference(),
-			},
-		},
-		Type: corev1.SecretTypeTLS,
+		ObjectMeta: d.getObjectMeta(d.Name + "-" + cn),
+		Type:       corev1.SecretTypeTLS,
 		Data: map[string][]byte{
 			corev1.TLSPrivateKeyKey: ecodedKey,
 			corev1.TLSCertKey:       ecnodedCert,
@@ -359,13 +352,7 @@ func (d *PmemCSIDriver) getControllerService() *corev1.Service {
 			Kind:       "Service",
 			APIVersion: "v1",
 		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      d.Name,
-			Namespace: d.namespace,
-			OwnerReferences: []metav1.OwnerReference{
-				d.getOwnerReference(),
-			},
-		},
+		ObjectMeta: d.getObjectMeta(d.Name),
 		Spec: corev1.ServiceSpec{
 			Type: corev1.ServiceTypeClusterIP,
 			Ports: []corev1.ServicePort{
@@ -386,13 +373,7 @@ func (d *PmemCSIDriver) getControllerServiceAccount() *corev1.ServiceAccount {
 			Kind:       "ServiceAccount",
 			APIVersion: "v1",
 		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      d.Name,
-			Namespace: d.namespace,
-			OwnerReferences: []metav1.OwnerReference{
-				d.getOwnerReference(),
-			},
-		},
+		ObjectMeta: d.getObjectMeta(d.Name),
 	}
 }
 
@@ -402,13 +383,7 @@ func (d *PmemCSIDriver) getControllerProvisionerRole() *rbacv1.Role {
 			Kind:       "Role",
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      d.Name,
-			Namespace: d.namespace,
-			OwnerReferences: []metav1.OwnerReference{
-				d.getOwnerReference(),
-			},
-		},
+		ObjectMeta: d.getObjectMeta(d.Name),
 		Rules: []rbacv1.PolicyRule{
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
@@ -434,13 +409,7 @@ func (d *PmemCSIDriver) getControllerProvisionerRoleBinding() *rbacv1.RoleBindin
 			Kind:       "RoleBinding",
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      d.Name,
-			Namespace: d.namespace,
-			OwnerReferences: []metav1.OwnerReference{
-				d.getOwnerReference(),
-			},
-		},
+		ObjectMeta: d.getObjectMeta(d.Name),
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
@@ -462,12 +431,7 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRole() *rbacv1.ClusterRol
 			Kind:       "ClusterRole",
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: d.Name,
-			OwnerReferences: []metav1.OwnerReference{
-				d.getOwnerReference(),
-			},
-		},
+		ObjectMeta: d.getObjectMeta(d.Name),
 		Rules: []rbacv1.PolicyRule{
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
@@ -528,12 +492,7 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRoleBinding() *rbacv1.Clu
 			Kind:       "ClusterRoleBinding",
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: d.Name,
-			OwnerReferences: []metav1.OwnerReference{
-				d.getOwnerReference(),
-			},
-		},
+		ObjectMeta: d.getObjectMeta(d.Name),
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
@@ -556,13 +515,7 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 			Kind:       "StatefulSet",
 			APIVersion: "apps/v1",
 		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      d.Name + "-controller",
-			Namespace: d.namespace,
-			OwnerReferences: []metav1.OwnerReference{
-				d.getOwnerReference(),
-			},
-		},
+		ObjectMeta: d.getObjectMeta(d.Name + "-controller"),
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
@@ -573,10 +526,12 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 			ServiceName: d.Name,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"app":                        d.Name + "-controller",
-						"pmem-csi.intel.com/webhook": "ignore",
-					},
+					Labels: joinMaps(
+						d.Spec.Labels,
+						map[string]string{
+							"app":                        d.Name + "-controller",
+							"pmem-csi.intel.com/webhook": "ignore",
+						}),
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: d.Name,
@@ -639,13 +594,7 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 			Kind:       "DaemonSet",
 			APIVersion: "apps/v1",
 		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      d.Name + "-node",
-			Namespace: d.namespace,
-			OwnerReferences: []metav1.OwnerReference{
-				d.getOwnerReference(),
-			},
-		},
+		ObjectMeta: d.getObjectMeta(d.Name + "-node"),
 		Spec: appsv1.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
@@ -654,10 +603,12 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"app":                        d.Name + "-node",
-						"pmem-csi.intel.com/webhook": "ignore",
-					},
+					Labels: joinMaps(
+						d.Spec.Labels,
+						map[string]string{
+							"app":                        d.Name + "-node",
+							"pmem-csi.intel.com/webhook": "ignore",
+						}),
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector: d.Spec.NodeSelector,
@@ -1013,4 +964,26 @@ func (d *PmemCSIDriver) getNodeRegistrarContainer() corev1.Container {
 		},
 		Resources: *d.Spec.NodeResources,
 	}
+}
+
+func (d *PmemCSIDriver) getObjectMeta(name string) metav1.ObjectMeta {
+	return metav1.ObjectMeta{
+		Name:      name,
+		Namespace: d.namespace, // Will be ignored for cluster-scope objects.
+		OwnerReferences: []metav1.OwnerReference{
+			d.getOwnerReference(),
+		},
+		Labels: d.Spec.Labels,
+	}
+}
+
+func joinMaps(left, right map[string]string) map[string]string {
+	result := map[string]string{}
+	for key, value := range left {
+		result[key] = value
+	}
+	for key, value := range right {
+		result[key] = value
+	}
+	return result
 }

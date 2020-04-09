@@ -294,6 +294,71 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			}
 		})
 
+		It("shall not allow to change labels of a running deployment", func() {
+			oldLabels := map[string]string{
+				"foo": "bar",
+			}
+			newLabels := map[string]string{
+				"foo":  "bar",
+				"foo2": "bar2",
+			}
+			dep := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": api.SchemeGroupVersion.String(),
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name": "test-update-pmem-space",
+					},
+					"spec": map[string]interface{}{
+						"driverName": "update-pmem-space.test.com",
+						"image":      dummyImage,
+						"deviceMode": api.DeviceModeLVM,
+						"labels":     oldLabels,
+					},
+				},
+			}
+
+			deployment, err := toDeployment(dep)
+			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
+
+			createDeployment(f, dep)
+			defer deleteDeployment(f, deployment.Name)
+			validateDriverDeployment(f, d, deployment)
+
+			dep = getDeployment(f, deployment.Name)
+
+			/* Update fields */
+			spec := dep.Object["spec"].(map[string]interface{})
+			spec["labels"] = newLabels
+
+			deployment, err = toDeployment(dep)
+			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
+
+			updateDeployment(f, dep)
+
+			Eventually(func() bool {
+				updatedDep := getDeployment(f, deployment.Name)
+				spec := updatedDep.Object["spec"].(map[string]interface{})
+				labels := spec["labels"].(map[string]interface{})
+				// We cannot use reflect.DeepEqual here because the types are different.
+				if len(labels) != len(oldLabels) {
+					return false
+				}
+				for key, value := range oldLabels {
+					if labels[key].(string) != value {
+						return false
+					}
+				}
+				return true
+			}, "3m", "2s").Should(BeTrue(), "labels value should not be updated")
+
+			// Ensure that the driver is still using the old labels. We only check the daemonset here
+			// as one object of the driver deployment.
+			ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(deployment.Name+"-node", metav1.GetOptions{})
+			Expect(err).ShouldNot(HaveOccurred(), "daemon set should exists")
+			Expect(ds.Labels).Should(Equal(oldLabels), "mismatched labels in daemon set")
+		})
+
 		It("shall allow muliple deployments", func() {
 			dep1 := &unstructured.Unstructured{
 				Object: map[string]interface{}{
