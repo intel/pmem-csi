@@ -211,12 +211,17 @@ func (c DeploymentChange) String() string {
 }
 
 // EnsureDefaults make sure that the deployment object has all defaults set properly
-func (d *Deployment) EnsureDefaults() error {
+func (d *Deployment) EnsureDefaults(operatorImage string) error {
 	if d.Spec.DriverName == "" {
 		d.Spec.DriverName = DefaultDriverName
 	}
 	if d.Spec.Image == "" {
-		d.Spec.Image = DefaultDriverImage
+		// If provided use operatorImage
+		if operatorImage != "" {
+			d.Spec.Image = operatorImage
+		} else {
+			d.Spec.Image = DefaultDriverImage
+		}
 	}
 	if d.Spec.PullPolicy == "" {
 		d.Spec.PullPolicy = DefaultImagePullPolicy

@@ -18,6 +18,8 @@ type ControllerOptions struct {
 	K8sVersion *version.Version
 	// Namespace to use for namespace-scoped sub-resources created by the controller
 	Namespace string
+	// DriverImage to use as default image for driver deployment
+	DriverImage string
 	// Config kubernetes config used
 	Config *rest.Config
 }

@@ -98,6 +98,7 @@ func Main() int {
 
 	// Setup all Controllers
 	if err := controller.AddToManager(mgr, controller.ControllerOptions{
+		Config:     mgr.GetConfig(),
 		Namespace:  namespace,
 		K8sVersion: ver,
 	}); err != nil {

@@ -14,6 +14,7 @@ import (
 	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -89,6 +90,37 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				validateDriverDeployment(f, d, deployment)
 			})
 		}
+
+		It("driver image shall default to operator image", func() {
+			dep := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": api.SchemeGroupVersion.String(),
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name": "test-deployment-driver-image",
+					},
+					"spec": map[string]interface{}{
+						// NOTE(avalluri): we do not use lvm mode so that
+						// running this test does not pollute the PMEM space
+						"deviceMode": "direct",
+						"driverName": "test-driver-image",
+					},
+				},
+			}
+
+			deployment, err := toDeployment(dep)
+			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
+
+			operatorDep, err := findOperatorDeployment(f)
+			Expect(err).ShouldNot(HaveOccurred(), "find operator deployment")
+
+			// operator image should be the driver image
+			deployment.Spec.Image = operatorDep.Spec.Template.Spec.Containers[0].Image
+			deploy.CreateDeploymentCR(f, dep)
+			defer deploy.DeleteDeploymentCR(f, deployment.Name)
+
+			validateDriverDeployment(f, d, deployment)
+		})
 
 		It("shall be able to edit running deployment", func() {
 			dep := &unstructured.Unstructured{
@@ -428,9 +460,8 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			dep2 = deploy.GetDeploymentCR(f, deployment2.Name)
 			// Resolve deployment name and update
-			dep2.Object["spec"] = map[string]interface{}{
-				"driverName": "new-driver-name",
-			}
+			spec := dep2.Object["spec"].(map[string]interface{})
+			spec["driverName"] = "new-driver-name"
 
 			// and redeploy with new name
 			deploy.UpdateDeploymentCR(f, dep2)
@@ -490,7 +521,7 @@ func toDeployment(dep *unstructured.Unstructured) (*api.Deployment, error) {
 	if err := deploy.Scheme.Convert(dep, deployment, nil); err != nil {
 		return nil, err
 	}
-	if err := deployment.EnsureDefaults(); err != nil {
+	if err := deployment.EnsureDefaults(""); err != nil {
 		return nil, fmt.Errorf("ensure defaults: %v", err)
 	}
 
@@ -668,4 +699,26 @@ func validateDeploymentFailure(f *framework.Framework, name string) {
 		By(fmt.Sprintf("Deployment %q is in %q pahse", deployment.Name, deployment.Status.Phase))
 		return deployment.Status.Phase == api.DeploymentPhaseFailed
 	}, "3m", "5s").Should(BeTrue(), "deployment %q not running", name)
+}
+
+// findOperatorDeployment checks whether there is a PMEM-CSI operator
+// installation in the cluster. An installation is found via its
+// deployment name and namespace.
+func findOperatorDeployment(f *framework.Framework) (*appsv1.Deployment, error) {
+	c, err := deploy.NewCluster(f.ClientSet, f.DynamicClient)
+	if err != nil {
+		return nil, fmt.Errorf("error at create new cluster: %v", err)
+	}
+	d, err := deploy.FindDeployment(c)
+	if err != nil {
+		return nil, fmt.Errorf("find operator deployment: %v", err)
+	}
+
+	framework.Logf("Checking if the operator '%s/%s' running", d.Namespace, d.Name)
+	dep, err := f.ClientSet.AppsV1().Deployments(d.Namespace).Get(context.TODO(), d.Name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("Failed to find operator deployment '%s/%s'", d.Namespace, d.Name)
+	}
+
+	return dep, nil
 }

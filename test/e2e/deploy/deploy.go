@@ -26,7 +26,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
-	"github.com/intel/pmem-csi/pkg/pmem-csi-driver"
+	pmemcsidriver "github.com/intel/pmem-csi/pkg/pmem-csi-driver"
 
 	"github.com/onsi/ginkgo"
 	"github.com/onsi/gomega"
@@ -136,7 +136,7 @@ func WaitForPMEMDriver(c *Cluster, namespace string) {
 		}
 		label := buildMetric.Label[0]
 		if *label.Name != "version" {
-			return fmt.Errorf("expected build_info to contain a version label, got: %s", label.Name)
+			return fmt.Errorf("expected build_info to contain a version label, got: %s", *label.Name)
 		}
 		framework.Logf("PMEM-CSI version: %s", *label.Value)
 
@@ -583,7 +583,6 @@ func EnsureDeployment(deploymentName string) *Deployment {
 						},
 					},
 					Spec: api.DeploymentSpec{
-						Image: os.Getenv("PMEM_CSI_IMAGE"), // workaround for https://github.com/intel/pmem-csi/issues/578
 						Labels: map[string]string{
 							deploymentLabel: deployment.Name,
 						},
