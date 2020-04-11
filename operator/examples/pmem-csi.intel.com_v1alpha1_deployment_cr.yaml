@@ -3,7 +3,6 @@ kind: Deployment
 metadata:
   name: example-deployment
 spec:
-  image: 172.17.0.1:5000/pmem-csi-driver:canary
   pmemPercentage: 50
   controllerResources:
       requests:

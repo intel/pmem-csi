@@ -25,6 +25,7 @@ rules:
   - endpoints
   - events
   - secrets
+  - pods
   verbs:
   - '*'
 - apiGroups:
@@ -150,4 +151,5 @@ spec:
                 fieldRef:
                   fieldPath: metadata.name
             - name: OPERATOR_NAME
+              # This should match to the operator container name
               value: "pmem-csi-operator"

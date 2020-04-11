@@ -243,14 +243,17 @@ var _ = Describe("Operator", func() {
 		var rc reconcile.Reconciler
 		var testNamespace = "test-namespace"
 		var testK8sVersion = k8sVersion_116
+		var testDriverImage = "fake-driver-image"
 
 		BeforeEach(func() {
 			c = fake.NewFakeClient()
-
-			rc = deployment.NewReconcileDeployment(c, pmemcontroller.ControllerOptions{
-				Namespace:  testNamespace,
-				K8sVersion: k8sVersion_116,
+			var err error
+			rc, err = deployment.NewReconcileDeployment(c, pmemcontroller.ControllerOptions{
+				Namespace:   testNamespace,
+				K8sVersion:  k8sVersion_116,
+				DriverImage: testDriverImage,
 			})
+			Expect(err).ShouldNot(HaveOccurred(), "create new reconciler")
 		})
 
 		AfterEach(func() {
@@ -284,7 +287,7 @@ var _ = Describe("Operator", func() {
 				Expect(c.Resources.Limits.Memory().String()).Should(BeEquivalentTo(api.DefaultControllerResourceMemory), "controller memory resource limit mismatch")
 				switch c.Name {
 				case "pmem-driver":
-					Expect(c.Image).Should(BeEquivalentTo(api.DefaultDriverImage), "mismatched driver image")
+					Expect(c.Image).Should(BeEquivalentTo(testDriverImage), "mismatched driver image")
 					Expect(c.Args).Should(ContainElement("-drivername="+api.DefaultDriverName), "mismatched driver name")
 					Expect(c.Args).Should(ContainElement(fmt.Sprintf("-v=%d", api.DefaultLogLevel)), "mismatched logging level")
 				case "provisioner":
@@ -307,7 +310,7 @@ var _ = Describe("Operator", func() {
 				Expect(c.Resources.Limits.Memory().String()).Should(BeEquivalentTo(api.DefaultNodeResourceMemory), "node memory resource limit mismatch")
 				switch c.Name {
 				case "pmem-driver":
-					Expect(c.Image).Should(BeEquivalentTo(api.DefaultDriverImage), "mismatched driver image")
+					Expect(c.Image).Should(BeEquivalentTo(testDriverImage), "mismatched driver image")
 					Expect(c.Args).Should(ContainElement("-drivername="+api.DefaultDriverName), "mismatched driver name")
 					Expect(c.Args).Should(ContainElement(fmt.Sprintf("-v=%d", api.DefaultLogLevel)), "mismatched logging level")
 				case "driver-registrar":
@@ -832,7 +835,7 @@ var _ = Describe("Operator", func() {
 			for _, c := range containers {
 				switch c.Name {
 				case "pmem-driver":
-					Expect(c.Image).Should(BeEquivalentTo(api.DefaultDriverImage), "mismatched pmem-csi driver image")
+					Expect(c.Image).Should(BeEquivalentTo(testDriverImage), "mismatched pmem-csi driver image")
 				case "provisioner":
 					Expect(c.Image).Should(BeEquivalentTo(api.DefaultProvisionerImage), "mismatched provisioner image")
 				case "driver-registar":
