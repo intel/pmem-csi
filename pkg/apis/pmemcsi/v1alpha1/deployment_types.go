@@ -180,22 +180,32 @@ const (
 	NodeSelector
 	PMEMPercentage
 	Labels
+	CACertificate
+	RegistryCertificate
+	RegistryKey
+	NodeControllerCertificate
+	NodeControllerKey
 )
 
 func (c DeploymentChange) String() string {
 	return map[DeploymentChange]string{
-		DriverName:          "driverName",
-		DriverMode:          "deviceMode",
-		DriverImage:         "image",
-		PullPolicy:          "imagePullPolicy",
-		LogLevel:            "logLevel",
-		ProvisionerImage:    "provisionerImage",
-		NodeRegistrarImage:  "nodeRegistrarImage",
-		ControllerResources: "controllerResources",
-		NodeResources:       "nodeResources",
-		NodeSelector:        "nodeSelector",
-		PMEMPercentage:      "pmemPercentage",
-		Labels:              "labels",
+		DriverName:                "driverName",
+		DriverMode:                "deviceMode",
+		DriverImage:               "image",
+		PullPolicy:                "imagePullPolicy",
+		LogLevel:                  "logLevel",
+		ProvisionerImage:          "provisionerImage",
+		NodeRegistrarImage:        "nodeRegistrarImage",
+		ControllerResources:       "controllerResources",
+		NodeResources:             "nodeResources",
+		NodeSelector:              "nodeSelector",
+		PMEMPercentage:            "pmemPercentage",
+		Labels:                    "labels",
+		CACertificate:             "caCert",
+		RegistryCertificate:       "registryCert",
+		RegistryKey:               "registryKey",
+		NodeControllerCertificate: "nodeControllerCert",
+		NodeControllerKey:         "nodeControllerKey",
 	}[c]
 }
 
