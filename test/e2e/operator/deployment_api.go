@@ -451,9 +451,9 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			ca, err := pmemtls.NewCA(nil, caKey)
 			Expect(err).ShouldNot(HaveOccurred(), "creatre ca")
 
-			regCert, err := ca.GenerateCertificate("pmem-registry", regKey)
+			regCert, err := ca.GenerateCertificate("pmem-registry", regKey.Public())
 			Expect(err).ShouldNot(HaveOccurred(), "sign registry key")
-			nodeControllerCert, err := ca.GenerateCertificate("pmem-node-controller", regKey)
+			nodeControllerCert, err := ca.GenerateCertificate("pmem-node-controller", nodeControllerKey.Public())
 			Expect(err).ShouldNot(HaveOccurred(), "sign node controller key")
 
 			dep := &unstructured.Unstructured{

@@ -25,12 +25,13 @@ func unixDialer(addr string, timeout time.Duration) (net.Conn, error) {
 }
 
 //Connect is a helper function to initiate a grpc client connection to server running at endpoint using tlsConfig
-func Connect(endpoint string, tlsConfig *tls.Config) (*grpc.ClientConn, error) {
+func Connect(endpoint string, tlsConfig *tls.Config, dialOptions ...grpc.DialOption) (*grpc.ClientConn, error) {
 	proto, address, err := parseEndpoint(endpoint)
 	if err != nil {
 		return nil, err
 	}
-	dialOptions := []grpc.DialOption{grpc.WithBackoffMaxDelay(time.Second)}
+
+	dialOptions = append(dialOptions, grpc.WithBackoffMaxDelay(time.Second))
 	if tlsConfig != nil {
 		dialOptions = append(dialOptions, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 	} else {
@@ -49,11 +50,10 @@ func Connect(endpoint string, tlsConfig *tls.Config) (*grpc.ClientConn, error) {
 	dialOptions = append(dialOptions, grpc.WithKeepaliveParams(keepalive.ClientParameters{PermitWithoutStream: true}))
 
 	return grpc.Dial(address, dialOptions...)
-
 }
 
 //NewServer is a helper function to start a grpc server at given endpoint and uses provided tlsConfig
-func NewServer(endpoint string, tlsConfig *tls.Config) (*grpc.Server, net.Listener, error) {
+func NewServer(endpoint string, tlsConfig *tls.Config, opts ...grpc.ServerOption) (*grpc.Server, net.Listener, error) {
 	proto, addr, err := parseEndpoint(endpoint)
 	if err != nil {
 		return nil, nil, err
@@ -70,12 +70,28 @@ func NewServer(endpoint string, tlsConfig *tls.Config) (*grpc.Server, net.Listen
 		return nil, nil, err
 	}
 
-	opts := []grpc.ServerOption{grpc.UnaryInterceptor(pmemcommon.LogGRPCServer)}
+	opts = append(opts, grpc.UnaryInterceptor(pmemcommon.LogGRPCServer))
 	if tlsConfig != nil {
 		opts = append(opts, grpc.Creds(credentials.NewTLS(tlsConfig)))
 	}
 
 	return grpc.NewServer(opts...), listener, nil
+}
+
+// ServerTLS prepares the TLS configuration needed for a server with given
+// encoded certficate and private key.
+func ServerTLS(caCert, cert, key []byte, peerName string) (*tls.Config, error) {
+	certPool := x509.NewCertPool()
+	if ok := certPool.AppendCertsFromPEM(caCert); !ok {
+		return nil, fmt.Errorf("failed to  append CA certificate to pool")
+	}
+
+	certificate, err := tls.X509KeyPair(cert, key)
+	if err != nil {
+		return nil, err
+	}
+
+	return serverConfig(certPool, &certificate, peerName), nil
 }
 
 // LoadServerTLS prepares the TLS configuration needed for a server with the given certificate files.
@@ -86,7 +102,10 @@ func LoadServerTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, err
 	if err != nil {
 		return nil, err
 	}
+	return serverConfig(certPool, peerCert, peerName), nil
+}
 
+func serverConfig(certPool *x509.CertPool, peerCert *tls.Certificate, peerName string) *tls.Config {
 	return &tls.Config{
 		GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
 			if info == nil {
@@ -143,16 +162,38 @@ func LoadServerTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, err
 			}
 			return config, nil
 		},
-	}, nil
+	}
 }
 
-//LoadClientTLS prepares the TLS configuration that can be used by a client while connecting to a server.
+// ClientTLS prepares the TLS configuration that can be used by a client while connecting to a server
+// with given encoded certificate and private key.
+// peerName must be provided when expecting the server to offer a certificate with that CommonName.
+func ClientTLS(caCert, cert, key []byte, peerName string) (*tls.Config, error) {
+	certPool := x509.NewCertPool()
+	if ok := certPool.AppendCertsFromPEM(caCert); !ok {
+		return nil, fmt.Errorf("failed to append CA certificate to pool")
+	}
+
+	certificate, err := tls.X509KeyPair(cert, key)
+	if err != nil {
+		return nil, err
+	}
+
+	return clientConfig(certPool, &certificate, peerName), nil
+}
+
+// LoadClientTLS prepares the TLS configuration that can be used by a client while connecting to a server.
 // peerName must be provided when expecting the server to offer a certificate with that CommonName. caFile, certFile, and keyFile are all optional.
 func LoadClientTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, error) {
 	certPool, peerCert, err := loadCertificate(caFile, certFile, keyFile)
 	if err != nil {
 		return nil, err
 	}
+
+	return clientConfig(certPool, peerCert, peerName), nil
+}
+
+func clientConfig(certPool *x509.CertPool, peerCert *tls.Certificate, peerName string) *tls.Config {
 	tlsConfig := &tls.Config{
 		MinVersion:    tls.VersionTLS12,
 		Renegotiation: tls.RenegotiateNever,
@@ -162,7 +203,7 @@ func LoadClientTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, err
 	if peerCert != nil {
 		tlsConfig.Certificates = append(tlsConfig.Certificates, *peerCert)
 	}
-	return tlsConfig, nil
+	return tlsConfig
 }
 
 func loadCertificate(caFile, certFile, keyFile string) (certPool *x509.CertPool, peerCert *tls.Certificate, err error) {

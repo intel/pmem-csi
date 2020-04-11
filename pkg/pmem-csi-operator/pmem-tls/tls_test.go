@@ -107,7 +107,7 @@ func TestPmemTLS(t *testing.T) {
 		prKey, err := pmemtls.NewPrivateKey()
 		assert.Empty(t, err, "Failed to create private key")
 
-		cert, err := ca.GenerateCertificate("Some name", prKey)
+		cert, err := ca.GenerateCertificate("Some name", prKey.Public())
 		assert.Empty(t, err, "Failed to sign certificate")
 		assert.NotEmpty(t, cert, "Generated certificate is empty")
 	})
@@ -131,7 +131,7 @@ func TestPmemTLS(t *testing.T) {
 		// CA signing truncates noano seconds
 		validity := time.Now().Add(time.Hour * 24 * 365).UTC().Truncate(time.Second)
 
-		cert, err := ca.GenerateCertificate("test-cert", prKey)
+		cert, err := ca.GenerateCertificate("test-cert", prKey.Public())
 		assert.Empty(t, err, "Failed to sign certificate")
 		assert.NotEmpty(t, cert, "Generated certificate is empty")
 

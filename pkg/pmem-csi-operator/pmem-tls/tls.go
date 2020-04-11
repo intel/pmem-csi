@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package pmemtls
 
 import (
+	"crypto"
 	"errors"
 	"math"
 	"time"
@@ -86,7 +87,7 @@ func NewCA(caCert *x509.Certificate, key *rsa.PrivateKey) (*CA, error) {
 			}
 		}
 
-		cert, err = newCACertificate(prKey)
+		cert, err = NewCACertificate(prKey)
 		if err != nil {
 			return nil, err
 		}
@@ -131,35 +132,20 @@ func (ca *CA) EncodedCertificate() []byte {
 	return EncodeCert(ca.cert)
 }
 
-// GenerateCertificate returns a new certificate signed for public key of given private key.
-func (ca *CA) GenerateCertificate(cn string, key *rsa.PrivateKey) (*x509.Certificate, error) {
-	max := new(big.Int).SetInt64(math.MaxInt64)
-	serial, err := rand.Int(rand.Reader, max)
-	if err != nil {
-		return nil, err
-	}
-
-	tmpl := &x509.Certificate{
-		Version:      tls.VersionTLS12,
-		SerialNumber: serial,
-		NotBefore:    ca.cert.NotBefore,
-		NotAfter:     time.Now().Add(time.Hour * 24 * 365),
-		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		Subject: pkix.Name{
-			CommonName: cn,
-		},
-	}
-
-	certBytes, err := x509.CreateCertificate(rand.Reader, tmpl, ca.cert, key.Public(), ca.prKey)
-	if err != nil {
-		return nil, err
-	}
-
-	return x509.ParseCertificate(certBytes)
+// GenerateCertificate returns a new certificate signed for given public key.
+func (ca *CA) GenerateCertificate(cn string, key crypto.PublicKey) (*x509.Certificate, error) {
+	return ca.generateCertificate(cn, ca.cert.NotBefore, time.Now().Add(time.Hour*24*365), key)
 }
 
-func newCACertificate(key *rsa.PrivateKey) (*x509.Certificate, error) {
+// GenerateCertificateWithDuration returns a new certificate signed for given public key.
+// The duration of this certificate is with in the given notBefore and notAfter bounds.
+// Intended use of this API is only by tests
+func (ca *CA) GenerateCertificateWithDuration(cn string, notBefore, notAfter time.Time, key crypto.PublicKey) (*x509.Certificate, error) {
+	return ca.generateCertificate(cn, notAfter, notAfter, key)
+}
+
+// NewCACertificate returns a self-signed certificate used as certificate authority
+func NewCACertificate(key *rsa.PrivateKey) (*x509.Certificate, error) {
 	max := new(big.Int).SetInt64(math.MaxInt64)
 	serial, err := rand.Int(rand.Reader, max)
 	if err != nil {
@@ -178,6 +164,33 @@ func newCACertificate(key *rsa.PrivateKey) (*x509.Certificate, error) {
 		},
 	}
 	certBytes, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, key.Public(), key)
+	if err != nil {
+		return nil, err
+	}
+
+	return x509.ParseCertificate(certBytes)
+}
+
+func (ca *CA) generateCertificate(cn string, notBefore, notAfter time.Time, key crypto.PublicKey) (*x509.Certificate, error) {
+	max := new(big.Int).SetInt64(math.MaxInt64)
+	serial, err := rand.Int(rand.Reader, max)
+	if err != nil {
+		return nil, err
+	}
+
+	tmpl := &x509.Certificate{
+		Version:      tls.VersionTLS12,
+		SerialNumber: serial,
+		NotBefore:    notBefore,
+		NotAfter:     notAfter,
+		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		Subject: pkix.Name{
+			CommonName: cn,
+		},
+	}
+
+	certBytes, err := x509.CreateCertificate(rand.Reader, tmpl, ca.cert, key, ca.prKey)
 	if err != nil {
 		return nil, err
 	}

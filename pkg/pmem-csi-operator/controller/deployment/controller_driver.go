@@ -8,11 +8,14 @@ package deployment
 
 import (
 	"crypto/rsa"
+	"crypto/tls"
 	"fmt"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/version"
+	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -74,6 +77,7 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 		r.deployments[d.Name] = d.Deployment
 
 		if err := d.deployObjects(r); err != nil {
+			d.Status.Phase = api.DeploymentPhaseFailed
 			return true, err
 		}
 
@@ -225,7 +229,7 @@ func (d *PmemCSIDriver) getDeploymentObjects(r *ReconcileDeployment) ([]runtime.
 			return nil, err
 		}
 
-		cert, err := ca.GenerateCertificate("pmem-registry", prKey)
+		cert, err := ca.GenerateCertificate("pmem-registry", prKey.Public())
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate registry certificate: %v", err)
 		}
@@ -241,11 +245,16 @@ func (d *PmemCSIDriver) getDeploymentObjects(r *ReconcileDeployment) ([]runtime.
 			return nil, err
 		}
 
-		cert, err = ca.GenerateCertificate("pmem-node-controller", prKey)
+		cert, err = ca.GenerateCertificate("pmem-node-controller", prKey.Public())
 		if err != nil {
 			return nil, err
 		}
 		ncCert = pmemtls.EncodeCert(cert)
+	} else {
+		// check if the provided certificates are valid
+		if err := validateCertificates(caCert, registryPrKey, registryCert, ncPrKey, ncCert); err != nil {
+			return nil, err
+		}
 	}
 
 	objects := []runtime.Object{
@@ -264,6 +273,42 @@ func (d *PmemCSIDriver) getDeploymentObjects(r *ReconcileDeployment) ([]runtime.
 		d.getNodeDaemonSet(),
 	}
 	return objects, nil
+}
+
+// validateCertificates ensures that the given keys and certificates are valid
+// to start PMEM-CSI driver by running a mutual-tls registry server and initiating
+// a tls client connection to that sever using the provided keys and certificates.
+// As we use mutual-tls, testing one server is enough to make sure that the provided
+// certificates works
+func validateCertificates(caCert, regKey, regCert, ncKey, ncCert []byte) error {
+	const endpoint = "0.0.0.0:10000"
+
+	// Registry server config
+	regCfg, err := pmemgrpc.ServerTLS(caCert, regCert, regKey, "pmem-node-controller")
+	if err != nil {
+		return err
+	}
+
+	clientCfg, err := pmemgrpc.ClientTLS(caCert, ncCert, ncKey, "pmem-registry")
+	if err != nil {
+		return err
+	}
+
+	// start a registry server
+	server := grpcserver.NewNonBlockingGRPCServer()
+	if err := server.Start("tcp://"+endpoint, regCfg); err != nil {
+		return err
+	}
+	defer server.ForceStop()
+
+	conn, err := tls.Dial("tcp", endpoint, clientCfg)
+	if err != nil {
+		return err
+	}
+
+	conn.Close()
+
+	return nil
 }
 
 func (d *PmemCSIDriver) getOwnerReference() metav1.OwnerReference {
