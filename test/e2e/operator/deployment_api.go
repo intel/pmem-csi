@@ -490,7 +490,9 @@ func toDeployment(dep *unstructured.Unstructured) (*api.Deployment, error) {
 	if err := deploy.Scheme.Convert(dep, deployment, nil); err != nil {
 		return nil, err
 	}
-	deployment.EnsureDefaults()
+	if err := deployment.EnsureDefaults(); err != nil {
+		return nil, fmt.Errorf("ensure defaults: %v", err)
+	}
 
 	return deployment, nil
 }

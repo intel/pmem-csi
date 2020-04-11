@@ -52,6 +52,7 @@ func TestDeploymentController(t *testing.T) {
 type pmemDeployment struct {
 	name                                                string
 	driverName                                          string
+	deviceMode                                          string
 	logLevel                                            uint16
 	image, pullPolicy, provisionerImage, registrarImage string
 	controllerCPU, controllerMemory                     string
@@ -93,6 +94,7 @@ func getDeployment(d *pmemDeployment, c client.Client) runtime.Object {
 	dep.Spec = api.DeploymentSpec{}
 	spec := &dep.Spec
 	spec.DriverName = d.driverName
+	spec.DeviceMode = api.DeviceMode(d.deviceMode)
 	spec.LogLevel = d.logLevel
 	spec.Image = d.image
 	spec.PullPolicy = corev1.PullPolicy(d.pullPolicy)
@@ -411,6 +413,20 @@ var _ = Describe("Operator", func() {
 			testReconcilePhase(rc, c, d1.name, false, false, api.DeploymentPhaseRunning)
 			testReconcilePhase(rc, c, d2.name, false, false, api.DeploymentPhaseRunning)
 
+		})
+
+		It("shall not allow invalid device mode", func() {
+			d := &pmemDeployment{
+				name:       "test-driver-modes",
+				deviceMode: "foobar",
+			}
+
+			dep := getDeployment(d, nil)
+
+			err := c.Create(context.TODO(), dep)
+			Expect(err).Should(BeNil(), "failed to create deployment")
+			// Deployment should failed with an error
+			testReconcilePhase(rc, c, d.name, true, false, api.DeploymentPhaseFailed)
 		})
 
 		It("shall not allow multiple deployments with same driver name", func() {
