@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package v1alpha1
 
 import (
+	"fmt"
 	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
@@ -210,7 +211,7 @@ func (c DeploymentChange) String() string {
 }
 
 // EnsureDefaults make sure that the deployment object has all defaults set properly
-func (d *Deployment) EnsureDefaults() {
+func (d *Deployment) EnsureDefaults() error {
 	if d.Spec.DriverName == "" {
 		d.Spec.DriverName = DefaultDriverName
 	}
@@ -241,8 +242,15 @@ func (d *Deployment) EnsureDefaults() {
 
 	/* Node Defaults */
 
-	if d.Spec.DeviceMode == "" {
+	// Validate the given driver mode.
+	// In a realistic case this check might not needed as it should be
+	// handled by JSON schema as we defined deviceMode as enumeration.
+	switch d.Spec.DeviceMode {
+	case "":
 		d.Spec.DeviceMode = DefaultDeviceMode
+	case DeviceModeDirect, DeviceModeLVM:
+	default:
+		return fmt.Errorf("invalid device mode %q", d.Spec.DeviceMode)
 	}
 
 	if d.Spec.NodeRegistrarImage == "" {
@@ -265,6 +273,8 @@ func (d *Deployment) EnsureDefaults() {
 	if d.Spec.PMEMPercentage == 0 {
 		d.Spec.PMEMPercentage = DefaultPMEMPercentage
 	}
+
+	return nil
 }
 
 // Compare compares 'other' deployment spec with current deployment and returns

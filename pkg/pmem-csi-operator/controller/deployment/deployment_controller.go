@@ -119,10 +119,7 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{Requeue: requeue, RequeueAfter: requeueDelayOnError}, err
 	}
 
-	deployment.EnsureDefaults()
 	d := &PmemCSIDriver{deployment, r.namespace}
-
-	requeue, err = d.Reconcile(r)
 
 	// update status
 	defer func() {
@@ -132,6 +129,13 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 				d.Deployment.Status.Phase, d.Name, statusErr)
 		}
 	}()
+
+	if err := deployment.EnsureDefaults(); err != nil {
+		d.Deployment.Status.Phase = pmemcsiv1alpha1.DeploymentPhaseFailed
+		return reconcile.Result{}, err
+	}
+
+	requeue, err = d.Reconcile(r)
 
 	klog.Infof("Requeue: %t, error: %v", requeue, err)
 
