@@ -17,6 +17,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/kubernetes/test/e2e/framework"
@@ -513,6 +514,40 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 			validateDriverDeployment(f, d, deployment)
 		})
+
+		It("driver deployment shall be running even after operator exit", func() {
+			dep := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": api.SchemeGroupVersion.String(),
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name": "test-deployment-operator-exit",
+					},
+					"spec": map[string]interface{}{
+						"driverName": "operator-exit.com",
+						"image":      dummyImage,
+					},
+				},
+			}
+
+			deployment, err := toDeployment(dep)
+			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
+
+			deploy.CreateDeploymentCR(f, dep)
+
+			defer deploy.DeleteDeploymentCR(f, deployment.Name)
+			validateDriverDeployment(f, d, deployment)
+
+			// Stop the operator
+			deleteOperatorDeployment(f)
+
+			// Ensure that the driver is running consistently
+			Consistently(func() bool {
+				By("validating driver afater operator deletion")
+				validateDriverDeployment(f, d, deployment)
+				return true
+			}, "1m", "20s", "driver validation failure")
+		})
 	})
 })
 
@@ -721,4 +756,32 @@ func findOperatorDeployment(f *framework.Framework) (*appsv1.Deployment, error) 
 	}
 
 	return dep, nil
+}
+
+// deleteOperatorDeployment removes the operator deployment object
+func deleteOperatorDeployment(f *framework.Framework) error {
+	dep, err := findOperatorDeployment(f)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	Eventually(func() bool {
+		framework.Logf("Deleting the operator '%s/%s' running", dep.Namespace, dep.Name)
+		err = f.ClientSet.AppsV1().Deployments(dep.Namespace).Delete(dep.Name, nil)
+		if err == nil {
+			// Deletion success, but wait till it's get removed from API server
+			return false
+		}
+		if errors.IsNotFound(err) {
+			return true
+		}
+
+		framework.Logf("Error while get operator deployment '%s/%s': %v", dep.Namespace, dep.Name, err)
+		return false
+	}, "3m", "1s").Should(BeTrue(), "delete operator deployment '%s/%s'", dep.Namespace, dep.Name)
+
+	return nil
 }
