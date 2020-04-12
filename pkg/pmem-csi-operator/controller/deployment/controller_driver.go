@@ -798,7 +798,7 @@ func (d *PmemCSIDriver) getControllerContainer() corev1.Container {
 func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 	bidirectional := corev1.MountPropagationBidirectional
 	true := true
-	return corev1.Container{
+	c := corev1.Container{
 		Name:            "pmem-driver",
 		Image:           d.Spec.Image,
 		ImagePullPolicy: d.Spec.PullPolicy,
@@ -861,6 +861,16 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 			Privileged: &true,
 		},
 	}
+
+	// Driver in 'direct' mode requires /sys mounting
+	if d.Spec.DeviceMode == api.DeviceModeDirect {
+		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
+			Name:      "sys-dir",
+			MountPath: "/sys",
+		})
+	}
+
+	return c
 }
 
 func (d *PmemCSIDriver) getProvisionerContainer() corev1.Container {
