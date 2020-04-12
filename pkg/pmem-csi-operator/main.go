@@ -15,6 +15,7 @@ import (
 	"k8s.io/klog"
 
 	"github.com/intel/pmem-csi/pkg/apis"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	"github.com/intel/pmem-csi/pkg/k8sutil"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment"
@@ -112,6 +113,24 @@ func Main() int {
 	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
 		pmemcommon.ExitError("Manager exited non-zero: ", err)
 		return 1
+	}
+
+	list := &api.DeploymentList{}
+	if err := mgr.GetClient().List(context.TODO(), list); err != nil {
+		pmemcommon.ExitError("failed to get deployment list: %v", err)
+		return 1
+	}
+
+	activeList := []string{}
+	for _, d := range list.Items {
+		if d.DeletionTimestamp == nil {
+			activeList = append(activeList, d.Name)
+		}
+	}
+
+	if len(activeList) != 0 {
+		klog.Infof("There are active PMEM-CSI deployments (%v), hence not deleting the CRD.", activeList)
+		return 0
 	}
 
 	if err := deployment.DeleteCRD(cfg); err != nil {

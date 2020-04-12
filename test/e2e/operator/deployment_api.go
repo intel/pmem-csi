@@ -9,6 +9,7 @@ package operator
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
@@ -16,6 +17,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/kubernetes/test/e2e/framework"
@@ -29,8 +31,19 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 	// those which did not already install the driver.
 	return d.HasOperator && !d.HasDriver
 }, func(d *deploy.Deployment) {
+	var c *deploy.Cluster
 
 	f := framework.NewDefaultFramework("operator")
+	// test/e2e/deploy.go is using default namespace for deploying operator.
+	// So we could skip default namespace creation/deletion steps
+	f.SkipNamespaceCreation = true
+
+	BeforeEach(func() {
+		Expect(f).ShouldNot(BeNil(), "framework init")
+		cluster, err := deploy.NewCluster(f.ClientSet, f.DynamicClient)
+		Expect(err).ShouldNot(HaveOccurred(), "new cluster")
+		c = cluster
+	})
 
 	Context("deployment", func() {
 		// We use intentionally use this non-existing driver image
@@ -113,7 +126,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			deploy.CreateDeploymentCR(f, dep)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 
-			operatorPod, err := findOperatorPod(f)
+			operatorPod, err := findOperatorPod(c, d)
 			Expect(err).ShouldNot(HaveOccurred(), "find operator deployment")
 
 			// operator image should be the driver image
@@ -512,6 +525,42 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 			validateDriverDeployment(f, d, deployment)
 		})
+
+		It("driver deployment shall be running even after operator exit", func() {
+			dep := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": api.SchemeGroupVersion.String(),
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name": "test-deployment-operator-exit",
+					},
+					"spec": map[string]interface{}{
+						"driverName": "operator-exit.com",
+						"image":      dummyImage,
+					},
+				},
+			}
+
+			deployment, err := toDeployment(dep)
+			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
+
+			deploy.CreateDeploymentCR(f, dep)
+
+			defer deploy.DeleteDeploymentCR(f, deployment.Name)
+			validateDriverDeployment(f, d, deployment)
+
+			// Stop the operator
+			stopOperator(c, d)
+			// restore the deployment so that next test should  not effect
+			defer startOperator(c, d)
+
+			// Ensure that the driver is running consistently
+			Consistently(func() bool {
+				By("validating driver after operator deletion")
+				validateDriverDeployment(f, d, deployment)
+				return true
+			}, "1m", "20s", "driver validation failure")
+		})
 	})
 })
 
@@ -702,15 +751,68 @@ func validateDeploymentFailure(f *framework.Framework, name string) {
 
 // findOperatorPod checks whether there is a PMEM-CSI operator
 // installation in the cluster and returns the found operator pod.
-func findOperatorPod(f *framework.Framework) (*corev1.Pod, error) {
-	c, err := deploy.NewCluster(f.ClientSet, f.DynamicClient)
-	if err != nil {
-		return nil, fmt.Errorf("error at create new cluster: %v", err)
-	}
-	d, err := deploy.FindDeployment(c)
-	if err != nil {
-		return nil, fmt.Errorf("find operator deployment: %v", err)
-	}
-
+func findOperatorPod(c *deploy.Cluster, d *deploy.Deployment) (*corev1.Pod, error) {
 	return deploy.WaitForOperator(c, d.Namespace), nil
+}
+
+// stopOperator ensures operator deployment replica counter == 0 and the
+// operator pod gets deleted
+func stopOperator(c *deploy.Cluster, d *deploy.Deployment) error {
+	By("Decrease operator deployment replicas to 0")
+	Eventually(func() bool {
+		dep, err := c.ClientSet().AppsV1().Deployments(d.Namespace).Get(context.Background(), "pmem-csi-operator", metav1.GetOptions{})
+		if err != nil && !errors.IsNotFound(err) {
+			return false
+		}
+
+		By(fmt.Sprintf("Replicas : %d", *dep.Spec.Replicas))
+		if *dep.Spec.Replicas == 0 {
+			return true
+		}
+
+		*dep.Spec.Replicas = 0
+		_, err = c.ClientSet().AppsV1().Deployments(dep.Namespace).Update(context.Background(), dep, metav1.UpdateOptions{})
+		deploy.LogError(err, "failed update operator's replica counter: %v", err)
+		return false
+	}, "3m", "1s").Should(BeTrue(), "set operator deployment replicas to 0")
+
+	By("Ensure the operator pod deleted")
+
+	Eventually(func() bool {
+		_, err := c.GetAppInstance("pmem-csi-operator", "", d.Namespace)
+		deploy.LogError(err, "get operator error: %v, will retry...", err)
+		return err != nil && strings.HasPrefix(err.Error(), "no app")
+	}, "3m", "1s").Should(BeTrue(), "delete operator pod")
+
+	By("Operator pod deleted!")
+
+	return nil
+}
+
+// startOperator ensures the operator deployment counter == 1 and the operator pod
+// is in running state
+func startOperator(c *deploy.Cluster, d *deploy.Deployment) {
+	Eventually(func() bool {
+		dep, err := c.ClientSet().AppsV1().Deployments(d.Namespace).Get(context.Background(), "pmem-csi-operator", metav1.GetOptions{})
+
+		deploy.LogError(err, "Failed to get error: %v", err)
+		if err != nil {
+			return false
+		}
+
+		By(fmt.Sprintf("Replicas : %d", *dep.Spec.Replicas))
+		if *dep.Spec.Replicas == 1 {
+			return true
+		}
+
+		*dep.Spec.Replicas = 1
+		_, err = c.ClientSet().AppsV1().Deployments(dep.Namespace).Update(context.Background(), dep, metav1.UpdateOptions{})
+		deploy.LogError(err, "failed update operator's replication counter: %v", err)
+
+		return false
+	}, "3m", "1s").Should(BeTrue(), "increase operator deployment replicas to 1")
+
+	By("Ensure operator pod is ready")
+	deploy.WaitForOperator(c, d.Namespace)
+	By("Operator is restored!")
 }
