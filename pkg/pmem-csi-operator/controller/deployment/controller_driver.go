@@ -10,6 +10,8 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"fmt"
+	"strconv"
+	"strings"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
@@ -20,6 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog"
@@ -55,8 +58,8 @@ func (d *PmemCSIDriver) checkIfNameClash(r *ReconcileDeployment) *api.Deployment
 func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 
 	changes := map[api.DeploymentChange]struct{}{}
-	oldDeployment, ok := r.deployments[d.Name]
-	if ok {
+	oldDeployment, foundInCache := r.deployments[d.Name]
+	if foundInCache {
 		changes = d.Compare(oldDeployment)
 		// We should not trust the deployment status, as it might be tampered.
 		// Use existing objects Status instead.
@@ -88,7 +91,18 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 		// Deployment successfull, so no more reconcile needed for this deployment
 		return false, nil
 	case api.DeploymentPhaseRunning:
-		requeue, err := d.reconcileDeploymentChanges(r, oldDeployment, changes)
+		if !foundInCache {
+			// Possibly that operator restarted, so we can't assume that
+			// everything is up-to-date. Check running deployment to determine
+			// if any changes are needed
+			oldDeployment, err := d.buildFromPreDeployed(r)
+			if err != nil {
+				return true, err
+			}
+
+			changes = d.Compare(oldDeployment)
+		}
+		requeue, err := d.reconcileDeploymentChanges(r, oldDeployment, changes, foundInCache)
 		if err == nil {
 			// If everything ok, update local cache
 			r.deployments[d.Name] = d.Deployment
@@ -98,7 +112,10 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 	return true, nil
 }
 
-func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, existing *api.Deployment, changes map[api.DeploymentChange]struct{}) (bool, error) {
+// reconcileDeploymentChanges examines the changes and updates the appropriate objects.
+// Reverts deployment if and incompatible found compareted to existing deployment, such as deviceMode, driverName, pmemSpace.
+// In case of foundInCache is false, all the objects gets refreshed/updated.
+func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, existing *api.Deployment, changes map[api.DeploymentChange]struct{}, foundInCache bool) (bool, error) {
 
 	if len(changes) == 0 {
 		klog.Infof("No changes detected in deployment")
@@ -110,8 +127,15 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 	updateController := false
 	updateNodeDriver := false
 	updateDeployment := false
+	updateAll := false // Update all objects of the deployment
 	requeue := false
 	var err error
+
+	if !foundInCache {
+		// Running deployment not found in cache, possibly result of operator
+		// restart, refresh all objects.
+		updateAll = true
+	}
 
 	for c := range changes {
 		switch c {
@@ -161,18 +185,33 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 		}
 	}
 
-	if updateController {
-		klog.Infof("Updating controller driver for deployment %q", d.Name)
-		if e := r.UpdateOrCreate(d.getControllerStatefulSet()); e != nil {
-			requeue = true
-			err = e
+	// Force update all deployment objects
+	if updateAll {
+		klog.Infof("Updating all objects for deployment %q", d.Name)
+		objs, err := d.getDeploymentObjects(r)
+		if err != nil {
+			return true, err
 		}
-	}
-	if updateNodeDriver {
-		klog.Infof("Updating node driver for deployment %q", d.Name)
-		if e := r.UpdateOrCreate(d.getNodeDaemonSet()); err != nil {
-			requeue = true
-			err = e
+		for _, obj := range objs {
+			if e := r.UpdateOrCreate(obj); e != nil {
+				requeue = true
+				err = e
+			}
+		}
+	} else {
+		if updateController {
+			klog.Infof("Updating controller driver for deployment %q", d.Name)
+			if e := r.UpdateOrCreate(d.getControllerStatefulSet()); e != nil {
+				requeue = true
+				err = e
+			}
+		}
+		if updateNodeDriver {
+			klog.Infof("Updating node driver for deployment %q", d.Name)
+			if e := r.UpdateOrCreate(d.getNodeDaemonSet()); err != nil {
+				requeue = true
+				err = e
+			}
 		}
 	}
 
@@ -1038,4 +1077,134 @@ func joinMaps(left, right map[string]string) map[string]string {
 		result[key] = value
 	}
 	return result
+}
+
+// buildFromPreDeployed builds a new Deployment object by fetching details
+// from existing deplyment sub-resources.
+func (d *PmemCSIDriver) buildFromPreDeployed(r *ReconcileDeployment) (*api.Deployment, error) {
+	out := &api.Deployment{}
+
+	out.TypeMeta = d.TypeMeta
+	out.ObjectMeta = d.ObjectMeta
+	out.Spec.DriverName = d.Spec.DriverName
+
+	isError := func(err error) bool {
+		// FIXME(avalluri): Missing object(s) created in initializing phase could be recreated
+		// in reconcile loop. So we do not treat this as error.
+		// But this is not _true_ for object created in pre-initializing phase.
+		// Say, d.Spec.Staus.Phase is 'Running', but the created Secrets for that
+		// deployment are deleted is an error case should be fixed.
+		if err != nil && !errors.IsNotFound(err) {
+			return true
+		}
+		return false
+	}
+
+	//
+	// Reload Secrets
+	//
+	sec := &corev1.Secret{
+		ObjectMeta: d.getObjectMeta(d.Name + "-pmem-ca"),
+	}
+	if err := r.Get(sec); isError(err) {
+		return nil, err
+	}
+	out.Spec.CACert = sec.Data[corev1.TLSCertKey]
+
+	sec = &corev1.Secret{
+		ObjectMeta: d.getObjectMeta(d.Name + "-pmem-registry"),
+	}
+	if err := r.Get(sec); isError(err) {
+		return nil, err
+	}
+	out.Spec.RegistryPrivateKey = sec.Data[corev1.TLSPrivateKeyKey]
+	out.Spec.RegistryCert = sec.Data[corev1.TLSCertKey]
+
+	sec = &corev1.Secret{
+		ObjectMeta: d.getObjectMeta(d.Name + "-pmem-node-controller"),
+	}
+	if err := r.Get(sec); isError(err) {
+		return nil, err
+	}
+	out.Spec.NodeControllerPrivateKey = sec.Data[corev1.TLSPrivateKeyKey]
+	out.Spec.NodeControllerCert = sec.Data[corev1.TLSCertKey]
+
+	//
+	// Reload controller state
+	//
+	ss := &appsv1.StatefulSet{
+		ObjectMeta: d.getObjectMeta(d.Name + "-controller"),
+	}
+	if err := r.Get(ss); isError(err) {
+		return nil, err
+	}
+
+	for _, c := range ss.Spec.Template.Spec.Containers {
+		switch c.Name {
+		case "pmem-driver":
+			out.Spec.Image = c.Image
+			out.Spec.PullPolicy = c.ImagePullPolicy
+			out.Spec.ControllerResources = c.Resources.DeepCopy()
+			args := argsToMap(c.Args)
+			if logLevelStr, ok := args["-v"]; ok {
+				level, err := strconv.ParseUint(logLevelStr, 10, 16)
+				if err != nil {
+					klog.Warningf("failed to parse loglevel(%s) argument: %v", logLevelStr, err)
+				} else {
+					out.Spec.LogLevel = uint16(level)
+				}
+			}
+		case "provisioner":
+			out.Spec.ProvisionerImage = c.Image
+		}
+	}
+
+	//
+	// Reload node state
+	//
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: d.getObjectMeta(d.Name + "-node"),
+	}
+	if err := r.Get(ds); isError(err) {
+		return nil, err
+	}
+
+	out.Spec.NodeSelector = ds.Spec.Template.Spec.NodeSelector
+	for _, c := range ds.Spec.Template.Spec.Containers {
+		switch c.Name {
+		case "pmem-driver":
+			args := argsToMap(c.Args)
+			out.Spec.DeviceMode = api.DeviceMode(args["-deviceManager"])
+			out.Spec.NodeResources = c.Resources.DeepCopy()
+		case "registrar":
+			out.Spec.NodeRegistrarImage = c.Image
+		}
+	}
+
+	for _, c := range ds.Spec.Template.Spec.InitContainers {
+		if c.Name == "pmem-ns-init" {
+			args := argsToMap(c.Args)
+			if fsdaxStr, ok := args["--useforfsdax"]; ok {
+				useOfFsdax, err := strconv.ParseUint(fsdaxStr, 10, 16)
+				if err != nil {
+					klog.Warningf("failed to parse use-of-fsdax(%s) argument: %v", fsdaxStr, err)
+				} else {
+					out.Spec.PMEMPercentage = uint16(useOfFsdax)
+				}
+			}
+		}
+	}
+
+	out.EnsureDefaults(r.containerImage)
+
+	return out, nil
+}
+
+func argsToMap(args []string) map[string]string {
+	argsMap := map[string]string{}
+	for _, arg := range args {
+		vals := strings.SplitN(arg, "=", 2)
+		argsMap[vals[0]] = vals[1]
+	}
+	return argsMap
 }
