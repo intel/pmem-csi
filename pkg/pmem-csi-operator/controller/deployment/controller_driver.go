@@ -10,6 +10,8 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"fmt"
+	"strconv"
+	"strings"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
@@ -20,6 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog"
@@ -38,7 +41,7 @@ type PmemCSIDriver struct {
 }
 
 // checkIfNameClash check if d.Spec.DriverName is not clashing with any of the
-// known deploments by the reconciler. If clash found reutrns the reference of
+// known deploments by the reconciler. If clash found returns the reference of
 // that deployment else nil.
 func (d *PmemCSIDriver) checkIfNameClash(r *ReconcileDeployment) *api.Deployment {
 	for _, dep := range r.deployments {
@@ -53,14 +56,22 @@ func (d *PmemCSIDriver) checkIfNameClash(r *ReconcileDeployment) *api.Deployment
 
 // Reconcile reconciles the driver deployment
 func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
-
 	changes := map[api.DeploymentChange]struct{}{}
-	oldDeployment, ok := r.deployments[d.Name]
-	if ok {
+
+	oldDeployment, foundInCache := r.deployments[d.Name]
+	if foundInCache {
 		changes = d.Compare(oldDeployment)
 		// We should not trust the deployment status, as it might be tampered.
 		// Use existing objects Status instead.
 		oldDeployment.Status.DeepCopyInto(&d.Status)
+	} else {
+		var err error
+		// Possibly that operator restarted, check if any conflicting changes
+		// to deployment
+		changes, err = d.changesFromPreDeployed(r)
+		if err != nil {
+			return true, err
+		}
 	}
 
 	klog.Infof("Deployment: %q, state: %q", d.Name, d.Status.Phase)
@@ -75,45 +86,44 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 		}
 		// Update local cache so that we can catch if any change in deployment
 		r.deployments[d.Name] = d.Deployment
+	}
 
-		if err := d.deployObjects(r); err != nil {
-			d.Status.Phase = api.DeploymentPhaseFailed
-			return true, err
-		}
+	// Deployment successfull, so no more reconcile needed for this deployment
+	requeue, err := d.reconcileDeploymentChanges(r, oldDeployment, changes, foundInCache)
+	if err == nil {
+		// If everything ok, update local cache
+		r.deployments[d.Name] = d.Deployment
 
 		// TODO: wait for functional driver before entering "running" phase.
 		// For now we go straight to it.
-
 		d.Status.Phase = api.DeploymentPhaseRunning
-		// Deployment successfull, so no more reconcile needed for this deployment
-		return false, nil
-	case api.DeploymentPhaseRunning:
-		requeue, err := d.reconcileDeploymentChanges(r, oldDeployment, changes)
-		if err == nil {
-			// If everything ok, update local cache
-			r.deployments[d.Name] = d.Deployment
-		}
-		return requeue, err
+	} else if d.Status.Phase == api.DeploymentPhaseNew {
+		d.Status.Phase = api.DeploymentPhaseFailed
 	}
-	return true, nil
+
+	return requeue, err
 }
 
-func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, existing *api.Deployment, changes map[api.DeploymentChange]struct{}) (bool, error) {
-
-	if len(changes) == 0 {
-		klog.Infof("No changes detected in deployment")
-		return false, nil
-	}
+// reconcileDeploymentChanges examines the changes and updates the appropriate objects.
+// Reverts deployment if and incompatible found compareted to existing deployment, such as deviceMode, driverName, pmemSpace.
+// In case of foundInCache is false, all the objects gets refreshed/updated.
+func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, existing *api.Deployment, changes map[api.DeploymentChange]struct{}, foundInCache bool) (bool, error) {
 
 	klog.Infof("Changes detected: %v", changes)
 
 	updateController := false
 	updateNodeDriver := false
 	updateDeployment := false
-	requeue := false
-	var err error
+	updateAll := false // Update all objects of the deployment
+
+	if !foundInCache {
+		// Running deployment not found in cache, possibly result of operator
+		// restart, refresh all objects.
+		updateAll = true
+	}
 
 	for c := range changes {
+		var err error
 		switch c {
 		case api.ControllerResources, api.ProvisionerImage:
 			updateController = true
@@ -149,34 +159,80 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 			updateDeployment = true
 			err = fmt.Errorf("changing %q of a running deployment %q is not allowed", c, d.Name)
 		}
+
+		if err != nil {
+			klog.Warningf("Incompatible change of deployment occurred: %v", err)
+		}
 	}
 
 	// Reject changes which cannot be applied
 	// by updating the deployment object
 	if updateDeployment {
 		klog.Infof("Updating deployment %q", d.Name)
-		if e := r.Update(d.Deployment); e != nil {
-			requeue = true
-			err = e
+		if err := r.Update(d.Deployment); err != nil {
+			return true, err
 		}
 	}
 
-	if updateController {
-		klog.Infof("Updating controller driver for deployment %q", d.Name)
-		if e := r.UpdateOrCreate(d.getControllerStatefulSet()); e != nil {
-			requeue = true
-			err = e
+	objects := []runtime.Object{}
+
+	// Force update all deployment objects
+	if updateAll {
+		klog.Infof("Updating all objects for deployment %q", d.Name)
+		objs, err := d.getDeploymentObjects(r)
+		if err != nil {
+			return true, err
 		}
-	}
-	if updateNodeDriver {
-		klog.Infof("Updating node driver for deployment %q", d.Name)
-		if e := r.UpdateOrCreate(d.getNodeDaemonSet()); err != nil {
-			requeue = true
-			err = e
+		objects = append(objects, objs...)
+	} else {
+		if updateController {
+			klog.Infof("Updating controller driver for deployment %q", d.Name)
+			objects = append(objects, d.getControllerStatefulSet())
+		}
+		if updateNodeDriver {
+			klog.Infof("Updating node driver for deployment %q", d.Name)
+			objects = append(objects, d.getNodeDaemonSet())
 		}
 	}
 
-	return requeue, err
+	for _, obj := range objects {
+		// Services needs special treatment as they have some immutable field(s)
+		// So, we cannot refresh the existing one with new service object.
+		if s, ok := obj.(*corev1.Service); ok {
+			existingService := &corev1.Service{
+				TypeMeta:   s.TypeMeta,
+				ObjectMeta: s.ObjectMeta,
+			}
+			err := r.Get(existingService)
+			if err != nil {
+				if !errors.IsNotFound(err) {
+					return true, err
+				}
+				// Create the missing service now
+				klog.Infof("'%s' service not found, creating new one", s.GetName())
+				if err := r.Create(s); err != nil {
+					return true, err
+				}
+				continue
+			}
+
+			existingService.Spec.Ports = []corev1.ServicePort{}
+			for _, p := range s.Spec.Ports {
+				existingService.Spec.Ports = append(existingService.Spec.Ports, p)
+			}
+			existingService.Spec.Selector = s.Spec.Selector
+			klog.Infof("updating service '%s' service ports and selector", s.GetName())
+			if err := r.Update(existingService); err != nil {
+				return true, err
+			}
+		} else {
+			if err := r.UpdateOrCreate(obj); err != nil {
+				return true, err
+			}
+		}
+	}
+
+	return false, nil
 }
 
 func (d *PmemCSIDriver) deployObjects(r *ReconcileDeployment) error {
@@ -1038,4 +1094,60 @@ func joinMaps(left, right map[string]string) map[string]string {
 		result[key] = value
 	}
 	return result
+}
+
+// changesFromPreDeployed checks if any conflicting changes observed
+// in deployment compared to pre-deployed driver for that deployment if any.
+func (d *PmemCSIDriver) changesFromPreDeployed(r *ReconcileDeployment) (map[api.DeploymentChange]struct{}, error) {
+	changes := map[api.DeploymentChange]struct{}{}
+
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: d.getObjectMeta(d.Name + "-node"),
+	}
+	if err := r.Get(ds); err != nil {
+		if errors.IsNotFound(err) {
+			return changes, nil
+		}
+		return nil, err
+	}
+
+	for _, c := range ds.Spec.Template.Spec.Containers {
+		if c.Name == "pmem-driver" {
+			args := argsToMap(c.Args)
+
+			if args["-driverName"] != d.Spec.DriverName {
+				changes[api.DriverName] = struct{}{}
+			}
+			if api.DeviceMode(args["-deviceManager"]) != d.Spec.DeviceMode {
+				changes[api.DriverMode] = struct{}{}
+			}
+			break
+		}
+	}
+
+	for _, c := range ds.Spec.Template.Spec.InitContainers {
+		if c.Name == "pmem-ns-init" {
+			args := argsToMap(c.Args)
+			if fsdaxStr, ok := args["--useforfsdax"]; ok {
+				useOfFsdax, err := strconv.ParseUint(fsdaxStr, 10, 16)
+				if err != nil {
+					klog.Warningf("failed to parse use-of-fsdax(%s) argument: %v", fsdaxStr, err)
+				} else if d.Spec.PMEMPercentage != uint16(useOfFsdax) {
+					changes[api.PMEMPercentage] = struct{}{}
+				}
+			}
+			break
+		}
+	}
+
+	return changes, nil
+}
+
+func argsToMap(args []string) map[string]string {
+	argsMap := map[string]string{}
+	for _, arg := range args {
+		vals := strings.SplitN(arg, "=", 2)
+		argsMap[vals[0]] = vals[1]
+	}
+	return argsMap
 }
