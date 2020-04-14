@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/intel/pmem-csi/pkg/pmem-csi-driver"
+	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
 	"github.com/intel/pmem-csi/pkg/registryserver"
@@ -44,7 +44,7 @@ var _ = Describe("pmem registry", func() {
 
 	var (
 		tlsConfig          *tls.Config
-		nbServer           *pmemcsidriver.NonBlockingGRPCServer
+		nbServer           *grpcserver.NonBlockingGRPCServer
 		registryClientConn *grpc.ClientConn
 		registryClient     registry.RegistryClient
 		registryServer     *registryserver.RegistryServer
@@ -61,7 +61,7 @@ var _ = Describe("pmem registry", func() {
 		tlsConfig, err = pmemgrpc.LoadServerTLS(caFile, certFile, keyFile, "pmem-node-controller")
 		Expect(err).NotTo(HaveOccurred())
 
-		nbServer = pmemcsidriver.NewNonBlockingGRPCServer()
+		nbServer = grpcserver.NewNonBlockingGRPCServer()
 		err = nbServer.Start(registryServerEndpoint, tlsConfig, registryServer)
 		Expect(err).NotTo(HaveOccurred())
 		_, err = os.Stat(registryServerSocketFile)

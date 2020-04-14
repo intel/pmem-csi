@@ -8,6 +8,7 @@ package pmemcsidriver
 
 import (
 	csi "github.com/container-storage-interface/spec/lib/go/csi"
+	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
@@ -18,7 +19,7 @@ type identityServer struct {
 	pluginCaps []*csi.PluginCapability
 }
 
-var _ PmemService = &identityServer{}
+var _ grpcserver.PmemService = &identityServer{}
 
 func NewIdentityServer(name, version string) (*identityServer, error) {
 	return &identityServer{
