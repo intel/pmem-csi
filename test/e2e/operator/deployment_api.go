@@ -700,6 +700,10 @@ func validateDriverDeployment(f *framework.Framework, d *deploy.Deployment, expe
 	Expect(err).ShouldNot(HaveOccurred(), "missing controller service")
 	Expect(len(svc.Spec.Ports)).ShouldNot(BeZero(), "controller service should have a port defined")
 
+	svc, err = f.ClientSet.CoreV1().Services(d.Namespace).Get(expected.Name+"-metrics", metav1.GetOptions{})
+	Expect(err).ShouldNot(HaveOccurred(), "missing metrics service")
+	Expect(len(svc.Spec.Ports)).ShouldNot(BeZero(), "metrics service should have a port defined")
+
 	// should have a service account
 	sa, err := f.ClientSet.CoreV1().ServiceAccounts(d.Namespace).Get(saName, metav1.GetOptions{})
 	Expect(err).ShouldNot(HaveOccurred(), "controller service account")

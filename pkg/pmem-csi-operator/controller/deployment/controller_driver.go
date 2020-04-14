@@ -24,6 +24,7 @@ import (
 
 const (
 	controllerServicePort = 10000
+	controllerMetricsPort = 10010
 	nodeControllerPort    = 10001
 )
 
@@ -286,6 +287,7 @@ func (d *PmemCSIDriver) getDeploymentObjects(r *ReconcileDeployment) []runtime.O
 		d.getControllerProvisionerClusterRole(),
 		d.getControllerProvisionerClusterRoleBinding(),
 		d.getControllerService(),
+		d.getMetricsService(),
 		d.getControllerStatefulSet(),
 		d.getNodeDaemonSet(),
 	}
@@ -352,12 +354,33 @@ func (d *PmemCSIDriver) getControllerService() *corev1.Service {
 			Kind:       "Service",
 			APIVersion: "v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name),
+		ObjectMeta: d.getObjectMeta(d.Name + "-controller"),
 		Spec: corev1.ServiceSpec{
 			Type: corev1.ServiceTypeClusterIP,
 			Ports: []corev1.ServicePort{
 				corev1.ServicePort{
 					Port: controllerServicePort,
+				},
+			},
+			Selector: map[string]string{
+				"app": d.Name + "-controller",
+			},
+		},
+	}
+}
+
+func (d *PmemCSIDriver) getMetricsService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Service",
+			APIVersion: "v1",
+		},
+		ObjectMeta: d.getObjectMeta(d.Name + "-metrics"),
+		Spec: corev1.ServiceSpec{
+			Type: corev1.ServiceTypeNodePort,
+			Ports: []corev1.ServicePort{
+				corev1.ServicePort{
+					Port: controllerMetricsPort,
 				},
 			},
 			Selector: map[string]string{
@@ -523,7 +546,7 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 					"app": d.Name + "-controller",
 				},
 			},
-			ServiceName: d.Name,
+			ServiceName: d.Name + "-controller",
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: joinMaps(
@@ -726,6 +749,7 @@ func (d *PmemCSIDriver) getControllerArgs() []string {
 		"-drivername=" + d.Spec.DriverName,
 		"-endpoint=unix:///csi/csi-controller.sock",
 		fmt.Sprintf("-registryEndpoint=tcp://0.0.0.0:%d", controllerServicePort),
+		fmt.Sprintf("-metricsListen=:%d", controllerMetricsPort),
 		"-nodeid=$(KUBE_NODE_NAME)",
 		"-caFile=/ca-certs/ca.crt",
 		"-certFile=/certs/pmem-csi-registry.crt",
@@ -745,7 +769,7 @@ func (d *PmemCSIDriver) getNodeDriverArgs() []string {
 		"-nodeid=$(KUBE_NODE_NAME)",
 		fmt.Sprintf("-controllerEndpoint=tcp://$(KUBE_POD_IP):%d", nodeControllerPort),
 		// User controller service name(== deployment name) as registry endpoint.
-		fmt.Sprintf("-registryEndpoint=tcp://%s:%d", d.Name, controllerServicePort),
+		fmt.Sprintf("-registryEndpoint=tcp://%s-controller:%d", d.Name, controllerServicePort),
 		"-statePath=/var/lib/" + d.Spec.DriverName,
 		"-caFile=/ca-certs/ca.crt",
 		"-certFile=/certs/pmem-csi-node-controller.crt",
