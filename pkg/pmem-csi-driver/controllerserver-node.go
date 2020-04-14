@@ -19,6 +19,7 @@ import (
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 
+	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	pmemstate "github.com/intel/pmem-csi/pkg/pmem-state"
@@ -41,7 +42,7 @@ type nodeControllerServer struct {
 }
 
 var _ csi.ControllerServer = &nodeControllerServer{}
-var _ PmemService = &nodeControllerServer{}
+var _ grpcserver.PmemService = &nodeControllerServer{}
 
 var nodeVolumeMutex = keymutex.NewHashed(-1)
 

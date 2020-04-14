@@ -22,6 +22,7 @@ import (
 	"k8s.io/klog"
 	"k8s.io/utils/keymutex"
 
+	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 	"github.com/intel/pmem-csi/pkg/registryserver"
 )
@@ -56,7 +57,7 @@ type masterController struct {
 }
 
 var _ csi.ControllerServer = &masterController{}
-var _ PmemService = &masterController{}
+var _ grpcserver.PmemService = &masterController{}
 var _ registryserver.RegistryListener = &masterController{}
 var volumeMutex = keymutex.NewHashed(-1)
 
