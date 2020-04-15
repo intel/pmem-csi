@@ -104,7 +104,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 		cs := f.ClientSet
 
 		var err error
-		cluster, err = deploy.NewCluster(cs)
+		cluster, err = deploy.NewCluster(cs, f.DynamicClient)
 		framework.ExpectNoError(err, "query cluster")
 
 		// Node #1 is expected to have a PMEM-CSI node driver

@@ -200,19 +200,35 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 			}
 			return false
 		}
-		del := func(object metav1.ObjectMeta, deletor func() error) {
+		del := func(objectMeta metav1.ObjectMeta, object interface{}, deletor func() error) {
 			// We found something in this loop iteration. Let's do another one
 			// to verify that it really is gone.
 			done = false
 
 			// Already getting deleted?
-			if object.DeletionTimestamp != nil {
+			if objectMeta.DeletionTimestamp != nil {
 				return
 			}
 
-			framework.Logf("deleting %s", object.Name)
+			// It would be nice if we could print the runtime group/kind information
+			// here, but TypeMeta in the objects returned by the client-go interfaces
+			// is empty. If there is a way to retrieve it, then it wasn't obvious...
+			framework.Logf("deleting %s (%T, %s)", objectMeta.Name, object, objectMeta.UID)
 			err := deletor()
 			failure(err)
+		}
+
+		// Delete all PMEM-CSI deployment objects first to avoid races with the operator
+		// restarting things that we want removed.
+		if list, err := c.dc.Resource(DeploymentResource).List(filter); !failure(err) && list != nil {
+			for _, object := range list.Items {
+				deployment := api.Deployment{}
+				err := Scheme.Convert(&object, &deployment, nil)
+				framework.ExpectNoError(err, "convert %v to PMEM-CSI deployment", object)
+				del(deployment.ObjectMeta, deployment, func() error {
+					return c.dc.Resource(DeploymentResource).Delete(deployment.Name, nil)
+				})
+			}
 		}
 
 		// We intentionally delete statefulset last because that is
@@ -242,7 +258,7 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 
 		if list, err := c.cs.AppsV1().DaemonSets("").List(filter); !failure(err) {
 			for _, object := range list.Items {
-				del(object.ObjectMeta, func() error {
+				del(object.ObjectMeta, object, func() error {
 					return c.cs.AppsV1().DaemonSets(object.Namespace).Delete(object.Name, nil)
 				})
 			}
@@ -250,7 +266,7 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 
 		if list, err := c.cs.CoreV1().Pods("").List(filter); !failure(err) {
 			for _, object := range list.Items {
-				del(object.ObjectMeta, func() error {
+				del(object.ObjectMeta, object, func() error {
 					return c.cs.CoreV1().Pods(object.Namespace).Delete(object.Name, nil)
 				})
 			}
@@ -258,7 +274,7 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 
 		if list, err := c.cs.RbacV1().Roles("").List(filter); !failure(err) {
 			for _, object := range list.Items {
-				del(object.ObjectMeta, func() error {
+				del(object.ObjectMeta, object, func() error {
 					return c.cs.RbacV1().Roles(object.Namespace).Delete(object.Name, nil)
 				})
 			}
@@ -266,7 +282,7 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 
 		if list, err := c.cs.RbacV1().RoleBindings("").List(filter); !failure(err) {
 			for _, object := range list.Items {
-				del(object.ObjectMeta, func() error {
+				del(object.ObjectMeta, object, func() error {
 					return c.cs.RbacV1().RoleBindings(object.Namespace).Delete(object.Name, nil)
 				})
 			}
@@ -274,7 +290,7 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 
 		if list, err := c.cs.RbacV1().ClusterRoles().List(filter); !failure(err) {
 			for _, object := range list.Items {
-				del(object.ObjectMeta, func() error {
+				del(object.ObjectMeta, object, func() error {
 					return c.cs.RbacV1().ClusterRoles().Delete(object.Name, nil)
 				})
 			}
@@ -282,7 +298,7 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 
 		if list, err := c.cs.RbacV1().ClusterRoleBindings().List(filter); !failure(err) {
 			for _, object := range list.Items {
-				del(object.ObjectMeta, func() error {
+				del(object.ObjectMeta, object, func() error {
 					return c.cs.RbacV1().ClusterRoleBindings().Delete(object.Name, nil)
 				})
 			}
@@ -290,7 +306,7 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 
 		if list, err := c.cs.CoreV1().Services("").List(filter); !failure(err) {
 			for _, object := range list.Items {
-				del(object.ObjectMeta, func() error {
+				del(object.ObjectMeta, object, func() error {
 					return c.cs.CoreV1().Services(object.Namespace).Delete(object.Name, nil)
 				})
 			}
@@ -298,7 +314,7 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 
 		if list, err := c.cs.CoreV1().ServiceAccounts("").List(filter); !failure(err) {
 			for _, object := range list.Items {
-				del(object.ObjectMeta, func() error {
+				del(object.ObjectMeta, object, func() error {
 					return c.cs.CoreV1().ServiceAccounts(object.Namespace).Delete(object.Name, nil)
 				})
 			}
@@ -314,7 +330,7 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 
 		if list, err := c.cs.StorageV1beta1().CSIDrivers().List(filter); !failure(err) {
 			for _, object := range list.Items {
-				del(object.ObjectMeta, func() error {
+				del(object.ObjectMeta, object, func() error {
 					return c.cs.StorageV1beta1().CSIDrivers().Delete(object.Name, nil)
 				})
 			}
@@ -324,14 +340,14 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 			// Nothing else left, now delete the deployments and statefulsets.
 			if list, err := c.cs.AppsV1().Deployments("").List(filter); !failure(err) {
 				for _, object := range list.Items {
-					del(object.ObjectMeta, func() error {
+					del(object.ObjectMeta, object, func() error {
 						return c.cs.AppsV1().Deployments(object.Namespace).Delete(object.Name, nil)
 					})
 				}
 			}
 			if list, err := c.cs.AppsV1().StatefulSets("").List(filter); !failure(err) {
 				for _, object := range list.Items {
-					del(object.ObjectMeta, func() error {
+					del(object.ObjectMeta, object, func() error {
 						return c.cs.AppsV1().StatefulSets(object.Namespace).Delete(object.Name, nil)
 					})
 				}
@@ -516,7 +532,7 @@ func EnsureDeployment(deploymentName string) *Deployment {
 
 	ginkgo.BeforeEach(func() {
 		ginkgo.By(fmt.Sprintf("preparing for test %q", ginkgo.CurrentGinkgoTestDescription().FullTestText))
-		c, err := NewCluster(f.ClientSet)
+		c, err := NewCluster(f.ClientSet, f.DynamicClient)
 		framework.ExpectNoError(err, "get cluster information")
 		running, err := FindDeployment(c)
 		framework.ExpectNoError(err, "check for PMEM-CSI components")
@@ -562,6 +578,9 @@ func EnsureDeployment(deploymentName string) *Deployment {
 					},
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "pmem-csi",
+						Labels: map[string]string{
+							deploymentLabel: deployment.Name,
+						},
 					},
 					Spec: api.DeploymentSpec{
 						Image: os.Getenv("PMEM_CSI_IMAGE"), // workaround for https://github.com/intel/pmem-csi/issues/578
