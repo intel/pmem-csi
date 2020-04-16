@@ -33,8 +33,8 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/klog"
+	schedulerapi "k8s.io/kube-scheduler/extender/v1"
 	"k8s.io/kubernetes/pkg/controller"
-	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 

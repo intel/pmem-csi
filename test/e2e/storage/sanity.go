@@ -46,7 +46,9 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	clientexec "k8s.io/client-go/util/exec"
 	"k8s.io/kubernetes/test/e2e/framework"
+	e2enode "k8s.io/kubernetes/test/e2e/framework/node"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
+	"k8s.io/kubernetes/test/e2e/framework/skipper"
 	testutils "k8s.io/kubernetes/test/utils"
 
 	"github.com/intel/pmem-csi/pkg/pmem-csi-driver"
@@ -644,7 +646,9 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 				sc.Config.TestVolumeParameters = map[string]string{}
 				var expectedTopology []*csi.Topology
 				// These node names are sorted.
-				for _, node := range framework.GetReadySchedulableNodesOrDie(f.ClientSet).Items {
+				readyNodes, err := e2enode.GetReadySchedulableNodes(f.ClientSet)
+				framework.ExpectNoError(err, "get schedulable nodes")
+				for _, node := range readyNodes.Items {
 					expectedTopology = append(expectedTopology, &csi.Topology{
 						Segments: map[string]string{
 							"pmem-csi.intel.com/node": node.Name,
@@ -930,7 +934,7 @@ func (v volume) retry(operation func() error, what string) error {
 
 func canRestartNode(nodeID string) {
 	if !regexp.MustCompile(`worker\d+$`).MatchString(nodeID) {
-		framework.Skipf("node %q not one of the expected QEMU nodes (worker<number>))", nodeID)
+		skipper.Skipf("node %q not one of the expected QEMU nodes (worker<number>))", nodeID)
 	}
 }
 
