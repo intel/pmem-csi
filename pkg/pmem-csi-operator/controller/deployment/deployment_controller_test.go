@@ -142,9 +142,9 @@ func testDeploymentPhase(c client.Client, name string, expectedPhase api.Deploym
 			Name: name,
 		},
 	}
-	err := c.Get(context.TODO(), namespacedName(depObject), depObject)
-	Expect(err).Should(BeNil(), "failed to retrive deployment object")
-	Expect(depObject.Status.Phase).Should(BeEquivalentTo(expectedPhase), "Unexpected status phase")
+	err := c.Get(context.TODO(), namespacedNameWithOffset(3, depObject), depObject)
+	ExpectWithOffset(2, err).Should(BeNil(), "failed to retrive deployment object")
+	ExpectWithOffset(2, depObject.Status.Phase).Should(BeEquivalentTo(expectedPhase), "Unexpected status phase")
 }
 
 func testReconcile(rc reconcile.Reconciler, name string, expectErr bool, expectedRequeue bool) {
@@ -155,11 +155,11 @@ func testReconcile(rc reconcile.Reconciler, name string, expectErr bool, expecte
 	}
 	resp, err := rc.Reconcile(req)
 	if expectErr {
-		Expect(err).ShouldNot(BeNil(), "expected reconcile failure")
+		ExpectWithOffset(2, err).ShouldNot(BeNil(), "expected reconcile failure")
 	} else {
-		Expect(err).Should(BeNil(), "reconcile failed with error")
+		ExpectWithOffset(2, err).Should(BeNil(), "reconcile failed with error")
 	}
-	Expect(resp.Requeue).Should(BeEquivalentTo(expectedRequeue), "expected requeue reconcile")
+	ExpectWithOffset(2, resp.Requeue).Should(BeEquivalentTo(expectedRequeue), "expected requeue reconcile")
 }
 
 func testReconcilePhase(rc reconcile.Reconciler, c client.Client, name string, expectErr bool, expectedRequeue bool, expectedPhase api.DeploymentPhase) {
@@ -175,11 +175,11 @@ func validateSecrets(c client.Client, d *pmemDeployment) {
 				Name: secretName,
 			},
 		}
-		err := c.Get(context.TODO(), namespacedName(s), s)
-		Expect(err).Should(BeNil(), "failed to get secret for %q", secretName)
-		Expect(s.Data[corev1.TLSCertKey]).ShouldNot(BeNil(), "certificate not present in secret %s", secretName)
+		err := c.Get(context.TODO(), namespacedNameWithOffset(2, s), s)
+		ExpectWithOffset(1, err).Should(BeNil(), "failed to get secret for %q", secretName)
+		ExpectWithOffset(1, s.Data[corev1.TLSCertKey]).ShouldNot(BeNil(), "certificate not present in secret %s", secretName)
 		if name != "pmem-ca" {
-			Expect(s.Data[corev1.TLSPrivateKeyKey]).ShouldNot(BeNil(), "private key not present in secret %s", secretName)
+			ExpectWithOffset(1, s.Data[corev1.TLSPrivateKeyKey]).ShouldNot(BeNil(), "private key not present in secret %s", secretName)
 		}
 	}
 }
@@ -191,19 +191,23 @@ func validateCSIDriver(c client.Client, driverName string, k8sVersion *version.V
 		},
 	}
 
-	err := c.Get(context.TODO(), namespacedName(driver), driver)
-	Expect(err).Should(BeNil(), "could not find csidriver object")
+	err := c.Get(context.TODO(), namespacedNameWithOffset(2, driver), driver)
+	ExpectWithOffset(1, err).Should(BeNil(), "could not find csidriver object")
 
 	if k8sVersion.Compare(1, 16) >= 0 {
-		Expect(len(driver.Spec.VolumeLifecycleModes)).Should(Equal(2), "mismatched lifecycle modes")
-		Expect(driver.Spec.VolumeLifecycleModes).Should(ContainElement(storagev1beta1.VolumeLifecyclePersistent), "Persisten volume mode not preset")
-		Expect(driver.Spec.VolumeLifecycleModes).Should(ContainElement(storagev1beta1.VolumeLifecycleEphemeral), "Ephemeral volume mode not preset")
+		ExpectWithOffset(1, len(driver.Spec.VolumeLifecycleModes)).Should(Equal(2), "mismatched lifecycle modes")
+		ExpectWithOffset(1, driver.Spec.VolumeLifecycleModes).Should(ContainElement(storagev1beta1.VolumeLifecyclePersistent), "Persisten volume mode not preset")
+		ExpectWithOffset(1, driver.Spec.VolumeLifecycleModes).Should(ContainElement(storagev1beta1.VolumeLifecycleEphemeral), "Ephemeral volume mode not preset")
 	}
 }
 
 func namespacedName(obj runtime.Object) types.NamespacedName {
+	return namespacedNameWithOffset(2, obj)
+}
+
+func namespacedNameWithOffset(offset int, obj runtime.Object) types.NamespacedName {
 	metaObj, err := meta.Accessor(obj)
-	Expect(err).Should(BeNil(), "failed to get accessor")
+	ExpectWithOffset(offset, err).Should(BeNil(), "failed to get accessor")
 
 	return types.NamespacedName{Name: metaObj.GetName(), Namespace: metaObj.GetNamespace()}
 }
