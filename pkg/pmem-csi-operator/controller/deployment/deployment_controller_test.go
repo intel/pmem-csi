@@ -241,13 +241,9 @@ var _ = Describe("Operator", func() {
 			err := c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
-			testReconcilePhase(rc, c, d.name, false, true, api.DeploymentPhaseInitializing)
-
-			validateSecrets(c, d)
-
-			// Reconcile now should change Phase to running
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
+			validateSecrets(c, d)
 			validateCSIDriver(c, api.DefaultDriverName, testK8sVersion)
 
 			ss := &appsv1.StatefulSet{}
@@ -316,13 +312,10 @@ var _ = Describe("Operator", func() {
 			err := c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
-			testReconcilePhase(rc, c, d.name, false, true, api.DeploymentPhaseInitializing)
-
-			validateSecrets(c, d)
-
 			// Reconcile now should change Phase to running
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
+			validateSecrets(c, d)
 			validateCSIDriver(c, d.driverName, testK8sVersion)
 
 			ss := &appsv1.StatefulSet{}
@@ -392,9 +385,8 @@ var _ = Describe("Operator", func() {
 			err = c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment2")
 
-			testReconcilePhase(rc, c, d1.name, false, true, api.DeploymentPhaseInitializing)
-
-			testReconcilePhase(rc, c, d2.name, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, c, d1.name, false, false, api.DeploymentPhaseRunning)
+			testReconcilePhase(rc, c, d2.name, false, false, api.DeploymentPhaseRunning)
 
 		})
 
@@ -418,7 +410,7 @@ var _ = Describe("Operator", func() {
 			Expect(err).Should(BeNil(), "failed to create deployment2")
 
 			// First deployment expected to be successful
-			testReconcilePhase(rc, c, d1.name, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, c, d1.name, false, false, api.DeploymentPhaseRunning)
 			// Second deployment expected to fail as one more deployment is active with the
 			// same driver name
 			testReconcilePhase(rc, c, d2.name, true, true, api.DeploymentPhaseFailed)
@@ -436,7 +428,7 @@ var _ = Describe("Operator", func() {
 			testReconcile(rc, d1.name, false, false)
 
 			// After removing first deployment, sencond deployment should progress
-			testReconcilePhase(rc, c, d2.name, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, c, d2.name, false, false, api.DeploymentPhaseRunning)
 			testReconcilePhase(rc, c, d2.name, false, false, api.DeploymentPhaseRunning)
 
 			validateCSIDriver(c, d2.driverName, testK8sVersion)
@@ -459,7 +451,7 @@ var _ = Describe("Operator", func() {
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
 			// First deployment expected to be successful
-			testReconcilePhase(rc, c, d.name, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			validateSecrets(c, d)
 
@@ -481,13 +473,12 @@ var _ = Describe("Operator", func() {
 			err := c.Create(context.TODO(), getDeployment(d))
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
-			testReconcilePhase(rc, c, d.name, false, true, api.DeploymentPhaseInitializing)
-
-			validateSecrets(c, d)
-
-			// Reconcile now should change Phase to running
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
+			// Reconcile now should keep phase as running
+			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
+
+			validateSecrets(c, d)
 			validateCSIDriver(c, api.DefaultDriverName, testK8sVersion)
 
 			// Ensure both deaemonset and statefulset have default driver name
@@ -563,11 +554,11 @@ var _ = Describe("Operator", func() {
 			err = c.Create(context.TODO(), getDeployment(d2))
 			Expect(err).Should(BeNil(), "failed to create deployment2")
 
-			// Ensure that both the deployments are in initializing phase
-			testReconcilePhase(rc, c, d1.name, false, true, api.DeploymentPhaseInitializing)
-			testReconcilePhase(rc, c, d2.name, false, true, api.DeploymentPhaseInitializing)
+			// Ensure that both the deployments are in running phase
+			testReconcilePhase(rc, c, d1.name, false, false, api.DeploymentPhaseRunning)
+			testReconcilePhase(rc, c, d2.name, false, false, api.DeploymentPhaseRunning)
 
-			// Try to introdue duplicate name when the driver is in Initializing phase
+			// Try to introduce duplicate name when the driver is in Initializing phase
 			// Rertrieve deployment1
 			dep := &api.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
@@ -582,18 +573,9 @@ var _ = Describe("Operator", func() {
 			dep.Spec.DriverName = d2.driverName
 			err = c.Update(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to update deployment")
-			testReconcilePhase(rc, c, d1.name, true, true, api.DeploymentPhaseInitializing)
-
-			// Move the deployment to Running phase
-			testReconcilePhase(rc, c, d1.name, false, false, api.DeploymentPhaseRunning)
+			testReconcilePhase(rc, c, d1.name, true, false, api.DeploymentPhaseRunning)
 
 			validateCSIDriver(c, d1.driverName, testK8sVersion)
-
-			// Try to introdue duplicate name when the driver is in Running phase
-			dep.Spec.DriverName = d2.driverName
-			err = c.Update(context.TODO(), dep)
-			Expect(err).Should(BeNil(), "failed to update deployment")
-			testReconcilePhase(rc, c, d1.name, true, false, api.DeploymentPhaseRunning)
 		})
 
 		It("shall not allow to change running deployment device mode", func() {
@@ -604,11 +586,11 @@ var _ = Describe("Operator", func() {
 			err := c.Create(context.TODO(), getDeployment(d))
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
-			testReconcilePhase(rc, c, d.name, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			validateSecrets(c, d)
 
-			// Reconcile now should change Phase to running
+			// Reconcile now should keep phase as running
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			// Ensure both deaemonset and statefulset have default driver name
@@ -652,11 +634,11 @@ var _ = Describe("Operator", func() {
 			err := c.Create(context.TODO(), getDeployment(d))
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
-			testReconcilePhase(rc, c, d.name, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			validateSecrets(c, d)
 
-			// Reconcile now should change Phase to running
+			// Reconcile now should keep phase as running
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			ss := &appsv1.StatefulSet{}
@@ -712,11 +694,11 @@ var _ = Describe("Operator", func() {
 			err := c.Create(context.TODO(), getDeployment(d))
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
-			testReconcilePhase(rc, c, d.name, false, true, api.DeploymentPhaseInitializing)
+			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			validateSecrets(c, d)
 
-			// Reconcile now should change Phase to running
+			// Reconcile now should change keep phase as running
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			ss := &appsv1.StatefulSet{}

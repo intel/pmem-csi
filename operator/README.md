@@ -93,11 +93,13 @@ Deployment is in it's lifecycle.
 The possible `phase` values and their meaning are as below:
 
 | value | meaning |
-|---|---|---|
-| Initializing | The required sub-resources of the `Deployment` are being initialized |
-| Running | All the required sub-resources of the `Deployment` are created. This does not mean that the deployed driver is fully ready to use, there might still possibility of failures. Reasons for such failures can be determined by looking into individual pod status |
-| Failed | For some reason the state of the `Deployment` failed and cannot be progressed<sup>2</sup> |
+|---|---|
+| empty string | A new deployment. |
+| Initializing | All the direct sub-resources of the `Deployment` are created, but some indirect ones (like pods controlled by a daemon set) may still be missing. |
+| Running | The operator has determined that the driver is usable<sup>1</sup>.  |
+| Failed | For some reason the state of the `Deployment` failed and cannot be progressed<sup>2</sup>. |
 
+<sup>1</sup> This check has not been implemented yet. Instead, the deployment goes straight to `Running` after creating sub-resources.
 <sup>2</sup> Failure reason is supposed to be carried by one of additional `DeploymentStatus` field, but not implemented yet.
 
 ### Driver certificates
