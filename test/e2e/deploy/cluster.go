@@ -13,6 +13,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	e2essh "k8s.io/kubernetes/test/e2e/framework/ssh"
 
@@ -22,11 +23,13 @@ import (
 type Cluster struct {
 	nodeIPs []string
 	cs      kubernetes.Interface
+	dc      dynamic.Interface
 }
 
-func NewCluster(cs kubernetes.Interface) (*Cluster, error) {
+func NewCluster(cs kubernetes.Interface, dc dynamic.Interface) (*Cluster, error) {
 	cluster := &Cluster{
 		cs: cs,
+		dc: dc,
 	}
 
 	hosts, err := e2essh.NodeSSHHosts(cs)

@@ -69,6 +69,8 @@ type DeploymentSpec struct {
 	// on every node. Default 100
 	// This is only valid for driver in LVM mode
 	PMEMPercentage uint16 `json:"pmemPercentage,omitempty"`
+	// Labels contains additional labels for all objects created by the operator.
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 // DeploymentStatus defines the observed state of Deployment
@@ -177,6 +179,7 @@ const (
 	NodeResources
 	NodeSelector
 	PMEMPercentage
+	Labels
 )
 
 func (c DeploymentChange) String() string {
@@ -192,6 +195,7 @@ func (c DeploymentChange) String() string {
 		NodeResources:       "nodeResources",
 		NodeSelector:        "nodeSelector",
 		PMEMPercentage:      "pmemPercentage",
+		Labels:              "labels",
 	}[c]
 }
 
@@ -298,6 +302,10 @@ func (d *Deployment) Compare(other *Deployment) map[DeploymentChange]struct{} {
 		changes[PMEMPercentage] = struct{}{}
 	}
 
+	if !reflect.DeepEqual(d.Spec.Labels, other.Spec.Labels) {
+		changes[Labels] = struct{}{}
+	}
+
 	return changes
 }
 
@@ -387,7 +395,16 @@ func GetDeploymentCRDSchema() *apiextensions.JSONSchemaProps {
 						Minimum:     &One,
 						Maximum:     &Hundred,
 					},
-				},
+					"labels": apiextensions.JSONSchemaProps{
+						Type:        "object",
+						Description: "Set of additional labels for all objects created by the operator",
+						AdditionalProperties: &apiextensions.JSONSchemaPropsOrBool{
+							Allows: true,
+							Schema: &apiextensions.JSONSchemaProps{
+								Type: "string",
+							},
+						},
+					}},
 			},
 			"status": apiextensions.JSONSchemaProps{
 				Type:        "object",
