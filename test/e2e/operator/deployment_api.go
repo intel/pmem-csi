@@ -9,6 +9,7 @@ package operator
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
@@ -540,7 +541,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			validateDriverDeployment(f, d, deployment)
 
 			// Stop the operator
-			deleteOperatorDeployment(f)
+			deleteOperator(f)
 
 			// Ensure that the driver is running consistently
 			Consistently(func() bool {
@@ -573,11 +574,22 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 			validateDriverDeployment(f, d, deployment)
 
-			opDeploy, err := findOperatorDeployment(f)
-			Expect(err).ShouldNot(HaveOccurred(), "find operator deployment")
-
 			// Stop the operator
-			deleteOperatorDeployment(f)
+			By("Stopping operator deployment...")
+			deleteOperator(f)
+
+			ca, err := pmemtls.NewCA(nil, nil)
+			Expect(err).Should(BeNil(), "faield to instantiate CA")
+
+			regKey, err := pmemtls.NewPrivateKey()
+			Expect(err).Should(BeNil(), "failed to generate a private key: %v", err)
+			regCert, err := ca.GenerateCertificate("pmem-registry", regKey.Public())
+			Expect(err).Should(BeNil(), "failed to sign registry key")
+
+			ncKey, err := pmemtls.NewPrivateKey()
+			Expect(err).Should(BeNil(), "failed to generate a private key: %v", err)
+			ncCert, err := ca.GenerateCertificate("pmem-node-controller", ncKey.Public())
+			Expect(err).Should(BeNil(), "failed to sign node controller key")
 
 			dep = deploy.GetDeploymentCR(f, deployment.Name)
 			spec := dep.Object["spec"].(map[string]interface{})
@@ -597,24 +609,37 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					"memory": "2Mi",
 				},
 			}
+			spec["caCert"] = ca.EncodedCertificate()
+			spec["registryKey"] = pmemtls.EncodeKey(regKey)
+			spec["registryCert"] = pmemtls.EncodeCert(regCert)
+			spec["nodeControllerKey"] = pmemtls.EncodeKey(ncKey)
+			spec["nodeControllerCert"] = pmemtls.EncodeCert(ncCert)
 
 			deployment, err = toDeployment(dep)
 			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
 
-			By("Updating PMEM-CSI deployment...")
+			By(fmt.Sprintf("Updating PMEM-CSI deployment(%s)...", deployment.ResourceVersion))
 			deploy.UpdateDeploymentCR(f, dep)
 
-			// Reset previous resource version
-			opDeploy.ResourceVersion = ""
+			dep = deploy.GetDeploymentCR(f, deployment.Name)
+			deployment, err = toDeployment(dep)
+			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
+			lastUpdaed := deployment.Status.LastUpdated
+
+			By("Restarting the operator deployment...")
 			// Start the operator
-			createOperatorDeployment(f, opDeploy)
+			createOperator(f)
+
+			// Wait till the operator reconciles the operator changes
+			Eventually(func() bool {
+				dep := deploy.GetDeploymentCR(f, deployment.Name)
+				deployment, err := toDeployment(dep)
+				Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
+				return lastUpdaed != deployment.Status.LastUpdated
+			}, "3m", "2s").Should(BeTrue(), "deployment status update")
 
 			// Ensure that the driver is running updated values
-			Eventually(func() bool {
-				By("validating driver afater operator restart")
-				validateDriverDeployment(f, d, deployment)
-				return true
-			}, "3m", "5s", "driver validation failure")
+			validateDriverDeployment(f, d, deployment)
 		})
 	})
 })
@@ -826,52 +851,83 @@ func findOperatorDeployment(f *framework.Framework) (*appsv1.Deployment, error) 
 	return dep, nil
 }
 
-// deleteOperatorDeployment removes the operator deployment object
-func deleteOperatorDeployment(f *framework.Framework) error {
-	dep, err := findOperatorDeployment(f)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
-		return err
-	}
+// deleteOperator ensures operator deployment replica counter == 0 and the
+// operator pod gets deleted
+func deleteOperator(f *framework.Framework) error {
+	c, err := deploy.NewCluster(f.ClientSet, f.DynamicClient)
+	Expect(err).ShouldNot(HaveOccurred(), "new cluster")
 
+	d, err := deploy.FindDeployment(c)
+	Expect(err).ShouldNot(HaveOccurred(), "find deployment")
+
+	By("Set operator deployment replicas to 0")
 	Eventually(func() bool {
-		framework.Logf("Deleting the operator '%s/%s'...", dep.Namespace, dep.Name)
-		err = f.ClientSet.AppsV1().Deployments(dep.Namespace).Delete(context.Background(), dep.Name, metav1.DeleteOptions{})
-		if err == nil {
-			// Deletion success, but wait till it's get removed from API server
+		dep, err := f.ClientSet.AppsV1().Deployments(d.Namespace).Get(context.Background(), "pmem-csi-operator", metav1.GetOptions{})
+		if err != nil && !errors.IsNotFound(err) {
+			By(fmt.Sprintf("Not Found: %v", err))
 			return false
 		}
-		if errors.IsNotFound(err) {
+
+		By(fmt.Sprintf("Replicas : %d", *dep.Spec.Replicas))
+		if *dep.Spec.Replicas == 0 {
 			return true
 		}
-
-		framework.Logf("Error while get operator deployment '%s/%s': %v", dep.Namespace, dep.Name, err)
+		*dep.Spec.Replicas = 0
+		_, err = f.ClientSet.AppsV1().Deployments(dep.Namespace).Update(context.Background(), dep, metav1.UpdateOptions{})
+		if err != nil {
+			By(fmt.Sprintf("Update error: %v", err))
+		}
+		deploy.LogError(err, "failed update operator's replica counter: %v", err)
 		return false
-	}, "3m", "1s").Should(BeTrue(), "delete operator deployment '%s/%s'", dep.Namespace, dep.Name)
+	}, "3m", "1s").Should(BeTrue(), "set operator deployment replicas to 0")
+
+	By("Ensure the operator pod deleted")
+	Eventually(func() bool {
+		_, err := c.GetAppInstance("pmem-csi-operator", "", d.Namespace)
+		deploy.LogError(err, "get operator error: %v, will retry...", err)
+		return err != nil && strings.HasPrefix(err.Error(), "no app")
+	}, "5m", "2s").Should(BeTrue(), "delete operator pod")
+
+	By("Operator deleted!")
 
 	return nil
 }
 
-// deleteOperatorDeployment removes the operator deployment object
-func createOperatorDeployment(f *framework.Framework, dep *appsv1.Deployment) {
+// createOperator ensures the operator deployment counter == 1 and the operator pod
+// in in running state
+func createOperator(f *framework.Framework) {
 	c, err := deploy.NewCluster(f.ClientSet, f.DynamicClient)
 	Expect(err).ShouldNot(HaveOccurred(), "crate cluster")
 
-	Eventually(func() bool {
-		_, err := f.ClientSet.AppsV1().Deployments(dep.Namespace).Create(context.Background(), dep, metav1.CreateOptions{})
-		deploy.LogError(err, "create operator error: %v, will retry...", err)
-		if err == nil || errors.IsAlreadyExists(err) {
-			return true
-		}
-		return false
-	}, "3m", "2s").Should(BeTrue(), "create operator deployment '%s/%s'", dep.Namespace, dep.Name)
+	d, err := deploy.FindDeployment(c)
+	Expect(err).ShouldNot(HaveOccurred(), "find deployment")
 
 	Eventually(func() bool {
-		pod, err := c.GetAppInstance("pmem-csi-operator", "", dep.Namespace)
+		dep, err := f.ClientSet.AppsV1().Deployments(d.Namespace).Get(context.Background(), "pmem-csi-operator", metav1.GetOptions{})
+		deploy.LogError(err, "Failed to get error: %v", err)
+		if err != nil {
+			By(fmt.Sprintf("Fail to get operator deployment: %v", err))
+			return false
+		}
+
+		By(fmt.Sprintf("Replicas : %d", *dep.Spec.Replicas))
+		if *dep.Spec.Replicas == 1 {
+			return true
+		}
+		*dep.Spec.Replicas = 1
+		_, err = f.ClientSet.AppsV1().Deployments(dep.Namespace).Update(context.Background(), dep, metav1.UpdateOptions{})
+		deploy.LogError(err, "failed update operator's replicas: %v", err)
+		return false
+	}, "3m", "1s").Should(BeTrue(), "increase operator deployment replicas to 1")
+
+	By("Ensure operator pod is ready")
+
+	Eventually(func() bool {
+		pod, err := c.GetAppInstance("pmem-csi-operator", "", d.Namespace)
 		deploy.LogError(err, "get operator error: %v, will retry...", err)
+		By(fmt.Sprintf("Operator Pod: %s/%s", pod.Namespace, pod.Name))
 		return err == nil && pod.Status.Phase == v1.PodRunning
-	}, "5m", "2s").Should(BeTrue(), "operator not running in namespace %s", dep.Namespace)
+	}, "5m", "2s").Should(BeTrue(), "operator pod is not running")
+
 	By("Operator is ready!")
 }

@@ -20,7 +20,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -184,12 +183,10 @@ func (r *ReconcileDeployment) Namespace() string {
 
 //Get tries to retrives the Kubernetes objects
 func (r *ReconcileDeployment) Get(obj runtime.Object) error {
-	metaObj, err := meta.Accessor(obj)
+	key, err := client.ObjectKeyFromObject(obj)
 	if err != nil {
-		klog.Errorf("Failed to get object: %v", err)
 		return err
 	}
-	key := types.NamespacedName{Name: metaObj.GetName(), Namespace: metaObj.GetNamespace()}
 
 	return r.client.Get(context.TODO(), key, obj)
 }
@@ -197,6 +194,11 @@ func (r *ReconcileDeployment) Get(obj runtime.Object) error {
 // Update updates existing Kubernetes object. The object must be a modified copy of the existing object in the apiserver.
 func (r *ReconcileDeployment) Update(obj runtime.Object) error {
 	return r.client.Update(context.TODO(), obj)
+}
+
+// Create creates a new object, the object beging created must not be existing already
+func (r *ReconcileDeployment) Create(obj runtime.Object) error {
+	return r.client.Create(context.TODO(), obj)
 }
 
 // UpdateOrCreate updates the spec of an existing object or, if it does not exist yet, creates it.
