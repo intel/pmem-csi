@@ -159,14 +159,14 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 
 	if updateController {
 		klog.Infof("Updating controller driver for deployment %q", d.Name)
-		if e := r.Update(d.getControllerStatefulSet()); e != nil {
+		if e := r.UpdateOrCreate(d.getControllerStatefulSet()); e != nil {
 			requeue = true
 			err = e
 		}
 	}
 	if updateNodeDriver {
 		klog.Infof("Updating node driver for deployment %q", d.Name)
-		if e := r.Update(d.getNodeDaemonSet()); err != nil {
+		if e := r.UpdateOrCreate(d.getNodeDaemonSet()); err != nil {
 			requeue = true
 			err = e
 		}

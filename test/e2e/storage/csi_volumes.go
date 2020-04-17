@@ -37,6 +37,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/framework/podlogs"
+	"k8s.io/kubernetes/test/e2e/framework/skipper"
+	e2evolume "k8s.io/kubernetes/test/e2e/framework/volume"
 	"k8s.io/kubernetes/test/e2e/storage/testpatterns"
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
 	"k8s.io/kubernetes/test/e2e/storage/utils"
@@ -68,17 +70,21 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 						testsuites.CapExec:        true,
 						testsuites.CapBlock:       true,
 					},
+					SupportedSizeRange: e2evolume.SizeRange{
+						// There is test in VolumeIO suite creating 102 MB of content
+						// so we use 110 MB as minimum size to fit that with some margin.
+						// TODO: fix that upstream test to have a suitable minimum size
+						//
+						// Without VolumeIO suite, 16Mi would be enough as smallest xfs system size.
+						// Ref: http://man7.org/linux/man-pages/man8/mkfs.xfs.8.html
+						Min: "110Mi",
+					},
 				},
 				scManifest: map[string]string{
 					"":     "deploy/common/pmem-storageclass-ext4.yaml",
 					"ext4": "deploy/common/pmem-storageclass-ext4.yaml",
 					"xfs":  "deploy/common/pmem-storageclass-xfs.yaml",
 				},
-				// There is test in VolumeIO suite creating 102 MB of content
-				// so we use 110 MB claimSize to fit that with some margin.
-				// Without VolumeIO suite, 16Mi would be enough as smallest xfs system size.
-				// Ref: http://man7.org/linux/man-pages/man8/mkfs.xfs.8.html
-				claimSize:     "110Mi",
 				csiDriverName: "pmem-csi.intel.com",
 			}
 		},
@@ -118,9 +124,9 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 		f := framework.NewDefaultFramework("latebinding")
 		BeforeEach(func() {
 			// Check whether storage class exists before trying to use it.
-			_, err := f.ClientSet.StorageV1().StorageClasses().Get(storageClassLateBindingName, metav1.GetOptions{})
+			_, err := f.ClientSet.StorageV1().StorageClasses().Get(context.Background(), storageClassLateBindingName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
-				framework.Skipf("storage class %s not found, late binding not supported", storageClassLateBindingName)
+				skipper.Skipf("storage class %s not found, late binding not supported", storageClassLateBindingName)
 			}
 			framework.ExpectNoError(err, "get storage class %s", storageClassLateBindingName)
 			// Register list of volumes before test, using out-of-band host commands (i.e. not CSI API).
@@ -210,7 +216,6 @@ type manifestDriver struct {
 	patchOptions  utils.PatchCSIOptions
 	manifests     []string
 	scManifest    map[string]string
-	claimSize     string
 	cleanup       func()
 }
 
@@ -230,21 +235,17 @@ func (m *manifestDriver) GetDynamicProvisionStorageClass(config *testsuites.PerT
 	scManifest, ok := m.scManifest[fsType]
 	Expect(ok).To(BeTrue(), "Unsupported filesystem type %s", fsType)
 
-	items, err := f.LoadFromManifests(scManifest)
+	items, err := utils.LoadFromManifests(scManifest)
 	Expect(err).NotTo(HaveOccurred())
 	Expect(len(items)).To(Equal(1), "exactly one item from %s", scManifest)
 
-	err = f.PatchItems(items...)
+	err = utils.PatchItems(f, items...)
 	Expect(err).NotTo(HaveOccurred())
 	err = utils.PatchCSIDeployment(f, m.finalPatchOptions(f), items[0])
 
 	sc, ok := items[0].(*storagev1.StorageClass)
 	Expect(ok).To(BeTrue(), "storage class from %s", scManifest)
 	return sc
-}
-
-func (m *manifestDriver) GetClaimSize() string {
-	return m.claimSize
 }
 
 func (m *manifestDriver) PrepareTest(f *framework.Framework) (*testsuites.PerTestConfig, func()) {
@@ -254,7 +255,7 @@ func (m *manifestDriver) PrepareTest(f *framework.Framework) (*testsuites.PerTes
 		Prefix:    "pmem",
 		Framework: f,
 	}
-	cleanup, err := f.CreateFromManifests(func(item interface{}) error {
+	cleanup, err := utils.CreateFromManifests(f, func(item interface{}) error {
 		return utils.PatchCSIDeployment(f, m.finalPatchOptions(f), item)
 	},
 		m.manifests...,
@@ -276,7 +277,7 @@ func (m *manifestDriver) finalPatchOptions(f *framework.Framework) utils.PatchCS
 }
 
 func (m *manifestDriver) GetVolume(config *testsuites.PerTestConfig, volumeNumber int) (map[string]string, bool, bool) {
-	attributes := map[string]string{"size": m.claimSize}
+	attributes := map[string]string{"size": m.driverInfo.SupportedSizeRange.Min}
 	shared := false
 	readOnly := false
 

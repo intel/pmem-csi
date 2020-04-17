@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package deployment
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -26,7 +27,7 @@ func EnsureCRDInstalled(config *rest.Config) error {
 	}
 	crd := GetDeploymentCRD()
 
-	if _, err := aeClientset.ApiextensionsV1().CustomResourceDefinitions().Create(crd); err != nil {
+	if _, err := aeClientset.ApiextensionsV1().CustomResourceDefinitions().Create(context.Background(), crd, metav1.CreateOptions{}); err != nil {
 		if errors.IsAlreadyExists(err) {
 			return nil
 		}
@@ -37,7 +38,7 @@ func EnsureCRDInstalled(config *rest.Config) error {
 		retryDelay := 10 * time.Second
 
 		for retryCount > 0 {
-			_, err := aeClientset.ApiextensionsV1().CustomResourceDefinitions().Get(
+			_, err := aeClientset.ApiextensionsV1().CustomResourceDefinitions().Get(context.Background(),
 				"deployments.pmem-csi.intel.com",
 				metav1.GetOptions{
 					TypeMeta: metav1.TypeMeta{
@@ -69,14 +70,14 @@ func DeleteCRD(config *rest.Config) error {
 	if err != nil {
 		return err
 	}
-	delOptions := &metav1.DeleteOptions{
+	delOptions := metav1.DeleteOptions{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "apiextensions.k8s.io/v1",
 			Kind:       "CustomResourceDefinition",
 		},
 	}
 
-	if err := aeClientset.ApiextensionsV1().CustomResourceDefinitions().Delete("deployments.pmem-csi.intel.com", delOptions); err != nil {
+	if err := aeClientset.ApiextensionsV1().CustomResourceDefinitions().Delete(context.Background(), "deployments.pmem-csi.intel.com", delOptions); err != nil {
 		if errors.IsNotFound(err) {
 			return nil
 		}
