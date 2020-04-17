@@ -7,7 +7,7 @@ import (
 
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	"k8s.io/klog"
-	"k8s.io/kubernetes/pkg/util/mount"
+	"k8s.io/utils/mount"
 )
 
 const (

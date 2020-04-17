@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package gotests
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -55,7 +56,7 @@ func runGoTest(f *framework.Framework, pkg string) {
 	framework.ExpectNoError(err, "compile test program for %s", pkg)
 
 	label := labels.SelectorFromSet(labels.Set(map[string]string{"app": "pmem-csi-node"}))
-	pods, err := f.ClientSet.CoreV1().Pods("default").List(metav1.ListOptions{LabelSelector: label.String()})
+	pods, err := f.ClientSet.CoreV1().Pods("default").List(context.Background(), metav1.ListOptions{LabelSelector: label.String()})
 	framework.ExpectNoError(err, "list PMEM-CSI pods")
 	Expect(pods.Items).NotTo(BeEmpty(), "have PMEM-CSI pods")
 	pmem := pods.Items[0]

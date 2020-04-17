@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package tls
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"regexp"
@@ -36,7 +37,7 @@ var _ = deploy.DescribeForAll("TLS", func(d *deploy.Deployment) {
 	BeforeEach(func() {
 		// Find one node driver pod.
 		label := labels.SelectorFromSet(labels.Set(map[string]string{"app": "pmem-csi-node"}))
-		pods, err := f.ClientSet.CoreV1().Pods("default").List(metav1.ListOptions{LabelSelector: label.String()})
+		pods, err := f.ClientSet.CoreV1().Pods("default").List(context.Background(), metav1.ListOptions{LabelSelector: label.String()})
 		framework.ExpectNoError(err, "list PMEM-CSI node pods")
 		Expect(pods.Items).NotTo(BeEmpty(), "have PMEM-CSI node pods")
 		nodePod = &pods.Items[0]
@@ -79,7 +80,7 @@ func checkTLS(f *framework.Framework, server string) {
 	createdPod := podClient.Create(pod)
 	defer func() {
 		By("delete the pod")
-		podClient.DeleteSync(createdPod.Name, &metav1.DeleteOptions{}, framework.DefaultPodDeletionTimeout)
+		podClient.DeleteSync(createdPod.Name, metav1.DeleteOptions{}, framework.DefaultPodDeletionTimeout)
 	}()
 	podErr := e2epod.WaitForPodRunningInNamespace(f.ClientSet, createdPod)
 	framework.ExpectNoError(podErr, "running pod")

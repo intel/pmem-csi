@@ -201,94 +201,94 @@ func RemovePMEMDriver(c *Cluster, deploymentName string) error {
 		// how FindPMEMDriver will find it again if we don't manage to
 		// delete the entire deployment. Here we just scale it down
 		// to trigger pod deletion.
-		if list, err := c.cs.AppsV1().StatefulSets("").List(filter); !failure(err) {
+		if list, err := c.cs.AppsV1().StatefulSets("").List(context.Background(), filter); !failure(err) {
 			for _, set := range list.Items {
 				if *set.Spec.Replicas != 0 {
 					*set.Spec.Replicas = 0
-					_, err := c.cs.AppsV1().StatefulSets(set.Namespace).Update(&set)
+					_, err := c.cs.AppsV1().StatefulSets(set.Namespace).Update(context.Background(), &set, metav1.UpdateOptions{})
 					failure(err)
 				}
 			}
 		}
 
-		if list, err := c.cs.AppsV1().DaemonSets("").List(filter); !failure(err) {
+		if list, err := c.cs.AppsV1().DaemonSets("").List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, func() error {
-					return c.cs.AppsV1().DaemonSets(object.Namespace).Delete(object.Name, nil)
+					return c.cs.AppsV1().DaemonSets(object.Namespace).Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
 
-		if list, err := c.cs.CoreV1().Pods("").List(filter); !failure(err) {
+		if list, err := c.cs.CoreV1().Pods("").List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, func() error {
-					return c.cs.CoreV1().Pods(object.Namespace).Delete(object.Name, nil)
+					return c.cs.CoreV1().Pods(object.Namespace).Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
 
-		if list, err := c.cs.RbacV1().Roles("").List(filter); !failure(err) {
+		if list, err := c.cs.RbacV1().Roles("").List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, func() error {
-					return c.cs.RbacV1().Roles(object.Namespace).Delete(object.Name, nil)
+					return c.cs.RbacV1().Roles(object.Namespace).Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
 
-		if list, err := c.cs.RbacV1().RoleBindings("").List(filter); !failure(err) {
+		if list, err := c.cs.RbacV1().RoleBindings("").List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, func() error {
-					return c.cs.RbacV1().RoleBindings(object.Namespace).Delete(object.Name, nil)
+					return c.cs.RbacV1().RoleBindings(object.Namespace).Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
 
-		if list, err := c.cs.RbacV1().ClusterRoles().List(filter); !failure(err) {
+		if list, err := c.cs.RbacV1().ClusterRoles().List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, func() error {
-					return c.cs.RbacV1().ClusterRoles().Delete(object.Name, nil)
+					return c.cs.RbacV1().ClusterRoles().Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
 
-		if list, err := c.cs.RbacV1().ClusterRoleBindings().List(filter); !failure(err) {
+		if list, err := c.cs.RbacV1().ClusterRoleBindings().List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, func() error {
-					return c.cs.RbacV1().ClusterRoleBindings().Delete(object.Name, nil)
+					return c.cs.RbacV1().ClusterRoleBindings().Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
 
-		if list, err := c.cs.CoreV1().Services("").List(filter); !failure(err) {
+		if list, err := c.cs.CoreV1().Services("").List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, func() error {
-					return c.cs.CoreV1().Services(object.Namespace).Delete(object.Name, nil)
+					return c.cs.CoreV1().Services(object.Namespace).Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
 
-		if list, err := c.cs.CoreV1().ServiceAccounts("").List(filter); !failure(err) {
+		if list, err := c.cs.CoreV1().ServiceAccounts("").List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, func() error {
-					return c.cs.CoreV1().ServiceAccounts(object.Namespace).Delete(object.Name, nil)
+					return c.cs.CoreV1().ServiceAccounts(object.Namespace).Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
 
-		if list, err := c.cs.StorageV1beta1().CSIDrivers().List(filter); !failure(err) {
+		if list, err := c.cs.StorageV1beta1().CSIDrivers().List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, func() error {
-					return c.cs.StorageV1beta1().CSIDrivers().Delete(object.Name, nil)
+					return c.cs.StorageV1beta1().CSIDrivers().Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
 
 		if done {
 			// Nothing else left, now delete the statefulset.
-			if list, err := c.cs.AppsV1().StatefulSets("").List(filter); !failure(err) {
+			if list, err := c.cs.AppsV1().StatefulSets("").List(context.Background(), filter); !failure(err) {
 				for _, object := range list.Items {
 					del(object.ObjectMeta, func() error {
-						return c.cs.AppsV1().StatefulSets(object.Namespace).Delete(object.Name, nil)
+						return c.cs.AppsV1().StatefulSets(object.Namespace).Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 					})
 				}
 			}
@@ -337,7 +337,7 @@ func (d Deployment) DeploymentMode() string {
 // installation in the cluster. An installation is found via its
 // statefulset, which must have a pmem-csi.intel.com/deployment label.
 func FindPMEMDriver(c *Cluster) (*Deployment, error) {
-	statefulsets, err := c.cs.AppsV1().StatefulSets("").List(metav1.ListOptions{LabelSelector: deploymentLabel})
+	statefulsets, err := c.cs.AppsV1().StatefulSets("").List(context.Background(), metav1.ListOptions{LabelSelector: deploymentLabel})
 	if err != nil {
 		return nil, err
 	}

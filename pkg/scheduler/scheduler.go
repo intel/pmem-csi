@@ -26,7 +26,7 @@ import (
 	corelisters "k8s.io/client-go/listers/core/v1"
 	storagelisters "k8s.io/client-go/listers/storage/v1"
 	"k8s.io/klog/klogr"
-	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api" // We already depend on k/k, so we might as well import the API here.
+	schedulerapi "k8s.io/kube-scheduler/extender/v1"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
