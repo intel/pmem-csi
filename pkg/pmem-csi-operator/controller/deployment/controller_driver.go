@@ -208,7 +208,7 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 		}
 		if updateNodeDriver {
 			klog.Infof("Updating node driver for deployment %q", d.Name)
-			if e := r.UpdateOrCreate(d.getNodeDaemonSet()); err != nil {
+			if e := r.UpdateOrCreate(d.getNodeDaemonSet()); e != nil {
 				requeue = true
 				err = e
 			}
@@ -224,7 +224,7 @@ func (d *PmemCSIDriver) deployObjects(r *ReconcileDeployment) error {
 		return err
 	}
 	for _, obj := range objects {
-		if err := r.Create(obj); err != nil {
+		if err := r.UpdateOrCreate(obj); err != nil {
 			return err
 		}
 	}
