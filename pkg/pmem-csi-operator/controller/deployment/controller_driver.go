@@ -114,6 +114,7 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 	updateController := false
 	updateNodeDriver := false
 	updateDeployment := false
+	updateSecrets := false
 	updateAll := false // Update all objects of the deployment
 
 	if !foundInCache {
@@ -158,6 +159,8 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 			d.Spec.Labels = existing.Spec.Labels
 			updateDeployment = true
 			err = fmt.Errorf("changing %q of a running deployment %q is not allowed", c, d.Name)
+		case api.CACertificate, api.RegistryCertificate, api.NodeControllerCertificate:
+			updateSecrets = true
 		}
 
 		if err != nil {
@@ -185,6 +188,13 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 		}
 		objects = append(objects, objs...)
 	} else {
+		if updateSecrets {
+			objs, err := d.getSecrets(r)
+			if err != nil {
+				return true, err
+			}
+			objects = append(objects, objs...)
+		}
 		if updateController {
 			klog.Infof("Updating controller driver for deployment %q", d.Name)
 			objects = append(objects, d.getControllerStatefulSet())
@@ -250,6 +260,28 @@ func (d *PmemCSIDriver) deployObjects(r *ReconcileDeployment) error {
 
 // getDeploymentObjects returns all objects that are part of a driver deployment.
 func (d *PmemCSIDriver) getDeploymentObjects(r *ReconcileDeployment) ([]runtime.Object, error) {
+	objects, err := d.getSecrets(r)
+	if err != nil {
+		return nil, err
+	}
+
+	objects = append(objects,
+		d.getCSIDriver(r.k8sVersion),
+		d.getControllerServiceAccount(),
+		d.getControllerProvisionerRole(),
+		d.getControllerProvisionerRoleBinding(),
+		d.getControllerProvisionerClusterRole(),
+		d.getControllerProvisionerClusterRoleBinding(),
+		d.getControllerService(),
+		d.getMetricsService(),
+		d.getControllerStatefulSet(),
+		d.getNodeDaemonSet(),
+	)
+
+	return objects, nil
+}
+
+func (d *PmemCSIDriver) getSecrets(r *ReconcileDeployment) ([]runtime.Object, error) {
 	// Encoded private keys and certificates
 	caCert := d.Spec.CACert
 	registryPrKey := d.Spec.RegistryPrivateKey
@@ -313,22 +345,11 @@ func (d *PmemCSIDriver) getDeploymentObjects(r *ReconcileDeployment) ([]runtime.
 		}
 	}
 
-	objects := []runtime.Object{
+	return []runtime.Object{
 		d.getSecret("pmem-ca", nil, caCert),
 		d.getSecret("pmem-registry", registryPrKey, registryCert),
 		d.getSecret("pmem-node-controller", ncPrKey, ncCert),
-		d.getCSIDriver(r.k8sVersion),
-		d.getControllerServiceAccount(),
-		d.getControllerProvisionerRole(),
-		d.getControllerProvisionerRoleBinding(),
-		d.getControllerProvisionerClusterRole(),
-		d.getControllerProvisionerClusterRoleBinding(),
-		d.getControllerService(),
-		d.getMetricsService(),
-		d.getControllerStatefulSet(),
-		d.getNodeDaemonSet(),
-	}
-	return objects, nil
+	}, nil
 }
 
 // validateCertificates ensures that the given keys and certificates are valid

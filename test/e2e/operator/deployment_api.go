@@ -156,6 +156,20 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 			validateDriverDeployment(f, d, deployment)
 
+			// prepare custom certificates
+			ca, err := pmemtls.NewCA(nil, nil)
+			Expect(err).Should(BeNil(), "failed to instantiate CA")
+
+			regKey, err := pmemtls.NewPrivateKey()
+			Expect(err).Should(BeNil(), "failed to generate a private key: %v", err)
+			regCert, err := ca.GenerateCertificate("pmem-registry", regKey.Public())
+			Expect(err).Should(BeNil(), "failed to sign registry key")
+
+			ncKey, err := pmemtls.NewPrivateKey()
+			Expect(err).Should(BeNil(), "failed to generate a private key: %v", err)
+			ncCert, err := ca.GenerateCertificate("pmem-node-controller", ncKey.Public())
+			Expect(err).Should(BeNil(), "failed to sign node controller key")
+
 			dep = deploy.GetDeploymentCR(f, deployment.Name)
 
 			/* Update fields */
@@ -176,6 +190,11 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					"memory": "2Mi",
 				},
 			}
+			spec["caCert"] = ca.EncodedCertificate()
+			spec["registryKey"] = pmemtls.EncodeKey(regKey)
+			spec["registryCert"] = pmemtls.EncodeCert(regCert)
+			spec["nodeControllerKey"] = pmemtls.EncodeKey(ncKey)
+			spec["nodeControllerCert"] = pmemtls.EncodeCert(ncCert)
 
 			deployment, err = toDeployment(dep)
 			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
@@ -592,6 +611,19 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				}
 			}()
 
+			ca, err := pmemtls.NewCA(nil, nil)
+			Expect(err).Should(BeNil(), "failed to instantiate CA")
+
+			regKey, err := pmemtls.NewPrivateKey()
+			Expect(err).Should(BeNil(), "failed to generate a private key: %v", err)
+			regCert, err := ca.GenerateCertificate("pmem-registry", regKey.Public())
+			Expect(err).Should(BeNil(), "failed to sign registry key")
+
+			ncKey, err := pmemtls.NewPrivateKey()
+			Expect(err).Should(BeNil(), "failed to generate a private key: %v", err)
+			ncCert, err := ca.GenerateCertificate("pmem-node-controller", ncKey.Public())
+			Expect(err).Should(BeNil(), "failed to sign node controller key")
+
 			dep = deploy.GetDeploymentCR(f, deployment.Name)
 			spec := dep.Object["spec"].(map[string]interface{})
 			spec["image"] = "fake-image"
@@ -610,6 +642,11 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					"memory": "2Mi",
 				},
 			}
+			spec["caCert"] = ca.EncodedCertificate()
+			spec["registryKey"] = pmemtls.EncodeKey(regKey)
+			spec["registryCert"] = pmemtls.EncodeCert(regCert)
+			spec["nodeControllerKey"] = pmemtls.EncodeKey(ncKey)
+			spec["nodeControllerCert"] = pmemtls.EncodeCert(ncCert)
 
 			deployment, err = toDeployment(dep)
 			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")

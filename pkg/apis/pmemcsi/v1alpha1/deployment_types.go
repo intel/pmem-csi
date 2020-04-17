@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package v1alpha1
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 
@@ -331,6 +332,22 @@ func (d *Deployment) Compare(other *Deployment) map[DeploymentChange]struct{} {
 
 	if !reflect.DeepEqual(d.Spec.Labels, other.Spec.Labels) {
 		changes[Labels] = struct{}{}
+	}
+
+	if bytes.Compare(d.Spec.CACert, other.Spec.CACert) != 0 {
+		changes[CACertificate] = struct{}{}
+	}
+	if bytes.Compare(d.Spec.RegistryCert, other.Spec.RegistryCert) != 0 {
+		changes[RegistryCertificate] = struct{}{}
+	}
+	if bytes.Compare(d.Spec.NodeControllerCert, other.Spec.NodeControllerCert) != 0 {
+		changes[NodeControllerCertificate] = struct{}{}
+	}
+	if bytes.Compare(d.Spec.RegistryPrivateKey, other.Spec.RegistryPrivateKey) != 0 {
+		changes[RegistryKey] = struct{}{}
+	}
+	if bytes.Compare(d.Spec.NodeControllerPrivateKey, other.Spec.NodeControllerPrivateKey) != 0 {
+		changes[NodeControllerKey] = struct{}{}
 	}
 
 	return changes
