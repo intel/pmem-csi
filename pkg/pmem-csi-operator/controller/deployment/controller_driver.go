@@ -70,34 +70,15 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 			return true, fmt.Errorf("driver name %q is already taken by deployment %q",
 				dep.Spec.DriverName, dep.Name)
 		}
-		r.deployments[d.Name] = d.Deployment
-
-		if err := d.initDeploymentSecrests(r); err != nil {
-			d.Status.Phase = api.DeploymentPhaseFailed
-			return true, err
-		}
-		d.Status.Phase = api.DeploymentPhaseInitializing
-	case api.DeploymentPhaseInitializing:
-		// There might be change in deployment name
-		// Reject if any incompatible name change
-		if _, ok := changes[api.DriverName]; ok {
-			if dep := d.checkIfNameClash(r); dep != nil {
-				// Revert Deployment object
-				d.Spec.DriverName = oldDeployment.Spec.DriverName
-				if err := r.Update(d.Deployment); err != nil {
-					return true, err
-				}
-				return true, fmt.Errorf("driver name %q is already taken by deployment %q",
-					oldDeployment.Spec.DriverName, dep.Name)
-			}
-		}
-
 		// Update local cache so that we can catch if any change in deployment
 		r.deployments[d.Name] = d.Deployment
 
 		if err := d.deployObjects(r); err != nil {
 			return true, err
 		}
+
+		// TODO: wait for functional driver before entering "running" phase.
+		// For now we go straight to it.
 
 		d.Status.Phase = api.DeploymentPhaseRunning
 		// Deployment successfull, so no more reconcile needed for this deployment
@@ -194,8 +175,21 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 	return requeue, err
 }
 
-func (d *PmemCSIDriver) initDeploymentSecrests(r *ReconcileDeployment) error {
+func (d *PmemCSIDriver) deployObjects(r *ReconcileDeployment) error {
+	objects, err := d.getDeploymentObjects(r)
+	if err != nil {
+		return err
+	}
+	for _, obj := range objects {
+		if err := r.Create(obj); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
+// getDeploymentObjects returns all objects that are part of a driver deployment.
+func (d *PmemCSIDriver) getDeploymentObjects(r *ReconcileDeployment) ([]runtime.Object, error) {
 	// Encoded private keys and certificates
 	caCert := d.Spec.CACert
 	registryPrKey := d.Spec.RegistryPrivateKey
@@ -206,10 +200,10 @@ func (d *PmemCSIDriver) initDeploymentSecrests(r *ReconcileDeployment) error {
 	// sanity check
 	if caCert == nil {
 		if registryCert != nil || ncCert != nil {
-			return fmt.Errorf("incomplete deployment configuration: missing root CA certificate by which the provided certificates are signed")
+			return nil, fmt.Errorf("incomplete deployment configuration: missing root CA certificate by which the provided certificates are signed")
 		}
 	} else if registryCert == nil || registryPrKey == nil || ncCert == nil || ncPrKey == nil {
-		return fmt.Errorf("incomplete deployment configuration: certificates and corresponding private keys must be provided")
+		return nil, fmt.Errorf("incomplete deployment configuration: certificates and corresponding private keys must be provided")
 	}
 
 	if caCert == nil {
@@ -217,7 +211,7 @@ func (d *PmemCSIDriver) initDeploymentSecrests(r *ReconcileDeployment) error {
 
 		ca, err := pmemtls.NewCA(nil, nil)
 		if err != nil {
-			return fmt.Errorf("failed to initialize CA: %v", err)
+			return nil, fmt.Errorf("failed to initialize CA: %v", err)
 		}
 		caCert = ca.EncodedCertificate()
 
@@ -228,12 +222,12 @@ func (d *PmemCSIDriver) initDeploymentSecrests(r *ReconcileDeployment) error {
 			registryPrKey = pmemtls.EncodeKey(prKey)
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		cert, err := ca.GenerateCertificate("pmem-registry", prKey)
 		if err != nil {
-			return fmt.Errorf("failed to generate registry certificate: %v", err)
+			return nil, fmt.Errorf("failed to generate registry certificate: %v", err)
 		}
 		registryCert = pmemtls.EncodeCert(cert)
 
@@ -244,42 +238,20 @@ func (d *PmemCSIDriver) initDeploymentSecrests(r *ReconcileDeployment) error {
 			prKey, err = pmemtls.DecodeKey(ncPrKey)
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		cert, err = ca.GenerateCertificate("pmem-node-controller", prKey)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		ncCert = pmemtls.EncodeCert(cert)
 	}
 
-	secrets := []runtime.Object{
+	objects := []runtime.Object{
 		d.getSecret("pmem-ca", nil, caCert),
 		d.getSecret("pmem-registry", registryPrKey, registryCert),
 		d.getSecret("pmem-node-controller", ncPrKey, ncCert),
-	}
-
-	for _, obj := range secrets {
-		if err := r.Create(obj); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (d *PmemCSIDriver) deployObjects(r *ReconcileDeployment) error {
-	for _, obj := range d.getDeploymentObjects(r) {
-		if err := r.Create(obj); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (d *PmemCSIDriver) getDeploymentObjects(r *ReconcileDeployment) []runtime.Object {
-	return []runtime.Object{
 		d.getCSIDriver(r.k8sVersion),
 		d.getControllerServiceAccount(),
 		d.getControllerProvisionerRole(),
@@ -291,6 +263,7 @@ func (d *PmemCSIDriver) getDeploymentObjects(r *ReconcileDeployment) []runtime.O
 		d.getControllerStatefulSet(),
 		d.getNodeDaemonSet(),
 	}
+	return objects, nil
 }
 
 func (d *PmemCSIDriver) getOwnerReference() metav1.OwnerReference {
