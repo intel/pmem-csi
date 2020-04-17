@@ -173,6 +173,9 @@ var _ = Describe("pmem registry", func() {
 			evilKey  = os.ExpandEnv("${TEST_WORK}/evil-ca/pmem-node-controller-key.pem")
 		)
 
+		// gRPC returns all kinds of errors when TLS fails.
+		badConnectionRE := "authentication handshake failed: remote error: tls: bad certificate|all SubConns are in TransientFailure|rpc error: code = Unavailable desc = connection closed|rpc error: code = Unavailable desc = tls: use of closed connection|transport: failed to write client preface: write .*: write: broken pipe"
+
 		// This covers different scenarios for connections to the registry.
 		cases := []struct {
 			name, ca, cert, key, peerName, errorRE string
@@ -180,12 +183,12 @@ var _ = Describe("pmem registry", func() {
 			// The exact error for the server side depends on whether TLS 1.3 is active (https://golang.org/doc/go1.12#tls_1_3).
 			// It looks like error detection is less precise in that case.
 			{"registry should detect man-in-the-middle", ca, evilCert, evilKey, "pmem-registry",
-				"authentication handshake failed: remote error: tls: bad certificate|all SubConns are in TransientFailure",
+				badConnectionRE,
 			},
 			{"client should detect man-in-the-middle", evilCA, evilCert, evilKey, "pmem-registry", "transport: authentication handshake failed: x509: certificate signed by unknown authority"},
 			{"client should detect wrong peer", ca, cert, key, "unknown-registry", "transport: authentication handshake failed: x509: certificate is valid for pmem-csi-scheduler, pmem-csi-scheduler.default, pmem-csi-scheduler.default.svc, pmem-csi-metrics, pmem-csi-metrics.default, pmem-csi-metrics.default.svc, pmem-registry, not unknown-registry"},
 			{"server should detect wrong peer", ca, wrongCert, wrongKey, "pmem-registry",
-				"transport: authentication handshake failed: remote error: tls: bad certificate|all SubConns are in TransientFailure",
+				badConnectionRE,
 			},
 		}
 

@@ -7,7 +7,6 @@ package deployment_test
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"testing"
 
@@ -70,70 +69,57 @@ func decodeYaml(deploymentYaml string) runtime.Object {
 	return obj
 }
 
-func getDeployment(d *pmemDeployment) runtime.Object {
-	yaml := fmt.Sprintf(`kind: Deployment
-apiVersion: pmem-csi.intel.com/v1alpha1
-metadata:
-  name: %s
-`, d.name)
-	yaml += "spec:\n"
-	if d.driverName != "" {
-		yaml += "  driverName: " + d.driverName + "\n"
+func getDeployment(d *pmemDeployment, c client.Client) runtime.Object {
+	dep := &api.Deployment{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Deployment",
+			APIVersion: "pmem-csi.intel.com/v1alpha1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: d.name,
+		},
 	}
-	if d.logLevel != 0 {
-		yaml += fmt.Sprintf("  logLevel: %d\n", d.logLevel)
+
+	if c != nil {
+		// Retrieve existing object before updating it.
+		err := c.Get(context.TODO(), types.NamespacedName{Name: d.name}, dep)
+		Expect(err).Should(BeNil(), "failed to retrive existing deployment object")
 	}
-	if d.image != "" {
-		yaml += "  image: " + d.image + "\n"
-	}
-	if d.pullPolicy != "" {
-		yaml += "  imagePullPolicy: " + d.pullPolicy + "\n"
-	}
-	if d.provisionerImage != "" {
-		yaml += "  provisionerImage: " + d.provisionerImage + "\n"
-	}
-	if d.registrarImage != "" {
-		yaml += "  nodeRegistrarImage: " + d.registrarImage + "\n"
-	}
+
+	// TODO (?): embed DeploymentSpec inside pmemDeployment instead of splitting it up into individual values.
+	// The entire copying block below then collapses into a single line.
+
+	dep.Spec = api.DeploymentSpec{}
+	spec := &dep.Spec
+	spec.DriverName = d.driverName
+	spec.LogLevel = d.logLevel
+	spec.Image = d.image
+	spec.PullPolicy = corev1.PullPolicy(d.pullPolicy)
+	spec.ProvisionerImage = d.provisionerImage
+	spec.NodeRegistrarImage = d.registrarImage
 	if d.controllerCPU != "" || d.controllerMemory != "" {
-		yaml += "  controllerResources:\n"
-		yaml += "    requests:\n"
-		if d.controllerCPU != "" {
-			yaml += "      cpu: " + d.controllerCPU + "\n"
-		}
-		if d.controllerMemory != "" {
-			yaml += "      memory: " + d.controllerMemory + "\n"
+		spec.ControllerResources = &corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse(d.controllerCPU),
+				corev1.ResourceMemory: resource.MustParse(d.controllerMemory),
+			},
 		}
 	}
-
 	if d.nodeCPU != "" || d.nodeMemory != "" {
-		yaml += "  nodeResources:\n"
-		yaml += "    requests:\n"
-		if d.controllerCPU != "" {
-			yaml += "      cpu: " + d.nodeCPU + "\n"
-		}
-		if d.controllerMemory != "" {
-			yaml += "      memory: " + d.nodeMemory + "\n"
+		spec.NodeResources = &corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse(d.nodeCPU),
+				corev1.ResourceMemory: resource.MustParse(d.nodeMemory),
+			},
 		}
 	}
+	spec.CACert = d.caCert
+	spec.RegistryCert = d.regCert
+	spec.RegistryPrivateKey = d.regKey
+	spec.NodeControllerCert = d.ncCert
+	spec.NodeControllerPrivateKey = d.ncKey
 
-	if d.caCert != nil {
-		yaml += "  caCert: " + base64.StdEncoding.EncodeToString(d.caCert) + "\n"
-	}
-	if d.regCert != nil {
-		yaml += "  registryCert: " + base64.StdEncoding.EncodeToString(d.regCert) + "\n"
-	}
-	if d.regKey != nil {
-		yaml += "  registryKey: " + base64.StdEncoding.EncodeToString(d.regKey) + "\n"
-	}
-	if d.ncCert != nil {
-		yaml += "  nodeControllerCert: " + base64.StdEncoding.EncodeToString(d.ncCert) + "\n"
-	}
-	if d.ncKey != nil {
-		yaml += "  nodeControllerKey: " + base64.StdEncoding.EncodeToString(d.ncKey) + "\n"
-	}
-
-	return decodeYaml(yaml)
+	return dep
 }
 
 func testDeploymentPhase(c client.Client, name string, expectedPhase api.DeploymentPhase) {
@@ -167,12 +153,13 @@ func testReconcilePhase(rc reconcile.Reconciler, c client.Client, name string, e
 	testDeploymentPhase(c, name, expectedPhase)
 }
 
-func validateSecrets(c client.Client, d *pmemDeployment) {
+func validateSecrets(c client.Client, d *pmemDeployment, ns string) {
 	for _, name := range []string{"pmem-registry", "pmem-node-controller", "pmem-ca"} {
 		secretName := d.name + "-" + name
 		s := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: secretName,
+				Name:      secretName,
+				Namespace: ns,
 			},
 		}
 		err := c.Get(context.TODO(), namespacedNameWithOffset(2, s), s)
@@ -184,10 +171,17 @@ func validateSecrets(c client.Client, d *pmemDeployment) {
 	}
 }
 
-func validateCSIDriver(c client.Client, driverName string, k8sVersion *version.Version) {
+func validateCSIDriver(c client.Client, driverName string, k8sVersion *version.Version, ns string) {
 	driver := &storagev1beta1.CSIDriver{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: driverName,
+			// The namespace should be ignored for
+			// non-namespaced objects, but the object
+			// tracker in
+			// k8s.io/client-go@v0.18.1/testing/fixture.go
+			// doesn't know which types that applies for
+			// and always compares the namespace.
+			Namespace: ns,
 		},
 	}
 
@@ -210,6 +204,17 @@ func namespacedNameWithOffset(offset int, obj runtime.Object) types.NamespacedNa
 	ExpectWithOffset(offset, err).Should(BeNil(), "failed to get accessor")
 
 	return types.NamespacedName{Name: metaObj.GetName(), Namespace: metaObj.GetNamespace()}
+}
+
+// objectKey creates the lookup key for an object with a name and optionally with a namespace.
+func objectKey(name string, namespace ...string) client.ObjectKey {
+	key := types.NamespacedName{
+		Name: name,
+	}
+	if len(namespace) > 0 {
+		key.Namespace = namespace[0]
+	}
+	return key
 }
 
 var _ = Describe("Operator", func() {
@@ -236,18 +241,18 @@ var _ = Describe("Operator", func() {
 				name: "test-deployment",
 			}
 
-			dep := getDeployment(d)
+			dep := getDeployment(d, nil)
 
 			err := c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
-			validateSecrets(c, d)
-			validateCSIDriver(c, api.DefaultDriverName, testK8sVersion)
+			validateSecrets(c, d, testNamespace)
+			validateCSIDriver(c, api.DefaultDriverName, testK8sVersion, testNamespace)
 
 			ss := &appsv1.StatefulSet{}
-			err = c.Get(context.TODO(), namespacedName(ss), ss)
+			err = c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)
 			Expect(err).Should(BeNil(), "controller stateful set is expected on a successful deployment")
 			Expect(*ss.Spec.Replicas).Should(BeEquivalentTo(1), "controller stateful set replication count mismatch")
 			Expect(ss.ObjectMeta.Namespace).Should(BeEquivalentTo(testNamespace), "controller stateful set namespace mismatch")
@@ -270,7 +275,7 @@ var _ = Describe("Operator", func() {
 			}
 
 			ds := &appsv1.DaemonSet{}
-			err = c.Get(context.TODO(), namespacedName(ds), ds)
+			err = c.Get(context.TODO(), objectKey(d.name+"-node", testNamespace), ds)
 
 			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
 			Expect(ds.ObjectMeta.Namespace).Should(BeEquivalentTo(testNamespace), "node daemon set namespace mismatch")
@@ -308,18 +313,18 @@ var _ = Describe("Operator", func() {
 				nodeMemory:       "500Mi",
 			}
 
-			dep := getDeployment(d)
+			dep := getDeployment(d, nil)
 			err := c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
 			// Reconcile now should change Phase to running
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
-			validateSecrets(c, d)
-			validateCSIDriver(c, d.driverName, testK8sVersion)
+			validateSecrets(c, d, testNamespace)
+			validateCSIDriver(c, d.driverName, testK8sVersion, testNamespace)
 
 			ss := &appsv1.StatefulSet{}
-			err = c.Get(context.TODO(), namespacedName(ss), ss)
+			err = c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)
 
 			Expect(err).Should(BeNil(), "controller stateful set is expected on a successful deployment")
 			Expect(*ss.Spec.Replicas).Should(BeEquivalentTo(1), "controller stateful set replication count mismatch")
@@ -343,7 +348,7 @@ var _ = Describe("Operator", func() {
 			}
 
 			ds := &appsv1.DaemonSet{}
-			err = c.Get(context.TODO(), namespacedName(ds), ds)
+			err = c.Get(context.TODO(), objectKey(d.name+"-node", testNamespace), ds)
 
 			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
 			Expect(ds.ObjectMeta.Namespace).Should(BeEquivalentTo(testNamespace), "node daemon set namespace mismatch")
@@ -377,11 +382,11 @@ var _ = Describe("Operator", func() {
 				driverName: "test-pmem-driver2.intel.com",
 			}
 
-			dep := getDeployment(d1)
+			dep := getDeployment(d1, nil)
 			err := c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment1")
 
-			dep = getDeployment(d2)
+			dep = getDeployment(d2, nil)
 			err = c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment2")
 
@@ -401,11 +406,11 @@ var _ = Describe("Operator", func() {
 				driverName: "test-pmem-driver.intel.com",
 			}
 
-			dep := getDeployment(d1)
+			dep := getDeployment(d1, nil)
 			err := c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment1")
 
-			dep = getDeployment(d2)
+			dep = getDeployment(d2, nil)
 			err = c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment2")
 
@@ -431,7 +436,7 @@ var _ = Describe("Operator", func() {
 			testReconcilePhase(rc, c, d2.name, false, false, api.DeploymentPhaseRunning)
 			testReconcilePhase(rc, c, d2.name, false, false, api.DeploymentPhaseRunning)
 
-			validateCSIDriver(c, d2.driverName, testK8sVersion)
+			validateCSIDriver(c, d2.driverName, testK8sVersion, testNamespace)
 		})
 
 		It("shall use provided private keys", func() {
@@ -446,21 +451,17 @@ var _ = Describe("Operator", func() {
 				driverName: "test-pmem-driver.intel.com",
 				regKey:     encodedKey,
 			}
-			dep := getDeployment(d)
+			dep := getDeployment(d, nil)
 			err = c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
 			// First deployment expected to be successful
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
-			validateSecrets(c, d)
+			validateSecrets(c, d, testNamespace)
 
-			s := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: d.name + "-pmem-registry",
-				},
-			}
-			err = c.Get(context.TODO(), namespacedName(s), s)
+			s := &corev1.Secret{}
+			err = c.Get(context.TODO(), objectKey(d.name+"-pmem-registry", testNamespace), s)
 			Expect(err).Should(BeNil(), "failed to get registry secret: %v", err)
 			Expect(s.Data[corev1.TLSPrivateKeyKey]).Should(Equal(encodedKey), "mismatched private key")
 		})
@@ -470,7 +471,7 @@ var _ = Describe("Operator", func() {
 				name: "test-deployment",
 			}
 
-			err := c.Create(context.TODO(), getDeployment(d))
+			err := c.Create(context.TODO(), getDeployment(d, nil))
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
@@ -478,13 +479,13 @@ var _ = Describe("Operator", func() {
 			// Reconcile now should keep phase as running
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
-			validateSecrets(c, d)
-			validateCSIDriver(c, api.DefaultDriverName, testK8sVersion)
+			validateSecrets(c, d, testNamespace)
+			validateCSIDriver(c, api.DefaultDriverName, testK8sVersion, testNamespace)
 
 			// Ensure both deaemonset and statefulset have default driver name
 			// before editing deployment
 			ss := &appsv1.StatefulSet{}
-			err = c.Get(context.TODO(), namespacedName(ss), ss)
+			err = c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)
 			Expect(err).Should(BeNil(), "controller stateful set is expected on a successful deployment")
 			for _, c := range ss.Spec.Template.Spec.Containers {
 				if c.Name == "pmem-driver" {
@@ -493,7 +494,7 @@ var _ = Describe("Operator", func() {
 				}
 			}
 			ds := &appsv1.DaemonSet{}
-			err = c.Get(context.TODO(), namespacedName(ds), ds)
+			err = c.Get(context.TODO(), objectKey(d.name+"-node", testNamespace), ds)
 			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
 			for _, c := range ds.Spec.Template.Spec.Containers {
 				if c.Name == "pmem-driver" {
@@ -503,12 +504,8 @@ var _ = Describe("Operator", func() {
 			}
 
 			// Edit deployment name
-			dep := &api.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: d.name,
-				},
-			}
-			err = c.Get(context.TODO(), namespacedName(dep), dep)
+			dep := &api.Deployment{}
+			err = c.Get(context.TODO(), objectKey(d.name), dep)
 			Expect(err).Should(BeNil(), "failed to retrieve deployment")
 
 			dep.Spec.DriverName = "test-driver-name"
@@ -518,7 +515,7 @@ var _ = Describe("Operator", func() {
 
 			// Ensure the new driver name effective in sub resources
 			ss = &appsv1.StatefulSet{}
-			err = c.Get(context.TODO(), namespacedName(ss), ss)
+			err = c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)
 			Expect(err).Should(BeNil(), "controller stateful set is expected on a successful deployment")
 			for _, c := range ss.Spec.Template.Spec.Containers {
 				if c.Name == "pmem-driver" {
@@ -527,7 +524,7 @@ var _ = Describe("Operator", func() {
 				}
 			}
 			ds = &appsv1.DaemonSet{}
-			err = c.Get(context.TODO(), namespacedName(ds), ds)
+			err = c.Get(context.TODO(), objectKey(d.name+"-node", testNamespace), ds)
 			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
 			for _, c := range ds.Spec.Template.Spec.Containers {
 				if c.Name == "pmem-driver" {
@@ -548,10 +545,10 @@ var _ = Describe("Operator", func() {
 				driverName: "test-driver2",
 			}
 
-			err := c.Create(context.TODO(), getDeployment(d1))
+			err := c.Create(context.TODO(), getDeployment(d1, nil))
 			Expect(err).Should(BeNil(), "failed to create deployment1")
 
-			err = c.Create(context.TODO(), getDeployment(d2))
+			err = c.Create(context.TODO(), getDeployment(d2, nil))
 			Expect(err).Should(BeNil(), "failed to create deployment2")
 
 			// Ensure that both the deployments are in running phase
@@ -560,12 +557,8 @@ var _ = Describe("Operator", func() {
 
 			// Try to introduce duplicate name when the driver is in Initializing phase
 			// Rertrieve deployment1
-			dep := &api.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: d1.name,
-				},
-			}
-			err = c.Get(context.TODO(), namespacedName(dep), dep)
+			dep := &api.Deployment{}
+			err = c.Get(context.TODO(), objectKey(d1.name), dep)
 			Expect(err).Should(BeNil(), "failed to retrieve deployment")
 
 			// Update it's driver name with the name of deployment2, which should
@@ -575,7 +568,7 @@ var _ = Describe("Operator", func() {
 			Expect(err).Should(BeNil(), "failed to update deployment")
 			testReconcilePhase(rc, c, d1.name, true, false, api.DeploymentPhaseRunning)
 
-			validateCSIDriver(c, d1.driverName, testK8sVersion)
+			validateCSIDriver(c, d1.driverName, testK8sVersion, testNamespace)
 		})
 
 		It("shall not allow to change running deployment device mode", func() {
@@ -583,12 +576,12 @@ var _ = Describe("Operator", func() {
 				name: "test-deployment",
 			}
 
-			err := c.Create(context.TODO(), getDeployment(d))
+			err := c.Create(context.TODO(), getDeployment(d, nil))
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
-			validateSecrets(c, d)
+			validateSecrets(c, d, testNamespace)
 
 			// Reconcile now should keep phase as running
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
@@ -596,7 +589,7 @@ var _ = Describe("Operator", func() {
 			// Ensure both deaemonset and statefulset have default driver name
 			// before editing deployment
 			ds := &appsv1.DaemonSet{}
-			err = c.Get(context.TODO(), namespacedName(ds), ds)
+			err = c.Get(context.TODO(), objectKey(d.name+"-node", testNamespace), ds)
 			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
 			for _, c := range ds.Spec.Template.Spec.Containers {
 				if c.Name == "pmem-driver" {
@@ -607,12 +600,8 @@ var _ = Describe("Operator", func() {
 			}
 
 			// Edit deployment name
-			dep := &api.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: d.name,
-				},
-			}
-			err = c.Get(context.TODO(), namespacedName(dep), dep)
+			dep := &api.Deployment{}
+			err = c.Get(context.TODO(), objectKey(d.name), dep)
 			Expect(err).Should(BeNil(), "failed to retrieve deployment")
 
 			dep.Spec.DeviceMode = api.DeviceModeDirect
@@ -631,18 +620,18 @@ var _ = Describe("Operator", func() {
 				nodeMemory:       "11Mi",
 			}
 
-			err := c.Create(context.TODO(), getDeployment(d))
+			err := c.Create(context.TODO(), getDeployment(d, nil))
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
-			validateSecrets(c, d)
+			validateSecrets(c, d, testNamespace)
 
 			// Reconcile now should keep phase as running
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			ss := &appsv1.StatefulSet{}
-			err = c.Get(context.TODO(), namespacedName(ss), ss)
+			err = c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)
 			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
 			for _, c := range ss.Spec.Template.Spec.Containers {
 				Expect(c.Resources.Requests.Cpu().Cmp(resource.MustParse(d.controllerCPU))).Should(BeZero(), "controller cpu resource requests mismatch")
@@ -650,7 +639,7 @@ var _ = Describe("Operator", func() {
 			}
 
 			ds := &appsv1.DaemonSet{}
-			err = c.Get(context.TODO(), namespacedName(ds), ds)
+			err = c.Get(context.TODO(), objectKey(d.name+"-node", testNamespace), ds)
 			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
 			for _, c := range ds.Spec.Template.Spec.Containers {
 				Expect(c.Resources.Requests.Cpu().Cmp(resource.MustParse(d.nodeCPU))).Should(BeZero(), "node cpu resource requests mismatch")
@@ -662,7 +651,7 @@ var _ = Describe("Operator", func() {
 			d.controllerMemory = "20Mi"
 			d.nodeCPU = "210m"
 			d.nodeMemory = "21Mi"
-			dep := getDeployment(d)
+			dep := getDeployment(d, c)
 			err = c.Update(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to update deployment")
 			// Reconcile is expected not to fail
@@ -670,7 +659,7 @@ var _ = Describe("Operator", func() {
 
 			// Recheck the container resources are updated
 			ss = &appsv1.StatefulSet{}
-			err = c.Get(context.TODO(), namespacedName(ss), ss)
+			err = c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)
 			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
 			for _, c := range ss.Spec.Template.Spec.Containers {
 				Expect(c.Resources.Requests.Cpu().Cmp(resource.MustParse(d.controllerCPU))).Should(BeZero(), "controller cpu resource requests mismatch")
@@ -678,7 +667,7 @@ var _ = Describe("Operator", func() {
 			}
 
 			ds = &appsv1.DaemonSet{}
-			err = c.Get(context.TODO(), namespacedName(ds), ds)
+			err = c.Get(context.TODO(), objectKey(d.name+"-node", testNamespace), ds)
 			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
 			for _, c := range ds.Spec.Template.Spec.Containers {
 				Expect(c.Resources.Requests.Cpu().Cmp(resource.MustParse(d.nodeCPU))).Should(BeZero(), "node cpu resource requests mismatch")
@@ -691,20 +680,20 @@ var _ = Describe("Operator", func() {
 				name: "test-update-images",
 			}
 
-			err := c.Create(context.TODO(), getDeployment(d))
+			err := c.Create(context.TODO(), getDeployment(d, nil))
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
-			validateSecrets(c, d)
+			validateSecrets(c, d, testNamespace)
 
 			// Reconcile now should change keep phase as running
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			ss := &appsv1.StatefulSet{}
-			Expect(c.Get(context.TODO(), namespacedName(ss), ss)).Should(BeNil(), "stateful set object is expected on a successful deployment")
+			Expect(c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)).Should(BeNil(), "stateful set object is expected on a successful deployment")
 			ds := &appsv1.DaemonSet{}
-			Expect(c.Get(context.TODO(), namespacedName(ds), ds)).Should(BeNil(), "node daemon set object is expected on a successful deployment")
+			Expect(c.Get(context.TODO(), objectKey(d.name+"-node", testNamespace), ds)).Should(BeNil(), "node daemon set object is expected on a successful deployment")
 
 			containers := ss.Spec.Template.Spec.Containers
 			containers = append(containers, ds.Spec.Template.Spec.Containers...)
@@ -724,14 +713,14 @@ var _ = Describe("Operator", func() {
 			d.provisionerImage = "test-provisioner-image:v0.0.0"
 			d.registrarImage = "test-registrar-image:v0.0.0"
 
-			dep := getDeployment(d)
+			dep := getDeployment(d, c)
 			Expect(c.Update(context.TODO(), dep)).Should(BeNil(), "failed to update deployment")
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			ss = &appsv1.StatefulSet{}
-			Expect(c.Get(context.TODO(), namespacedName(ss), ss)).Should(BeNil(), "stateful set object is expected on a successful deployment")
+			Expect(c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)).Should(BeNil(), "stateful set object is expected on a successful deployment")
 			ds = &appsv1.DaemonSet{}
-			Expect(c.Get(context.TODO(), namespacedName(ds), ds)).Should(BeNil(), "node daemon set is expected on a successful deployment")
+			Expect(c.Get(context.TODO(), objectKey(d.name+"-node", testNamespace), ds)).Should(BeNil(), "node daemon set is expected on a successful deployment")
 			// Recheck if the images are updated
 			containers = ss.Spec.Template.Spec.Containers
 			containers = append(containers, ds.Spec.Template.Spec.Containers...)

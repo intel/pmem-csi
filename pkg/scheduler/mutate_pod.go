@@ -59,7 +59,7 @@ func (s scheduler) Handle(ctx context.Context, req admission.Request) admission.
 	}
 	klog.V(5).Infof("mutate pod %s: PMEM-CSI storage classes %v", pod.Name, targets)
 
-	filter, err := s.mustFilterPod(pod, targets)
+	filter, err := s.mustFilterPod(ctx, pod, targets)
 	if err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
@@ -110,14 +110,14 @@ func (s scheduler) mustFilterSC(sc *storagev1.StorageClass) bool {
 			*sc.VolumeBindingMode != storagev1.VolumeBindingImmediate)
 }
 
-func (s scheduler) mustFilterPod(pod *corev1.Pod, targets map[string]bool) (bool, error) {
+func (s scheduler) mustFilterPod(ctx context.Context, pod *corev1.Pod, targets map[string]bool) (bool, error) {
 	for _, vol := range pod.Spec.Volumes {
 		if vol.PersistentVolumeClaim != nil {
 			pvcName := vol.PersistentVolumeClaim.ClaimName
 			pvc, err := s.pvcLister.PersistentVolumeClaims(pod.Namespace).Get(pvcName)
 			if err != nil && apierrs.IsNotFound(err) {
 				// Bypass the lister, it might not have a recently created PVC yet.
-				pvc, err = s.clientSet.CoreV1().PersistentVolumeClaims(pod.Namespace).Get(pvcName, metav1.GetOptions{})
+				pvc, err = s.clientSet.CoreV1().PersistentVolumeClaims(pod.Namespace).Get(ctx, pvcName, metav1.GetOptions{})
 			}
 
 			if err != nil {
@@ -142,7 +142,7 @@ func (s scheduler) mustFilterPod(pod *corev1.Pod, targets map[string]bool) (bool
 			filter, known := targets[scName]
 			if !known {
 				// Query API server directly.
-				sc, err := s.clientSet.StorageV1().StorageClasses().Get(scName, metav1.GetOptions{})
+				sc, err := s.clientSet.StorageV1().StorageClasses().Get(ctx, scName, metav1.GetOptions{})
 				if err != nil {
 					if apierrs.IsNotFound(err) {
 						// As with non-existent PVC, assume that it isn't using PMEM.

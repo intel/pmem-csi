@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package operator
 
 import (
+	"context"
 	"fmt"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
@@ -135,11 +136,11 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			deployment, err = toDeployment(dep)
 			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
 
-			ss, err := f.ClientSet.AppsV1().StatefulSets(d.Namespace).Get(deployment.Name+"-controller", metav1.GetOptions{})
+			ss, err := f.ClientSet.AppsV1().StatefulSets(d.Namespace).Get(context.Background(), deployment.Name+"-controller", metav1.GetOptions{})
 			Expect(err).Should(BeNil(), "existence of controller stateful set")
 			ssVersion := ss.GetResourceVersion()
 
-			ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(deployment.Name+"-node", metav1.GetOptions{})
+			ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(context.Background(), deployment.Name+"-node", metav1.GetOptions{})
 			Expect(err).Should(BeNil(), "existence of node daemonst set")
 			dsVersion := ds.GetResourceVersion()
 
@@ -150,12 +151,12 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			// versions to make sure the resource got updated. Instead, operator should update
 			// deployment status with appropriate events/condtion messages.
 			Eventually(func() bool {
-				ss, err := f.ClientSet.AppsV1().StatefulSets(d.Namespace).Get(deployment.Name+"-controller", metav1.GetOptions{})
+				ss, err := f.ClientSet.AppsV1().StatefulSets(d.Namespace).Get(context.Background(), deployment.Name+"-controller", metav1.GetOptions{})
 				if err != nil {
 					framework.Logf("Get stateful set error: %v", err)
 					return false
 				}
-				ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(deployment.Name+"-node", metav1.GetOptions{})
+				ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(context.Background(), deployment.Name+"-node", metav1.GetOptions{})
 				if err != nil {
 					framework.Logf("Get daemon set error: %v", err)
 					return false
@@ -210,7 +211,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			}, "3m", "2s").Should(BeTrue(), "device manager should not be updated")
 
 			// ensure that the driver is still using the old device manager
-			ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(deployment.Name+"-node", metav1.GetOptions{})
+			ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(context.Background(), deployment.Name+"-node", metav1.GetOptions{})
 			Expect(err).ShouldNot(HaveOccurred(), "daemon set should exists")
 			for _, c := range ds.Spec.Template.Spec.Containers {
 				if c.Name == "pmem-driver" {
@@ -264,7 +265,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			}, "3m", "2s").Should(BeTrue(), "pmem percentage value should not be updated")
 
 			// ensure that the driver is still using the old device manager
-			ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(deployment.Name+"-node", metav1.GetOptions{})
+			ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(context.Background(), deployment.Name+"-node", metav1.GetOptions{})
 			Expect(err).ShouldNot(HaveOccurred(), "daemon set should exists")
 			for _, c := range ds.Spec.Template.Spec.InitContainers {
 				if c.Name == "pmem-ns-init" {
@@ -333,12 +334,12 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			// Ensure that the driver is still using the old labels. We only check the daemonset here
 			// as one object of the driver deployment.
-			ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(deployment.Name+"-node", metav1.GetOptions{})
+			ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(context.Background(), deployment.Name+"-node", metav1.GetOptions{})
 			Expect(err).ShouldNot(HaveOccurred(), "daemon set should exists")
 			Expect(ds.Labels).Should(Equal(oldLabels), "mismatched labels in daemon set")
 		})
 
-		It("shall allow muliple deployments", func() {
+		It("shall allow multiple deployments", func() {
 			dep1 := &unstructured.Unstructured{
 				Object: map[string]interface{}{
 					"apiVersion": api.SchemeGroupVersion.String(),
@@ -380,7 +381,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			validateDriverDeployment(f, d, deployment2)
 		})
 
-		It("shall not allow muliple deployments with same driver name", func() {
+		It("shall not allow multiple deployments with same driver name", func() {
 			driverName := "deployment-name-clash.test.com"
 			dep1 := &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -497,7 +498,7 @@ func toDeployment(dep *unstructured.Unstructured) (*api.Deployment, error) {
 func validateDriverDeployment(f *framework.Framework, d *deploy.Deployment, expected *api.Deployment) {
 	deployment := &api.Deployment{}
 	Eventually(func() bool {
-		dep, err := f.DynamicClient.Resource(deploy.DeploymentResource).Get(expected.Name, metav1.GetOptions{})
+		dep, err := f.DynamicClient.Resource(deploy.DeploymentResource).Get(context.Background(), expected.Name, metav1.GetOptions{})
 		if err != nil {
 			return false
 		}
@@ -512,12 +513,12 @@ func validateDriverDeployment(f *framework.Framework, d *deploy.Deployment, expe
 	// Validate sub-resources
 
 	// Secretes
-	caSecret, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Get(expected.Name+"-pmem-ca", metav1.GetOptions{})
+	caSecret, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Get(context.Background(), expected.Name+"-pmem-ca", metav1.GetOptions{})
 	Expect(err).ShouldNot(HaveOccurred(), "find ca secret")
 	if expected.Spec.CACert != nil {
 		Expect(caSecret.Data[corev1.TLSCertKey]).Should(BeEquivalentTo(expected.Spec.CACert))
 	}
-	regSecret, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Get(expected.Name+"-pmem-registry", metav1.GetOptions{})
+	regSecret, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Get(context.Background(), expected.Name+"-pmem-registry", metav1.GetOptions{})
 	Expect(err).ShouldNot(HaveOccurred(), "find registry secret")
 	if expected.Spec.RegistryPrivateKey != nil {
 		Expect(regSecret.Data[corev1.TLSPrivateKeyKey]).Should(BeEquivalentTo(expected.Spec.RegistryPrivateKey))
@@ -525,7 +526,7 @@ func validateDriverDeployment(f *framework.Framework, d *deploy.Deployment, expe
 	if expected.Spec.RegistryCert != nil {
 		Expect(regSecret.Data[corev1.TLSCertKey]).Should(BeEquivalentTo(expected.Spec.RegistryCert))
 	}
-	nodeControllerSecret, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Get(expected.Name+"-pmem-node-controller", metav1.GetOptions{})
+	nodeControllerSecret, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Get(context.Background(), expected.Name+"-pmem-node-controller", metav1.GetOptions{})
 	Expect(err).ShouldNot(HaveOccurred(), "find node controller secret")
 	if expected.Spec.NodeControllerPrivateKey != nil {
 		Expect(nodeControllerSecret.Data[corev1.TLSPrivateKeyKey]).Should(BeEquivalentTo(expected.Spec.NodeControllerPrivateKey))
@@ -535,7 +536,7 @@ func validateDriverDeployment(f *framework.Framework, d *deploy.Deployment, expe
 	}
 
 	// Statefulset and its containers
-	ss, err := f.ClientSet.AppsV1().StatefulSets(d.Namespace).Get(expected.Name+"-controller", metav1.GetOptions{})
+	ss, err := f.ClientSet.AppsV1().StatefulSets(d.Namespace).Get(context.Background(), expected.Name+"-controller", metav1.GetOptions{})
 	Expect(err).Should(BeNil(), "existence of controller stateful set")
 	Expect(*ss.Spec.Replicas).Should(BeEquivalentTo(1), "controller stateful set replication count mismatch")
 	svcName := ss.Spec.ServiceName
@@ -576,7 +577,7 @@ func validateDriverDeployment(f *framework.Framework, d *deploy.Deployment, expe
 	}
 
 	// Daemonset and its containers
-	ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(expected.Name+"-node", metav1.GetOptions{})
+	ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(context.Background(), expected.Name+"-node", metav1.GetOptions{})
 	Expect(err).ShouldNot(HaveOccurred(), "daemon set should exists")
 	for _, secret := range []string{caSecret.Name, nodeControllerSecret.Name} {
 		Expect(findSecret(ds.Spec.Template.Spec.Volumes, secret)).Should(BeTrue(), "volume sources of daemon set shall have secret %s", secret)
@@ -612,7 +613,7 @@ func validateDriverDeployment(f *framework.Framework, d *deploy.Deployment, expe
 	}
 
 	// should have a CSIDriver
-	driver, err := f.ClientSet.StorageV1beta1().CSIDrivers().Get(expected.Spec.DriverName, metav1.GetOptions{})
+	driver, err := f.ClientSet.StorageV1beta1().CSIDrivers().Get(context.Background(), expected.Spec.DriverName, metav1.GetOptions{})
 	Expect(err).ShouldNot(HaveOccurred(), "expected instance of csi driver")
 	lcModes := []storagev1beta1.VolumeLifecycleMode{
 		storagev1beta1.VolumeLifecycleEphemeral,
@@ -621,40 +622,40 @@ func validateDriverDeployment(f *framework.Framework, d *deploy.Deployment, expe
 	By(fmt.Sprintf("Driver: %s Lifecycle Modes: %v", driver.Name, driver.Spec.VolumeLifecycleModes))
 	Expect(driver.Spec.VolumeLifecycleModes).Should(ConsistOf(lcModes), "mismatched life cycle modes")
 
-	svc, err := f.ClientSet.CoreV1().Services(d.Namespace).Get(svcName, metav1.GetOptions{})
+	svc, err := f.ClientSet.CoreV1().Services(d.Namespace).Get(context.Background(), svcName, metav1.GetOptions{})
 	Expect(err).ShouldNot(HaveOccurred(), "missing controller service")
 	Expect(len(svc.Spec.Ports)).ShouldNot(BeZero(), "controller service should have a port defined")
 
-	svc, err = f.ClientSet.CoreV1().Services(d.Namespace).Get(expected.Name+"-metrics", metav1.GetOptions{})
+	svc, err = f.ClientSet.CoreV1().Services(d.Namespace).Get(context.Background(), expected.Name+"-metrics", metav1.GetOptions{})
 	Expect(err).ShouldNot(HaveOccurred(), "missing metrics service")
 	Expect(len(svc.Spec.Ports)).ShouldNot(BeZero(), "metrics service should have a port defined")
 
 	// should have a service account
-	sa, err := f.ClientSet.CoreV1().ServiceAccounts(d.Namespace).Get(saName, metav1.GetOptions{})
+	sa, err := f.ClientSet.CoreV1().ServiceAccounts(d.Namespace).Get(context.Background(), saName, metav1.GetOptions{})
 	Expect(err).ShouldNot(HaveOccurred(), "controller service account")
 	Expect(len(sa.Secrets)).ShouldNot(BeZero(), "controller service account should have valid secrets")
 
 	// should have defined Roles and Role bindings
-	rb, err := f.ClientSet.RbacV1().RoleBindings(d.Namespace).Get(expected.Name, metav1.GetOptions{})
+	rb, err := f.ClientSet.RbacV1().RoleBindings(d.Namespace).Get(context.Background(), expected.Name, metav1.GetOptions{})
 	Expect(err).ShouldNot(HaveOccurred(), "should have role binding instance")
 	Expect(len(rb.Subjects)).ShouldNot(BeZero(), "role binding have a valid subject")
 	Expect(rb.Subjects[0].Name).Should(BeEquivalentTo(saName), "rolbe binding should have a valid service account")
 
-	_, err = f.ClientSet.RbacV1().Roles(d.Namespace).Get(rb.RoleRef.Name, metav1.GetOptions{})
+	_, err = f.ClientSet.RbacV1().Roles(d.Namespace).Get(context.Background(), rb.RoleRef.Name, metav1.GetOptions{})
 	Expect(err).ShouldNot(HaveOccurred(), "roles should have been defined")
 
-	crb, err := f.ClientSet.RbacV1().ClusterRoleBindings().Get(expected.Name, metav1.GetOptions{})
+	crb, err := f.ClientSet.RbacV1().ClusterRoleBindings().Get(context.Background(), expected.Name, metav1.GetOptions{})
 	Expect(err).ShouldNot(HaveOccurred(), "should have a cluster role binding instance")
 	Expect(len(crb.Subjects)).ShouldNot(BeZero(), "cluster role binding should have a valid subject")
 	Expect(crb.Subjects[0].Name).Should(BeEquivalentTo(saName), "cluster role binding should have a valid service account")
-	_, err = f.ClientSet.RbacV1().Roles(d.Namespace).Get(rb.RoleRef.Name, metav1.GetOptions{})
+	_, err = f.ClientSet.RbacV1().Roles(d.Namespace).Get(context.Background(), rb.RoleRef.Name, metav1.GetOptions{})
 	Expect(err).ShouldNot(HaveOccurred(), "roles should have been defined")
 }
 
 func validateDeploymentFailure(f *framework.Framework, name string) {
 	deployment := &api.Deployment{}
 	Eventually(func() bool {
-		dep, err := f.DynamicClient.Resource(deploy.DeploymentResource).Get(name, metav1.GetOptions{})
+		dep, err := f.DynamicClient.Resource(deploy.DeploymentResource).Get(context.Background(), name, metav1.GetOptions{})
 		if err != nil {
 			return false
 		}

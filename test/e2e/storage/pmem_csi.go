@@ -7,6 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package storage
 
 import (
+	"context"
+
 	k8scsi "k8s.io/api/storage/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -28,12 +30,12 @@ var _ = deploy.DescribeForAll("Deployment", func(d *deploy.Deployment) {
 	// pmem-csi.
 	It("has CSIDriverInfo", func() {
 		if hasBetaAPI(f.ClientSet.Discovery()) {
-			_, err := f.ClientSet.StorageV1beta1().CSIDrivers().Get("pmem-csi.intel.com", metav1.GetOptions{})
+			_, err := f.ClientSet.StorageV1beta1().CSIDrivers().Get(context.Background(), "pmem-csi.intel.com", metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred(), "get csidriver.storage.k8s.io for pmem-csi failed")
 		} else {
 			dc := f.DynamicClient
 			csiDriverGVR := schema.GroupVersionResource{Group: "csi.storage.k8s.io", Version: "v1alpha1", Resource: "csidrivers"}
-			_, err := dc.Resource(csiDriverGVR).Namespace("").Get("pmem-csi.intel.com", metav1.GetOptions{})
+			_, err := dc.Resource(csiDriverGVR).Namespace("").Get(context.Background(), "pmem-csi.intel.com", metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred(), "get csidriver.csi.storage.k8s.io for pmem-csi failed")
 		}
 	})

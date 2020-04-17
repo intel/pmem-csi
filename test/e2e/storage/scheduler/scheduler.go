@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
+	"k8s.io/kubernetes/test/e2e/framework/volume"
 	"k8s.io/kubernetes/test/e2e/storage/testpatterns"
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
 
@@ -91,7 +92,7 @@ func (p *schedulerTestSuite) DefineTests(driver testsuites.TestDriver, pattern t
 
 		// Now do the more expensive test initialization.
 		l.config, l.testCleanup = driver.PrepareTest(f)
-		l.resource = testsuites.CreateVolumeResource(driver, l.config, pattern)
+		l.resource = testsuites.CreateVolumeResource(driver, l.config, pattern, volume.SizeRange{})
 	}
 
 	cleanup := func() {
@@ -151,10 +152,9 @@ func (l local) testSchedulerInPod(
 				},
 			},
 			RestartPolicy: v1.RestartPolicyNever,
-			NodeSelector:  config.ClientNodeSelector,
-			NodeName:      config.ClientNodeName,
 		},
 	}
+	e2epod.SetNodeSelection(&pod.Spec, config.ClientNodeSelection)
 
 	By(fmt.Sprintf("Creating pod %s", pod.Name))
 	ns := f.Namespace.Name
@@ -162,7 +162,7 @@ func (l local) testSchedulerInPod(
 	createdPod := podClient.Create(pod)
 	defer func() {
 		By("delete the pod")
-		podClient.DeleteSync(createdPod.Name, &metav1.DeleteOptions{}, framework.DefaultPodDeletionTimeout)
+		podClient.DeleteSync(createdPod.Name, metav1.DeleteOptions{}, framework.DefaultPodDeletionTimeout)
 	}()
 
 	Expect(createdPod.Spec.Containers[0].Resources).NotTo(BeNil(), "pod resources")

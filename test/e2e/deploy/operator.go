@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package deploy
 
 import (
+	"context"
 	"fmt"
 
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
@@ -46,7 +47,7 @@ func CreateDeploymentCR(f *framework.Framework, dep *unstructured.Unstructured) 
 	depName := metadata["name"].(string)
 	gomega.Eventually(func() error {
 		var err error
-		outDep, err = f.DynamicClient.Resource(DeploymentResource).Create(dep, metav1.CreateOptions{})
+		outDep, err = f.DynamicClient.Resource(DeploymentResource).Create(context.Background(), dep, metav1.CreateOptions{})
 		LogError(err, "create deployment error: %v, will retry...", err)
 		return err
 	}, "3m", "10s").Should(gomega.BeNil(), "create deployment %q", depName)
@@ -56,7 +57,7 @@ func CreateDeploymentCR(f *framework.Framework, dep *unstructured.Unstructured) 
 
 func DeleteDeploymentCR(f *framework.Framework, name string) {
 	gomega.Eventually(func() error {
-		err := f.DynamicClient.Resource(DeploymentResource).Delete(name, nil)
+		err := f.DynamicClient.Resource(DeploymentResource).Delete(context.Background(), name, metav1.DeleteOptions{})
 		if err != nil && apierrs.IsNotFound(err) {
 			return nil
 		}
@@ -73,7 +74,7 @@ func UpdateDeploymentCR(f *framework.Framework, dep *unstructured.Unstructured) 
 
 	gomega.Eventually(func() error {
 		var err error
-		outDep, err = f.DynamicClient.Resource(DeploymentResource).Update(dep, metav1.UpdateOptions{})
+		outDep, err = f.DynamicClient.Resource(DeploymentResource).Update(context.Background(), dep, metav1.UpdateOptions{})
 		LogError(err, "update deployment error: %v, will retry...", err)
 		return err
 	}, "3m", "10s").Should(gomega.BeNil(), "update deployment: %q", depName)
@@ -86,7 +87,7 @@ func GetDeploymentCR(f *framework.Framework, name string) *unstructured.Unstruct
 	var outDep *unstructured.Unstructured
 	gomega.Eventually(func() error {
 		var err error
-		outDep, err = f.DynamicClient.Resource(DeploymentResource).Get(name, metav1.GetOptions{})
+		outDep, err = f.DynamicClient.Resource(DeploymentResource).Get(context.Background(), name, metav1.GetOptions{})
 		LogError(err, "get deployment error: %v, will retry...", err)
 		return err
 	}, "3m", "10s").Should(gomega.BeNil(), "get deployment")

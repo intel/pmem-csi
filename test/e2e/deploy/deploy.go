@@ -220,13 +220,13 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 
 		// Delete all PMEM-CSI deployment objects first to avoid races with the operator
 		// restarting things that we want removed.
-		if list, err := c.dc.Resource(DeploymentResource).List(filter); !failure(err) && list != nil {
+		if list, err := c.dc.Resource(DeploymentResource).List(context.Background(), filter); !failure(err) && list != nil {
 			for _, object := range list.Items {
 				deployment := api.Deployment{}
 				err := Scheme.Convert(&object, &deployment, nil)
 				framework.ExpectNoError(err, "convert %v to PMEM-CSI deployment", object)
 				del(deployment.ObjectMeta, deployment, func() error {
-					return c.dc.Resource(DeploymentResource).Delete(deployment.Name, nil)
+					return c.dc.Resource(DeploymentResource).Delete(context.Background(), deployment.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
@@ -235,120 +235,120 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 		// how FindDeployment will find it again if we don't manage to
 		// delete the entire deployment. Here we just scale it down
 		// to trigger pod deletion.
-		if list, err := c.cs.AppsV1().StatefulSets("").List(filter); !failure(err) {
+		if list, err := c.cs.AppsV1().StatefulSets("").List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				if *object.Spec.Replicas != 0 {
 					*object.Spec.Replicas = 0
-					_, err := c.cs.AppsV1().StatefulSets(object.Namespace).Update(&object)
+					_, err := c.cs.AppsV1().StatefulSets(object.Namespace).Update(context.Background(), &object, metav1.UpdateOptions{})
 					failure(err)
 				}
 			}
 		}
 
 		// Same for the operator's deployment.
-		if list, err := c.cs.AppsV1().Deployments("").List(filter); !failure(err) {
+		if list, err := c.cs.AppsV1().Deployments("").List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				if *object.Spec.Replicas != 0 {
 					*object.Spec.Replicas = 0
-					_, err := c.cs.AppsV1().Deployments(object.Namespace).Update(&object)
+					_, err := c.cs.AppsV1().Deployments(object.Namespace).Update(context.Background(), &object, metav1.UpdateOptions{})
 					failure(err)
 				}
 			}
 		}
 
-		if list, err := c.cs.AppsV1().DaemonSets("").List(filter); !failure(err) {
+		if list, err := c.cs.AppsV1().DaemonSets("").List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, object, func() error {
-					return c.cs.AppsV1().DaemonSets(object.Namespace).Delete(object.Name, nil)
+					return c.cs.AppsV1().DaemonSets(object.Namespace).Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
 
-		if list, err := c.cs.CoreV1().Pods("").List(filter); !failure(err) {
+		if list, err := c.cs.CoreV1().Pods("").List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, object, func() error {
-					return c.cs.CoreV1().Pods(object.Namespace).Delete(object.Name, nil)
+					return c.cs.CoreV1().Pods(object.Namespace).Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
 
-		if list, err := c.cs.RbacV1().Roles("").List(filter); !failure(err) {
+		if list, err := c.cs.RbacV1().Roles("").List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, object, func() error {
-					return c.cs.RbacV1().Roles(object.Namespace).Delete(object.Name, nil)
+					return c.cs.RbacV1().Roles(object.Namespace).Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
 
-		if list, err := c.cs.RbacV1().RoleBindings("").List(filter); !failure(err) {
+		if list, err := c.cs.RbacV1().RoleBindings("").List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, object, func() error {
-					return c.cs.RbacV1().RoleBindings(object.Namespace).Delete(object.Name, nil)
+					return c.cs.RbacV1().RoleBindings(object.Namespace).Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
 
-		if list, err := c.cs.RbacV1().ClusterRoles().List(filter); !failure(err) {
+		if list, err := c.cs.RbacV1().ClusterRoles().List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, object, func() error {
-					return c.cs.RbacV1().ClusterRoles().Delete(object.Name, nil)
+					return c.cs.RbacV1().ClusterRoles().Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
 
-		if list, err := c.cs.RbacV1().ClusterRoleBindings().List(filter); !failure(err) {
+		if list, err := c.cs.RbacV1().ClusterRoleBindings().List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, object, func() error {
-					return c.cs.RbacV1().ClusterRoleBindings().Delete(object.Name, nil)
+					return c.cs.RbacV1().ClusterRoleBindings().Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
 
-		if list, err := c.cs.CoreV1().Services("").List(filter); !failure(err) {
+		if list, err := c.cs.CoreV1().Services("").List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, object, func() error {
-					return c.cs.CoreV1().Services(object.Namespace).Delete(object.Name, nil)
+					return c.cs.CoreV1().Services(object.Namespace).Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
 
-		if list, err := c.cs.CoreV1().ServiceAccounts("").List(filter); !failure(err) {
+		if list, err := c.cs.CoreV1().ServiceAccounts("").List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, object, func() error {
-					return c.cs.CoreV1().ServiceAccounts(object.Namespace).Delete(object.Name, nil)
+					return c.cs.CoreV1().ServiceAccounts(object.Namespace).Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
 
-		if list, err := c.cs.CoreV1().Secrets("").List(filter); !failure(err) {
+		if list, err := c.cs.CoreV1().Secrets("").List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, object, func() error {
-					return c.cs.CoreV1().Secrets(object.Namespace).Delete(object.Name, nil)
+					return c.cs.CoreV1().Secrets(object.Namespace).Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
 
-		if list, err := c.cs.StorageV1beta1().CSIDrivers().List(filter); !failure(err) {
+		if list, err := c.cs.StorageV1beta1().CSIDrivers().List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, object, func() error {
-					return c.cs.StorageV1beta1().CSIDrivers().Delete(object.Name, nil)
+					return c.cs.StorageV1beta1().CSIDrivers().Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
 
 		if done {
 			// Nothing else left, now delete the deployments and statefulsets.
-			if list, err := c.cs.AppsV1().Deployments("").List(filter); !failure(err) {
+			if list, err := c.cs.AppsV1().Deployments("").List(context.Background(), filter); !failure(err) {
 				for _, object := range list.Items {
 					del(object.ObjectMeta, object, func() error {
-						return c.cs.AppsV1().Deployments(object.Namespace).Delete(object.Name, nil)
+						return c.cs.AppsV1().Deployments(object.Namespace).Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 					})
 				}
 			}
-			if list, err := c.cs.AppsV1().StatefulSets("").List(filter); !failure(err) {
+			if list, err := c.cs.AppsV1().StatefulSets("").List(context.Background(), filter); !failure(err) {
 				for _, object := range list.Items {
 					del(object.ObjectMeta, object, func() error {
-						return c.cs.AppsV1().StatefulSets(object.Namespace).Delete(object.Name, nil)
+						return c.cs.AppsV1().StatefulSets(object.Namespace).Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 					})
 				}
 			}
@@ -428,7 +428,7 @@ func FindDeployment(c *Cluster) (*Deployment, error) {
 }
 
 func findDriver(c *Cluster) (*Deployment, error) {
-	list, err := c.cs.AppsV1().StatefulSets("").List(metav1.ListOptions{LabelSelector: deploymentLabel})
+	list, err := c.cs.AppsV1().StatefulSets("").List(context.Background(), metav1.ListOptions{LabelSelector: deploymentLabel})
 	if err != nil {
 		return nil, err
 	}
@@ -455,7 +455,7 @@ func findDriver(c *Cluster) (*Deployment, error) {
 }
 
 func findOperator(c *Cluster) (*Deployment, error) {
-	list, err := c.cs.AppsV1().Deployments("").List(metav1.ListOptions{LabelSelector: deploymentLabel})
+	list, err := c.cs.AppsV1().Deployments("").List(context.Background(), metav1.ListOptions{LabelSelector: deploymentLabel})
 	if err != nil {
 		return nil, err
 	}

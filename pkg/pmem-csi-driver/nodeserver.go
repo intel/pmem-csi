@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/klog"
-	"k8s.io/kubernetes/pkg/util/mount"
+	"k8s.io/utils/mount"
 
 	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"

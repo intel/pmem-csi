@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package deploy
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -68,7 +69,7 @@ func (c *Cluster) NodeServiceAddress(node int, port int) string {
 
 // GetServicePort looks up the node port of a service.
 func (c *Cluster) GetServicePort(serviceName, namespace string) (int, error) {
-	service, err := c.cs.CoreV1().Services(namespace).Get(serviceName, metav1.GetOptions{})
+	service, err := c.cs.CoreV1().Services(namespace).Get(context.Background(), serviceName, metav1.GetOptions{})
 	if err != nil {
 		return 0, err
 	}
@@ -89,7 +90,7 @@ func (c *Cluster) WaitForServicePort(serviceName, namespace string) int {
 // GetAppInstance looks for a pod with a certain app label and a specific host or pod IP.
 // The IP may also be empty.
 func (c *Cluster) GetAppInstance(app, ip, namespace string) (*v1.Pod, error) {
-	pods, err := c.cs.CoreV1().Pods(namespace).List(metav1.ListOptions{})
+	pods, err := c.cs.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -113,14 +114,14 @@ func (c *Cluster) WaitForAppInstance(app, ip, namespace string) *v1.Pod {
 }
 
 func (c *Cluster) GetDaemonSet(setName, namespace string) (*appsv1.DaemonSet, error) {
-	return c.cs.AppsV1().DaemonSets(namespace).Get(setName, metav1.GetOptions{})
+	return c.cs.AppsV1().DaemonSets(namespace).Get(context.Background(), setName, metav1.GetOptions{})
 }
 
 func (c *Cluster) WaitForDaemonSet(setName string) *appsv1.DaemonSet {
 	var set *appsv1.DaemonSet
 	Eventually(func() bool {
 		var err error
-		set, err = c.cs.AppsV1().DaemonSets("default").Get(setName, metav1.GetOptions{})
+		set, err = c.cs.AppsV1().DaemonSets("default").Get(context.Background(), setName, metav1.GetOptions{})
 		return err == nil
 	}, "3m").Should(BeTrue(), "%s DaemonSet running", setName)
 	return set

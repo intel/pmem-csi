@@ -8,12 +8,14 @@ package deployment
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	pmemcsiv1alpha1 "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	"github.com/intel/pmem-csi/pkg/k8sutil"
 	pmemcontroller "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/version"
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -181,9 +183,32 @@ func (r *ReconcileDeployment) Create(obj runtime.Object) error {
 	return nil
 }
 
-// Update updates existing Kubernetes object
+// Update updates existing Kubernetes object. The object must be a modified copy of the existing object in the apiserver.
 func (r *ReconcileDeployment) Update(obj runtime.Object) error {
 	return r.client.Update(context.TODO(), obj)
+}
+
+// UpdateOrCreate updates the spec of an existing object or, if it does not exist yet, creates it.
+func (r *ReconcileDeployment) UpdateOrCreate(obj runtime.Object) error {
+	existing := obj.DeepCopyObject()
+	err := r.Get(existing)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	if err == nil {
+		// Update spec of existing object.
+		switch update := existing.(type) {
+		case *appsv1.StatefulSet:
+			update.Spec = obj.(*appsv1.StatefulSet).Spec
+		case *appsv1.DaemonSet:
+			update.Spec = obj.(*appsv1.DaemonSet).Spec
+		default:
+			return fmt.Errorf("internal error: updating %T not supported", obj)
+		}
+		return r.client.Update(context.TODO(), existing)
+	}
+	// Fall back to creating the object.
+	return r.client.Create(context.TODO(), obj)
 }
 
 // Delete delete existing Kubernetes object
