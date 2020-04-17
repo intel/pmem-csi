@@ -81,6 +81,8 @@ type DeploymentStatus struct {
 
 	// Phase indicates the state of the deployment
 	Phase DeploymentPhase `json:"phase,omitempty"`
+	// LastUpdated time of the deployment status
+	LastUpdated metav1.Time `json:"lastUpdated,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -438,6 +440,10 @@ func GetDeploymentCRDSchema() *apiextensions.JSONSchemaProps {
 					"phase": apiextensions.JSONSchemaProps{
 						Type:        "string",
 						Description: "deployment phase",
+					},
+					"lastUpdated": apiextensions.JSONSchemaProps{
+						Type:        "string",
+						Description: "time when the status last updated",
 					},
 				},
 			},
