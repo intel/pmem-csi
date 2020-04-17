@@ -152,6 +152,7 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 	// update status
 	defer func() {
 		klog.Infof("Updating deployment status....")
+		d.Deployment.Status.LastUpdated = metav1.Now()
 		if statusErr := r.client.Status().Update(context.TODO(), d.Deployment); statusErr != nil {
 			klog.Warningf("failed to update status %q for deployment %q: %v",
 				d.Deployment.Status.Phase, d.Name, statusErr)
