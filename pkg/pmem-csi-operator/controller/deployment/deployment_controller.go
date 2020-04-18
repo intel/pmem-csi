@@ -148,7 +148,7 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 
 	// update status
 	defer func() {
-		klog.Infof("Updating deployment status....")
+		klog.Infof("Updating deployment '%s' status '%s'", d.Name, d.Deployment.Status.Phase)
 		d.Deployment.Status.LastUpdated = metav1.Now()
 		if statusErr := r.client.Status().Update(context.TODO(), d.Deployment); statusErr != nil {
 			klog.Warningf("failed to update status %q for deployment %q: %v",
@@ -193,6 +193,11 @@ func (r *ReconcileDeployment) Get(obj runtime.Object) error {
 
 // Update updates existing Kubernetes object. The object must be a modified copy of the existing object in the apiserver.
 func (r *ReconcileDeployment) Update(obj runtime.Object) error {
+	meta, err := meta.Accessor(obj)
+	if err != nil {
+		return fmt.Errorf("failed to update %T: %v", obj, err)
+	}
+	klog.Infof("Updating '%s/%s' of type: %s", meta.GetNamespace(), meta.GetName(), obj.GetObjectKind().GroupVersionKind())
 	return r.client.Update(context.TODO(), obj)
 }
 
@@ -230,14 +235,21 @@ func (r *ReconcileDeployment) UpdateOrCreate(obj runtime.Object) error {
 		metaObj.SetClusterName(metaExisting.GetClusterName())
 		metaObj.SetManagedFields(metaExisting.GetManagedFields())
 
+		klog.Infof("Updating '%s/%s' of type: %s", metaObj.GetNamespace(), metaObj.GetName(), obj.GetObjectKind().GroupVersionKind())
 		return r.client.Update(context.TODO(), obj)
 	}
+	klog.Infof("Creating '%s/%s' of type: %s", metaObj.GetNamespace(), metaObj.GetName(), obj.GetObjectKind().GroupVersionKind())
 	// Fall back to creating the object.
 	return r.client.Create(context.TODO(), obj)
 }
 
 // Delete delete existing Kubernetes object
 func (r *ReconcileDeployment) Delete(obj runtime.Object) error {
+	meta, err := meta.Accessor(obj)
+	if err != nil {
+		return fmt.Errorf("failed to delete %T: %v", obj, err)
+	}
+	klog.Infof("Deleting '%s/%s' of type: %s", meta.GetNamespace(), meta.GetName(), obj.GetObjectKind().GroupVersionKind())
 	return r.client.Delete(context.TODO(), obj)
 }
 
