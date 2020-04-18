@@ -191,17 +191,10 @@ func validateSecret(c client.Client, name, ns string, key, cert []byte, ctx stri
 	}
 }
 
-func validateCSIDriver(c client.Client, driverName string, k8sVersion *version.Version, ns string) {
+func validateCSIDriver(c client.Client, driverName string, k8sVersion *version.Version) {
 	driver := &storagev1beta1.CSIDriver{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: driverName,
-			// The namespace should be ignored for
-			// non-namespaced objects, but the object
-			// tracker in
-			// k8s.io/client-go@v0.18.1/testing/fixture.go
-			// doesn't know which types that applies for
-			// and always compares the namespace.
-			Namespace: ns,
 		},
 	}
 
@@ -272,7 +265,7 @@ var _ = Describe("Operator", func() {
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			validateSecrets(c, d, testNamespace)
-			validateCSIDriver(c, api.DefaultDriverName, testK8sVersion, testNamespace)
+			validateCSIDriver(c, api.DefaultDriverName, testK8sVersion)
 
 			ss := &appsv1.StatefulSet{}
 			err = c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)
@@ -344,7 +337,7 @@ var _ = Describe("Operator", func() {
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			validateSecrets(c, d, testNamespace)
-			validateCSIDriver(c, d.driverName, testK8sVersion, testNamespace)
+			validateCSIDriver(c, d.driverName, testK8sVersion)
 
 			ss := &appsv1.StatefulSet{}
 			err = c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)
@@ -473,7 +466,7 @@ var _ = Describe("Operator", func() {
 			testReconcilePhase(rc, c, d2.name, false, false, api.DeploymentPhaseRunning)
 			testReconcilePhase(rc, c, d2.name, false, false, api.DeploymentPhaseRunning)
 
-			validateCSIDriver(c, d2.driverName, testK8sVersion, testNamespace)
+			validateCSIDriver(c, d2.driverName, testK8sVersion)
 		})
 
 		It("shall use provided private keys", func() {
@@ -615,7 +608,7 @@ var _ = Describe("Operator", func() {
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			validateSecrets(c, d, testNamespace)
-			validateCSIDriver(c, api.DefaultDriverName, testK8sVersion, testNamespace)
+			validateCSIDriver(c, api.DefaultDriverName, testK8sVersion)
 
 			// Ensure both deaemonset and statefulset have default driver name
 			// before editing deployment
@@ -703,7 +696,7 @@ var _ = Describe("Operator", func() {
 			Expect(err).Should(BeNil(), "failed to update deployment")
 			testReconcilePhase(rc, c, d1.name, true, false, api.DeploymentPhaseRunning)
 
-			validateCSIDriver(c, d1.driverName, testK8sVersion, testNamespace)
+			validateCSIDriver(c, d1.driverName, testK8sVersion)
 		})
 
 		It("shall not allow to change running deployment device mode", func() {
