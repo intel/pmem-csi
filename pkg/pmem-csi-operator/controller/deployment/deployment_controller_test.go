@@ -448,7 +448,7 @@ var _ = Describe("Operator", func() {
 			testReconcilePhase(rc, c, d1.name, false, false, api.DeploymentPhaseRunning)
 			// Second deployment expected to fail as one more deployment is active with the
 			// same driver name
-			testReconcilePhase(rc, c, d2.name, true, true, api.DeploymentPhaseFailed)
+			testReconcilePhase(rc, c, d2.name, true, false, api.DeploymentPhaseFailed)
 
 			// Delete fist deployment
 			dep1 := &api.Deployment{

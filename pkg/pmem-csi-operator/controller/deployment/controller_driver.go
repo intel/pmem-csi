@@ -73,7 +73,7 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 	case api.DeploymentPhaseNew, api.DeploymentPhaseFailed:
 		if dep := d.checkIfNameClash(r); dep != nil {
 			d.Status.Phase = api.DeploymentPhaseFailed
-			return true, fmt.Errorf("driver name %q is already taken by deployment %q",
+			return false, fmt.Errorf("driver name %q is already taken by deployment %q",
 				dep.Spec.DriverName, dep.Name)
 		}
 		// Update local cache so that we can catch if any change in deployment
