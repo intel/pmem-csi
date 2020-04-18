@@ -34,7 +34,8 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 	return d.HasOperator && !d.HasDriver
 }, func(d *deploy.Deployment) {
 
-	f := framework.NewDefaultFramework("operator")
+	f := framework.NewDefaultFramework("API")
+	f.SkipNamespaceCreation = true
 
 	Context("deployment", func() {
 		// We use intentionally use this non-existing driver image
