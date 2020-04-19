@@ -43,8 +43,7 @@ func init() {
 
 func CreateDeploymentCR(f *framework.Framework, dep *unstructured.Unstructured) *unstructured.Unstructured {
 	var outDep *unstructured.Unstructured
-	metadata := dep.Object["metadata"].(map[string]interface{})
-	depName := metadata["name"].(string)
+	depName := dep.GetName()
 	gomega.Eventually(func() error {
 		var err error
 		outDep, err = f.DynamicClient.Resource(DeploymentResource).Create(context.Background(), dep, metav1.CreateOptions{})
@@ -69,8 +68,7 @@ func DeleteDeploymentCR(f *framework.Framework, name string) {
 
 func UpdateDeploymentCR(f *framework.Framework, dep *unstructured.Unstructured) *unstructured.Unstructured {
 	var outDep *unstructured.Unstructured
-	metadata := dep.Object["metadata"].(map[string]interface{})
-	depName := metadata["name"].(string)
+	depName := dep.GetName()
 
 	gomega.Eventually(func() error {
 		var err error
