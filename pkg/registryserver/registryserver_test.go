@@ -174,7 +174,7 @@ var _ = Describe("pmem registry", func() {
 		)
 
 		// gRPC returns all kinds of errors when TLS fails.
-		badConnectionRE := "authentication handshake failed: remote error: tls: bad certificate|all SubConns are in TransientFailure|rpc error: code = Unavailable desc = connection closed|rpc error: code = Unavailable desc = tls: use of closed connection|transport: failed to write client preface: write .*: write: broken pipe"
+		badConnectionRE := "authentication handshake failed: remote error: tls: bad certificate|all SubConns are in TransientFailure|rpc error: code = Unavailable"
 
 		// This covers different scenarios for connections to the registry.
 		cases := []struct {
