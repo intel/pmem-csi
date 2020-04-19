@@ -54,6 +54,28 @@ func CreateDeploymentCR(f *framework.Framework, dep *unstructured.Unstructured) 
 	return outDep
 }
 
+func EnsureDeploymentCR(f *framework.Framework, dep *unstructured.Unstructured) *unstructured.Unstructured {
+	var outDep *unstructured.Unstructured
+	depName := dep.GetName()
+	gomega.Eventually(func() error {
+		existingDep, err := f.DynamicClient.Resource(DeploymentResource).Get(context.Background(), depName, metav1.GetOptions{})
+		if err == nil {
+			dep.SetResourceVersion(existingDep.GetResourceVersion())
+			outDep, err = f.DynamicClient.Resource(DeploymentResource).Update(context.Background(), dep, metav1.UpdateOptions{})
+			LogError(err, "update deployment error: %v, will retry...", err)
+			return err
+		}
+		if apierrs.IsNotFound(err) {
+			outDep, err = f.DynamicClient.Resource(DeploymentResource).Create(context.Background(), dep, metav1.CreateOptions{})
+			LogError(err, "create deployment error: %v, will retry...", err)
+			return err
+		}
+		return err
+	}, "3m", "10s").Should(gomega.BeNil(), "create deployment %q", depName)
+	ginkgo.By(fmt.Sprintf("Created deployment %q", depName))
+	return outDep
+}
+
 func DeleteDeploymentCR(f *framework.Framework, name string) {
 	gomega.Eventually(func() error {
 		err := f.DynamicClient.Resource(DeploymentResource).Delete(context.Background(), name, metav1.DeleteOptions{})
