@@ -56,8 +56,12 @@ func CreateDeploymentCR(f *framework.Framework, dep *unstructured.Unstructured) 
 }
 
 func DeleteDeploymentCR(f *framework.Framework, name string) {
+	// Delete all
+	deletionPolicy := metav1.DeletePropagationForeground
 	gomega.Eventually(func() error {
-		err := f.DynamicClient.Resource(DeploymentResource).Delete(context.Background(), name, metav1.DeleteOptions{})
+		err := f.DynamicClient.Resource(DeploymentResource).Delete(context.Background(), name, metav1.DeleteOptions{
+			PropagationPolicy: &deletionPolicy,
+		})
 		if err != nil && apierrs.IsNotFound(err) {
 			return nil
 		}
