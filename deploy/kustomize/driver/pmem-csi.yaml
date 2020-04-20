@@ -35,7 +35,7 @@ spec:
       serviceAccount: pmem-csi-controller
       containers:
       - name: pmem-driver
-        image: intel/pmem-csi-driver:v0.6.36
+        image: intel/pmem-csi-driver:v0.6.37
         imagePullPolicy: Always
         args:  [ "-v=3",
                  "-drivername=pmem-csi.intel.com",
@@ -103,7 +103,7 @@ spec:
       containers:
       - name: pmem-driver
         imagePullPolicy: Always
-        image: intel/pmem-csi-driver:v0.6.36
+        image: intel/pmem-csi-driver:v0.6.37
         args: [ "-v=3",
                   "-drivername=pmem-csi.intel.com",
                   "-mode=node",
