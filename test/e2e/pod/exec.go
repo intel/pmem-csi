@@ -56,7 +56,7 @@ func RunInPod(f *framework.Framework, rootdir string, items []string, command st
 	stdout, stderr, err := f.ExecWithOptions(options)
 	framework.ExpectNoError(err, "command failed in namespace %s, pod/container %s/%s:\nstderr:\n%s\nstdout:%s\n",
 		namespace, pod, container, stderr, stdout)
-	fmt.Fprintf(GinkgoWriter, "stderr:\n%s\nstdout:\n%s",
+	fmt.Fprintf(GinkgoWriter, "stderr:\n%s\nstdout:\n%s\n",
 		stderr, stdout)
 
 	return stdout, stderr
