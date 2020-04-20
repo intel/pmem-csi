@@ -16,8 +16,7 @@ REPO_DIRECTORY="${REPO_DIRECTORY:-$(dirname $(dirname $(readlink -f $0)))}"
 CLUSTER_DIRECTORY="${CLUSTER_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
 SSH="${CLUSTER_DIRECTORY}/ssh.0"
 KUBECTL="${SSH} kubectl" # Always use the kubectl installed in the cluster.
-KUBERNETES_VERSION="$(${KUBECTL} version --short | grep 'Server Version' | \
-        sed -e 's/.*: v\([0-9]*\)\.\([0-9]*\)\..*/\1.\2/')"
+KUBERNETES_VERSION="$(cat "$CLUSTER_DIRECTORY/kubernetes.version")"
 DEPLOYMENT_DIRECTORY="${REPO_DIRECTORY}/deploy/kubernetes-$KUBERNETES_VERSION"
 case ${TEST_DEPLOYMENTMODE} in
     testing)
@@ -73,7 +72,6 @@ data:
     tls.key: ${NODE_KEY}
 EOF
 
-echo "$KUBERNETES_VERSION" > $CLUSTER_DIRECTORY/kubernetes.version
 case "$KUBERNETES_VERSION" in
     1.1[01234])
         # We cannot exclude the PMEM-CSI pods from the webhook because objectSelector

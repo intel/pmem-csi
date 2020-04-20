@@ -146,6 +146,11 @@ TEST_E2E_SKIP_ALL += should.access.volume.from.different.nodes
 # E2E tests which are to be executed (space separated list of regular expressions, default is all that aren't skipped).
 TEST_E2E_FOCUS =
 
+foobar:
+	echo TEST_E2E_SKIP_$(shell cat _work/$(CLUSTER)/kubernetes.version)
+	echo $(TEST_E2E_SKIP_$(shell cat _work/$(CLUSTER)/kubernetes.version))
+	echo $(TEST_E2E_SKIP_ALL)
+
 # E2E Junit output directory (default empty = none). junit_<ginkgo node>.xml files will be written there,
 # i.e. usually just junit_01.xml.
 TEST_E2E_REPORT_DIR=
