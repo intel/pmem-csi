@@ -8,7 +8,7 @@ package version_test
 import (
 	"testing"
 
-	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/version"
+	"github.com/intel/pmem-csi/pkg/version"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package controller
 
 import (
-	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/version"
+	"github.com/intel/pmem-csi/pkg/version"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
