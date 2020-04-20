@@ -143,6 +143,13 @@ TEST_E2E_SKIP_ALL = $(TEST_E2E_SKIP)
 # https://github.com/kubernetes/kubernetes/blob/25ffbe633810609743944edd42d164cd7990071c/test/e2e/storage/testsuites/provisioning.go#L175-L181
 TEST_E2E_SKIP_ALL += should.access.volume.from.different.nodes
 
+# This is a test for behavior of kubelet which Kubernetes <= 1.15 doesn't pass.
+TEST_E2E_SKIP_1.14 += volumeMode.should.not.mount.*map.unused.volumes.in.a.pod
+TEST_E2E_SKIP_1.15 += volumeMode.should.not.mount.*map.unused.volumes.in.a.pod
+
+# Add all Kubernetes version-specific suppressions.
+TEST_E2E_SKIP_ALL += $(TEST_E2E_SKIP_$(shell cat _work/$(CLUSTER)/kubernetes.version))
+
 # E2E tests which are to be executed (space separated list of regular expressions, default is all that aren't skipped).
 TEST_E2E_FOCUS =
 
