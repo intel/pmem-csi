@@ -76,7 +76,8 @@ replace (
 //	github.com/Azure/go-autorest/autorest v0.9.0 (/home/avalluri/work/go/pkg/mod/github.com/!azure/go-autorest/autorest@v0.9.0)
 replace github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.0+incompatible
 
-// Temporary fork based on 1.18.1 with two additional PRs:
+// Temporary fork based on 1.18.1 with additional PRs:
 // - https://github.com/kubernetes/kubernetes/pull/89819
 // - https://github.com/kubernetes/kubernetes/pull/90214
-replace k8s.io/kubernetes => github.com/pohly/kubernetes v1.18.1-pmem-csi-20200416
+// - https://github.com/kubernetes/kubernetes/pull/90335
+replace k8s.io/kubernetes => github.com/pohly/kubernetes v1.18.1-pmem-csi-20200421-2
