@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package v1alpha1
 
 import (
+	"fmt"
 	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
@@ -180,32 +181,47 @@ const (
 	NodeSelector
 	PMEMPercentage
 	Labels
+	CACertificate
+	RegistryCertificate
+	RegistryKey
+	NodeControllerCertificate
+	NodeControllerKey
 )
 
 func (c DeploymentChange) String() string {
 	return map[DeploymentChange]string{
-		DriverName:          "driverName",
-		DriverMode:          "deviceMode",
-		DriverImage:         "image",
-		PullPolicy:          "imagePullPolicy",
-		LogLevel:            "logLevel",
-		ProvisionerImage:    "provisionerImage",
-		NodeRegistrarImage:  "nodeRegistrarImage",
-		ControllerResources: "controllerResources",
-		NodeResources:       "nodeResources",
-		NodeSelector:        "nodeSelector",
-		PMEMPercentage:      "pmemPercentage",
-		Labels:              "labels",
+		DriverName:                "driverName",
+		DriverMode:                "deviceMode",
+		DriverImage:               "image",
+		PullPolicy:                "imagePullPolicy",
+		LogLevel:                  "logLevel",
+		ProvisionerImage:          "provisionerImage",
+		NodeRegistrarImage:        "nodeRegistrarImage",
+		ControllerResources:       "controllerResources",
+		NodeResources:             "nodeResources",
+		NodeSelector:              "nodeSelector",
+		PMEMPercentage:            "pmemPercentage",
+		Labels:                    "labels",
+		CACertificate:             "caCert",
+		RegistryCertificate:       "registryCert",
+		RegistryKey:               "registryKey",
+		NodeControllerCertificate: "nodeControllerCert",
+		NodeControllerKey:         "nodeControllerKey",
 	}[c]
 }
 
 // EnsureDefaults make sure that the deployment object has all defaults set properly
-func (d *Deployment) EnsureDefaults() {
+func (d *Deployment) EnsureDefaults(operatorImage string) error {
 	if d.Spec.DriverName == "" {
 		d.Spec.DriverName = DefaultDriverName
 	}
 	if d.Spec.Image == "" {
-		d.Spec.Image = DefaultDriverImage
+		// If provided use operatorImage
+		if operatorImage != "" {
+			d.Spec.Image = operatorImage
+		} else {
+			d.Spec.Image = DefaultDriverImage
+		}
 	}
 	if d.Spec.PullPolicy == "" {
 		d.Spec.PullPolicy = DefaultImagePullPolicy
@@ -231,8 +247,15 @@ func (d *Deployment) EnsureDefaults() {
 
 	/* Node Defaults */
 
-	if d.Spec.DeviceMode == "" {
+	// Validate the given driver mode.
+	// In a realistic case this check might not needed as it should be
+	// handled by JSON schema as we defined deviceMode as enumeration.
+	switch d.Spec.DeviceMode {
+	case "":
 		d.Spec.DeviceMode = DefaultDeviceMode
+	case DeviceModeDirect, DeviceModeLVM:
+	default:
+		return fmt.Errorf("invalid device mode %q", d.Spec.DeviceMode)
 	}
 
 	if d.Spec.NodeRegistrarImage == "" {
@@ -255,6 +278,8 @@ func (d *Deployment) EnsureDefaults() {
 	if d.Spec.PMEMPercentage == 0 {
 		d.Spec.PMEMPercentage = DefaultPMEMPercentage
 	}
+
+	return nil
 }
 
 // Compare compares 'other' deployment spec with current deployment and returns

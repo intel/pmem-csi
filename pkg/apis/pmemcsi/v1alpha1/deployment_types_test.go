@@ -37,7 +37,8 @@ var _ = Describe("Operator", func() {
 		//
 		It("shall set defaults for empty deployment", func() {
 			d := api.Deployment{}
-			d.EnsureDefaults()
+			err := d.EnsureDefaults("")
+			Expect(err).ShouldNot(HaveOccurred(), "ensure defaults")
 
 			Expect(d.Spec.DriverName).Should(BeEquivalentTo(api.DefaultDriverName), "default driver name mismatch")
 			Expect(d.Spec.LogLevel).Should(BeEquivalentTo(api.DefaultLogLevel), "default logging level mismatch")
@@ -87,7 +88,8 @@ spec:
 			Expect(obj).ShouldNot(BeNil(), "Nil deployment object")
 
 			d := obj.(*api.Deployment)
-			d.EnsureDefaults()
+			err = d.EnsureDefaults("")
+			Expect(err).ShouldNot(HaveOccurred(), "ensure defaults")
 
 			Expect(d.Spec.DriverName).Should(BeEquivalentTo("test-driver"), "driver name mismatch")
 			Expect(d.Spec.LogLevel).Should(BeEquivalentTo(10), "logging level mismatch")
@@ -114,8 +116,10 @@ spec:
 			changes := map[api.DeploymentChange]struct{}{}
 			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "two empty deployments should be equal")
 
-			d1.EnsureDefaults()
-			d2.EnsureDefaults()
+			err := d1.EnsureDefaults("")
+			Expect(err).ShouldNot(HaveOccurred(), "ensure defaults")
+			err = d2.EnsureDefaults("")
+			Expect(err).ShouldNot(HaveOccurred(), "ensure defaults")
 			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "two default deployments should be equaval")
 
 			d2.Spec.DriverName = "new-driver"

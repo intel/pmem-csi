@@ -26,7 +26,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
-	"github.com/intel/pmem-csi/pkg/pmem-csi-driver"
+	pmemcsidriver "github.com/intel/pmem-csi/pkg/pmem-csi-driver"
 
 	"github.com/onsi/ginkgo"
 	"github.com/onsi/gomega"
@@ -59,15 +59,20 @@ func AddUninstallHook(h UninstallHook) {
 
 // WaitForOperator ensures that the PMEM-CSI operator is ready for use, which is
 // currently defined as the operator pod in Running phase.
-func WaitForOperator(c *Cluster, namespace string) {
+func WaitForOperator(c *Cluster, namespace string) (operator *v1.Pod) {
 	// TODO(avalluri): At later point of time we should add readiness support
 	// for the operator. Then we can query directoly the operator if its ready.
 	// As interm solution we are just checking Pod.Status.
 	gomega.Eventually(func() bool {
 		pod, err := c.GetAppInstance("pmem-csi-operator", "", namespace)
-		return err == nil && pod.Status.Phase == v1.PodRunning
+		if err == nil && pod.Status.Phase == v1.PodRunning {
+			operator = pod
+			return true
+		}
+		return false
 	}, "5m", "2s").Should(gomega.BeTrue(), "operator not running in namespace %s", namespace)
 	ginkgo.By("Operator is ready!")
+	return
 }
 
 // WaitForPMEMDriver ensures that the PMEM-CSI driver is ready for use, which is
@@ -136,7 +141,7 @@ func WaitForPMEMDriver(c *Cluster, namespace string) {
 		}
 		label := buildMetric.Label[0]
 		if *label.Name != "version" {
-			return fmt.Errorf("expected build_info to contain a version label, got: %s", label.Name)
+			return fmt.Errorf("expected build_info to contain a version label, got: %s", *label.Name)
 		}
 		framework.Logf("PMEM-CSI version: %s", *label.Value)
 
@@ -583,7 +588,6 @@ func EnsureDeployment(deploymentName string) *Deployment {
 						},
 					},
 					Spec: api.DeploymentSpec{
-						Image: os.Getenv("PMEM_CSI_IMAGE"), // workaround for https://github.com/intel/pmem-csi/issues/578
 						Labels: map[string]string{
 							deploymentLabel: deployment.Name,
 						},

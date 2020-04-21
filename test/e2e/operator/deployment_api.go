@@ -90,6 +90,37 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			})
 		}
 
+		It("driver image shall default to operator image", func() {
+			dep := &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": api.SchemeGroupVersion.String(),
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name": "test-deployment-driver-image",
+					},
+					"spec": map[string]interface{}{
+						// NOTE(avalluri): we do not use lvm mode so that
+						// running this test does not pollute the PMEM space
+						"deviceMode": "direct",
+						"driverName": "test-driver-image",
+					},
+				},
+			}
+
+			deployment, err := toDeployment(dep)
+			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
+
+			deploy.CreateDeploymentCR(f, dep)
+			defer deploy.DeleteDeploymentCR(f, deployment.Name)
+
+			operatorPod, err := findOperatorPod(f)
+			Expect(err).ShouldNot(HaveOccurred(), "find operator deployment")
+
+			// operator image should be the driver image
+			deployment.Spec.Image = operatorPod.Spec.Containers[0].Image
+			validateDriverDeployment(f, d, deployment)
+		})
+
 		It("shall be able to edit running deployment", func() {
 			dep := &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -428,9 +459,8 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			dep2 = deploy.GetDeploymentCR(f, deployment2.Name)
 			// Resolve deployment name and update
-			dep2.Object["spec"] = map[string]interface{}{
-				"driverName": "new-driver-name",
-			}
+			spec := dep2.Object["spec"].(map[string]interface{})
+			spec["driverName"] = "new-driver-name"
 
 			// and redeploy with new name
 			deploy.UpdateDeploymentCR(f, dep2)
@@ -451,9 +481,9 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			ca, err := pmemtls.NewCA(nil, caKey)
 			Expect(err).ShouldNot(HaveOccurred(), "creatre ca")
 
-			regCert, err := ca.GenerateCertificate("pmem-registry", regKey)
+			regCert, err := ca.GenerateCertificate("pmem-registry", regKey.Public())
 			Expect(err).ShouldNot(HaveOccurred(), "sign registry key")
-			nodeControllerCert, err := ca.GenerateCertificate("pmem-node-controller", regKey)
+			nodeControllerCert, err := ca.GenerateCertificate("pmem-node-controller", nodeControllerKey.Public())
 			Expect(err).ShouldNot(HaveOccurred(), "sign node controller key")
 
 			dep := &unstructured.Unstructured{
@@ -490,7 +520,9 @@ func toDeployment(dep *unstructured.Unstructured) (*api.Deployment, error) {
 	if err := deploy.Scheme.Convert(dep, deployment, nil); err != nil {
 		return nil, err
 	}
-	deployment.EnsureDefaults()
+	if err := deployment.EnsureDefaults(""); err != nil {
+		return nil, fmt.Errorf("ensure defaults: %v", err)
+	}
 
 	return deployment, nil
 }
@@ -666,4 +698,19 @@ func validateDeploymentFailure(f *framework.Framework, name string) {
 		By(fmt.Sprintf("Deployment %q is in %q pahse", deployment.Name, deployment.Status.Phase))
 		return deployment.Status.Phase == api.DeploymentPhaseFailed
 	}, "3m", "5s").Should(BeTrue(), "deployment %q not running", name)
+}
+
+// findOperatorPod checks whether there is a PMEM-CSI operator
+// installation in the cluster and returns the found operator pod.
+func findOperatorPod(f *framework.Framework) (*corev1.Pod, error) {
+	c, err := deploy.NewCluster(f.ClientSet, f.DynamicClient)
+	if err != nil {
+		return nil, fmt.Errorf("error at create new cluster: %v", err)
+	}
+	d, err := deploy.FindDeployment(c)
+	if err != nil {
+		return nil, fmt.Errorf("find operator deployment: %v", err)
+	}
+
+	return deploy.WaitForOperator(c, d.Namespace), nil
 }

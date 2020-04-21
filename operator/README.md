@@ -63,9 +63,9 @@ The current API for PMEM-CSI `Deployment` resources is:
 |Field | type | Description | Default Value |
 |---|---|---|---|
 | driverName | string | Unique CSI driver name to use | `pmem-csi.intel.com` |
-| image | string | PMEM-CSI docker image name used for the deployment | the same version as the operator |
-| provisionerImage | string | [CSI provisioner](https://kubernetes-csi.github.io/docs/external-provisioner.html) docker image name | latest [external provisioner](https://kubernetes-csi.github.io/docs/external-provisioner.html) stable release image<sup>1</sup> |
-| registrarImage | string | [CSI node driver registrar](https://github.com/kubernetes-csi/node-driver-registrar) docker image name | latest [node driver registrar](https://kubernetes-csi.github.io/docs/node-driver-registrar.html) stable release image<sup>1</sup> |
+| image | string | PMEM-CSI docker image name used for the deployment | the same image as the operator<sup>1</sup> |
+| provisionerImage | string | [CSI provisioner](https://kubernetes-csi.github.io/docs/external-provisioner.html) docker image name | latest [external provisioner](https://kubernetes-csi.github.io/docs/external-provisioner.html) stable release image<sup>2</sup> |
+| registrarImage | string | [CSI node driver registrar](https://github.com/kubernetes-csi/node-driver-registrar) docker image name | latest [node driver registrar](https://kubernetes-csi.github.io/docs/node-driver-registrar.html) stable release image<sup>2</sup> |
 | pullPolicy | string | Docker image pull policy. either one of `Always`, `Never`, `IfNotPresent` | `IfNotPresent` |
 | logLevel | integer | PMEM-CSI driver logging level | 3 |
 | deviceMode | string | Device management mode to use. Supports one of `lvm` or `direct` | `lvm`
@@ -80,7 +80,13 @@ The current API for PMEM-CSI `Deployment` resources is:
 | pmemPercentage | integer | Percentage of PMEM space to be used by the driver on each node. This is only valid for a driver deployed in `lvm` mode. This field cannot be changed of a running deployment. | 100 |
 | labels | string map | Additional labels for all objects created by the operator. Can only be set when creating the deployment. |
 
-<sup>1</sup> Image versions depend on the Kubernetes release. The
+<sup>1</sup> To use the same container image as default driver image
+the operator pod must set with below environment variables with
+appropriate values:
+ - POD_NAME: Name of the operator pod. Namespace of the pod could be figured out by the operator.
+ - OPERATOR_NAME: Name of the operator container. If not set, defaults to "pmem-csi-operator"
+
+<sup>2</sup> Image versions depend on the Kubernetes release. The
 operator dynamically chooses suitable image versions. Users have to
 take care of that themselves when overriding the values.
 

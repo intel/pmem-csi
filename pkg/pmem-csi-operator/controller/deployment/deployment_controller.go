@@ -9,6 +9,7 @@ package deployment
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	pmemcsiv1alpha1 "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
@@ -18,8 +19,10 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -37,7 +40,11 @@ func init() {
 // Add creates a new Deployment Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts pmemcontroller.ControllerOptions) error {
-	return add(mgr, NewReconcileDeployment(mgr.GetClient(), opts))
+	r, err := NewReconcileDeployment(mgr.GetClient(), opts)
+	if err != nil {
+		return err
+	}
+	return add(mgr, r)
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -67,29 +74,49 @@ type ReconcileDeployment struct {
 	client     client.Client
 	namespace  string
 	k8sVersion *version.Version
+	// container image used for deploying the operator
+	containerImage string
 	// known deployments
 	deployments map[string]*pmemcsiv1alpha1.Deployment
 }
 
 // NewReconcileDeployment creates new deployment reconciler
-func NewReconcileDeployment(client client.Client, opts pmemcontroller.ControllerOptions) reconcile.Reconciler {
+func NewReconcileDeployment(client client.Client, opts pmemcontroller.ControllerOptions) (reconcile.Reconciler, error) {
 	if opts.K8sVersion == nil {
-		if ver, err := k8sutil.GetKubernetesVersion(opts.Config); err != nil {
-			klog.Warningf("Failed to get kubernetes version: %v", err)
-		} else {
-			opts.K8sVersion = ver
+		ver, err := k8sutil.GetKubernetesVersion(opts.Config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get Kubernetes version: %v", err)
 		}
+		opts.K8sVersion = ver
 	}
 	if opts.Namespace == "" {
 		opts.Namespace = k8sutil.GetNamespace()
 	}
 
-	return &ReconcileDeployment{
-		client:      client,
-		k8sVersion:  opts.K8sVersion,
-		namespace:   opts.Namespace,
-		deployments: map[string]*pmemcsiv1alpha1.Deployment{},
+	if opts.DriverImage == "" {
+		// we can not use passed controller-runtime client as it's cache has
+		// not yet been populated, and so it fails to fetch the pod details.
+		// The cache only gets populated once after the Manager.Start().
+		// So we depend on direct Kubernetes clientset.
+		cs, err := kubernetes.NewForConfig(opts.Config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get in-cluster client: %v", err)
+		}
+		image, err := containerImage(cs, opts.Namespace)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find the operator image: %v", err)
+		}
+		opts.DriverImage = image
 	}
+	klog.Infof("Using '%s' as default driver image.", opts.DriverImage)
+
+	return &ReconcileDeployment{
+		client:         client,
+		k8sVersion:     opts.K8sVersion,
+		namespace:      opts.Namespace,
+		containerImage: opts.DriverImage,
+		deployments:    map[string]*pmemcsiv1alpha1.Deployment{},
+	}, nil
 }
 
 // Reconcile reads that state of the cluster for a Deployment object and makes changes based on the state read
@@ -119,10 +146,7 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{Requeue: requeue, RequeueAfter: requeueDelayOnError}, err
 	}
 
-	deployment.EnsureDefaults()
 	d := &PmemCSIDriver{deployment, r.namespace}
-
-	requeue, err = d.Reconcile(r)
 
 	// update status
 	defer func() {
@@ -132,6 +156,13 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 				d.Deployment.Status.Phase, d.Name, statusErr)
 		}
 	}()
+
+	if err := deployment.EnsureDefaults(r.containerImage); err != nil {
+		d.Deployment.Status.Phase = pmemcsiv1alpha1.DeploymentPhaseFailed
+		return reconcile.Result{}, err
+	}
+
+	requeue, err = d.Reconcile(r)
 
 	klog.Infof("Requeue: %t, error: %v", requeue, err)
 
@@ -214,4 +245,37 @@ func (r *ReconcileDeployment) UpdateOrCreate(obj runtime.Object) error {
 // Delete delete existing Kubernetes object
 func (r *ReconcileDeployment) Delete(obj runtime.Object) error {
 	return r.client.Delete(context.TODO(), obj)
+}
+
+// containerImage returns container image name used by operator Pod
+func containerImage(cs *kubernetes.Clientset, namespace string) (string, error) {
+	const podNameEnv = "POD_NAME"
+	const operatorNameEnv = "OPERATOR_NAME"
+
+	containerImage := ""
+	// Operator deployment shall provide this environment
+	if podName := os.Getenv(podNameEnv); podName != "" {
+		pod, err := cs.CoreV1().Pods(namespace).Get(context.TODO(), podName, metav1.GetOptions{})
+		if err != nil {
+			return "", fmt.Errorf("error getting self pod '%s/%s': %v", namespace, podName, err)
+		}
+		// Operator container name shall be provided by deployment
+		operatorName := os.Getenv(operatorNameEnv)
+		if operatorName == "" {
+			operatorName = "pmem-csi-operator"
+		}
+		for _, c := range pod.Spec.Containers {
+			if c.Name == operatorName {
+				containerImage = c.Image
+				break
+			}
+		}
+		if containerImage == "" {
+			return "", fmt.Errorf("no container with name '%s' found. Set '%s' environment variable with the operator container name", operatorName, operatorNameEnv)
+		}
+	} else {
+		return "", fmt.Errorf("'%s' environment variable not set", podNameEnv)
+	}
+
+	return containerImage, nil
 }

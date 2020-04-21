@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -51,6 +52,7 @@ func TestDeploymentController(t *testing.T) {
 type pmemDeployment struct {
 	name                                                string
 	driverName                                          string
+	deviceMode                                          string
 	logLevel                                            uint16
 	image, pullPolicy, provisionerImage, registrarImage string
 	controllerCPU, controllerMemory                     string
@@ -92,6 +94,7 @@ func getDeployment(d *pmemDeployment, c client.Client) runtime.Object {
 	dep.Spec = api.DeploymentSpec{}
 	spec := &dep.Spec
 	spec.DriverName = d.driverName
+	spec.DeviceMode = api.DeviceMode(d.deviceMode)
 	spec.LogLevel = d.logLevel
 	spec.Image = d.image
 	spec.PullPolicy = corev1.PullPolicy(d.pullPolicy)
@@ -171,6 +174,23 @@ func validateSecrets(c client.Client, d *pmemDeployment, ns string) {
 	}
 }
 
+func validateSecret(c client.Client, name, ns string, key, cert []byte, ctx string) {
+	s := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+		},
+	}
+	err := c.Get(context.TODO(), namespacedNameWithOffset(2, s), s)
+	ExpectWithOffset(1, err).Should(BeNil(), "%s: get secret: %v", ctx, err)
+	if key != nil {
+		ExpectWithOffset(1, s.Data[corev1.TLSPrivateKeyKey]).Should(Equal(key), "%s: mismatched key", ctx)
+	}
+	if cert != nil {
+		ExpectWithOffset(1, s.Data[corev1.TLSCertKey]).Should(Equal(cert), "%s: mismatched certificate", ctx)
+	}
+}
+
 func validateCSIDriver(c client.Client, driverName string, k8sVersion *version.Version, ns string) {
 	driver := &storagev1beta1.CSIDriver{
 		ObjectMeta: metav1.ObjectMeta{
@@ -223,14 +243,17 @@ var _ = Describe("Operator", func() {
 		var rc reconcile.Reconciler
 		var testNamespace = "test-namespace"
 		var testK8sVersion = k8sVersion_116
+		var testDriverImage = "fake-driver-image"
 
 		BeforeEach(func() {
 			c = fake.NewFakeClient()
-
-			rc = deployment.NewReconcileDeployment(c, pmemcontroller.ControllerOptions{
-				Namespace:  testNamespace,
-				K8sVersion: k8sVersion_116,
+			var err error
+			rc, err = deployment.NewReconcileDeployment(c, pmemcontroller.ControllerOptions{
+				Namespace:   testNamespace,
+				K8sVersion:  k8sVersion_116,
+				DriverImage: testDriverImage,
 			})
+			Expect(err).ShouldNot(HaveOccurred(), "create new reconciler")
 		})
 
 		AfterEach(func() {
@@ -264,7 +287,7 @@ var _ = Describe("Operator", func() {
 				Expect(c.Resources.Limits.Memory().String()).Should(BeEquivalentTo(api.DefaultControllerResourceMemory), "controller memory resource limit mismatch")
 				switch c.Name {
 				case "pmem-driver":
-					Expect(c.Image).Should(BeEquivalentTo(api.DefaultDriverImage), "mismatched driver image")
+					Expect(c.Image).Should(BeEquivalentTo(testDriverImage), "mismatched driver image")
 					Expect(c.Args).Should(ContainElement("-drivername="+api.DefaultDriverName), "mismatched driver name")
 					Expect(c.Args).Should(ContainElement(fmt.Sprintf("-v=%d", api.DefaultLogLevel)), "mismatched logging level")
 				case "provisioner":
@@ -287,7 +310,7 @@ var _ = Describe("Operator", func() {
 				Expect(c.Resources.Limits.Memory().String()).Should(BeEquivalentTo(api.DefaultNodeResourceMemory), "node memory resource limit mismatch")
 				switch c.Name {
 				case "pmem-driver":
-					Expect(c.Image).Should(BeEquivalentTo(api.DefaultDriverImage), "mismatched driver image")
+					Expect(c.Image).Should(BeEquivalentTo(testDriverImage), "mismatched driver image")
 					Expect(c.Args).Should(ContainElement("-drivername="+api.DefaultDriverName), "mismatched driver name")
 					Expect(c.Args).Should(ContainElement(fmt.Sprintf("-v=%d", api.DefaultLogLevel)), "mismatched logging level")
 				case "driver-registrar":
@@ -395,6 +418,20 @@ var _ = Describe("Operator", func() {
 
 		})
 
+		It("shall not allow invalid device mode", func() {
+			d := &pmemDeployment{
+				name:       "test-driver-modes",
+				deviceMode: "foobar",
+			}
+
+			dep := getDeployment(d, nil)
+
+			err := c.Create(context.TODO(), dep)
+			Expect(err).Should(BeNil(), "failed to create deployment")
+			// Deployment should failed with an error
+			testReconcilePhase(rc, c, d.name, true, false, api.DeploymentPhaseFailed)
+		})
+
 		It("shall not allow multiple deployments with same driver name", func() {
 			d1 := &pmemDeployment{
 				name:       "test-deployment1",
@@ -464,6 +501,104 @@ var _ = Describe("Operator", func() {
 			err = c.Get(context.TODO(), objectKey(d.name+"-pmem-registry", testNamespace), s)
 			Expect(err).Should(BeNil(), "failed to get registry secret: %v", err)
 			Expect(s.Data[corev1.TLSPrivateKeyKey]).Should(Equal(encodedKey), "mismatched private key")
+		})
+
+		It("shall use provided private keys and certificates", func() {
+			ca, err := pmemtls.NewCA(nil, nil)
+			Expect(err).Should(BeNil(), "faield to instantiate CA")
+
+			regKey, err := pmemtls.NewPrivateKey()
+			Expect(err).Should(BeNil(), "failed to generate a private key: %v", err)
+			regCert, err := ca.GenerateCertificate("pmem-registry", regKey.Public())
+			Expect(err).Should(BeNil(), "failed to sign registry key")
+
+			ncKey, err := pmemtls.NewPrivateKey()
+			Expect(err).Should(BeNil(), "failed to generate a private key: %v", err)
+			ncCert, err := ca.GenerateCertificate("pmem-node-controller", ncKey.Public())
+			Expect(err).Should(BeNil(), "failed to sign node controller key")
+
+			d := &pmemDeployment{
+				name:       "test-deployment",
+				driverName: "test-pmem-driver.intel.com",
+				caCert:     ca.EncodedCertificate(),
+				regKey:     pmemtls.EncodeKey(regKey),
+				regCert:    pmemtls.EncodeCert(regCert),
+				ncKey:      pmemtls.EncodeKey(ncKey),
+				ncCert:     pmemtls.EncodeCert(ncCert),
+			}
+			dep := getDeployment(d, nil)
+			err = c.Create(context.TODO(), dep)
+			Expect(err).Should(BeNil(), "failed to create deployment")
+
+			// First deployment expected to be successful
+			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
+
+			validateSecret(c, d.name+"-pmem-ca", testNamespace, nil, ca.EncodedCertificate(), "CA")
+			validateSecret(c, d.name+"-pmem-registry", testNamespace, pmemtls.EncodeKey(regKey), pmemtls.EncodeCert(regCert), "registry")
+			validateSecret(c, d.name+"-pmem-node-controller", testNamespace, pmemtls.EncodeKey(ncKey), pmemtls.EncodeCert(ncCert), "node")
+		})
+
+		It("shall detect invalid private keys and certificates", func() {
+			ca, err := pmemtls.NewCA(nil, nil)
+			Expect(err).Should(BeNil(), "faield to instantiate CA")
+
+			regKey, err := pmemtls.NewPrivateKey()
+			Expect(err).Should(BeNil(), "failed to generate a private key: %v", err)
+			regCert, err := ca.GenerateCertificate("invalid-registry", regKey.Public())
+			Expect(err).Should(BeNil(), "failed to sign registry key")
+
+			ncKey, err := pmemtls.NewPrivateKey()
+			Expect(err).Should(BeNil(), "failed to generate a private key: %v", err)
+			ncCert, err := ca.GenerateCertificate("invalid-node-controller", ncKey.Public())
+			Expect(err).Should(BeNil(), "failed to sign node key")
+
+			d := &pmemDeployment{
+				name:       "test-deployment-cert-invalid",
+				driverName: "test-pmem-driver-cert-invalid",
+				caCert:     ca.EncodedCertificate(),
+				regKey:     pmemtls.EncodeKey(regKey),
+				regCert:    pmemtls.EncodeCert(regCert),
+				ncKey:      pmemtls.EncodeKey(ncKey),
+				ncCert:     pmemtls.EncodeCert(ncCert),
+			}
+			dep := getDeployment(d, nil)
+			err = c.Create(context.TODO(), dep)
+			Expect(err).Should(BeNil(), "failed to create deployment")
+
+			testReconcilePhase(rc, c, d.name, true, true, api.DeploymentPhaseFailed)
+		})
+
+		It("shall detect expired certificates", func() {
+			oneDayAgo := time.Now().Add(-24 * time.Hour)
+			oneMinuteAgo := time.Now().Add(-1 * time.Minute)
+
+			ca, err := pmemtls.NewCA(nil, nil)
+			Expect(err).Should(BeNil(), "faield to instantiate CA")
+
+			regKey, err := pmemtls.NewPrivateKey()
+			Expect(err).Should(BeNil(), "failed to generate a private key: %v", err)
+			regCert, err := ca.GenerateCertificateWithDuration("pmem-registry", oneDayAgo, oneMinuteAgo, regKey.Public())
+			Expect(err).Should(BeNil(), "failed to registry sign key")
+
+			ncKey, err := pmemtls.NewPrivateKey()
+			Expect(err).Should(BeNil(), "failed to generate a private key: %v", err)
+			ncCert, err := ca.GenerateCertificateWithDuration("pmem-node-controller", oneDayAgo, oneMinuteAgo, ncKey.Public())
+			Expect(err).Should(BeNil(), "failed to sign node controller key")
+
+			d := &pmemDeployment{
+				name:       "test-deployment-cert-expired",
+				driverName: "test-pmem-driver-cert-expired",
+				caCert:     ca.EncodedCertificate(),
+				regKey:     pmemtls.EncodeKey(regKey),
+				regCert:    pmemtls.EncodeCert(regCert),
+				ncKey:      pmemtls.EncodeKey(ncKey),
+				ncCert:     pmemtls.EncodeCert(ncCert),
+			}
+			dep := getDeployment(d, nil)
+			err = c.Create(context.TODO(), dep)
+			Expect(err).Should(BeNil(), "failed to create deployment")
+
+			testReconcilePhase(rc, c, d.name, true, true, api.DeploymentPhaseFailed)
 		})
 
 		It("shall allow to change running deployment name", func() {
@@ -700,7 +835,7 @@ var _ = Describe("Operator", func() {
 			for _, c := range containers {
 				switch c.Name {
 				case "pmem-driver":
-					Expect(c.Image).Should(BeEquivalentTo(api.DefaultDriverImage), "mismatched pmem-csi driver image")
+					Expect(c.Image).Should(BeEquivalentTo(testDriverImage), "mismatched pmem-csi driver image")
 				case "provisioner":
 					Expect(c.Image).Should(BeEquivalentTo(api.DefaultProvisionerImage), "mismatched provisioner image")
 				case "driver-registar":

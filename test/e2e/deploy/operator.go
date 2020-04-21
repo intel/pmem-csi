@@ -56,14 +56,18 @@ func CreateDeploymentCR(f *framework.Framework, dep *unstructured.Unstructured) 
 }
 
 func DeleteDeploymentCR(f *framework.Framework, name string) {
-	gomega.Eventually(func() error {
-		err := f.DynamicClient.Resource(DeploymentResource).Delete(context.Background(), name, metav1.DeleteOptions{})
+	// Delete all
+	deletionPolicy := metav1.DeletePropagationForeground
+	gomega.Eventually(func() bool {
+		err := f.DynamicClient.Resource(DeploymentResource).Delete(context.Background(), name, metav1.DeleteOptions{
+			PropagationPolicy: &deletionPolicy,
+		})
 		if err != nil && apierrs.IsNotFound(err) {
-			return nil
+			return true
 		}
 		LogError(err, "delete deployment error: %v, will retry...", err)
-		return err
-	}, "3m", "10s").Should(gomega.BeNil(), "delete deployment %q", name)
+		return false
+	}, "3m", "10s").Should(gomega.BeTrue(), "delete deployment %q", name)
 	ginkgo.By(fmt.Sprintf("Deleted deployment %q", name))
 }
 
