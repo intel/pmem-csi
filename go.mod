@@ -73,4 +73,4 @@ replace (
 // - https://github.com/kubernetes/kubernetes/pull/89819
 // - https://github.com/kubernetes/kubernetes/pull/90214
 // - https://github.com/kubernetes/kubernetes/pull/90335
-replace k8s.io/kubernetes => github.com/pohly/kubernetes v1.18.1-pmem-csi-20200421
+replace k8s.io/kubernetes => github.com/pohly/kubernetes v1.18.1-pmem-csi-20200421-2

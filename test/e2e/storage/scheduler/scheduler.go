@@ -45,11 +45,9 @@ var _ testsuites.TestSuite = &schedulerTestSuite{}
 // webhook work.
 func InitSchedulerTestSuite() testsuites.TestSuite {
 	// We test with an ephemeral inline volume and a PVC with late
-	// binding. The webhook works reliably only for the inline
-	// volume. With PVCs there are race conditions (PVC created,
-	// but controller not informed yet when webhook is called), so
-	// we may have to wait until eventually it works.
+	// binding.
 	lateBinding := testpatterns.DefaultFsDynamicPV
+	lateBinding.Name = "Dynamic PV with late binding"
 	lateBinding.BindingMode = storagev1.VolumeBindingWaitForFirstConsumer
 
 	suite := &schedulerTestSuite{
