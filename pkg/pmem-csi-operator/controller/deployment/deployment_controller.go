@@ -146,6 +146,14 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{Requeue: requeue, RequeueAfter: requeueDelayOnError}, err
 	}
 
+	// If the deployment has already been marked for deletion,
+	// then we don't need to do anything for it because the
+	// apiserver is in the process of garbage-collecting all
+	// sub-objects and then will remove it.
+	if deployment.DeletionTimestamp != nil {
+		return reconcile.Result{Requeue: false}, nil
+	}
+
 	d := &PmemCSIDriver{deployment, r.namespace}
 
 	// update status
