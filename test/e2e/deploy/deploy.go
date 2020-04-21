@@ -194,9 +194,16 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 	filter := metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s in (%s)", deploymentLabel, deploymentName),
 	}
+	infoDelay := 5 * time.Second
+	infoTimestamp := time.Now().Add(infoDelay)
 	for {
 		success := true // No failures so far.
 		done := true    // Nothing left.
+		now := time.Now()
+		showInfo := infoTimestamp.Before(now)
+		if showInfo {
+			infoTimestamp = now.Add(infoDelay)
+		}
 		failure := func(err error) bool {
 			if err != nil && !apierrs.IsNotFound(err) {
 				framework.Logf("remove PMEM-CSI: %v", err)
@@ -212,6 +219,9 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 
 			// Already getting deleted?
 			if objectMeta.DeletionTimestamp != nil {
+				if showInfo {
+					framework.Logf("waiting for deletion of %s (%T, %s)", objectMeta.Name, object, objectMeta.UID)
+				}
 				return
 			}
 
