@@ -392,10 +392,15 @@ func EnsureDeployment(deploymentName string) *Deployment {
 
 	f := framework.NewDefaultFramework("cluster")
 	f.SkipNamespaceCreation = true
+	var prevVol map[string][]string
 
 	ginkgo.BeforeEach(func() {
 		ginkgo.By(fmt.Sprintf("preparing for test %q", ginkgo.CurrentGinkgoTestDescription().FullTestText))
 		c, err := NewCluster(f.ClientSet)
+
+		// Remember list of volumes before test, using out-of-band host commands (i.e. not CSI API).
+		prevVol = GetHostVolumes(deployment)
+
 		framework.ExpectNoError(err, "get cluster information")
 		running, err := FindPMEMDriver(c)
 		framework.ExpectNoError(err, "check for PMEM-CSI driver")
@@ -426,6 +431,11 @@ func EnsureDeployment(deploymentName string) *Deployment {
 		for _, h := range installHooks {
 			h(deployment)
 		}
+	})
+
+	ginkgo.AfterEach(func() {
+		// Check list of volumes after test to detect left-overs
+		CheckForLeftoverVolumes(deployment, prevVol)
 	})
 
 	return deployment

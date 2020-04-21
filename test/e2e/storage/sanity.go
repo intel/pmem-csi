@@ -97,7 +97,6 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 	f.SkipNamespaceCreation = true // We don't need a per-test namespace and skipping it makes the tests run faster.
 	var execOnTestNode func(args ...string) string
 	var cleanup func()
-	var prevVol map[string][]string
 	var cluster *deploy.Cluster
 
 	const socatPort = 9735
@@ -181,13 +180,9 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 		config.CreateStagingDir = mkdir
 		config.RemoveTargetPath = rmdir
 		config.RemoveStagingPath = rmdir
-		// Register list of volumes before test, using out-of-band host commands (i.e. not CSI API).
-		prevVol = GetHostVolumes(d)
 	})
 
 	AfterEach(func() {
-		// Check list of volumes after test to detect left-overs
-		CheckForLeftoverVolumes(d, prevVol)
 		if cleanup != nil {
 			cleanup()
 		}
@@ -1025,48 +1020,4 @@ func WaitForPodsWithLabelRunningReady(c clientset.Interface, ns string, label la
 			return true, nil
 		})
 	return pods, err
-}
-
-// Register list of volumes before test, using out-of-band host commands (i.e. not CSI API).
-func GetHostVolumes(d *deploy.Deployment) map[string][]string {
-	var cmd string
-	var hdr string
-	switch d.Mode {
-	case pmemcsidriver.LVM:
-		// lvs adds many space (0x20) chars at end, we could squeeze
-		// repetitions using tr here, but TrimSpace() below strips those away
-		cmd = "sudo lvs --foreign --noheadings"
-		hdr = "LVM Volumes"
-	case pmemcsidriver.Direct:
-		// ndctl produces multiline block. We want one line per namespace.
-		// Pick uuid, mode, size for comparison. Note that sorting changes the order so lines
-		// are not grouped by volume, but keeping volume order would need more complex parsing
-		// and this is not meant to be pretty-printed for human, just to detect the change.
-		cmd = "sudo ndctl list |tr -d '\"' |egrep 'uuid|mode|^ *size' |sort |tr -d ' \n'"
-		hdr = "Namespaces"
-	}
-	result := make(map[string][]string)
-	// Instead of trying to find out number of hosts, we trust the set of
-	// ssh.N helper scripts matches running hosts, which should be the case in
-	// correctly running tester system. We run ssh.N commands until a ssh.N
-	// script appears to be "no such file".
-	for worker := 1; ; worker++ {
-		sshcmd := fmt.Sprintf("%s/_work/%s/ssh.%d", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"), worker)
-		ssh := exec.Command(sshcmd, cmd)
-		// Intentional Output instead of CombinedOutput to dismiss warnings from stderr.
-		// lvs may emit lvmetad-related WARNING msg which can't be silenced using -q option.
-		out, err := ssh.Output()
-		if err != nil && os.IsNotExist(err) {
-			break
-		}
-		buf := fmt.Sprintf("%s on Node %d", hdr, worker)
-		result[buf] = strings.Split(strings.TrimSpace(string(out)), "\n")
-	}
-	return result
-}
-
-// CheckForLeftovers lists volumes again after test, diff means leftovers.
-func CheckForLeftoverVolumes(d *deploy.Deployment, volBefore map[string][]string) {
-	volNow := GetHostVolumes(d)
-	Expect(volNow).To(Equal(volBefore), "same volumes before and after the test")
 }
