@@ -61,8 +61,8 @@ func AddUninstallHook(h UninstallHook) {
 // currently defined as the operator pod in Running phase.
 func WaitForOperator(c *Cluster, namespace string) (operator *v1.Pod) {
 	// TODO(avalluri): At later point of time we should add readiness support
-	// for the operator. Then we can query directoly the operator if its ready.
-	// As interm solution we are just checking Pod.Status.
+	// for the operator. Then we can query directly the operator if its ready.
+	// As intrem solution we are just checking Pod.Status.
 	gomega.Eventually(func() bool {
 		pod, err := c.GetAppInstance("pmem-csi-operator", "", namespace)
 		if err == nil && pod.Status.Phase == v1.PodRunning {
@@ -181,7 +181,7 @@ func WaitForPMEMDriver(c *Cluster, namespace string) {
 // statefulsets, driver info, storage classes, etc.).
 func RemoveObjects(c *Cluster, deploymentName string) error {
 	// Try repeatedly, in case that communication with the API server fails temporarily.
-	deadline, cancel := context.WithTimeout(context.Background(), time.Minute)
+	deadline, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
