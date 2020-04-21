@@ -486,13 +486,13 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 		It("shall be able to use custom CA certificates", func() {
 			caKey, err := pmemtls.NewPrivateKey()
-			Expect(err).ShouldNot(HaveOccurred(), "creatre ca private key")
+			Expect(err).ShouldNot(HaveOccurred(), "create ca private key")
 			regKey, err := pmemtls.NewPrivateKey()
-			Expect(err).ShouldNot(HaveOccurred(), "creatre registry private key")
+			Expect(err).ShouldNot(HaveOccurred(), "create registry private key")
 			nodeControllerKey, err := pmemtls.NewPrivateKey()
-			Expect(err).ShouldNot(HaveOccurred(), "creatre node ocntroller private key")
+			Expect(err).ShouldNot(HaveOccurred(), "create node controller private key")
 			ca, err := pmemtls.NewCA(nil, caKey)
-			Expect(err).ShouldNot(HaveOccurred(), "creatre ca")
+			Expect(err).ShouldNot(HaveOccurred(), "create ca")
 
 			regCert, err := ca.GenerateCertificate("pmem-registry", regKey.Public())
 			Expect(err).ShouldNot(HaveOccurred(), "sign registry key")
