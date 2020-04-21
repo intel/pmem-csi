@@ -389,7 +389,7 @@ func (d *PmemCSIDriver) getCSIDriver(k8sVersion version.Version) *storagev1beta1
 			Kind:       "CSIDriver",
 			APIVersion: "v1beta1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Spec.DriverName),
+		ObjectMeta: d.getObjectMeta(d.Spec.DriverName, true),
 		Spec: storagev1beta1.CSIDriverSpec{
 			AttachRequired: &attachRequired,
 			PodInfoOnMount: &podInfoOnMount,
@@ -413,7 +413,7 @@ func (d *PmemCSIDriver) getSecret(cn string, ecodedKey []byte, ecnodedCert []byt
 			Kind:       "Secret",
 			APIVersion: "v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name + "-" + cn),
+		ObjectMeta: d.getObjectMeta(d.Name+"-"+cn, false),
 		Type:       corev1.SecretTypeTLS,
 		Data: map[string][]byte{
 			corev1.TLSPrivateKeyKey: ecodedKey,
@@ -428,7 +428,7 @@ func (d *PmemCSIDriver) getControllerService() *corev1.Service {
 			Kind:       "Service",
 			APIVersion: "v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name + "-controller"),
+		ObjectMeta: d.getObjectMeta(d.Name+"-controller", false),
 		Spec: corev1.ServiceSpec{
 			Type: corev1.ServiceTypeClusterIP,
 			Ports: []corev1.ServicePort{
@@ -449,7 +449,7 @@ func (d *PmemCSIDriver) getMetricsService() *corev1.Service {
 			Kind:       "Service",
 			APIVersion: "v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name + "-metrics"),
+		ObjectMeta: d.getObjectMeta(d.Name+"-metrics", false),
 		Spec: corev1.ServiceSpec{
 			Type: corev1.ServiceTypeNodePort,
 			Ports: []corev1.ServicePort{
@@ -470,7 +470,7 @@ func (d *PmemCSIDriver) getControllerServiceAccount() *corev1.ServiceAccount {
 			Kind:       "ServiceAccount",
 			APIVersion: "v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name),
+		ObjectMeta: d.getObjectMeta(d.Name, false),
 	}
 }
 
@@ -480,7 +480,7 @@ func (d *PmemCSIDriver) getControllerProvisionerRole() *rbacv1.Role {
 			Kind:       "Role",
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name),
+		ObjectMeta: d.getObjectMeta(d.Name, false),
 		Rules: []rbacv1.PolicyRule{
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
@@ -506,7 +506,7 @@ func (d *PmemCSIDriver) getControllerProvisionerRoleBinding() *rbacv1.RoleBindin
 			Kind:       "RoleBinding",
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name),
+		ObjectMeta: d.getObjectMeta(d.Name, false),
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
@@ -528,7 +528,7 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRole() *rbacv1.ClusterRol
 			Kind:       "ClusterRole",
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name),
+		ObjectMeta: d.getObjectMeta(d.Name, true),
 		Rules: []rbacv1.PolicyRule{
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
@@ -589,7 +589,7 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRoleBinding() *rbacv1.Clu
 			Kind:       "ClusterRoleBinding",
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name),
+		ObjectMeta: d.getObjectMeta(d.Name, true),
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
@@ -612,7 +612,7 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 			Kind:       "StatefulSet",
 			APIVersion: "apps/v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name + "-controller"),
+		ObjectMeta: d.getObjectMeta(d.Name+"-controller", false),
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
@@ -691,7 +691,7 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 			Kind:       "DaemonSet",
 			APIVersion: "apps/v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name + "-node"),
+		ObjectMeta: d.getObjectMeta(d.Name+"-node", false),
 		Spec: appsv1.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
@@ -1074,15 +1074,18 @@ func (d *PmemCSIDriver) getNodeRegistrarContainer() corev1.Container {
 	}
 }
 
-func (d *PmemCSIDriver) getObjectMeta(name string) metav1.ObjectMeta {
-	return metav1.ObjectMeta{
-		Name:      name,
-		Namespace: d.namespace, // Will be ignored for cluster-scope objects.
+func (d *PmemCSIDriver) getObjectMeta(name string, isClusterResource bool) metav1.ObjectMeta {
+	meta := metav1.ObjectMeta{
+		Name: name,
 		OwnerReferences: []metav1.OwnerReference{
 			d.getOwnerReference(),
 		},
 		Labels: d.Spec.Labels,
 	}
+	if !isClusterResource {
+		meta.Namespace = d.namespace
+	}
+	return meta
 }
 
 func joinMaps(left, right map[string]string) map[string]string {
@@ -1102,7 +1105,7 @@ func (d *PmemCSIDriver) changesFromPreDeployed(r *ReconcileDeployment) (map[api.
 	changes := map[api.DeploymentChange]struct{}{}
 
 	ds := &appsv1.DaemonSet{
-		ObjectMeta: d.getObjectMeta(d.Name + "-node"),
+		ObjectMeta: d.getObjectMeta(d.Name+"-node", false),
 	}
 	if err := r.Get(ds); err != nil {
 		if errors.IsNotFound(err) {
