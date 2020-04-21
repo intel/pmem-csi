@@ -181,7 +181,7 @@ func WaitForPMEMDriver(c *Cluster, namespace string) {
 // statefulsets, driver info, storage classes, etc.).
 func RemoveObjects(c *Cluster, deploymentName string) error {
 	// Try repeatedly, in case that communication with the API server fails temporarily.
-	deadline, cancel := context.WithTimeout(context.Background(), time.Minute)
+	deadline, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -194,9 +194,16 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 	filter := metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s in (%s)", deploymentLabel, deploymentName),
 	}
+	infoDelay := 5 * time.Second
+	infoTimestamp := time.Now().Add(infoDelay)
 	for {
 		success := true // No failures so far.
 		done := true    // Nothing left.
+		now := time.Now()
+		showInfo := infoTimestamp.Before(now)
+		if showInfo {
+			infoTimestamp = now.Add(infoDelay)
+		}
 		failure := func(err error) bool {
 			if err != nil && !apierrs.IsNotFound(err) {
 				framework.Logf("remove PMEM-CSI: %v", err)
@@ -212,6 +219,9 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 
 			// Already getting deleted?
 			if objectMeta.DeletionTimestamp != nil {
+				if showInfo {
+					framework.Logf("waiting for deletion of %s (%T, %s)", objectMeta.Name, object, objectMeta.UID)
+				}
 				return
 			}
 
