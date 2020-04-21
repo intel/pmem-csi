@@ -10,18 +10,17 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"time"
 
 	pmemcsiv1alpha1 "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	"github.com/intel/pmem-csi/pkg/k8sutil"
 	pmemcontroller "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
 	"github.com/intel/pmem-csi/pkg/version"
-	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -132,6 +131,7 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected.
 			// Remove the reference from our records
+			klog.Infof("Deployment '%s' deleted, removing local reference", request.Name)
 			delete(r.deployments, request.Name)
 			return reconcile.Result{}, nil
 		}
@@ -186,66 +186,83 @@ func (r *ReconcileDeployment) Namespace() string {
 
 //Get tries to retrives the Kubernetes objects
 func (r *ReconcileDeployment) Get(obj runtime.Object) error {
-	metaObj, err := meta.Accessor(obj)
+	key, err := client.ObjectKeyFromObject(obj)
 	if err != nil {
-		klog.Errorf("Failed to get object: %v", err)
-		return err
+		return fmt.Errorf("internal error %T: %v", obj, err)
 	}
-	key := types.NamespacedName{Name: metaObj.GetName(), Namespace: metaObj.GetNamespace()}
-
 	return r.client.Get(context.TODO(), key, obj)
 }
 
 // Create create new Kubernetes object
 func (r *ReconcileDeployment) Create(obj runtime.Object) error {
-	err := r.Get(obj)
-	if err == nil {
-		// Already found an active object
-		return nil
+	metaObj, err := meta.Accessor(obj)
+	if err != nil {
+		return fmt.Errorf("internal error %T: %v", obj, err)
 	}
-	if errors.IsNotFound(err) {
-		metaObj, _ := meta.Accessor(obj)
-		klog.Infof("Creating: %q of type %q ", metaObj.GetName(), obj.GetObjectKind().GroupVersionKind())
-		if err := r.client.Create(context.TODO(), obj); err != nil {
-			return err
-		}
-	} else {
-		return err
-	}
-
-	return nil
+	klog.Infof("Creating: '%s/%s' of type %T", metaObj.GetNamespace(), metaObj.GetName(), obj)
+	return r.client.Create(context.TODO(), obj)
 }
 
 // Update updates existing Kubernetes object. The object must be a modified copy of the existing object in the apiserver.
 func (r *ReconcileDeployment) Update(obj runtime.Object) error {
+	metaObj, err := meta.Accessor(obj)
+	if err != nil {
+		return fmt.Errorf("internal error %T: %v", obj, err)
+	}
+	klog.Infof("Updating '%s/%s' of type '%T'", metaObj.GetNamespace(), metaObj.GetName(), obj)
 	return r.client.Update(context.TODO(), obj)
 }
 
 // UpdateOrCreate updates the spec of an existing object or, if it does not exist yet, creates it.
 func (r *ReconcileDeployment) UpdateOrCreate(obj runtime.Object) error {
+	metaObj, err := meta.Accessor(obj)
+	if err != nil {
+		return fmt.Errorf("internal error %T: %v", obj, err)
+	}
 	existing := obj.DeepCopyObject()
-	err := r.Get(existing)
+	err = r.Get(existing)
 	if err != nil && !errors.IsNotFound(err) {
 		return err
 	}
 	if err == nil {
-		// Update spec of existing object.
-		switch update := existing.(type) {
-		case *appsv1.StatefulSet:
-			update.Spec = obj.(*appsv1.StatefulSet).Spec
-		case *appsv1.DaemonSet:
-			update.Spec = obj.(*appsv1.DaemonSet).Spec
-		default:
-			return fmt.Errorf("internal error: updating %T not supported", obj)
+		metaExisting, err := meta.Accessor(existing)
+		if err != nil {
+			return fmt.Errorf("internal error %T: %v", existing, err)
 		}
-		return r.client.Update(context.TODO(), existing)
+
+		ownerRef := metaObj.GetOwnerReferences()[0]
+		if !isOwnedBy(metaExisting, &ownerRef) {
+			return fmt.Errorf("'%s' of type %T is not owned by '%s'", metaObj.GetName(), obj, ownerRef.Name)
+		}
+
+		// Copy metadata from existing object
+		metaObj.SetGenerateName(metaExisting.GetGenerateName())
+		metaObj.SetSelfLink(metaExisting.GetSelfLink())
+		metaObj.SetUID(metaExisting.GetUID())
+		metaObj.SetResourceVersion(metaExisting.GetResourceVersion())
+		metaObj.SetGeneration(metaExisting.GetGeneration())
+		metaObj.SetCreationTimestamp(metaExisting.GetCreationTimestamp())
+		metaObj.SetAnnotations(metaExisting.GetAnnotations())
+		metaObj.SetFinalizers(metaExisting.GetFinalizers())
+		metaObj.SetClusterName(metaExisting.GetClusterName())
+		metaObj.SetManagedFields(metaExisting.GetManagedFields())
+		metaObj.SetLabels(joinMaps(metaExisting.GetLabels(), metaObj.GetLabels()))
+
+		klog.Infof("Updating '%s/%s' of type '%T'", metaObj.GetNamespace(), metaObj.GetName(), obj)
+		return r.client.Update(context.TODO(), obj)
 	}
 	// Fall back to creating the object.
+	klog.Infof("Creating '%s/%s' of type '%T'", metaObj.GetNamespace(), metaObj.GetName(), obj)
 	return r.client.Create(context.TODO(), obj)
 }
 
 // Delete delete existing Kubernetes object
 func (r *ReconcileDeployment) Delete(obj runtime.Object) error {
+	metaObj, err := meta.Accessor(obj)
+	if err != nil {
+		return fmt.Errorf("internal error %T: %v", obj, err)
+	}
+	klog.Infof("Deleting '%s/%s' of type '%T'", metaObj.GetNamespace(), metaObj.GetName(), obj)
 	return r.client.Delete(context.TODO(), obj)
 }
 
@@ -280,4 +297,15 @@ func containerImage(cs *kubernetes.Clientset, namespace string) (string, error) 
 	}
 
 	return containerImage, nil
+}
+
+// isOwnedBy checks if expectedOwner is in the object's owner references list
+func isOwnedBy(object metav1.Object, expectedOwner *metav1.OwnerReference) bool {
+	for _, owner := range object.GetOwnerReferences() {
+		if reflect.DeepEqual(&owner, expectedOwner) {
+			return true
+		}
+	}
+
+	return false
 }

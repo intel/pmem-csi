@@ -230,6 +230,31 @@ func objectKey(name string, namespace ...string) client.ObjectKey {
 	return key
 }
 
+func deleteDeployment(c client.Client, name, ns string) error {
+	dep := &api.Deployment{}
+	key := objectKey(name)
+	if err := c.Get(context.TODO(), key, dep); err != nil {
+		return err
+	}
+
+	By(fmt.Sprintf("Deleting Deployment '%s'(%s)", dep.Name, dep.Spec.DriverName))
+	if err := c.Delete(context.TODO(), dep); err != nil {
+		return err
+	}
+	// Delete sub-objects created by this deployment which
+	// are possible might conflicts(CSIDriver) with later part of test
+	// This is supposed to handle by Kubernetes grabage collector
+	// but couldn't provided by fake client the tets are using
+	//
+	driver := &storagev1beta1.CSIDriver{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: dep.Spec.DriverName,
+		},
+	}
+	By(fmt.Sprintf("Deleting csi driver '%s'", driver.Name))
+	return c.Delete(context.TODO(), driver)
+}
+
 var _ = Describe("Operator", func() {
 	Context("Deployment Controller", func() {
 		var c client.Client
@@ -451,13 +476,7 @@ var _ = Describe("Operator", func() {
 			testReconcilePhase(rc, c, d2.name, true, true, api.DeploymentPhaseFailed)
 
 			// Delete fist deployment
-			dep1 := &api.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: d1.name,
-				},
-			}
-			err = c.Delete(context.TODO(), dep1)
-
+			err = deleteDeployment(c, d1.name, testNamespace)
 			Expect(err).Should(BeNil(), "Failed to delete deployment in failed state")
 
 			testReconcile(rc, d1.name, false, false)
