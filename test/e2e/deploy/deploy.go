@@ -181,7 +181,7 @@ func WaitForPMEMDriver(c *Cluster, namespace string) {
 // statefulsets, driver info, storage classes, etc.).
 func RemoveObjects(c *Cluster, deploymentName string) error {
 	// Try repeatedly, in case that communication with the API server fails temporarily.
-	deadline, cancel := context.WithTimeout(context.Background(), time.Minute)
+	deadline, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
