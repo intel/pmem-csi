@@ -416,6 +416,13 @@ function init_kubernetes_cluster() (
     done
     waitall $pids || die "at least one worker failed to join the cluster"
 
+    # Determine actual Kubernetes version and record for other tools which need
+    # to know without being able to call kubectl.
+    ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} kubectl version --short | \
+        grep 'Server Version' | \
+        sed -e 's/.*: v\([0-9]*\)\.\([0-9]*\)\..*/\1.\2/' \
+        >"${CLUSTER_DIRECTORY}/kubernetes.version"
+
     kubernetes_usage
 )
 
