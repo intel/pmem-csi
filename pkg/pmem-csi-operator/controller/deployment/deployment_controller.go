@@ -73,7 +73,7 @@ var _ reconcile.Reconciler = &ReconcileDeployment{}
 type ReconcileDeployment struct {
 	client     client.Client
 	namespace  string
-	k8sVersion *version.Version
+	k8sVersion version.Version
 	// container image used for deploying the operator
 	containerImage string
 	// known deployments
@@ -82,13 +82,6 @@ type ReconcileDeployment struct {
 
 // NewReconcileDeployment creates new deployment reconciler
 func NewReconcileDeployment(client client.Client, opts pmemcontroller.ControllerOptions) (reconcile.Reconciler, error) {
-	if opts.K8sVersion == nil {
-		ver, err := k8sutil.GetKubernetesVersion(opts.Config)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get Kubernetes version: %v", err)
-		}
-		opts.K8sVersion = ver
-	}
 	if opts.Namespace == "" {
 		opts.Namespace = k8sutil.GetNamespace()
 	}

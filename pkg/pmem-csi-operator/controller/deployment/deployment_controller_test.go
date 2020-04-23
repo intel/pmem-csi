@@ -191,7 +191,7 @@ func validateSecret(c client.Client, name, ns string, key, cert []byte, ctx stri
 	}
 }
 
-func validateCSIDriver(c client.Client, driverName string, k8sVersion *version.Version, ns string) {
+func validateCSIDriver(c client.Client, driverName string, k8sVersion version.Version, ns string) {
 	driver := &storagev1beta1.CSIDriver{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: driverName,

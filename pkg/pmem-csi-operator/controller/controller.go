@@ -15,7 +15,7 @@ import (
 // ControllerOptions type defintions for options to be passed to reconcile controller
 type ControllerOptions struct {
 	// K8sVersion represents version of the running Kubernetes cluster/API server
-	K8sVersion *version.Version
+	K8sVersion version.Version
 	// Namespace to use for namespace-scoped sub-resources created by the controller
 	Namespace string
 	// DriverImage to use as default image for driver deployment

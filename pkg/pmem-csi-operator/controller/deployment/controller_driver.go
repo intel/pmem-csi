@@ -324,7 +324,7 @@ func (d *PmemCSIDriver) getOwnerReference() metav1.OwnerReference {
 	}
 }
 
-func (d *PmemCSIDriver) getCSIDriver(k8sVersion *version.Version) *storagev1beta1.CSIDriver {
+func (d *PmemCSIDriver) getCSIDriver(k8sVersion version.Version) *storagev1beta1.CSIDriver {
 	attachRequired := false
 	podInfoOnMount := true
 
