@@ -119,7 +119,6 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 		var (
 			storageClassLateBindingName = "pmem-csi-sc-late-binding" // from deploy/common/pmem-storageclass-late-binding.yaml
 			claim                       v1.PersistentVolumeClaim
-			prevVol                     map[string][]string
 		)
 		f := framework.NewDefaultFramework("latebinding")
 		BeforeEach(func() {
@@ -129,8 +128,6 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 				skipper.Skipf("storage class %s not found, late binding not supported", storageClassLateBindingName)
 			}
 			framework.ExpectNoError(err, "get storage class %s", storageClassLateBindingName)
-			// Register list of volumes before test, using out-of-band host commands (i.e. not CSI API).
-			prevVol = GetHostVolumes(d)
 
 			claim = v1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
@@ -149,11 +146,6 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 					StorageClassName: &storageClassLateBindingName,
 				},
 			}
-		})
-
-		AfterEach(func() {
-			// Check list of volumes after test to detect left-overs
-			CheckForLeftoverVolumes(d, prevVol)
 		})
 
 		It("works", func() {
