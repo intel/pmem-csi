@@ -6,7 +6,10 @@ SPDX-License-Identifier: Apache-2.0
 package version
 
 import (
+	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 )
 
 // Version type definition for handling simple version comparision
@@ -21,6 +24,25 @@ func NewVersion(major, minor uint) Version {
 		major: major,
 		minor: minor,
 	}
+}
+
+// Parse creates a new version with major/minor from the given string, which must
+// have the format <major>.<minor>. Error texts do not include the version string
+// itself.
+func Parse(version string) (Version, error) {
+	parts := strings.Split(version, ".")
+	if len(parts) < 2 {
+		return Version{}, errors.New("must have <major>.<minor> format")
+	}
+	major, err := strconv.ParseUint(parts[0], 10, 32)
+	if err != nil {
+		return Version{}, fmt.Errorf("major version %q: %v", parts[0], err)
+	}
+	minor, err := strconv.ParseUint(parts[1], 10, 32)
+	if err != nil {
+		return Version{}, fmt.Errorf("minor version %q: %v", parts[1], err)
+	}
+	return NewVersion(uint(major), uint(minor)), nil
 }
 
 func (v Version) String() string {
