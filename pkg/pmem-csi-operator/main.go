@@ -38,8 +38,12 @@ func printVersion() {
 	klog.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))
 }
 
+var driverImage string
+
 func init() {
 	klog.InitFlags(nil)
+	flag.StringVar(&driverImage, "image", "", "docker container image used for deploying the operator.")
+
 	flag.Set("logtostderr", "true")
 }
 
@@ -99,9 +103,10 @@ func Main() int {
 
 	// Setup all Controllers
 	if err := controller.AddToManager(mgr, controller.ControllerOptions{
-		Config:     mgr.GetConfig(),
-		Namespace:  namespace,
-		K8sVersion: *ver,
+		Config:      mgr.GetConfig(),
+		Namespace:   namespace,
+		K8sVersion:  *ver,
+		DriverImage: driverImage,
 	}); err != nil {
 		pmemcommon.ExitError("Failed to add controller to manager: ", err)
 		return 1

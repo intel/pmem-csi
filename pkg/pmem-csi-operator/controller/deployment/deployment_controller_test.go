@@ -191,17 +191,10 @@ func validateSecret(c client.Client, name, ns string, key, cert []byte, ctx stri
 	}
 }
 
-func validateCSIDriver(c client.Client, driverName string, k8sVersion version.Version, ns string) {
+func validateCSIDriver(c client.Client, driverName string, k8sVersion version.Version) {
 	driver := &storagev1beta1.CSIDriver{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: driverName,
-			// The namespace should be ignored for
-			// non-namespaced objects, but the object
-			// tracker in
-			// k8s.io/client-go@v0.18.1/testing/fixture.go
-			// doesn't know which types that applies for
-			// and always compares the namespace.
-			Namespace: ns,
 		},
 	}
 
@@ -235,6 +228,31 @@ func objectKey(name string, namespace ...string) client.ObjectKey {
 		key.Namespace = namespace[0]
 	}
 	return key
+}
+
+func deleteDeployment(c client.Client, name, ns string) error {
+	dep := &api.Deployment{}
+	key := objectKey(name)
+	if err := c.Get(context.TODO(), key, dep); err != nil {
+		return err
+	}
+
+	By(fmt.Sprintf("Deleting Deployment '%s'(%s)", dep.Name, dep.Spec.DriverName))
+	if err := c.Delete(context.TODO(), dep); err != nil {
+		return err
+	}
+	// Delete sub-objects created by this deployment which
+	// are possible might conflicts(CSIDriver) with later part of test
+	// This is supposed to handle by Kubernetes grabage collector
+	// but couldn't provided by fake client the tets are using
+	//
+	driver := &storagev1beta1.CSIDriver{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: dep.Spec.DriverName,
+		},
+	}
+	By(fmt.Sprintf("Deleting csi driver '%s'", driver.Name))
+	return c.Delete(context.TODO(), driver)
 }
 
 var _ = Describe("Operator", func() {
@@ -272,7 +290,7 @@ var _ = Describe("Operator", func() {
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			validateSecrets(c, d, testNamespace)
-			validateCSIDriver(c, api.DefaultDriverName, testK8sVersion, testNamespace)
+			validateCSIDriver(c, api.DefaultDriverName, testK8sVersion)
 
 			ss := &appsv1.StatefulSet{}
 			err = c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)
@@ -344,7 +362,7 @@ var _ = Describe("Operator", func() {
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			validateSecrets(c, d, testNamespace)
-			validateCSIDriver(c, d.driverName, testK8sVersion, testNamespace)
+			validateCSIDriver(c, d.driverName, testK8sVersion)
 
 			ss := &appsv1.StatefulSet{}
 			err = c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)
@@ -458,22 +476,15 @@ var _ = Describe("Operator", func() {
 			testReconcilePhase(rc, c, d2.name, true, true, api.DeploymentPhaseFailed)
 
 			// Delete fist deployment
-			dep1 := &api.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: d1.name,
-				},
-			}
-			err = c.Delete(context.TODO(), dep1)
-
+			err = deleteDeployment(c, d1.name, testNamespace)
 			Expect(err).Should(BeNil(), "Failed to delete deployment in failed state")
 
 			testReconcile(rc, d1.name, false, false)
 
-			// After removing first deployment, sencond deployment should progress
-			testReconcilePhase(rc, c, d2.name, false, false, api.DeploymentPhaseRunning)
+			// After removing first deployment, second deployment should progress
 			testReconcilePhase(rc, c, d2.name, false, false, api.DeploymentPhaseRunning)
 
-			validateCSIDriver(c, d2.driverName, testK8sVersion, testNamespace)
+			validateCSIDriver(c, d2.driverName, testK8sVersion)
 		})
 
 		It("shall use provided private keys", func() {
@@ -611,11 +622,8 @@ var _ = Describe("Operator", func() {
 
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
-			// Reconcile now should keep phase as running
-			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-
 			validateSecrets(c, d, testNamespace)
-			validateCSIDriver(c, api.DefaultDriverName, testK8sVersion, testNamespace)
+			validateCSIDriver(c, api.DefaultDriverName, testK8sVersion)
 
 			// Ensure both deaemonset and statefulset have default driver name
 			// before editing deployment
@@ -690,20 +698,27 @@ var _ = Describe("Operator", func() {
 			testReconcilePhase(rc, c, d1.name, false, false, api.DeploymentPhaseRunning)
 			testReconcilePhase(rc, c, d2.name, false, false, api.DeploymentPhaseRunning)
 
-			// Try to introduce duplicate name when the driver is in Initializing phase
-			// Rertrieve deployment1
+			// Try to introduce duplicate name when the driver is in Running phase
+			// Retrieve deployment1
 			dep := &api.Deployment{}
 			err = c.Get(context.TODO(), objectKey(d1.name), dep)
 			Expect(err).Should(BeNil(), "failed to retrieve deployment")
 
-			// Update it's driver name with the name of deployment2, which should
-			// result in failure to move the reconcile phase
+			// Update it's driver name with the name of deployment2
 			dep.Spec.DriverName = d2.driverName
 			err = c.Update(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to update deployment")
-			testReconcilePhase(rc, c, d1.name, true, false, api.DeploymentPhaseRunning)
 
-			validateCSIDriver(c, d1.driverName, testK8sVersion, testNamespace)
+			// reconciling of this deployment should detect the driver name conflict
+			// and recover deployment by reverting the driver name change
+			testReconcilePhase(rc, c, d1.name, false, false, api.DeploymentPhaseRunning)
+
+			// ensure that the driver name of deployment1 is reverted back
+			dep = &api.Deployment{}
+			err = c.Get(context.TODO(), objectKey(d1.name), dep)
+			Expect(err).Should(BeNil(), "failed to retrieve deployment")
+			Expect(dep.Spec.DriverName).Should(BeEquivalentTo(d1.driverName), "driver name change in deployment is reverted")
+			validateCSIDriver(c, d1.driverName, testK8sVersion)
 		})
 
 		It("shall not allow to change running deployment device mode", func() {
@@ -717,9 +732,6 @@ var _ = Describe("Operator", func() {
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			validateSecrets(c, d, testNamespace)
-
-			// Reconcile now should keep phase as running
-			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			// Ensure both deaemonset and statefulset have default driver name
 			// before editing deployment
@@ -742,8 +754,15 @@ var _ = Describe("Operator", func() {
 			dep.Spec.DeviceMode = api.DeviceModeDirect
 			err = c.Update(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to update deployment")
-			// Reconcile is expected to fail
-			testReconcilePhase(rc, c, d.name, true, false, api.DeploymentPhaseRunning)
+
+			// Reconciling of this deployment is expected to revert the device mode change
+			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
+
+			// ensure that the driver mode in deployment spec is reverted back
+			dep = &api.Deployment{}
+			err = c.Get(context.TODO(), objectKey(d.name), dep)
+			Expect(err).Should(BeNil(), "failed to retrieve deployment")
+			Expect(dep.Spec.DeviceMode).Should(BeEquivalentTo(api.DefaultDeviceMode), "device mode change in deployment is reverted")
 		})
 
 		It("shall allow to change container resources of a running deployment", func() {

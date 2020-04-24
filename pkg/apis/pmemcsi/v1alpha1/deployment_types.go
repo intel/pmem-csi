@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package v1alpha1
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 
@@ -81,6 +82,8 @@ type DeploymentStatus struct {
 
 	// Phase indicates the state of the deployment
 	Phase DeploymentPhase `json:"phase,omitempty"`
+	// LastUpdated time of the deployment status
+	LastUpdated metav1.Time `json:"lastUpdated,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -331,6 +334,22 @@ func (d *Deployment) Compare(other *Deployment) map[DeploymentChange]struct{} {
 		changes[Labels] = struct{}{}
 	}
 
+	if bytes.Compare(d.Spec.CACert, other.Spec.CACert) != 0 {
+		changes[CACertificate] = struct{}{}
+	}
+	if bytes.Compare(d.Spec.RegistryCert, other.Spec.RegistryCert) != 0 {
+		changes[RegistryCertificate] = struct{}{}
+	}
+	if bytes.Compare(d.Spec.NodeControllerCert, other.Spec.NodeControllerCert) != 0 {
+		changes[NodeControllerCertificate] = struct{}{}
+	}
+	if bytes.Compare(d.Spec.RegistryPrivateKey, other.Spec.RegistryPrivateKey) != 0 {
+		changes[RegistryKey] = struct{}{}
+	}
+	if bytes.Compare(d.Spec.NodeControllerPrivateKey, other.Spec.NodeControllerPrivateKey) != 0 {
+		changes[NodeControllerKey] = struct{}{}
+	}
+
 	return changes
 }
 
@@ -438,6 +457,10 @@ func GetDeploymentCRDSchema() *apiextensions.JSONSchemaProps {
 					"phase": apiextensions.JSONSchemaProps{
 						Type:        "string",
 						Description: "deployment phase",
+					},
+					"lastUpdated": apiextensions.JSONSchemaProps{
+						Type:        "string",
+						Description: "time when the status last updated",
 					},
 				},
 			},

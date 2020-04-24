@@ -126,3 +126,7 @@ func (c *Cluster) WaitForDaemonSet(setName string) *appsv1.DaemonSet {
 	}, "3m").Should(BeTrue(), "%s DaemonSet running", setName)
 	return set
 }
+
+func (c *Cluster) GetStatefulSet(setName, namespace string) (*appsv1.StatefulSet, error) {
+	return c.cs.AppsV1().StatefulSets(namespace).Get(context.Background(), setName, metav1.GetOptions{})
+}
