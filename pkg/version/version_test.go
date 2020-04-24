@@ -8,7 +8,7 @@ package version_test
 import (
 	"testing"
 
-	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/version"
+	"github.com/intel/pmem-csi/pkg/version"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -38,5 +38,37 @@ func TestVersion(t *testing.T) {
 		assert.Greater(t, v.Compare(10, 11000), 0, "comparision: 101.1000 must be greater than 10.11000")
 		assert.Less(t, v.Compare(1011, 0), 0, "comparision: 101.1000 must be less than 1011.0")
 		assert.Greater(t, v.Compare(1, 1011000), 0, "comparision: 101.1000 must be less than 1.1011000")
+	})
+
+	invalid := []string{
+		"foo",
+		"1",
+		"a.b",
+		"1.a",
+		"a.2",
+		"-1.0",
+		"0.-1",
+		"1000000000000000000000000.0",
+	}
+	valid := map[string]version.Version{
+		"10.1":   version.NewVersion(10, 1),
+		"2.10.1": version.NewVersion(2, 10),
+	}
+
+	t.Run("parsing", func(t *testing.T) {
+		for _, str := range invalid {
+			t.Run(str, func(t *testing.T) {
+				_, err := version.Parse(str)
+				assert.Error(t, err)
+			})
+		}
+		for str, expected := range valid {
+			t.Run(str, func(t *testing.T) {
+				actual, err := version.Parse(str)
+				if assert.NoError(t, err) {
+					assert.Equal(t, expected, actual)
+				}
+			})
+		}
 	})
 }

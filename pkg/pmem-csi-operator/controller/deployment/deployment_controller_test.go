@@ -19,7 +19,7 @@ import (
 	pmemcontroller "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment"
 	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
-	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/version"
+	"github.com/intel/pmem-csi/pkg/version"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
@@ -191,7 +191,7 @@ func validateSecret(c client.Client, name, ns string, key, cert []byte, ctx stri
 	}
 }
 
-func validateCSIDriver(c client.Client, driverName string, k8sVersion *version.Version, ns string) {
+func validateCSIDriver(c client.Client, driverName string, k8sVersion version.Version, ns string) {
 	driver := &storagev1beta1.CSIDriver{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: driverName,

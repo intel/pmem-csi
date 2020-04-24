@@ -14,8 +14,8 @@ import (
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
-	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/version"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
+	"github.com/intel/pmem-csi/pkg/version"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -324,7 +324,7 @@ func (d *PmemCSIDriver) getOwnerReference() metav1.OwnerReference {
 	}
 }
 
-func (d *PmemCSIDriver) getCSIDriver(k8sVersion *version.Version) *storagev1beta1.CSIDriver {
+func (d *PmemCSIDriver) getCSIDriver(k8sVersion version.Version) *storagev1beta1.CSIDriver {
 	attachRequired := false
 	podInfoOnMount := true
 

@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/version"
+	"github.com/intel/pmem-csi/pkg/version"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -56,5 +56,6 @@ func GetKubernetesVersion(cfg *rest.Config) (*version.Version, error) {
 		return nil, fmt.Errorf("failed to parse Kubernetes minor version %q: %v", ver.Minor, err)
 	}
 
-	return version.NewVersion(uint(major), uint(minor)), nil
+	v := version.NewVersion(uint(major), uint(minor))
+	return &v, nil
 }

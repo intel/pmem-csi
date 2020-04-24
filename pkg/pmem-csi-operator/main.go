@@ -101,7 +101,7 @@ func Main() int {
 	if err := controller.AddToManager(mgr, controller.ControllerOptions{
 		Config:     mgr.GetConfig(),
 		Namespace:  namespace,
-		K8sVersion: ver,
+		K8sVersion: *ver,
 	}); err != nil {
 		pmemcommon.ExitError("Failed to add controller to manager: ", err)
 		return 1
