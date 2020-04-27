@@ -5,6 +5,7 @@ go 1.13
 require (
 	github.com/container-storage-interface/spec v1.2.0
 	github.com/docker/spdystream v0.0.0-20181023171402-6480d4af844c // indirect
+	github.com/go-bindata/go-bindata v3.1.2+incompatible
 	github.com/go-logr/logr v0.1.0
 	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9 // indirect
 	github.com/golang/protobuf v1.3.2
@@ -31,6 +32,7 @@ require (
 	google.golang.org/grpc v1.26.0
 	gopkg.in/freddierice/go-losetup.v1 v1.0.0-20170407175016-fc9adea44124
 	gopkg.in/square/go-jose.v2 v2.4.0 // indirect
+	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/api v0.18.1
 	k8s.io/apiextensions-apiserver v0.18.1
 	k8s.io/apimachinery v0.18.1
