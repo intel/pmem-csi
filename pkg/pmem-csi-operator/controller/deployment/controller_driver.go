@@ -72,6 +72,11 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 		if err != nil {
 			return true, err
 		}
+
+		// This is probably not the right solution for https://github.com/intel/pmem-csi/issues/617.
+		// Instead of getting a list of changes, d.changesFromPreDeployed should tell us what
+		// the old deployment looks like. The change list just gets ignored anyway.
+		oldDeployment = d.Deployment
 	}
 
 	klog.Infof("Deployment: %q, state: %q", d.Name, d.Status.Phase)
