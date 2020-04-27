@@ -157,7 +157,7 @@ func testReconcilePhase(rc reconcile.Reconciler, c client.Client, name string, e
 }
 
 func validateSecrets(c client.Client, d *pmemDeployment, ns string) {
-	for _, name := range []string{"pmem-registry", "pmem-node-controller", "pmem-ca"} {
+	for _, name := range []string{"registry-secrets", "node-secrets"} {
 		secretName := d.name + "-" + name
 		s := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -167,14 +167,13 @@ func validateSecrets(c client.Client, d *pmemDeployment, ns string) {
 		}
 		err := c.Get(context.TODO(), namespacedNameWithOffset(2, s), s)
 		ExpectWithOffset(1, err).Should(BeNil(), "failed to get secret for %q", secretName)
+		ExpectWithOffset(1, s.Data["ca.crt"]).ShouldNot(BeNil(), "root ca certificate not present in secret %s", secretName)
 		ExpectWithOffset(1, s.Data[corev1.TLSCertKey]).ShouldNot(BeNil(), "certificate not present in secret %s", secretName)
-		if name != "pmem-ca" {
-			ExpectWithOffset(1, s.Data[corev1.TLSPrivateKeyKey]).ShouldNot(BeNil(), "private key not present in secret %s", secretName)
-		}
+		ExpectWithOffset(1, s.Data[corev1.TLSPrivateKeyKey]).ShouldNot(BeNil(), "private key not present in secret %s", secretName)
 	}
 }
 
-func validateSecret(c client.Client, name, ns string, key, cert []byte, ctx string) {
+func validateSecret(c client.Client, name, ns string, ca, key, cert []byte, ctx string) {
 	s := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -183,6 +182,9 @@ func validateSecret(c client.Client, name, ns string, key, cert []byte, ctx stri
 	}
 	err := c.Get(context.TODO(), namespacedNameWithOffset(2, s), s)
 	ExpectWithOffset(1, err).Should(BeNil(), "%s: get secret: %v", ctx, err)
+	if ca != nil {
+		ExpectWithOffset(1, s.Data["ca.crt"]).Should(Equal(ca), "%s: mismatched ca", ctx)
+	}
 	if key != nil {
 		ExpectWithOffset(1, s.Data[corev1.TLSPrivateKeyKey]).Should(Equal(key), "%s: mismatched key", ctx)
 	}
@@ -306,9 +308,9 @@ var _ = Describe("Operator", func() {
 				switch c.Name {
 				case "pmem-driver":
 					Expect(c.Image).Should(BeEquivalentTo(testDriverImage), "mismatched driver image")
-					Expect(c.Args).Should(ContainElement("-drivername="+api.DefaultDriverName), "mismatched driver name")
-					Expect(c.Args).Should(ContainElement(fmt.Sprintf("-v=%d", api.DefaultLogLevel)), "mismatched logging level")
-				case "provisioner":
+					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: api.DefaultDriverName}), "mismatched driver")
+					Expect(c.Command).Should(ContainElement(fmt.Sprintf("-v=%d", api.DefaultLogLevel)), "mismatched logging level")
+				case "external-provisioner":
 					Expect(c.Image).Should(BeEquivalentTo(api.DefaultProvisionerImage), "mismatched provisioner image")
 				default:
 					Fail(fmt.Sprintf("Unknown container name %q in controller stateful set", c.Name))
@@ -329,8 +331,8 @@ var _ = Describe("Operator", func() {
 				switch c.Name {
 				case "pmem-driver":
 					Expect(c.Image).Should(BeEquivalentTo(testDriverImage), "mismatched driver image")
-					Expect(c.Args).Should(ContainElement("-drivername="+api.DefaultDriverName), "mismatched driver name")
-					Expect(c.Args).Should(ContainElement(fmt.Sprintf("-v=%d", api.DefaultLogLevel)), "mismatched logging level")
+					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: api.DefaultDriverName}), "mismatched driver name")
+					Expect(c.Command).Should(ContainElement(fmt.Sprintf("-v=%d", api.DefaultLogLevel)), "mismatched logging level")
 				case "driver-registrar":
 					Expect(c.Image).Should(BeEquivalentTo(api.DefaultRegistrarImage), "mismatched driver-registrar image")
 				default:
@@ -379,9 +381,9 @@ var _ = Describe("Operator", func() {
 				switch c.Name {
 				case "pmem-driver":
 					Expect(c.Image).Should(BeEquivalentTo(d.image), "mismatched driver image")
-					Expect(c.Args).Should(ContainElement("-drivername="+d.driverName), "mismatched driver name")
-					Expect(c.Args).Should(ContainElement(fmt.Sprintf("-v=%d", d.logLevel)), "mismatched logging level")
-				case "provisioner":
+					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: d.driverName}), "mismatched driver")
+					Expect(c.Command).Should(ContainElement(fmt.Sprintf("-v=%d", d.logLevel)), "mismatched logging level")
+				case "external-provisioner":
 					Expect(c.Image).Should(BeEquivalentTo(d.provisionerImage), "mismatched provisioner image")
 				default:
 					Fail(fmt.Sprintf("Unknown container name %q in controller stateful set", c.Name))
@@ -402,8 +404,8 @@ var _ = Describe("Operator", func() {
 				switch c.Name {
 				case "pmem-driver":
 					Expect(c.Image).Should(BeEquivalentTo(d.image), "mismatched driver image")
-					Expect(c.Args).Should(ContainElement("-drivername="+d.driverName), "mismatched driver name")
-					Expect(c.Args).Should(ContainElement(fmt.Sprintf("-v=%d", d.logLevel)), "mismatched logging level")
+					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: d.driverName}), "mismatched driver")
+					Expect(c.Command).Should(ContainElement(fmt.Sprintf("-v=%d", d.logLevel)), "mismatched logging level")
 				case "driver-registrar":
 					Expect(c.Image).Should(BeEquivalentTo(d.registrarImage), "mismatched driver-registrar image")
 				default:
@@ -509,7 +511,7 @@ var _ = Describe("Operator", func() {
 			validateSecrets(c, d, testNamespace)
 
 			s := &corev1.Secret{}
-			err = c.Get(context.TODO(), objectKey(d.name+"-pmem-registry", testNamespace), s)
+			err = c.Get(context.TODO(), objectKey(d.name+"-registry-secrets", testNamespace), s)
 			Expect(err).Should(BeNil(), "failed to get registry secret: %v", err)
 			Expect(s.Data[corev1.TLSPrivateKeyKey]).Should(Equal(encodedKey), "mismatched private key")
 		})
@@ -544,9 +546,8 @@ var _ = Describe("Operator", func() {
 			// First deployment expected to be successful
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
-			validateSecret(c, d.name+"-pmem-ca", testNamespace, nil, ca.EncodedCertificate(), "CA")
-			validateSecret(c, d.name+"-pmem-registry", testNamespace, pmemtls.EncodeKey(regKey), pmemtls.EncodeCert(regCert), "registry")
-			validateSecret(c, d.name+"-pmem-node-controller", testNamespace, pmemtls.EncodeKey(ncKey), pmemtls.EncodeCert(ncCert), "node")
+			validateSecret(c, d.name+"-registry-secrets", testNamespace, d.caCert, d.regKey, d.regCert, "registry")
+			validateSecret(c, d.name+"-node-secrets", testNamespace, d.caCert, d.ncKey, d.ncCert, "node")
 		})
 
 		It("shall detect invalid private keys and certificates", func() {
@@ -632,7 +633,7 @@ var _ = Describe("Operator", func() {
 			Expect(err).Should(BeNil(), "controller stateful set is expected on a successful deployment")
 			for _, c := range ss.Spec.Template.Spec.Containers {
 				if c.Name == "pmem-driver" {
-					Expect(c.Args).Should(ContainElement("-drivername="+api.DefaultDriverName), "mismatched driver name")
+					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: api.DefaultDriverName}), "mismatched driver")
 					break
 				}
 			}
@@ -641,7 +642,7 @@ var _ = Describe("Operator", func() {
 			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
 			for _, c := range ds.Spec.Template.Spec.Containers {
 				if c.Name == "pmem-driver" {
-					Expect(c.Args).Should(ContainElement("-drivername="+api.DefaultDriverName), "mismatched driver name")
+					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: api.DefaultDriverName}), "mismatched driver")
 					break
 				}
 			}
@@ -662,7 +663,7 @@ var _ = Describe("Operator", func() {
 			Expect(err).Should(BeNil(), "controller stateful set is expected on a successful deployment")
 			for _, c := range ss.Spec.Template.Spec.Containers {
 				if c.Name == "pmem-driver" {
-					Expect(c.Args).Should(ContainElement("-drivername="+dep.Spec.DriverName), "mismatched driver name")
+					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: dep.Spec.DriverName}), "mismatched driver name")
 					break
 				}
 			}
@@ -671,7 +672,7 @@ var _ = Describe("Operator", func() {
 			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
 			for _, c := range ds.Spec.Template.Spec.Containers {
 				if c.Name == "pmem-driver" {
-					Expect(c.Args).Should(ContainElement("-drivername="+dep.Spec.DriverName), "mismatched driver name")
+					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: dep.Spec.DriverName}), "mismatched driver name")
 					break
 				}
 			}
@@ -741,7 +742,7 @@ var _ = Describe("Operator", func() {
 			for _, c := range ds.Spec.Template.Spec.Containers {
 				if c.Name == "pmem-driver" {
 					arg := fmt.Sprintf("-deviceManager=%s", api.DefaultDeviceMode)
-					Expect(c.Args).Should(ContainElement(arg), "mismatched driver device mode")
+					Expect(c.Command).Should(ContainElement(arg), "mismatched driver device mode")
 					break
 				}
 			}
@@ -855,7 +856,7 @@ var _ = Describe("Operator", func() {
 				switch c.Name {
 				case "pmem-driver":
 					Expect(c.Image).Should(BeEquivalentTo(testDriverImage), "mismatched pmem-csi driver image")
-				case "provisioner":
+				case "external-provisioner":
 					Expect(c.Image).Should(BeEquivalentTo(api.DefaultProvisionerImage), "mismatched provisioner image")
 				case "driver-registar":
 					Expect(c.Image).Should(BeEquivalentTo(api.DefaultRegistrarImage), "mismatched node registart image")
@@ -882,7 +883,7 @@ var _ = Describe("Operator", func() {
 				switch c.Name {
 				case "pmem-driver":
 					Expect(c.Image).Should(BeEquivalentTo(d.image), "mismatched pmem-csi driver image")
-				case "provisioner":
+				case "external-provisioner":
 					Expect(c.Image).Should(BeEquivalentTo(d.provisionerImage), "mismatched provisioner image")
 				case "driver-registar":
 					Expect(c.Image).Should(BeEquivalentTo(d.registrarImage), "mismatched node registart image")

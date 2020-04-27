@@ -147,7 +147,7 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{Requeue: false}, nil
 	}
 
-	d := &PmemCSIDriver{deployment, r.namespace}
+	d := &PmemCSIDriver{deployment, r.namespace, r.k8sVersion}
 
 	// update status
 	defer func() {
