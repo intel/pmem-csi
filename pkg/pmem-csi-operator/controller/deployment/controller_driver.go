@@ -915,7 +915,8 @@ func (d *PmemCSIDriver) getControllerContainer() corev1.Container {
 				MountPath: "/csi",
 			},
 		},
-		Resources: *d.Spec.ControllerResources,
+		Resources:              *d.Spec.ControllerResources,
+		TerminationMessagePath: "/tmp/termination-log",
 	}
 }
 
@@ -984,6 +985,7 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &true,
 		},
+		TerminationMessagePath: "/tmp/termination-log",
 	}
 
 	// Driver in 'direct' mode requires /sys mounting
@@ -1048,6 +1050,7 @@ func (d *PmemCSIDriver) getNamespaceInitContainer() corev1.Container {
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &true,
 		},
+		TerminationMessagePath: "/tmp/pmem-ns-init-termination-log",
 	}
 }
 
@@ -1073,6 +1076,7 @@ func (d *PmemCSIDriver) getVolumeGroupInitContainer() corev1.Container {
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &true,
 		},
+		TerminationMessagePath: "/tmp/pmem-vgm-termination-log",
 	}
 }
 
