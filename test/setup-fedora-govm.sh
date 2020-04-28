@@ -100,7 +100,7 @@ if $INIT_KUBERNETES; then
     # We create /opt/cni/bin containing symlinks for every binary:
     mkdir -p /opt/cni/bin
     for i in /usr/libexec/cni/*; do
-        ln -vs $i /opt/cni/bin/
+        ln -s $i /opt/cni/bin/
     done
 
     # Testing may involve a Docker registry running on the build host (see
