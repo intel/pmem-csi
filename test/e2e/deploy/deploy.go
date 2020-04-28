@@ -420,6 +420,7 @@ func EnsureDeployment(deploymentName string) *Deployment {
 		cmd.Dir = os.Getenv("REPO_ROOT")
 		cmd.Env = os.Environ()
 		cmd.Env = append(cmd.Env,
+			"TEST_DEPLOYMENT_QUIET=quiet",
 			"TEST_DEPLOYMENTMODE="+deployment.DeploymentMode(),
 			"TEST_DEVICEMODE="+string(deployment.Mode))
 		cmd.Stdout = ginkgo.GinkgoWriter
