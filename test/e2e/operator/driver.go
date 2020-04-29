@@ -10,8 +10,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/intel/pmem-csi/pkg/k8sutil"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 	"github.com/intel/pmem-csi/test/e2e/operator/validate"
+	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"k8s.io/kubernetes/test/e2e/framework"
 
@@ -33,6 +35,13 @@ var _ = deploy.DescribeForSome("driver", func(d *deploy.Deployment) bool {
 
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 		defer cancel()
-		validate.DriverDeployment(ctx, f, d, d.GetDriverDeployment())
+
+		client, err := runtime.New(f.ClientConfig(), runtime.Options{})
+		framework.ExpectNoError(err, "new operator runtime client")
+
+		k8sver, err := k8sutil.GetKubernetesVersion(f.ClientConfig())
+		framework.ExpectNoError(err, "get Kubernetes version")
+
+		framework.ExpectNoError(validate.DriverDeploymentEventually(ctx, client, *k8sver, d.Namespace, d.GetDriverDeployment()), "validate driver")
 	})
 })

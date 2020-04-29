@@ -13,6 +13,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -22,70 +23,71 @@ import (
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	"github.com/intel/pmem-csi/pkg/deployments"
-	"github.com/intel/pmem-csi/pkg/k8sutil"
-	"github.com/intel/pmem-csi/test/e2e/deploy"
+	"github.com/intel/pmem-csi/pkg/version"
 
 	"gopkg.in/yaml.v2"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/kubernetes/test/e2e/framework"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // DriverDeployment compares all objects as deployed by the operator against the expected
 // objects for a certain deployment spec. deploymentSpec should only have those fields
-// set which are not the defaults.
-func DriverDeployment(ctx context.Context, f *framework.Framework, d *deploy.Deployment, deploymentSpec api.Deployment) error {
+// set which are not the defaults. This call will wait for the expected objects until
+// the context times out.
+func DriverDeploymentEventually(ctx context.Context, client client.Client, k8sver version.Version, namespace string, deployment api.Deployment) error {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
-	deployment := &api.Deployment{}
-	ready := func() (err error) {
-		dep, err := f.DynamicClient.Resource(deploy.DeploymentResource).Get(context.Background(), deploymentSpec.Name, metav1.GetOptions{})
-		if err != nil {
-			return err
-		}
-		if err = deploy.Scheme.Convert(dep, deployment, nil); err != nil {
-			return err
-		}
-		if deployment.Status.Phase != api.DeploymentPhaseRunning {
-			return fmt.Errorf("deployment in phase %s", deployment.Status.Phase)
-		}
+	if deployment.GetUID() == "" {
+		return errors.New("deployment not an object that was stored in the API server, no UID")
+	}
 
-		return nil
+	// TODO: once there is a better way to detect that the
+	// operator has finished updating the deployment, check for
+	// that here instead of repeatedly checking the objects.
+	// As it stands now, permanent differences will only be
+	// reported when the test times out.
+	ready := func() (err error) {
+		return DriverDeployment(client, k8sver, namespace, deployment)
 	}
 	if err := ready(); err != nil {
-	loop:
 		for {
 			select {
 			case <-ticker.C:
 				err = ready()
 				if err == nil {
-					break loop
+					return nil
 				}
 			case <-ctx.Done():
-				return fmt.Errorf("timed out waiting for running deployment, last error: %v", err)
+				return fmt.Errorf("timed out waiting for deployment, last error: %v", err)
 			}
 		}
+	}
+	return nil
+}
+
+// DriverDeployment compares all objects as deployed by the operator against the expected
+// objects for a certain deployment spec. deploymentSpec should only have those fields
+// set which are not the defaults. The caller must ensure that the operator is done
+// with creating objects.
+func DriverDeployment(client client.Client, k8sver version.Version, namespace string, deployment api.Deployment) error {
+	if deployment.GetUID() == "" {
+		return errors.New("deployment not an object that was stored in the API server, no UID")
 	}
 
 	// The operator currently always uses the production image. We
 	// can only find that indirectly.
 	driverImage := strings.Replace(os.Getenv("PMEM_CSI_IMAGE"), "-test", "", 1)
-	(&deploymentSpec).EnsureDefaults(driverImage)
+	(&deployment).EnsureDefaults(driverImage)
 
 	// Validate sub-objects. A sub-object is anything that has the deployment object as owner.
-	objects, err := listAllDeployedObjects(f, deployment)
+	objects, err := listAllDeployedObjects(client, deployment)
 	if err != nil {
 		return err
 	}
 
-	k8sver, err := k8sutil.GetKubernetesVersion(f.ClientConfig())
-	if err != nil {
-		return fmt.Errorf("get Kubernetes version: %v", err)
-	}
-	expectedObjects, err := deployments.LoadAndCustomizeObjects(*k8sver, deploymentSpec.Spec.DeviceMode, deploymentSpec.Name, d.Namespace, deploymentSpec)
+	expectedObjects, err := deployments.LoadAndCustomizeObjects(k8sver, deployment.Spec.DeviceMode, deployment.Name, namespace, deployment)
 	if err != nil {
 		return fmt.Errorf("customize expected objects: %v", err)
 	}
@@ -99,17 +101,17 @@ func DriverDeployment(ctx context.Context, f *framework.Framework, d *deploy.Dep
 				// content of secrets, which aren't
 				// part of the reference objects.
 				switch actual.GetName() {
-				case deploymentSpec.Name + "-registry-secrets":
+				case deployment.Name + "-registry-secrets":
 					diffs = append(diffs, compareSecrets(actual,
-						deploymentSpec.Spec.CACert,
-						deploymentSpec.Spec.RegistryPrivateKey,
-						deploymentSpec.Spec.RegistryCert)...)
+						deployment.Spec.CACert,
+						deployment.Spec.RegistryPrivateKey,
+						deployment.Spec.RegistryCert)...)
 					continue
-				case deploymentSpec.Name + "-node-secrets":
+				case deployment.Name + "-node-secrets":
 					diffs = append(diffs, compareSecrets(actual,
-						deploymentSpec.Spec.CACert,
-						deploymentSpec.Spec.NodeControllerPrivateKey,
-						deploymentSpec.Spec.NodeControllerCert)...)
+						deployment.Spec.CACert,
+						deployment.Spec.NodeControllerPrivateKey,
+						deployment.Spec.NodeControllerCert)...)
 					continue
 				}
 			}
@@ -123,7 +125,7 @@ func DriverDeployment(ctx context.Context, f *framework.Framework, d *deploy.Dep
 		actualLabels := actual.GetLabels()
 		for key, value := range expectedLabels {
 			if key == "pmem-csi.intel.com/deployment" &&
-				(deploymentSpec.Labels == nil || deploymentSpec.Labels["pmem-csi.intel.com/deployment"] == "") {
+				(deployment.Labels == nil || deployment.Labels["pmem-csi.intel.com/deployment"] == "") {
 				// This particular label is part of
 				// the reference YAMLs but not
 				// currently added by the operator
@@ -154,8 +156,8 @@ func DriverDeployment(ctx context.Context, f *framework.Framework, d *deploy.Dep
 	}
 	for _, expected := range append(expectedObjects,
 		// Content doesn't matter, we just want to be sure they exist.
-		createObject(gvk, deploymentSpec.Name+"-registry-secrets", d.Namespace),
-		createObject(gvk, deploymentSpec.Name+"-node-secrets", d.Namespace)) {
+		createObject(gvk, deployment.Name+"-registry-secrets", namespace),
+		createObject(gvk, deployment.Name+"-node-secrets", namespace)) {
 		if findObject(objects, expected) == nil {
 			diffs = append(diffs, fmt.Sprintf("expected object was not deployed: %v", prettyPrintObjectID(expected)))
 		}
@@ -444,13 +446,8 @@ var allObjectTypes = []schema.GroupVersionKind{
 	schema.GroupVersionKind{"storage.k8s.io", "v1beta1", "CSIDriver"},
 }
 
-func listAllDeployedObjects(f *framework.Framework, deployment *api.Deployment) ([]unstructured.Unstructured, error) {
+func listAllDeployedObjects(client client.Client, deployment api.Deployment) ([]unstructured.Unstructured, error) {
 	objects := []unstructured.Unstructured{}
-
-	c, err := client.New(f.ClientConfig(), client.Options{})
-	if err != nil {
-		return objects, fmt.Errorf("create controller-runtime client: %v", err)
-	}
 
 	for _, gvk := range allObjectTypes {
 		list := &unstructured.UnstructuredList{}
@@ -458,7 +455,7 @@ func listAllDeployedObjects(f *framework.Framework, deployment *api.Deployment) 
 		// Filtering by owner doesn't work, so we have to use brute-force and look at all
 		// objects.
 		// TODO (?): filter at least by namespace, where applicable.
-		if err := c.List(context.Background(), list); err != nil {
+		if err := client.List(context.Background(), list); err != nil {
 			return objects, fmt.Errorf("list %s: %v", gvk, err)
 		}
 	outer:

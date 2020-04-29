@@ -13,19 +13,58 @@ import (
 	"time"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	"github.com/intel/pmem-csi/pkg/k8sutil"
 	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
+	"github.com/intel/pmem-csi/pkg/version"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 	"github.com/intel/pmem-csi/test/e2e/operator/validate"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/kubernetes/test/e2e/framework"
+	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
+
+// We use intentionally use this non-existing driver image
+// because these tests do not actually need a running driver.
+const dummyImage = "unexisting/pmem-csi-driver"
+
+func getDeployment(name string) api.Deployment {
+	return api.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Spec: api.DeploymentSpec{
+			Image: dummyImage,
+		},
+	}
+}
+
+func initializeTLS(spec *api.DeploymentSpec) {
+	ca, err := pmemtls.NewCA(nil, nil)
+	framework.ExpectNoErrorWithOffset(1, err, "failed to instantiate CA")
+
+	regKey, err := pmemtls.NewPrivateKey()
+	framework.ExpectNoErrorWithOffset(1, err, "failed to generate a private key: %v", err)
+	regCert, err := ca.GenerateCertificate("pmem-registry", regKey.Public())
+	framework.ExpectNoErrorWithOffset(1, err, "failed to sign registry key")
+
+	ncKey, err := pmemtls.NewPrivateKey()
+	framework.ExpectNoErrorWithOffset(1, err, "failed to generate a private key: %v", err)
+	ncCert, err := ca.GenerateCertificate("pmem-node-controller", ncKey.Public())
+	framework.ExpectNoErrorWithOffset(1, err, "failed to sign node controller key")
+
+	spec.CACert = ca.EncodedCertificate()
+	spec.RegistryPrivateKey = pmemtls.EncodeKey(regKey)
+	spec.RegistryCert = pmemtls.EncodeCert(regCert)
+	spec.NodeControllerPrivateKey = pmemtls.EncodeKey(ncKey)
+	spec.NodeControllerCert = pmemtls.EncodeCert(ncCert)
+}
 
 var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 	// Run these tests for all bare operator deployments, i.e.
@@ -36,6 +75,8 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		c      *deploy.Cluster
 		ctx    context.Context
 		cancel func()
+		client runtime.Client
+		k8sver version.Version
 	)
 
 	f := framework.NewDefaultFramework("operator")
@@ -49,6 +90,13 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		Expect(err).ShouldNot(HaveOccurred(), "new cluster")
 		c = cluster
 
+		client, err = runtime.New(f.ClientConfig(), runtime.Options{})
+		Expect(err).ShouldNot(HaveOccurred(), "new operator runtime client")
+
+		ver, err := k8sutil.GetKubernetesVersion(f.ClientConfig())
+		Expect(err).ShouldNot(HaveOccurred(), "get Kubernetes version")
+		k8sver = *ver
+
 		// All tests are expected to complete in 5 minutes.
 		// We need to set up the global variables indirectly to avoid a watning about cancel not being called.
 		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -59,83 +107,57 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		cancel()
 	})
 
-	Context("deployment", func() {
-		// We use intentionally use this non-existing driver image
-		// because these tests do not actually need a running driver.
-		dummyImage := "unexisting/pmem-csi-driver"
+	validateDriver := func(deployment api.Deployment, what ...interface{}) {
+		By("waiting for expectecd driver deployment")
+		if what == nil {
+			what = []interface{}{"validate driver"}
+		}
+		framework.ExpectNoErrorWithOffset(1, validate.DriverDeploymentEventually(ctx, client, k8sver, d.Namespace, deployment), what...)
+	}
 
-		tests := map[string]*unstructured.Unstructured{
-			"with defaults": &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": api.SchemeGroupVersion.String(),
-					"kind":       "Deployment",
-					"metadata": map[string]interface{}{
-						"name": "test-deployment-with-defaults",
-					},
-					"spec": map[string]interface{}{
-						"image": dummyImage,
-					},
+	Context("deployment", func() {
+
+		tests := map[string]api.Deployment{
+			"with defaults": getDeployment("test-deployment-with-defaults"),
+			"with explicit values": api.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-deployment-with-explicit",
 				},
-			},
-			"with explicit values": &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": api.SchemeGroupVersion.String(),
-					"kind":       "Deployment",
-					"metadata": map[string]interface{}{
-						"name": "test-deployment-with-explicit",
-					},
-					"spec": map[string]interface{}{
-						"deviceMode":      "direct",
-						"imagePullPolicy": "Never",
-						"image":           dummyImage,
-						"controllerResources": map[string]interface{}{
-							"limits": map[string]interface{}{
-								"cpu":    "200m",
-								"memory": "100Mi",
-							},
+				Spec: api.DeploymentSpec{
+					DeviceMode: api.DeviceModeDirect,
+					PullPolicy: corev1.PullNever,
+					Image:      dummyImage,
+					ControllerResources: &corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("200m"),
+							corev1.ResourceMemory: resource.MustParse("100Mi"),
 						},
-						"nodeResources": map[string]interface{}{
-							"limits": map[string]interface{}{
-								"cpu":    "500m",
-								"memory": "500Mi",
-							},
+					},
+					NodeResources: &corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("500m"),
+							corev1.ResourceMemory: resource.MustParse("500Mi"),
 						},
 					},
 				},
 			},
 		}
 
-		for name, dep := range tests {
+		for name, deployment := range tests {
+			deployment := deployment
 			It(name, func() {
-				deployment, err := toDeployment(dep)
-				Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
-
-				deploy.CreateDeploymentCR(f, dep)
+				deployment = deploy.CreateDeploymentCR(f, deployment)
 				defer deploy.DeleteDeploymentCR(f, deployment.Name)
-				Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver")
+				validateDriver(deployment)
 			})
 		}
 
 		It("driver image shall default to operator image", func() {
-			dep := &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": api.SchemeGroupVersion.String(),
-					"kind":       "Deployment",
-					"metadata": map[string]interface{}{
-						"name": "test-deployment-driver-image",
-					},
-					"spec": map[string]interface{}{
-						// NOTE(avalluri): we do not use lvm mode so that
-						// running this test does not pollute the PMEM space
-						"deviceMode": "direct",
-					},
-				},
-			}
+			deployment := getDeployment("test-deployment-driver-image")
+			deployment.Spec.Image = ""
+			deployment.Spec.PMEMPercentage = 50
 
-			deployment, err := toDeployment(dep)
-			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
-
-			deploy.CreateDeploymentCR(f, dep)
+			deployment = deploy.CreateDeploymentCR(f, deployment)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 
 			operatorPod, err := findOperatorPod(c, d)
@@ -143,224 +165,74 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			// operator image should be the driver image
 			deployment.Spec.Image = operatorPod.Spec.Containers[0].Image
-			Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver")
+			validateDriver(deployment)
 		})
 
 		It("shall be able to edit running deployment", func() {
-			dep := &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": api.SchemeGroupVersion.String(),
-					"kind":       "Deployment",
-					"metadata": map[string]interface{}{
-						"name": "test-deployment-update",
-					},
-					"spec": map[string]interface{}{
-						"image": dummyImage,
-					},
-				},
-			}
+			deployment := getDeployment("test-deployment-update")
 
-			deployment, err := toDeployment(dep)
-			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
-
-			deploy.CreateDeploymentCR(f, dep)
+			deployment = deploy.CreateDeploymentCR(f, deployment)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-			Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver before editing")
+			validateDriver(deployment, "validate driver before editing")
 
-			// prepare custom certificates
-			ca, err := pmemtls.NewCA(nil, nil)
-			Expect(err).Should(BeNil(), "failed to instantiate CA")
+			// We have to get a fresh copy before updating it because the
+			// operator should have modified the status.
+			deployment = deploy.GetDeploymentCR(f, deployment.Name)
 
-			regKey, err := pmemtls.NewPrivateKey()
-			Expect(err).Should(BeNil(), "failed to generate a private key: %v", err)
-			regCert, err := ca.GenerateCertificate("pmem-registry", regKey.Public())
-			Expect(err).Should(BeNil(), "failed to sign registry key")
-
-			ncKey, err := pmemtls.NewPrivateKey()
-			Expect(err).Should(BeNil(), "failed to generate a private key: %v", err)
-			ncCert, err := ca.GenerateCertificate("pmem-node-controller", ncKey.Public())
-			Expect(err).Should(BeNil(), "failed to sign node controller key")
-
-			dep = deploy.GetDeploymentCR(f, deployment.Name)
-
-			/* Update fields */
-			spec := dep.Object["spec"].(map[string]interface{})
-			spec["logLevel"] = api.DefaultLogLevel + 1
-			spec["image"] = "test-driver-image"
-			spec["imagePullPolicy"] = "Never"
-			spec["provisionerImage"] = "test-provisioner"
-			spec["controllerResources"] = map[string]interface{}{
-				"limits": map[string]interface{}{
-					"cpu":    "150m",
-					"memory": "1Mi",
+			// Update fields.
+			spec := &deployment.Spec
+			spec.LogLevel++
+			spec.Image = "test-driver-image"
+			spec.PullPolicy = corev1.PullNever
+			spec.ProvisionerImage = "test-provisioner"
+			spec.ControllerResources = &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("200m"),
+					corev1.ResourceMemory: resource.MustParse("100Mi"),
 				},
 			}
-			spec["nodeResources"] = map[string]interface{}{
-				"limits": map[string]interface{}{
-					"cpu":    "350m",
-					"memory": "2Mi",
+			spec.NodeResources = &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("500m"),
+					corev1.ResourceMemory: resource.MustParse("500Mi"),
 				},
 			}
-			spec["caCert"] = ca.EncodedCertificate()
-			spec["registryKey"] = pmemtls.EncodeKey(regKey)
-			spec["registryCert"] = pmemtls.EncodeCert(regCert)
-			spec["nodeControllerKey"] = pmemtls.EncodeKey(ncKey)
-			spec["nodeControllerCert"] = pmemtls.EncodeCert(ncCert)
+			initializeTLS(spec)
 
-			deployment, err = toDeployment(dep)
-			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
+			deployment = deploy.UpdateDeploymentCR(f, deployment)
 
-			ss, err := f.ClientSet.AppsV1().StatefulSets(d.Namespace).Get(context.Background(), deployment.Name+"-controller", metav1.GetOptions{})
-			Expect(err).Should(BeNil(), "existence of controller statefulset")
-			ssVersion := ss.GetResourceVersion()
-
-			ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(context.Background(), deployment.Name+"-node", metav1.GetOptions{})
-			Expect(err).Should(BeNil(), "existence of node daemonset")
-			dsVersion := ds.GetResourceVersion()
-
-			registrySecret, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Get(context.Background(), deployment.Name+"-registry-secrets", metav1.GetOptions{})
-			Expect(err).Should(BeNil(), "existence of registry secret")
-			registrySecretVersion := registrySecret.GetResourceVersion()
-
-			nodeSecret, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Get(context.Background(), deployment.Name+"-node-secrets", metav1.GetOptions{})
-			Expect(err).Should(BeNil(), "existence of node secret")
-			nodeSecretVersion := nodeSecret.GetResourceVersion()
-
-			deploy.UpdateDeploymentCR(f, dep)
-
-			// Wait till the sub-resources get updated
-			// As a interim solution we are depending on subresoure(daemon set, stateful set, secrets)
-			// versions to make sure the resource got updated. Instead, operator should update
-			// deployment status with appropriate events/condition messages.
-			Eventually(func() bool {
-				ss, err := f.ClientSet.AppsV1().StatefulSets(d.Namespace).Get(context.Background(), deployment.Name+"-controller", metav1.GetOptions{})
-				if err != nil {
-					framework.Logf("Get stateful set error: %v", err)
-					return false
-				}
-				ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(context.Background(), deployment.Name+"-node", metav1.GetOptions{})
-				if err != nil {
-					framework.Logf("Get daemon set error: %v", err)
-					return false
-				}
-
-				registrySecret, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Get(context.Background(), deployment.Name+"-registry-secrets", metav1.GetOptions{})
-				Expect(err).Should(BeNil(), "update check of registry secret")
-
-				nodeSecret, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Get(context.Background(), deployment.Name+"-node-secrets", metav1.GetOptions{})
-				Expect(err).Should(BeNil(), "update check of node secret")
-
-				return ss.GetResourceVersion() != ssVersion &&
-					ds.GetResourceVersion() != dsVersion &&
-					registrySecret.GetResourceVersion() != registrySecretVersion &&
-					nodeSecret.GetResourceVersion() != nodeSecretVersion
-			}, "3m", "1s").Should(BeTrue(), "expected both daemonset and stateupset get updated")
-
-			Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver after editing")
+			validateDriver(deployment, "validate driver after editing")
 		})
 
 		It("shall allow multiple deployments", func() {
-			dep1 := &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": api.SchemeGroupVersion.String(),
-					"kind":       "Deployment",
-					"metadata": map[string]interface{}{
-						"name": "test-deployment-1",
-					},
-					"spec": map[string]interface{}{
-						"image": dummyImage,
-					},
-				},
-			}
-			dep2 := &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": api.SchemeGroupVersion.String(),
-					"kind":       "Deployment",
-					"metadata": map[string]interface{}{
-						"name": "test-deployment-2",
-					},
-					"spec": map[string]interface{}{
-						"image": dummyImage,
-					},
-				},
-			}
+			deployment1 := getDeployment("test-deployment-1")
+			deployment2 := getDeployment("test-deployment-2")
 
-			deployment1, err := toDeployment(dep1)
-			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
-
-			deploy.CreateDeploymentCR(f, dep1)
+			deployment1 = deploy.CreateDeploymentCR(f, deployment1)
 			defer deploy.DeleteDeploymentCR(f, deployment1.Name)
-			Expect(validate.DriverDeployment(ctx, f, d, *deployment1)).Should(BeNil(), "validate driver #1")
+			validateDriver(deployment1, "validate driver #1")
 
-			deployment2, err := toDeployment(dep2)
-			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
-			deploy.CreateDeploymentCR(f, dep2)
+			deployment2 = deploy.CreateDeploymentCR(f, deployment2)
 			defer deploy.DeleteDeploymentCR(f, deployment2.Name)
-			Expect(validate.DriverDeployment(ctx, f, d, *deployment2)).Should(BeNil(), "validate driver #2")
+			validateDriver(deployment1 /* TODO 2 */, "validate driver #2")
 		})
 
 		It("shall be able to use custom CA certificates", func() {
-			caKey, err := pmemtls.NewPrivateKey()
-			Expect(err).ShouldNot(HaveOccurred(), "create ca private key")
-			regKey, err := pmemtls.NewPrivateKey()
-			Expect(err).ShouldNot(HaveOccurred(), "create registry private key")
-			nodeControllerKey, err := pmemtls.NewPrivateKey()
-			Expect(err).ShouldNot(HaveOccurred(), "create node controller private key")
-			ca, err := pmemtls.NewCA(nil, caKey)
-			Expect(err).ShouldNot(HaveOccurred(), "create ca")
+			deployment := getDeployment("test-deployment-with-certificates")
+			initializeTLS(&deployment.Spec)
 
-			regCert, err := ca.GenerateCertificate("pmem-registry", regKey.Public())
-			Expect(err).ShouldNot(HaveOccurred(), "sign registry key")
-			nodeControllerCert, err := ca.GenerateCertificate("pmem-node-controller", nodeControllerKey.Public())
-			Expect(err).ShouldNot(HaveOccurred(), "sign node controller key")
-
-			dep := &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": api.SchemeGroupVersion.String(),
-					"kind":       "Deployment",
-					"metadata": map[string]interface{}{
-						"name": "test-deployment-with-certificates",
-					},
-					"spec": map[string]interface{}{
-						"image":              dummyImage,
-						"caCert":             ca.EncodedCertificate(),
-						"registryKey":        pmemtls.EncodeKey(regKey),
-						"registryCert":       pmemtls.EncodeCert(regCert),
-						"nodeControllerKey":  pmemtls.EncodeKey(nodeControllerKey),
-						"nodeControllerCert": pmemtls.EncodeCert(nodeControllerCert),
-					},
-				},
-			}
-
-			deployment, err := toDeployment(dep)
-			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
-
-			deploy.CreateDeploymentCR(f, dep)
+			deployment = deploy.CreateDeploymentCR(f, deployment)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-			Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver")
+			validateDriver(deployment)
 		})
 
 		It("driver deployment shall be running even after operator exit", func() {
-			dep := &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": api.SchemeGroupVersion.String(),
-					"kind":       "Deployment",
-					"metadata": map[string]interface{}{
-						"name": "test-deployment-operator-exit",
-					},
-					"spec": map[string]interface{}{
-						"image": dummyImage,
-					},
-				},
-			}
+			deployment := getDeployment("test-deployment-operator-exit")
 
-			deployment, err := toDeployment(dep)
-			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
-
-			deploy.CreateDeploymentCR(f, dep)
+			deployment = deploy.CreateDeploymentCR(f, deployment)
 
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-			Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver before stopping")
+			validateDriver(deployment)
 
 			// Stop the operator
 			stopOperator(c, d)
@@ -369,30 +241,20 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			// Ensure that the driver is running consistently
 			Consistently(func() error {
-				return validate.DriverDeployment(ctx, f, d, *deployment)
-			}, "1m", "20s").Should(BeNil(), "driver validation failure after restarting")
+				return validate.DriverDeployment(client, k8sver, d.Namespace, deployment)
+			}, "1m", "20s").ShouldNot(HaveOccurred(), "driver validation failure after restarting")
 		})
 
 		It("should be able to capture deployment changes when operator is not running", func() {
-			dep := &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": api.SchemeGroupVersion.String(),
-					"kind":       "Deployment",
-					"metadata": map[string]interface{}{
-						"name": "test-deployment-operator-restart",
-					},
-					"spec": map[string]interface{}{
-						"image": dummyImage,
-					},
-				},
-			}
+			deployment := getDeployment("test-deployment-operator-restart")
 
-			deployment, err := toDeployment(dep)
-			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
-
-			deploy.CreateDeploymentCR(f, dep)
+			deployment = deploy.CreateDeploymentCR(f, deployment)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-			Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver")
+			validateDriver(deployment, "validate driver before update")
+
+			// We have to get a fresh copy before updating it because the
+			// operator should have modified the status.
+			deployment = deploy.GetDeploymentCR(f, deployment.Name)
 
 			restored := false
 			stopOperator(c, d)
@@ -402,98 +264,45 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				}
 			}()
 
-			ca, err := pmemtls.NewCA(nil, nil)
-			Expect(err).Should(BeNil(), "failed to instantiate CA")
-
-			regKey, err := pmemtls.NewPrivateKey()
-			Expect(err).Should(BeNil(), "failed to generate a private key: %v", err)
-			regCert, err := ca.GenerateCertificate("pmem-registry", regKey.Public())
-			Expect(err).Should(BeNil(), "failed to sign registry key")
-
-			ncKey, err := pmemtls.NewPrivateKey()
-			Expect(err).Should(BeNil(), "failed to generate a private key: %v", err)
-			ncCert, err := ca.GenerateCertificate("pmem-node-controller", ncKey.Public())
-			Expect(err).Should(BeNil(), "failed to sign node controller key")
-
-			dep = deploy.GetDeploymentCR(f, deployment.Name)
-			spec := dep.Object["spec"].(map[string]interface{})
-			spec["image"] = "fake-image"
-			spec["logLevel"] = api.DefaultLogLevel + 1
-			spec["imagePullPolicy"] = "Never"
-			spec["provisionerImage"] = "test-provisioner"
-			spec["controllerResources"] = map[string]interface{}{
-				"limits": map[string]interface{}{
-					"cpu":    "150m",
-					"memory": "1Mi",
+			spec := &deployment.Spec
+			spec.LogLevel++
+			spec.Image = "test-driver-image"
+			spec.PullPolicy = corev1.PullNever
+			spec.ProvisionerImage = "test-provisioner"
+			spec.ControllerResources = &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("200m"),
+					corev1.ResourceMemory: resource.MustParse("100Mi"),
 				},
 			}
-			spec["nodeResources"] = map[string]interface{}{
-				"limits": map[string]interface{}{
-					"cpu":    "350m",
-					"memory": "2Mi",
+			spec.NodeResources = &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("500m"),
+					corev1.ResourceMemory: resource.MustParse("500Mi"),
 				},
 			}
-			spec["caCert"] = ca.EncodedCertificate()
-			spec["registryKey"] = pmemtls.EncodeKey(regKey)
-			spec["registryCert"] = pmemtls.EncodeCert(regCert)
-			spec["nodeControllerKey"] = pmemtls.EncodeKey(ncKey)
-			spec["nodeControllerCert"] = pmemtls.EncodeCert(ncCert)
-
-			deployment, err = toDeployment(dep)
-			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
-
-			timestamp := deployment.Status.LastUpdated
+			initializeTLS(spec)
 
 			By("Updating PMEM-CSI deployment...")
-			deploy.UpdateDeploymentCR(f, dep)
+			deployment = deploy.UpdateDeploymentCR(f, deployment)
 
 			startOperator(c, d)
 			restored = true
 
-			// Ensure that the operator reconciled the changes
-			Eventually(func() bool {
-				var err error
-				dep := deploy.GetDeploymentCR(f, deployment.Name)
-				deployment, err = toDeployment(dep)
-				Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
-				return deployment.Status.LastUpdated.After(timestamp.Time)
-			}, "3m", "2s").Should(BeTrue(), "reconcile updated deployment")
-
-			defer GinkgoRecover()
-			Eventually(func() string {
-				if err := validate.DriverDeployment(ctx, f, d, *deployment); err != nil {
-					return err.Error()
-				}
-				return ""
-			}, "3m", "2s").Should(BeEmpty(), "validate driver after update")
+			validateDriver(deployment, "validate driver after update and restart")
 		})
 	})
 })
 
-func toDeployment(dep *unstructured.Unstructured) (*api.Deployment, error) {
-	deployment := &api.Deployment{}
-	if err := deploy.Scheme.Convert(dep, deployment, nil); err != nil {
-		return nil, err
-	}
-	if err := deployment.EnsureDefaults(""); err != nil {
-		return nil, fmt.Errorf("ensure defaults: %v", err)
-	}
-
-	return deployment, nil
-}
-
 func validateDeploymentFailure(f *framework.Framework, name string) {
-	deployment := &api.Deployment{}
 	Eventually(func() bool {
 		dep, err := f.DynamicClient.Resource(deploy.DeploymentResource).Get(context.Background(), name, metav1.GetOptions{})
 		if err != nil {
 			return false
 		}
 
-		if err = deploy.Scheme.Convert(dep, deployment, nil); err != nil {
-			return false
-		}
-		By(fmt.Sprintf("Deployment %q is in %q pahse", deployment.Name, deployment.Status.Phase))
+		deployment := deploy.DeploymentFromUnstructured(dep)
+		By(fmt.Sprintf("Deployment %q is in %q phase", deployment.Name, deployment.Status.Phase))
 		return deployment.Status.Phase == api.DeploymentPhaseFailed
 	}, "3m", "5s").Should(BeTrue(), "deployment %q not running", name)
 }
