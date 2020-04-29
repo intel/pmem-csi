@@ -350,7 +350,7 @@ func (d *PmemCSIDriver) getCSIDriver() *storagev1beta1.CSIDriver {
 	csiDriver := &storagev1beta1.CSIDriver{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "CSIDriver",
-			APIVersion: "v1beta1",
+			APIVersion: "storage.k8s.io/v1beta1",
 		},
 		ObjectMeta: d.getObjectMeta(d.Name, true),
 		Spec: storagev1beta1.CSIDriverSpec{
