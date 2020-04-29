@@ -20,7 +20,8 @@ import (
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment"
 	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
 	"github.com/intel/pmem-csi/pkg/version"
-	appsv1 "k8s.io/api/apps/v1"
+	"github.com/intel/pmem-csi/test/e2e/operator/validate"
+
 	corev1 "k8s.io/api/core/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -70,7 +71,7 @@ func decodeYaml(deploymentYaml string) runtime.Object {
 	return obj
 }
 
-func getDeployment(d *pmemDeployment, c client.Client) runtime.Object {
+func getDeployment(d *pmemDeployment, c client.Client) *api.Deployment {
 	dep := &api.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Deployment",
@@ -78,6 +79,7 @@ func getDeployment(d *pmemDeployment, c client.Client) runtime.Object {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: d.name,
+			UID:  types.UID("fake-uuid-" + d.name),
 		},
 	}
 
@@ -154,60 +156,6 @@ func testReconcilePhase(rc reconcile.Reconciler, c client.Client, name string, e
 	testDeploymentPhase(c, name, expectedPhase)
 }
 
-func validateSecrets(c client.Client, d *pmemDeployment, ns string) {
-	for _, name := range []string{"registry-secrets", "node-secrets"} {
-		secretName := d.name + "-" + name
-		s := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      secretName,
-				Namespace: ns,
-			},
-		}
-		err := c.Get(context.TODO(), namespacedNameWithOffset(2, s), s)
-		ExpectWithOffset(1, err).Should(BeNil(), "failed to get secret for %q", secretName)
-		ExpectWithOffset(1, s.Data["ca.crt"]).ShouldNot(BeNil(), "root ca certificate not present in secret %s", secretName)
-		ExpectWithOffset(1, s.Data[corev1.TLSCertKey]).ShouldNot(BeNil(), "certificate not present in secret %s", secretName)
-		ExpectWithOffset(1, s.Data[corev1.TLSPrivateKeyKey]).ShouldNot(BeNil(), "private key not present in secret %s", secretName)
-	}
-}
-
-func validateSecret(c client.Client, name, ns string, ca, key, cert []byte, ctx string) {
-	s := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: ns,
-		},
-	}
-	err := c.Get(context.TODO(), namespacedNameWithOffset(2, s), s)
-	ExpectWithOffset(1, err).Should(BeNil(), "%s: get secret: %v", ctx, err)
-	if ca != nil {
-		ExpectWithOffset(1, s.Data["ca.crt"]).Should(Equal(ca), "%s: mismatched ca", ctx)
-	}
-	if key != nil {
-		ExpectWithOffset(1, s.Data[corev1.TLSPrivateKeyKey]).Should(Equal(key), "%s: mismatched key", ctx)
-	}
-	if cert != nil {
-		ExpectWithOffset(1, s.Data[corev1.TLSCertKey]).Should(Equal(cert), "%s: mismatched certificate", ctx)
-	}
-}
-
-func validateCSIDriver(c client.Client, driverName string, k8sVersion version.Version) {
-	driver := &storagev1beta1.CSIDriver{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: driverName,
-		},
-	}
-
-	err := c.Get(context.TODO(), namespacedNameWithOffset(2, driver), driver)
-	ExpectWithOffset(1, err).Should(BeNil(), "could not find csidriver object")
-
-	if k8sVersion.Compare(1, 16) >= 0 {
-		ExpectWithOffset(1, len(driver.Spec.VolumeLifecycleModes)).Should(Equal(2), "mismatched lifecycle modes")
-		ExpectWithOffset(1, driver.Spec.VolumeLifecycleModes).Should(ContainElement(storagev1beta1.VolumeLifecyclePersistent), "Persisten volume mode not preset")
-		ExpectWithOffset(1, driver.Spec.VolumeLifecycleModes).Should(ContainElement(storagev1beta1.VolumeLifecycleEphemeral), "Ephemeral volume mode not preset")
-	}
-}
-
 func namespacedName(obj runtime.Object) types.NamespacedName {
 	return namespacedNameWithOffset(2, obj)
 }
@@ -274,8 +222,15 @@ var _ = Describe("Operator", func() {
 			Expect(err).ShouldNot(HaveOccurred(), "create new reconciler")
 		})
 
-		AfterEach(func() {
-		})
+		validateDriver := func(dep *api.Deployment) {
+			// We may have to fill in some defaults, so make a copy first.
+			dep = dep.DeepCopyObject().(*api.Deployment)
+			if dep.Spec.Image == "" {
+				dep.Spec.Image = testDriverImage
+			}
+
+			ExpectWithOffset(1, validate.DriverDeployment(c, testK8sVersion, testNamespace, *dep)).ShouldNot(HaveOccurred(), "validate deployment")
+		}
 
 		It("shall allow deployment with defaults", func() {
 			d := &pmemDeployment{
@@ -288,55 +243,7 @@ var _ = Describe("Operator", func() {
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-
-			validateSecrets(c, d, testNamespace)
-			validateCSIDriver(c, d.name, testK8sVersion)
-
-			ss := &appsv1.StatefulSet{}
-			err = c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)
-			Expect(err).Should(BeNil(), "controller stateful set is expected on a successful deployment")
-			Expect(*ss.Spec.Replicas).Should(BeEquivalentTo(1), "controller stateful set replication count mismatch")
-			Expect(ss.ObjectMeta.Namespace).Should(BeEquivalentTo(testNamespace), "controller stateful set namespace mismatch")
-			containers := ss.Spec.Template.Spec.Containers
-			Expect(len(containers)).Should(BeEquivalentTo(2), "controller stateful set container count mismatch")
-			for _, c := range containers {
-				Expect(c.ImagePullPolicy).Should(BeEquivalentTo(api.DefaultImagePullPolicy), "pmem-driver: mismatched image pull policy")
-				Expect(c.Resources.Limits.Cpu().String()).Should(BeEquivalentTo(api.DefaultControllerResourceCPU), "controller cpu resource limit mismatch")
-				Expect(c.Resources.Limits.Memory().String()).Should(BeEquivalentTo(api.DefaultControllerResourceMemory), "controller memory resource limit mismatch")
-				switch c.Name {
-				case "pmem-driver":
-					Expect(c.Image).Should(BeEquivalentTo(testDriverImage), "mismatched driver image")
-					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: d.name}), "mismatched driver")
-					Expect(c.Command).Should(ContainElement(fmt.Sprintf("-v=%d", api.DefaultLogLevel)), "mismatched logging level")
-				case "external-provisioner":
-					Expect(c.Image).Should(BeEquivalentTo(api.DefaultProvisionerImage), "mismatched provisioner image")
-				default:
-					Fail(fmt.Sprintf("Unknown container name %q in controller stateful set", c.Name))
-				}
-			}
-
-			ds := &appsv1.DaemonSet{}
-			err = c.Get(context.TODO(), objectKey(d.name+"-node", testNamespace), ds)
-
-			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
-			Expect(ds.ObjectMeta.Namespace).Should(BeEquivalentTo(testNamespace), "node daemon set namespace mismatch")
-			containers = ds.Spec.Template.Spec.Containers
-			Expect(len(containers)).Should(BeEquivalentTo(2), "node daemon set container count mismatch")
-			for _, c := range containers {
-				Expect(c.ImagePullPolicy).Should(BeEquivalentTo(api.DefaultImagePullPolicy), "pmem-driver: mismatched image pull policy")
-				Expect(c.Resources.Limits.Cpu().String()).Should(BeEquivalentTo(api.DefaultNodeResourceCPU), "node cpu resource limit mismatch")
-				Expect(c.Resources.Limits.Memory().String()).Should(BeEquivalentTo(api.DefaultNodeResourceMemory), "node memory resource limit mismatch")
-				switch c.Name {
-				case "pmem-driver":
-					Expect(c.Image).Should(BeEquivalentTo(testDriverImage), "mismatched driver image")
-					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: d.name}), "mismatched driver name")
-					Expect(c.Command).Should(ContainElement(fmt.Sprintf("-v=%d", api.DefaultLogLevel)), "mismatched logging level")
-				case "driver-registrar":
-					Expect(c.Image).Should(BeEquivalentTo(api.DefaultRegistrarImage), "mismatched driver-registrar image")
-				default:
-					Fail(fmt.Sprintf("Unknown container name %q in controller stateful set", c.Name))
-				}
-			}
+			validateDriver(dep)
 		})
 
 		It("shall allow deployment with explicit values", func() {
@@ -359,56 +266,7 @@ var _ = Describe("Operator", func() {
 
 			// Reconcile now should change Phase to running
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-
-			validateSecrets(c, d, testNamespace)
-			validateCSIDriver(c, d.name, testK8sVersion)
-
-			ss := &appsv1.StatefulSet{}
-			err = c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)
-
-			Expect(err).Should(BeNil(), "controller stateful set is expected on a successful deployment")
-			Expect(*ss.Spec.Replicas).Should(BeEquivalentTo(1), "controller stateful set replication count mismatch")
-			Expect(ss.ObjectMeta.Namespace).Should(BeEquivalentTo(testNamespace), "controller stateful set namespace mismatch")
-			containers := ss.Spec.Template.Spec.Containers
-			Expect(len(containers)).Should(BeEquivalentTo(2), "controller stateful set container count mismatch")
-			for _, c := range containers {
-				Expect(c.ImagePullPolicy).Should(BeEquivalentTo(d.pullPolicy), "pmem-driver: mismatched image pull policy")
-				Expect(c.Resources.Requests.Cpu().Cmp(resource.MustParse(d.controllerCPU))).Should(BeZero(), "controller cpu resource limit mismatch")
-				Expect(c.Resources.Requests.Memory().Cmp(resource.MustParse(d.controllerMemory))).Should(BeZero(), "controller memory resource limit mismatch")
-				switch c.Name {
-				case "pmem-driver":
-					Expect(c.Image).Should(BeEquivalentTo(d.image), "mismatched driver image")
-					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: d.name}), "mismatched driver")
-					Expect(c.Command).Should(ContainElement(fmt.Sprintf("-v=%d", d.logLevel)), "mismatched logging level")
-				case "external-provisioner":
-					Expect(c.Image).Should(BeEquivalentTo(d.provisionerImage), "mismatched provisioner image")
-				default:
-					Fail(fmt.Sprintf("Unknown container name %q in controller stateful set", c.Name))
-				}
-			}
-
-			ds := &appsv1.DaemonSet{}
-			err = c.Get(context.TODO(), objectKey(d.name+"-node", testNamespace), ds)
-
-			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
-			Expect(ds.ObjectMeta.Namespace).Should(BeEquivalentTo(testNamespace), "node daemon set namespace mismatch")
-			containers = ds.Spec.Template.Spec.Containers
-			Expect(len(containers)).Should(BeEquivalentTo(2), "node daemon set container count mismatch")
-			for _, c := range containers {
-				Expect(c.ImagePullPolicy).Should(BeEquivalentTo(d.pullPolicy), "pmem-driver: mismatched image pull policy")
-				Expect(c.Resources.Requests.Cpu().Cmp(resource.MustParse(d.nodeCPU))).Should(BeZero(), "node cpu resource limit mismatch")
-				Expect(c.Resources.Requests.Memory().Cmp(resource.MustParse(d.nodeMemory))).Should(BeZero(), "node memory resource limit mismatch")
-				switch c.Name {
-				case "pmem-driver":
-					Expect(c.Image).Should(BeEquivalentTo(d.image), "mismatched driver image")
-					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: d.name}), "mismatched driver")
-					Expect(c.Command).Should(ContainElement(fmt.Sprintf("-v=%d", d.logLevel)), "mismatched logging level")
-				case "driver-registrar":
-					Expect(c.Image).Should(BeEquivalentTo(d.registrarImage), "mismatched driver-registrar image")
-				default:
-					Fail(fmt.Sprintf("Unknown container name %q in controller stateful set", c.Name))
-				}
-			}
+			validateDriver(dep)
 		})
 
 		It("shall allow multiple deployments", func() {
@@ -464,13 +322,7 @@ var _ = Describe("Operator", func() {
 
 			// First deployment expected to be successful
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-
-			validateSecrets(c, d, testNamespace)
-
-			s := &corev1.Secret{}
-			err = c.Get(context.TODO(), objectKey(d.name+"-registry-secrets", testNamespace), s)
-			Expect(err).Should(BeNil(), "failed to get registry secret: %v", err)
-			Expect(s.Data[corev1.TLSPrivateKeyKey]).Should(Equal(encodedKey), "mismatched private key")
+			validateDriver(dep)
 		})
 
 		It("shall use provided private keys and certificates", func() {
@@ -501,9 +353,7 @@ var _ = Describe("Operator", func() {
 
 			// First deployment expected to be successful
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-
-			validateSecret(c, d.name+"-registry-secrets", testNamespace, d.caCert, d.regKey, d.regCert, "registry")
-			validateSecret(c, d.name+"-node-secrets", testNamespace, d.caCert, d.ncKey, d.ncCert, "node")
+			validateDriver(dep)
 		})
 
 		It("shall detect invalid private keys and certificates", func() {
@@ -576,59 +426,29 @@ var _ = Describe("Operator", func() {
 				nodeMemory:       "11Mi",
 			}
 
-			err := c.Create(context.TODO(), getDeployment(d, nil))
+			dep := getDeployment(d, nil)
+			err := c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-
-			validateSecrets(c, d, testNamespace)
+			validateDriver(dep)
 
 			// Reconcile now should keep phase as running
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-
-			ss := &appsv1.StatefulSet{}
-			err = c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)
-			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
-			for _, c := range ss.Spec.Template.Spec.Containers {
-				Expect(c.Resources.Requests.Cpu().Cmp(resource.MustParse(d.controllerCPU))).Should(BeZero(), "controller cpu resource requests mismatch")
-				Expect(c.Resources.Requests.Memory().Cmp(resource.MustParse(d.controllerMemory))).Should(BeZero(), "controller memory resource requests mismatch")
-			}
-
-			ds := &appsv1.DaemonSet{}
-			err = c.Get(context.TODO(), objectKey(d.name+"-node", testNamespace), ds)
-			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
-			for _, c := range ds.Spec.Template.Spec.Containers {
-				Expect(c.Resources.Requests.Cpu().Cmp(resource.MustParse(d.nodeCPU))).Should(BeZero(), "node cpu resource requests mismatch")
-				Expect(c.Resources.Requests.Memory().Cmp(resource.MustParse(d.nodeMemory))).Should(BeZero(), "node memory resource requests mismatch")
-			}
 
 			// Update deployment resources
 			d.controllerCPU = "200m"
 			d.controllerMemory = "20Mi"
 			d.nodeCPU = "210m"
 			d.nodeMemory = "21Mi"
-			dep := getDeployment(d, c)
+			dep = getDeployment(d, c)
 			err = c.Update(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to update deployment")
 			// Reconcile is expected not to fail
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			// Recheck the container resources are updated
-			ss = &appsv1.StatefulSet{}
-			err = c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)
-			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
-			for _, c := range ss.Spec.Template.Spec.Containers {
-				Expect(c.Resources.Requests.Cpu().Cmp(resource.MustParse(d.controllerCPU))).Should(BeZero(), "controller cpu resource requests mismatch")
-				Expect(c.Resources.Requests.Memory().Cmp(resource.MustParse(d.controllerMemory))).Should(BeZero(), "controller memory resource requests mismatch")
-			}
-
-			ds = &appsv1.DaemonSet{}
-			err = c.Get(context.TODO(), objectKey(d.name+"-node", testNamespace), ds)
-			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
-			for _, c := range ds.Spec.Template.Spec.Containers {
-				Expect(c.Resources.Requests.Cpu().Cmp(resource.MustParse(d.nodeCPU))).Should(BeZero(), "node cpu resource requests mismatch")
-				Expect(c.Resources.Requests.Memory().Cmp(resource.MustParse(d.nodeMemory))).Should(BeZero(), "node memory resource requests mismatch")
-			}
+			validateDriver(dep)
 		})
 
 		It("shall allow to change container images of a running deployment", func() {
@@ -636,60 +456,26 @@ var _ = Describe("Operator", func() {
 				name: "test-update-images",
 			}
 
-			err := c.Create(context.TODO(), getDeployment(d, nil))
+			dep := getDeployment(d, nil)
+			err := c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-
-			validateSecrets(c, d, testNamespace)
+			validateDriver(dep)
 
 			// Reconcile now should change keep phase as running
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-
-			ss := &appsv1.StatefulSet{}
-			Expect(c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)).Should(BeNil(), "stateful set object is expected on a successful deployment")
-			ds := &appsv1.DaemonSet{}
-			Expect(c.Get(context.TODO(), objectKey(d.name+"-node", testNamespace), ds)).Should(BeNil(), "node daemon set object is expected on a successful deployment")
-
-			containers := ss.Spec.Template.Spec.Containers
-			containers = append(containers, ds.Spec.Template.Spec.Containers...)
-			for _, c := range containers {
-				switch c.Name {
-				case "pmem-driver":
-					Expect(c.Image).Should(BeEquivalentTo(testDriverImage), "mismatched pmem-csi driver image")
-				case "external-provisioner":
-					Expect(c.Image).Should(BeEquivalentTo(api.DefaultProvisionerImage), "mismatched provisioner image")
-				case "driver-registar":
-					Expect(c.Image).Should(BeEquivalentTo(api.DefaultRegistrarImage), "mismatched node registart image")
-				}
-			}
+			validateDriver(dep)
 
 			// Update images
 			d.image = "test-pmem-csi-image:v0.0.0"
 			d.provisionerImage = "test-provisioner-image:v0.0.0"
 			d.registrarImage = "test-registrar-image:v0.0.0"
 
-			dep := getDeployment(d, c)
+			dep = getDeployment(d, c)
 			Expect(c.Update(context.TODO(), dep)).Should(BeNil(), "failed to update deployment")
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-
-			ss = &appsv1.StatefulSet{}
-			Expect(c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)).Should(BeNil(), "stateful set object is expected on a successful deployment")
-			ds = &appsv1.DaemonSet{}
-			Expect(c.Get(context.TODO(), objectKey(d.name+"-node", testNamespace), ds)).Should(BeNil(), "node daemon set is expected on a successful deployment")
-			// Recheck if the images are updated
-			containers = ss.Spec.Template.Spec.Containers
-			containers = append(containers, ds.Spec.Template.Spec.Containers...)
-			for _, c := range containers {
-				switch c.Name {
-				case "pmem-driver":
-					Expect(c.Image).Should(BeEquivalentTo(d.image), "mismatched pmem-csi driver image")
-				case "external-provisioner":
-					Expect(c.Image).Should(BeEquivalentTo(d.provisionerImage), "mismatched provisioner image")
-				case "driver-registar":
-					Expect(c.Image).Should(BeEquivalentTo(d.registrarImage), "mismatched node registart image")
-				}
-			}
+			validateDriver(dep)
 		})
 	})
 })
