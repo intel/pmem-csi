@@ -432,18 +432,18 @@ func prettyPrintObjectID(object unstructured.Unstructured) string {
 // operator. It's okay and desirable to list more than actually used
 // at the moment, to catch new objects.
 var allObjectTypes = []schema.GroupVersionKind{
-	schema.GroupVersionKind{"", "v1", "Secret"},
-	schema.GroupVersionKind{"", "v1", "Service"},
-	schema.GroupVersionKind{"", "v1", "ServiceAccount"},
-	schema.GroupVersionKind{"apps", "v1", "DaemonSet"},
-	schema.GroupVersionKind{"apps", "v1", "Deployment"},
-	schema.GroupVersionKind{"apps", "v1", "ReplicaSet"},
-	schema.GroupVersionKind{"apps", "v1", "StatefulSet"},
-	schema.GroupVersionKind{"rbac.authorization.k8s.io", "v1", "ClusterRole"},
-	schema.GroupVersionKind{"rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
-	schema.GroupVersionKind{"rbac.authorization.k8s.io", "v1", "Role"},
-	schema.GroupVersionKind{"rbac.authorization.k8s.io", "v1", "RoleBinding"},
-	schema.GroupVersionKind{"storage.k8s.io", "v1beta1", "CSIDriver"},
+	schema.GroupVersionKind{"", "v1", "SecretList"},
+	schema.GroupVersionKind{"", "v1", "ServiceList"},
+	schema.GroupVersionKind{"", "v1", "ServiceAccountList"},
+	schema.GroupVersionKind{"apps", "v1", "DaemonSetList"},
+	schema.GroupVersionKind{"apps", "v1", "DeploymentList"},
+	schema.GroupVersionKind{"apps", "v1", "ReplicaSetList"},
+	schema.GroupVersionKind{"apps", "v1", "StatefulSetList"},
+	schema.GroupVersionKind{"rbac.authorization.k8s.io", "v1", "ClusterRoleList"},
+	schema.GroupVersionKind{"rbac.authorization.k8s.io", "v1", "ClusterRoleBindingList"},
+	schema.GroupVersionKind{"rbac.authorization.k8s.io", "v1", "RoleList"},
+	schema.GroupVersionKind{"rbac.authorization.k8s.io", "v1", "RoleBindingList"},
+	schema.GroupVersionKind{"storage.k8s.io", "v1beta1", "CSIDriverList"},
 }
 
 func listAllDeployedObjects(client client.Client, deployment api.Deployment) ([]unstructured.Unstructured, error) {
