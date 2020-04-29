@@ -40,7 +40,6 @@ var _ = Describe("Operator", func() {
 			err := d.EnsureDefaults("")
 			Expect(err).ShouldNot(HaveOccurred(), "ensure defaults")
 
-			Expect(d.Spec.DriverName).Should(BeEquivalentTo(api.DefaultDriverName), "default driver name mismatch")
 			Expect(d.Spec.LogLevel).Should(BeEquivalentTo(api.DefaultLogLevel), "default logging level mismatch")
 			Expect(d.Spec.DeviceMode).Should(BeEquivalentTo(api.DefaultDeviceMode), "default driver mode mismatch")
 			Expect(d.Spec.Image).Should(BeEquivalentTo(api.DefaultDriverImage), "default driver image mismatch")
@@ -65,7 +64,6 @@ apiVersion: pmem-csi.intel.com/v1alpha1
 metadata:
   name: test-deployment
 spec:
-  driverName: test-driver
   logLevel: 10
   deviceMode: direct
   image: test-driver:v0.0.0
@@ -91,7 +89,6 @@ spec:
 			err = d.EnsureDefaults("")
 			Expect(err).ShouldNot(HaveOccurred(), "ensure defaults")
 
-			Expect(d.Spec.DriverName).Should(BeEquivalentTo("test-driver"), "driver name mismatch")
 			Expect(d.Spec.LogLevel).Should(BeEquivalentTo(10), "logging level mismatch")
 			Expect(d.Spec.DeviceMode).Should(BeEquivalentTo("direct"), "driver mode mismatch")
 			Expect(d.Spec.Image).Should(BeEquivalentTo("test-driver:v0.0.0"), "driver image mismatch")
@@ -121,10 +118,6 @@ spec:
 			err = d2.EnsureDefaults("")
 			Expect(err).ShouldNot(HaveOccurred(), "ensure defaults")
 			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "two default deployments should be equaval")
-
-			d2.Spec.DriverName = "new-driver"
-			changes[api.DriverName] = struct{}{}
-			Expect(d1.Compare(d2)).Should(BeElementOf(changes), "expected to detect change in driver name")
 
 			d2.Spec.DeviceMode = api.DeviceModeDirect
 			changes[api.DriverMode] = struct{}{}
@@ -207,7 +200,6 @@ spec:
 			Expect(ok).Should(BeTrue(), "Deployment JSON schema does not have 'status'")
 
 			specProperties := map[string]string{
-				"driverName":          "string",
 				"logLevel":            "integer",
 				"image":               "string",
 				"imagePullPolicy":     "string",

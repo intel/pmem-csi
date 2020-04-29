@@ -85,7 +85,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						"name": "test-deployment-with-explicit",
 					},
 					"spec": map[string]interface{}{
-						"driverName":      "test-csi-driver",
 						"deviceMode":      "direct",
 						"imagePullPolicy": "Never",
 						"image":           dummyImage,
@@ -129,7 +128,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						// NOTE(avalluri): we do not use lvm mode so that
 						// running this test does not pollute the PMEM space
 						"deviceMode": "direct",
-						"driverName": "test-driver-image",
 					},
 				},
 			}
@@ -157,8 +155,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						"name": "test-deployment-update",
 					},
 					"spec": map[string]interface{}{
-						"driverName": "update-deployment.test.com",
-						"image":      dummyImage,
+						"image": dummyImage,
 					},
 				},
 			}
@@ -262,178 +259,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver after editing")
 		})
 
-		It("shall not allow to change device manager of a running deployment", func() {
-			oldMode := api.DeviceModeDirect
-			newMode := api.DeviceModeLVM
-			dep := &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": api.SchemeGroupVersion.String(),
-					"kind":       "Deployment",
-					"metadata": map[string]interface{}{
-						"name": "test-update-driver-mode",
-					},
-					"spec": map[string]interface{}{
-						"driverName": "update-driver-mode.test.com",
-						"deviceMode": oldMode,
-						"image":      dummyImage,
-					},
-				},
-			}
-
-			deployment, err := toDeployment(dep)
-			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
-
-			deploy.CreateDeploymentCR(f, dep)
-			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-			Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver")
-
-			dep = deploy.GetDeploymentCR(f, deployment.Name)
-
-			/* Update fields */
-			spec := dep.Object["spec"].(map[string]interface{})
-			spec["deviceMode"] = newMode
-
-			deployment, err = toDeployment(dep)
-			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
-
-			deploy.UpdateDeploymentCR(f, dep)
-
-			Eventually(func() bool {
-				updatedDep := deploy.GetDeploymentCR(f, deployment.Name)
-				spec := updatedDep.Object["spec"].(map[string]interface{})
-				mode := spec["deviceMode"].(string)
-				return mode == string(oldMode)
-			}, "3m", "2s").Should(BeTrue(), "device manager should not be updated")
-
-			// ensure that the driver is still using the old device manager
-			ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(context.Background(), deployment.Name+"-node", metav1.GetOptions{})
-			Expect(err).ShouldNot(HaveOccurred(), "daemon set should exists")
-			for _, c := range ds.Spec.Template.Spec.Containers {
-				if c.Name == "pmem-driver" {
-					Expect(c.Command).Should(ContainElement("-deviceManager="+string(oldMode)), "mismatched device manager")
-				}
-			}
-		})
-
-		It("shall not allow to change pmem percentage of a running LVM deployment", func() {
-			oldPercentage := 50
-			newPercentage := 100
-			dep := &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": api.SchemeGroupVersion.String(),
-					"kind":       "Deployment",
-					"metadata": map[string]interface{}{
-						"name": "test-update-pmem-space",
-					},
-					"spec": map[string]interface{}{
-						"driverName":     "update-pmem-space.test.com",
-						"image":          dummyImage,
-						"deviceMode":     api.DeviceModeLVM,
-						"pmemPercentage": oldPercentage,
-					},
-				},
-			}
-
-			deployment, err := toDeployment(dep)
-			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
-
-			deploy.CreateDeploymentCR(f, dep)
-			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-			Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver")
-
-			dep = deploy.GetDeploymentCR(f, deployment.Name)
-
-			/* Update fields */
-			spec := dep.Object["spec"].(map[string]interface{})
-			spec["pmemPercentage"] = newPercentage
-
-			deployment, err = toDeployment(dep)
-			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
-
-			deploy.UpdateDeploymentCR(f, dep)
-
-			Eventually(func() bool {
-				updatedDep := deploy.GetDeploymentCR(f, deployment.Name)
-				spec := updatedDep.Object["spec"].(map[string]interface{})
-				value := spec["pmemPercentage"].(int64)
-				return int(value) == oldPercentage
-			}, "3m", "2s").Should(BeTrue(), "pmem percentage value should not be updated")
-
-			// ensure that the driver is still using the old device manager
-			ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(context.Background(), deployment.Name+"-node", metav1.GetOptions{})
-			Expect(err).ShouldNot(HaveOccurred(), "daemon set should exists")
-			for _, c := range ds.Spec.Template.Spec.InitContainers {
-				if c.Name == "pmem-ns-init" {
-					Expect(c.Command).Should(ContainElement(fmt.Sprintf("--useforfsdax=%d", oldPercentage)), "mismatched pmem percentage")
-				}
-			}
-		})
-
-		It("shall not allow to change labels of a running deployment", func() {
-			oldLabels := map[string]string{
-				"foo": "bar",
-			}
-			newLabels := map[string]string{
-				"foo":  "bar",
-				"foo2": "bar2",
-			}
-			dep := &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": api.SchemeGroupVersion.String(),
-					"kind":       "Deployment",
-					"metadata": map[string]interface{}{
-						"name": "test-update-pmem-space",
-					},
-					"spec": map[string]interface{}{
-						"driverName": "update-pmem-space.test.com",
-						"image":      dummyImage,
-						"deviceMode": api.DeviceModeLVM,
-						"labels":     oldLabels,
-					},
-				},
-			}
-
-			deployment, err := toDeployment(dep)
-			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
-
-			deploy.CreateDeploymentCR(f, dep)
-			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-			Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver")
-
-			dep = deploy.GetDeploymentCR(f, deployment.Name)
-
-			/* Update fields */
-			spec := dep.Object["spec"].(map[string]interface{})
-			spec["labels"] = newLabels
-
-			deployment, err = toDeployment(dep)
-			Expect(err).ShouldNot(HaveOccurred(), "unstructured to deployment conversion")
-
-			deploy.UpdateDeploymentCR(f, dep)
-
-			Eventually(func() bool {
-				updatedDep := deploy.GetDeploymentCR(f, deployment.Name)
-				spec := updatedDep.Object["spec"].(map[string]interface{})
-				labels := spec["labels"].(map[string]interface{})
-				// We cannot use reflect.DeepEqual here because the types are different.
-				if len(labels) != len(oldLabels) {
-					return false
-				}
-				for key, value := range oldLabels {
-					if labels[key].(string) != value {
-						return false
-					}
-				}
-				return true
-			}, "3m", "2s").Should(BeTrue(), "labels value should not be updated")
-
-			// Ensure that the driver is still using the old labels. We only check the daemonset here
-			// as one object of the driver deployment.
-			ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(context.Background(), deployment.Name+"-node", metav1.GetOptions{})
-			Expect(err).ShouldNot(HaveOccurred(), "daemon set should exists")
-			Expect(ds.Labels).Should(Equal(oldLabels), "mismatched labels in daemon set")
-		})
-
 		It("shall allow multiple deployments", func() {
 			dep1 := &unstructured.Unstructured{
 				Object: map[string]interface{}{
@@ -443,8 +268,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						"name": "test-deployment-1",
 					},
 					"spec": map[string]interface{}{
-						"driverName": "deployment1.test.com",
-						"image":      dummyImage,
+						"image": dummyImage,
 					},
 				},
 			}
@@ -456,8 +280,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						"name": "test-deployment-2",
 					},
 					"spec": map[string]interface{}{
-						"driverName": "deployment2.test.com",
-						"image":      dummyImage,
+						"image": dummyImage,
 					},
 				},
 			}
@@ -473,65 +296,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
 			deploy.CreateDeploymentCR(f, dep2)
 			defer deploy.DeleteDeploymentCR(f, deployment2.Name)
-			Expect(validate.DriverDeployment(ctx, f, d, *deployment2)).Should(BeNil(), "validate driver #2")
-		})
-
-		It("shall not allow multiple deployments with same driver name", func() {
-			driverName := "deployment-name-clash.test.com"
-			dep1 := &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": api.SchemeGroupVersion.String(),
-					"kind":       "Deployment",
-					"metadata": map[string]interface{}{
-						"name": "test-deployment-1",
-					},
-					"spec": map[string]interface{}{
-						"driverName": driverName,
-						"image":      dummyImage,
-					},
-				},
-			}
-			dep2 := &unstructured.Unstructured{
-				Object: map[string]interface{}{
-					"apiVersion": api.SchemeGroupVersion.String(),
-					"kind":       "Deployment",
-					"metadata": map[string]interface{}{
-						"name": "test-deployment-2",
-					},
-					"spec": map[string]interface{}{
-						"driverName": driverName,
-						"image":      dummyImage,
-					},
-				},
-			}
-
-			deployment1, err := toDeployment(dep1)
-			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
-
-			deploy.CreateDeploymentCR(f, dep1)
-			defer deploy.DeleteDeploymentCR(f, deployment1.Name)
-			Expect(validate.DriverDeployment(ctx, f, d, *deployment1)).Should(BeNil(), "validate driver #1")
-
-			deployment2, err := toDeployment(dep2)
-			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
-			deploy.CreateDeploymentCR(f, dep2)
-			defer deploy.DeleteDeploymentCR(f, deployment2.Name)
-
-			// Deployment should be In Failure state as other
-			// deployment with that name exists
-			validateDeploymentFailure(f, deployment2.Name)
-
-			dep2 = deploy.GetDeploymentCR(f, deployment2.Name)
-			// Resolve deployment name and update
-			spec := dep2.Object["spec"].(map[string]interface{})
-			spec["driverName"] = "new-driver-name"
-
-			// and redeploy with new name
-			deploy.UpdateDeploymentCR(f, dep2)
-
-			deployment2, err = toDeployment(dep2)
-			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
-			// Now it should succeed
 			Expect(validate.DriverDeployment(ctx, f, d, *deployment2)).Should(BeNil(), "validate driver #2")
 		})
 
@@ -558,7 +322,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						"name": "test-deployment-with-certificates",
 					},
 					"spec": map[string]interface{}{
-						"driverName":         "custom-ca.test.com",
 						"image":              dummyImage,
 						"caCert":             ca.EncodedCertificate(),
 						"registryKey":        pmemtls.EncodeKey(regKey),
@@ -586,8 +349,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						"name": "test-deployment-operator-exit",
 					},
 					"spec": map[string]interface{}{
-						"driverName": "operator-exit.com",
-						"image":      dummyImage,
+						"image": dummyImage,
 					},
 				},
 			}
@@ -620,8 +382,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						"name": "test-deployment-operator-restart",
 					},
 					"spec": map[string]interface{}{
-						"driverName": "operator-restart.com",
-						"image":      dummyImage,
+						"image": dummyImage,
 					},
 				},
 			}

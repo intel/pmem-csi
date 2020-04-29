@@ -51,7 +51,6 @@ func TestDeploymentController(t *testing.T) {
 
 type pmemDeployment struct {
 	name                                                string
-	driverName                                          string
 	deviceMode                                          string
 	logLevel                                            uint16
 	image, pullPolicy, provisionerImage, registrarImage string
@@ -93,7 +92,6 @@ func getDeployment(d *pmemDeployment, c client.Client) runtime.Object {
 
 	dep.Spec = api.DeploymentSpec{}
 	spec := &dep.Spec
-	spec.DriverName = d.driverName
 	spec.DeviceMode = api.DeviceMode(d.deviceMode)
 	spec.LogLevel = d.logLevel
 	spec.Image = d.image
@@ -239,7 +237,7 @@ func deleteDeployment(c client.Client, name, ns string) error {
 		return err
 	}
 
-	By(fmt.Sprintf("Deleting Deployment '%s'(%s)", dep.Name, dep.Spec.DriverName))
+	By(fmt.Sprintf("Deleting Deployment '%s'", dep.Name))
 	if err := c.Delete(context.TODO(), dep); err != nil {
 		return err
 	}
@@ -250,7 +248,7 @@ func deleteDeployment(c client.Client, name, ns string) error {
 	//
 	driver := &storagev1beta1.CSIDriver{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: dep.Spec.DriverName,
+			Name: dep.Name,
 		},
 	}
 	By(fmt.Sprintf("Deleting csi driver '%s'", driver.Name))
@@ -292,7 +290,7 @@ var _ = Describe("Operator", func() {
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			validateSecrets(c, d, testNamespace)
-			validateCSIDriver(c, api.DefaultDriverName, testK8sVersion)
+			validateCSIDriver(c, d.name, testK8sVersion)
 
 			ss := &appsv1.StatefulSet{}
 			err = c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)
@@ -308,7 +306,7 @@ var _ = Describe("Operator", func() {
 				switch c.Name {
 				case "pmem-driver":
 					Expect(c.Image).Should(BeEquivalentTo(testDriverImage), "mismatched driver image")
-					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: api.DefaultDriverName}), "mismatched driver")
+					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: d.name}), "mismatched driver")
 					Expect(c.Command).Should(ContainElement(fmt.Sprintf("-v=%d", api.DefaultLogLevel)), "mismatched logging level")
 				case "external-provisioner":
 					Expect(c.Image).Should(BeEquivalentTo(api.DefaultProvisionerImage), "mismatched provisioner image")
@@ -331,7 +329,7 @@ var _ = Describe("Operator", func() {
 				switch c.Name {
 				case "pmem-driver":
 					Expect(c.Image).Should(BeEquivalentTo(testDriverImage), "mismatched driver image")
-					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: api.DefaultDriverName}), "mismatched driver name")
+					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: d.name}), "mismatched driver name")
 					Expect(c.Command).Should(ContainElement(fmt.Sprintf("-v=%d", api.DefaultLogLevel)), "mismatched logging level")
 				case "driver-registrar":
 					Expect(c.Image).Should(BeEquivalentTo(api.DefaultRegistrarImage), "mismatched driver-registrar image")
@@ -344,7 +342,6 @@ var _ = Describe("Operator", func() {
 		It("shall allow deployment with explicit values", func() {
 			d := &pmemDeployment{
 				name:             "test-deployment",
-				driverName:       "test-pmem-driver.intel.com",
 				image:            "test-driver:v0.0.0",
 				provisionerImage: "test-provisioner-image:v0.0.0",
 				registrarImage:   "test-driver-registrar-image:v.0.0.0",
@@ -364,7 +361,7 @@ var _ = Describe("Operator", func() {
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 
 			validateSecrets(c, d, testNamespace)
-			validateCSIDriver(c, d.driverName, testK8sVersion)
+			validateCSIDriver(c, d.name, testK8sVersion)
 
 			ss := &appsv1.StatefulSet{}
 			err = c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)
@@ -381,7 +378,7 @@ var _ = Describe("Operator", func() {
 				switch c.Name {
 				case "pmem-driver":
 					Expect(c.Image).Should(BeEquivalentTo(d.image), "mismatched driver image")
-					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: d.driverName}), "mismatched driver")
+					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: d.name}), "mismatched driver")
 					Expect(c.Command).Should(ContainElement(fmt.Sprintf("-v=%d", d.logLevel)), "mismatched logging level")
 				case "external-provisioner":
 					Expect(c.Image).Should(BeEquivalentTo(d.provisionerImage), "mismatched provisioner image")
@@ -404,7 +401,7 @@ var _ = Describe("Operator", func() {
 				switch c.Name {
 				case "pmem-driver":
 					Expect(c.Image).Should(BeEquivalentTo(d.image), "mismatched driver image")
-					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: d.driverName}), "mismatched driver")
+					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: d.name}), "mismatched driver")
 					Expect(c.Command).Should(ContainElement(fmt.Sprintf("-v=%d", d.logLevel)), "mismatched logging level")
 				case "driver-registrar":
 					Expect(c.Image).Should(BeEquivalentTo(d.registrarImage), "mismatched driver-registrar image")
@@ -416,13 +413,11 @@ var _ = Describe("Operator", func() {
 
 		It("shall allow multiple deployments", func() {
 			d1 := &pmemDeployment{
-				name:       "test-deployment1",
-				driverName: "test-pmem-driver1.intel.com",
+				name: "test-deployment1",
 			}
 
 			d2 := &pmemDeployment{
-				name:       "test-deployment2",
-				driverName: "test-pmem-driver2.intel.com",
+				name: "test-deployment2",
 			}
 
 			dep := getDeployment(d1, nil)
@@ -452,43 +447,6 @@ var _ = Describe("Operator", func() {
 			testReconcilePhase(rc, c, d.name, true, false, api.DeploymentPhaseFailed)
 		})
 
-		It("shall not allow multiple deployments with same driver name", func() {
-			d1 := &pmemDeployment{
-				name:       "test-deployment1",
-				driverName: "test-pmem-driver.intel.com",
-			}
-
-			d2 := &pmemDeployment{
-				name:       "test-deployment2",
-				driverName: "test-pmem-driver.intel.com",
-			}
-
-			dep := getDeployment(d1, nil)
-			err := c.Create(context.TODO(), dep)
-			Expect(err).Should(BeNil(), "failed to create deployment1")
-
-			dep = getDeployment(d2, nil)
-			err = c.Create(context.TODO(), dep)
-			Expect(err).Should(BeNil(), "failed to create deployment2")
-
-			// First deployment expected to be successful
-			testReconcilePhase(rc, c, d1.name, false, false, api.DeploymentPhaseRunning)
-			// Second deployment expected to fail as one more deployment is active with the
-			// same driver name
-			testReconcilePhase(rc, c, d2.name, true, true, api.DeploymentPhaseFailed)
-
-			// Delete fist deployment
-			err = deleteDeployment(c, d1.name, testNamespace)
-			Expect(err).Should(BeNil(), "Failed to delete deployment in failed state")
-
-			testReconcile(rc, d1.name, false, false)
-
-			// After removing first deployment, second deployment should progress
-			testReconcilePhase(rc, c, d2.name, false, false, api.DeploymentPhaseRunning)
-
-			validateCSIDriver(c, d2.driverName, testK8sVersion)
-		})
-
 		It("shall use provided private keys", func() {
 			// Generate private key
 			regKey, err := pmemtls.NewPrivateKey()
@@ -497,9 +455,8 @@ var _ = Describe("Operator", func() {
 			encodedKey := pmemtls.EncodeKey(regKey)
 
 			d := &pmemDeployment{
-				name:       "test-deployment",
-				driverName: "test-pmem-driver.intel.com",
-				regKey:     encodedKey,
+				name:   "test-deployment",
+				regKey: encodedKey,
 			}
 			dep := getDeployment(d, nil)
 			err = c.Create(context.TODO(), dep)
@@ -531,13 +488,12 @@ var _ = Describe("Operator", func() {
 			Expect(err).Should(BeNil(), "failed to sign node controller key")
 
 			d := &pmemDeployment{
-				name:       "test-deployment",
-				driverName: "test-pmem-driver.intel.com",
-				caCert:     ca.EncodedCertificate(),
-				regKey:     pmemtls.EncodeKey(regKey),
-				regCert:    pmemtls.EncodeCert(regCert),
-				ncKey:      pmemtls.EncodeKey(ncKey),
-				ncCert:     pmemtls.EncodeCert(ncCert),
+				name:    "test-deployment",
+				caCert:  ca.EncodedCertificate(),
+				regKey:  pmemtls.EncodeKey(regKey),
+				regCert: pmemtls.EncodeCert(regCert),
+				ncKey:   pmemtls.EncodeKey(ncKey),
+				ncCert:  pmemtls.EncodeCert(ncCert),
 			}
 			dep := getDeployment(d, nil)
 			err = c.Create(context.TODO(), dep)
@@ -565,13 +521,12 @@ var _ = Describe("Operator", func() {
 			Expect(err).Should(BeNil(), "failed to sign node key")
 
 			d := &pmemDeployment{
-				name:       "test-deployment-cert-invalid",
-				driverName: "test-pmem-driver-cert-invalid",
-				caCert:     ca.EncodedCertificate(),
-				regKey:     pmemtls.EncodeKey(regKey),
-				regCert:    pmemtls.EncodeCert(regCert),
-				ncKey:      pmemtls.EncodeKey(ncKey),
-				ncCert:     pmemtls.EncodeCert(ncCert),
+				name:    "test-deployment-cert-invalid",
+				caCert:  ca.EncodedCertificate(),
+				regKey:  pmemtls.EncodeKey(regKey),
+				regCert: pmemtls.EncodeCert(regCert),
+				ncKey:   pmemtls.EncodeKey(ncKey),
+				ncCert:  pmemtls.EncodeCert(ncCert),
 			}
 			dep := getDeployment(d, nil)
 			err = c.Create(context.TODO(), dep)
@@ -598,172 +553,18 @@ var _ = Describe("Operator", func() {
 			Expect(err).Should(BeNil(), "failed to sign node controller key")
 
 			d := &pmemDeployment{
-				name:       "test-deployment-cert-expired",
-				driverName: "test-pmem-driver-cert-expired",
-				caCert:     ca.EncodedCertificate(),
-				regKey:     pmemtls.EncodeKey(regKey),
-				regCert:    pmemtls.EncodeCert(regCert),
-				ncKey:      pmemtls.EncodeKey(ncKey),
-				ncCert:     pmemtls.EncodeCert(ncCert),
+				name:    "test-deployment-cert-expired",
+				caCert:  ca.EncodedCertificate(),
+				regKey:  pmemtls.EncodeKey(regKey),
+				regCert: pmemtls.EncodeCert(regCert),
+				ncKey:   pmemtls.EncodeKey(ncKey),
+				ncCert:  pmemtls.EncodeCert(ncCert),
 			}
 			dep := getDeployment(d, nil)
 			err = c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
 			testReconcilePhase(rc, c, d.name, true, true, api.DeploymentPhaseFailed)
-		})
-
-		It("shall allow to change running deployment name", func() {
-			d := &pmemDeployment{
-				name: "test-deployment",
-			}
-
-			err := c.Create(context.TODO(), getDeployment(d, nil))
-			Expect(err).Should(BeNil(), "failed to create deployment")
-
-			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-
-			validateSecrets(c, d, testNamespace)
-			validateCSIDriver(c, api.DefaultDriverName, testK8sVersion)
-
-			// Ensure both deaemonset and statefulset have default driver name
-			// before editing deployment
-			ss := &appsv1.StatefulSet{}
-			err = c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)
-			Expect(err).Should(BeNil(), "controller stateful set is expected on a successful deployment")
-			for _, c := range ss.Spec.Template.Spec.Containers {
-				if c.Name == "pmem-driver" {
-					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: api.DefaultDriverName}), "mismatched driver")
-					break
-				}
-			}
-			ds := &appsv1.DaemonSet{}
-			err = c.Get(context.TODO(), objectKey(d.name+"-node", testNamespace), ds)
-			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
-			for _, c := range ds.Spec.Template.Spec.Containers {
-				if c.Name == "pmem-driver" {
-					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: api.DefaultDriverName}), "mismatched driver")
-					break
-				}
-			}
-
-			// Edit deployment name
-			dep := &api.Deployment{}
-			err = c.Get(context.TODO(), objectKey(d.name), dep)
-			Expect(err).Should(BeNil(), "failed to retrieve deployment")
-
-			dep.Spec.DriverName = "test-driver-name"
-			err = c.Update(context.TODO(), dep)
-			Expect(err).Should(BeNil(), "failed to update deployment")
-			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-
-			// Ensure the new driver name effective in sub resources
-			ss = &appsv1.StatefulSet{}
-			err = c.Get(context.TODO(), objectKey(d.name+"-controller", testNamespace), ss)
-			Expect(err).Should(BeNil(), "controller stateful set is expected on a successful deployment")
-			for _, c := range ss.Spec.Template.Spec.Containers {
-				if c.Name == "pmem-driver" {
-					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: dep.Spec.DriverName}), "mismatched driver name")
-					break
-				}
-			}
-			ds = &appsv1.DaemonSet{}
-			err = c.Get(context.TODO(), objectKey(d.name+"-node", testNamespace), ds)
-			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
-			for _, c := range ds.Spec.Template.Spec.Containers {
-				if c.Name == "pmem-driver" {
-					Expect(c.Env).Should(ContainElement(corev1.EnvVar{Name: "PMEM_CSI_DRIVER_NAME", Value: dep.Spec.DriverName}), "mismatched driver name")
-					break
-				}
-			}
-		})
-
-		It("shall not allow duplicate driver name via update deployment", func() {
-			d1 := &pmemDeployment{
-				name:       "test-deployment1",
-				driverName: "test-driver1",
-			}
-
-			d2 := &pmemDeployment{
-				name:       "test-deployment2",
-				driverName: "test-driver2",
-			}
-
-			err := c.Create(context.TODO(), getDeployment(d1, nil))
-			Expect(err).Should(BeNil(), "failed to create deployment1")
-
-			err = c.Create(context.TODO(), getDeployment(d2, nil))
-			Expect(err).Should(BeNil(), "failed to create deployment2")
-
-			// Ensure that both the deployments are in running phase
-			testReconcilePhase(rc, c, d1.name, false, false, api.DeploymentPhaseRunning)
-			testReconcilePhase(rc, c, d2.name, false, false, api.DeploymentPhaseRunning)
-
-			// Try to introduce duplicate name when the driver is in Running phase
-			// Retrieve deployment1
-			dep := &api.Deployment{}
-			err = c.Get(context.TODO(), objectKey(d1.name), dep)
-			Expect(err).Should(BeNil(), "failed to retrieve deployment")
-
-			// Update it's driver name with the name of deployment2
-			dep.Spec.DriverName = d2.driverName
-			err = c.Update(context.TODO(), dep)
-			Expect(err).Should(BeNil(), "failed to update deployment")
-
-			// reconciling of this deployment should detect the driver name conflict
-			// and recover deployment by reverting the driver name change
-			testReconcilePhase(rc, c, d1.name, false, false, api.DeploymentPhaseRunning)
-
-			// ensure that the driver name of deployment1 is reverted back
-			dep = &api.Deployment{}
-			err = c.Get(context.TODO(), objectKey(d1.name), dep)
-			Expect(err).Should(BeNil(), "failed to retrieve deployment")
-			Expect(dep.Spec.DriverName).Should(BeEquivalentTo(d1.driverName), "driver name change in deployment is reverted")
-			validateCSIDriver(c, d1.driverName, testK8sVersion)
-		})
-
-		It("shall not allow to change running deployment device mode", func() {
-			d := &pmemDeployment{
-				name: "test-deployment",
-			}
-
-			err := c.Create(context.TODO(), getDeployment(d, nil))
-			Expect(err).Should(BeNil(), "failed to create deployment")
-
-			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-
-			validateSecrets(c, d, testNamespace)
-
-			// Ensure both deaemonset and statefulset have default driver name
-			// before editing deployment
-			ds := &appsv1.DaemonSet{}
-			err = c.Get(context.TODO(), objectKey(d.name+"-node", testNamespace), ds)
-			Expect(err).Should(BeNil(), "node daemon set is expected on a successful deployment")
-			for _, c := range ds.Spec.Template.Spec.Containers {
-				if c.Name == "pmem-driver" {
-					arg := fmt.Sprintf("-deviceManager=%s", api.DefaultDeviceMode)
-					Expect(c.Command).Should(ContainElement(arg), "mismatched driver device mode")
-					break
-				}
-			}
-
-			// Edit deployment name
-			dep := &api.Deployment{}
-			err = c.Get(context.TODO(), objectKey(d.name), dep)
-			Expect(err).Should(BeNil(), "failed to retrieve deployment")
-
-			dep.Spec.DeviceMode = api.DeviceModeDirect
-			err = c.Update(context.TODO(), dep)
-			Expect(err).Should(BeNil(), "failed to update deployment")
-
-			// Reconciling of this deployment is expected to revert the device mode change
-			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-
-			// ensure that the driver mode in deployment spec is reverted back
-			dep = &api.Deployment{}
-			err = c.Get(context.TODO(), objectKey(d.name), dep)
-			Expect(err).Should(BeNil(), "failed to retrieve deployment")
-			Expect(dep.Spec.DeviceMode).Should(BeEquivalentTo(api.DefaultDeviceMode), "device mode change in deployment is reverted")
 		})
 
 		It("shall allow to change container resources of a running deployment", func() {
