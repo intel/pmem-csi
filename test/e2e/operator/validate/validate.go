@@ -266,15 +266,9 @@ Service:
   sessionAffinity: None
   type: ClusterIP
 DaemonSet:` + defaultsApps + `
-  updateStrategy:
-    rollingUpdate:
-      maxUnavailable: 1
-    type: RollingUpdate
+  updateStrategy: ignore
 StatefulSet:` + defaultsApps + `
-  updateStrategy:
-    rollingUpdate:
-      partition: 0
-    type: RollingUpdate
+  updateStrategy: ignore
 `
 
 	err := yaml.UnmarshalStrict([]byte(defaultsYAML), &defaults)
