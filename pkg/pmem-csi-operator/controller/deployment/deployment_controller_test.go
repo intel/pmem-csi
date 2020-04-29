@@ -14,6 +14,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/intel/pmem-csi/deploy"
 	"github.com/intel/pmem-csi/pkg/apis"
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	pmemcontroller "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
@@ -34,11 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-)
-
-var (
-	k8sVersion_116 = version.NewVersion(1, 16)
-	k8sVersion_115 = version.NewVersion(1, 15)
 )
 
 func TestDeploymentController(t *testing.T) {
@@ -204,11 +200,10 @@ func deleteDeployment(c client.Client, name, ns string) error {
 }
 
 var _ = Describe("Operator", func() {
-	Context("Deployment Controller", func() {
+	testIt := func(testK8sVersion version.Version) {
 		var c client.Client
 		var rc reconcile.Reconciler
 		var testNamespace = "test-namespace"
-		var testK8sVersion = k8sVersion_116
 		var testDriverImage = "fake-driver-image"
 
 		BeforeEach(func() {
@@ -216,7 +211,7 @@ var _ = Describe("Operator", func() {
 			var err error
 			rc, err = deployment.NewReconcileDeployment(c, pmemcontroller.ControllerOptions{
 				Namespace:   testNamespace,
-				K8sVersion:  k8sVersion_116,
+				K8sVersion:  testK8sVersion,
 				DriverImage: testDriverImage,
 			})
 			Expect(err).ShouldNot(HaveOccurred(), "create new reconciler")
@@ -477,5 +472,13 @@ var _ = Describe("Operator", func() {
 			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
 			validateDriver(dep)
 		})
-	})
+	}
+
+	// Validate for all supported Kubernetes versions.
+	for _, yaml := range deploy.ListAll() {
+		version := yaml.Kubernetes
+		Context(fmt.Sprintf("Kubernetes %v", version), func() {
+			testIt(version)
+		})
+	}
 })
