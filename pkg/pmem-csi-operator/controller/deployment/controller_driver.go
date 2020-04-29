@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/klog"
 )
 
@@ -399,6 +400,9 @@ func (d *PmemCSIDriver) getControllerService() *corev1.Service {
 			Ports: []corev1.ServicePort{
 				corev1.ServicePort{
 					Port: controllerServicePort,
+					TargetPort: intstr.IntOrString{
+						IntVal: controllerServicePort,
+					},
 				},
 			},
 			Selector: map[string]string{
@@ -420,6 +424,9 @@ func (d *PmemCSIDriver) getMetricsService() *corev1.Service {
 			Ports: []corev1.ServicePort{
 				corev1.ServicePort{
 					Port: controllerMetricsPort,
+					TargetPort: intstr.IntOrString{
+						IntVal: controllerMetricsPort,
+					},
 				},
 			},
 			Selector: map[string]string{
