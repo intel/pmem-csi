@@ -78,7 +78,7 @@ func WaitForOperator(c *Cluster, namespace string) (operator *v1.Pod) {
 // - controller service is up and running
 // - all nodes have registered
 func WaitForPMEMDriver(c *Cluster, namespace string) {
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	deadline, cancel := context.WithTimeout(context.Background(), framework.TestContext.SystemDaemonsetStartupTimeout)
 	defer cancel()

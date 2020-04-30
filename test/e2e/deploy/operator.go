@@ -8,7 +8,6 @@ package deploy
 
 import (
 	"context"
-	"fmt"
 
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,7 +19,6 @@ import (
 	"github.com/intel/pmem-csi/pkg/apis"
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 
-	"github.com/onsi/ginkgo"
 	"github.com/onsi/gomega"
 )
 
@@ -78,8 +76,8 @@ func CreateDeploymentCR(f *framework.Framework, dep api.Deployment) api.Deployme
 		out, err = f.DynamicClient.Resource(DeploymentResource).Create(context.Background(), in, metav1.CreateOptions{})
 		LogError(err, "create deployment error: %v, will retry...", err)
 		return err
-	}, "3m", "10s").Should(gomega.BeNil(), "create deployment %q", dep.Name)
-	ginkgo.By(fmt.Sprintf("Created deployment %q", dep.Name))
+	}, "3m", "1s").Should(gomega.BeNil(), "create deployment %q", dep.Name)
+	framework.Logf("Created deployment %q", dep.Name)
 	return *DeploymentFromUnstructured(out)
 }
 
@@ -101,8 +99,8 @@ func EnsureDeploymentCR(f *framework.Framework, dep api.Deployment) api.Deployme
 			return err
 		}
 		return err
-	}, "3m", "10s").Should(gomega.BeNil(), "create deployment %q", dep.Name)
-	ginkgo.By(fmt.Sprintf("Created deployment %q", dep.Name))
+	}, "3m", "1s").Should(gomega.BeNil(), "create deployment %q", dep.Name)
+	framework.Logf("Created deployment %q", dep.Name)
 	return *DeploymentFromUnstructured(out)
 }
 
@@ -118,8 +116,8 @@ func DeleteDeploymentCR(f *framework.Framework, name string) {
 		}
 		LogError(err, "delete deployment error: %v, will retry...", err)
 		return false
-	}, "3m", "10s").Should(gomega.BeTrue(), "delete deployment %q", name)
-	ginkgo.By(fmt.Sprintf("Deleted deployment %q", name))
+	}, "3m", "1s").Should(gomega.BeTrue(), "delete deployment %q", name)
+	framework.Logf("Deleted deployment %q", name)
 }
 
 func UpdateDeploymentCR(f *framework.Framework, dep api.Deployment) api.Deployment {
@@ -131,9 +129,9 @@ func UpdateDeploymentCR(f *framework.Framework, dep api.Deployment) api.Deployme
 		out, err = f.DynamicClient.Resource(DeploymentResource).Update(context.Background(), in, metav1.UpdateOptions{})
 		LogError(err, "update deployment error: %v, will retry...", err)
 		return err
-	}, "3m", "10s").Should(gomega.BeNil(), "update deployment: %q", dep.Name)
+	}, "3m", "1s").Should(gomega.BeNil(), "update deployment: %q", dep.Name)
 
-	ginkgo.By(fmt.Sprintf("Updated deployment %q", dep.Name))
+	framework.Logf("Updated deployment %q", dep.Name)
 	return *DeploymentFromUnstructured(out)
 }
 
@@ -144,7 +142,7 @@ func GetDeploymentCR(f *framework.Framework, name string) api.Deployment {
 		out, err = f.DynamicClient.Resource(DeploymentResource).Get(context.Background(), name, metav1.GetOptions{})
 		LogError(err, "get deployment error: %v, will retry...", err)
 		return err
-	}, "3m", "10s").Should(gomega.BeNil(), "get deployment")
+	}, "3m", "1s").Should(gomega.BeNil(), "get deployment")
 	return *DeploymentFromUnstructured(out)
 }
 

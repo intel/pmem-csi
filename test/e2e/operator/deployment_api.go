@@ -8,13 +8,12 @@ package operator
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	"github.com/intel/pmem-csi/pkg/k8sutil"
-	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment/testcases"
 	"github.com/intel/pmem-csi/pkg/version"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 	"github.com/intel/pmem-csi/test/e2e/operator/validate"
@@ -43,27 +42,6 @@ func getDeployment(name string) api.Deployment {
 			Image: dummyImage,
 		},
 	}
-}
-
-func initializeTLS(spec *api.DeploymentSpec) {
-	ca, err := pmemtls.NewCA(nil, nil)
-	framework.ExpectNoErrorWithOffset(1, err, "failed to instantiate CA")
-
-	regKey, err := pmemtls.NewPrivateKey()
-	framework.ExpectNoErrorWithOffset(1, err, "failed to generate a private key: %v", err)
-	regCert, err := ca.GenerateCertificate("pmem-registry", regKey.Public())
-	framework.ExpectNoErrorWithOffset(1, err, "failed to sign registry key")
-
-	ncKey, err := pmemtls.NewPrivateKey()
-	framework.ExpectNoErrorWithOffset(1, err, "failed to generate a private key: %v", err)
-	ncCert, err := ca.GenerateCertificate("pmem-node-controller", ncKey.Public())
-	framework.ExpectNoErrorWithOffset(1, err, "failed to sign node controller key")
-
-	spec.CACert = ca.EncodedCertificate()
-	spec.RegistryPrivateKey = pmemtls.EncodeKey(regKey)
-	spec.RegistryCert = pmemtls.EncodeCert(regCert)
-	spec.NodeControllerPrivateKey = pmemtls.EncodeKey(ncKey)
-	spec.NodeControllerCert = pmemtls.EncodeCert(ncCert)
 }
 
 var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
@@ -108,11 +86,12 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 	})
 
 	validateDriver := func(deployment api.Deployment, what ...interface{}) {
-		By("waiting for expectecd driver deployment")
+		framework.Logf("waiting for expectecd driver deployment %s", deployment.Name)
 		if what == nil {
 			what = []interface{}{"validate driver"}
 		}
 		framework.ExpectNoErrorWithOffset(1, validate.DriverDeploymentEventually(ctx, client, k8sver, d.Namespace, deployment), what...)
+		framework.Logf("got expectecd driver deployment %s", deployment.Name)
 	}
 
 	Context("deployment", func() {
@@ -197,7 +176,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					corev1.ResourceMemory: resource.MustParse("500Mi"),
 				},
 			}
-			initializeTLS(spec)
+			testcases.SetTLSOrDie(spec)
 
 			deployment = deploy.UpdateDeploymentCR(f, deployment)
 
@@ -219,7 +198,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 		It("shall be able to use custom CA certificates", func() {
 			deployment := getDeployment("test-deployment-with-certificates")
-			initializeTLS(&deployment.Spec)
+			testcases.SetTLSOrDie(&deployment.Spec)
 
 			deployment = deploy.CreateDeploymentCR(f, deployment)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
@@ -244,53 +223,58 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				return validate.DriverDeployment(client, k8sver, d.Namespace, deployment)
 			}, "1m", "20s").ShouldNot(HaveOccurred(), "driver validation failure after restarting")
 		})
+	})
 
-		It("should be able to capture deployment changes when operator is not running", func() {
-			deployment := getDeployment("test-deployment-operator-restart")
+	Context("updating", func() {
+		for _, testcase := range testcases.UpdateTests() {
+			testcase := testcase
+			Context(testcase.Name, func() {
+				testIt := func(restart bool) {
+					deployment := *testcase.Deployment.DeepCopyObject().(*api.Deployment)
 
-			deployment = deploy.CreateDeploymentCR(f, deployment)
-			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-			validateDriver(deployment, "validate driver before update")
+					// Use fake images to prevent pods from actually starting.
+					deployment.Spec.Image = dummyImage
+					deployment.Spec.NodeRegistrarImage = dummyImage
+					deployment.Spec.ProvisionerImage = dummyImage
 
-			// We have to get a fresh copy before updating it because the
-			// operator should have modified the status.
-			deployment = deploy.GetDeploymentCR(f, deployment.Name)
+					deployment = deploy.CreateDeploymentCR(f, deployment)
+					defer deploy.DeleteDeploymentCR(f, deployment.Name)
+					validateDriver(deployment, "validate driver before update")
 
-			restored := false
-			stopOperator(c, d)
-			defer func() {
-				if !restored {
-					startOperator(c, d)
+					// We have to get a fresh copy before updating it because the
+					// operator should have modified the status.
+					deployment = deploy.GetDeploymentCR(f, deployment.Name)
+
+					restored := false
+					if restart {
+						stopOperator(c, d)
+						defer func() {
+							if !restored {
+								startOperator(c, d)
+							}
+						}()
+					}
+
+					testcase.Mutate(&deployment)
+					deployment = deploy.UpdateDeploymentCR(f, deployment)
+
+					if restart {
+						startOperator(c, d)
+						restored = true
+					}
+
+					validateDriver(deployment, "validate driver after update and restart")
 				}
-			}()
 
-			spec := &deployment.Spec
-			spec.LogLevel++
-			spec.Image = "test-driver-image"
-			spec.PullPolicy = corev1.PullNever
-			spec.ProvisionerImage = "test-provisioner"
-			spec.ControllerResources = &corev1.ResourceRequirements{
-				Limits: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("200m"),
-					corev1.ResourceMemory: resource.MustParse("100Mi"),
-				},
-			}
-			spec.NodeResources = &corev1.ResourceRequirements{
-				Limits: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("500m"),
-					corev1.ResourceMemory: resource.MustParse("500Mi"),
-				},
-			}
-			initializeTLS(spec)
+				It("while running", func() {
+					testIt(false)
+				})
 
-			By("Updating PMEM-CSI deployment...")
-			deployment = deploy.UpdateDeploymentCR(f, deployment)
-
-			startOperator(c, d)
-			restored = true
-
-			validateDriver(deployment, "validate driver after update and restart")
-		})
+				It("while stopped", func() {
+					testIt(true)
+				})
+			})
+		}
 	})
 })
 
@@ -302,7 +286,7 @@ func validateDeploymentFailure(f *framework.Framework, name string) {
 		}
 
 		deployment := deploy.DeploymentFromUnstructured(dep)
-		By(fmt.Sprintf("Deployment %q is in %q phase", deployment.Name, deployment.Status.Phase))
+		framework.Logf("Deployment %q is in %q phase", deployment.Name, deployment.Status.Phase)
 		return deployment.Status.Phase == api.DeploymentPhaseFailed
 	}, "3m", "5s").Should(BeTrue(), "deployment %q not running", name)
 }
@@ -316,14 +300,13 @@ func findOperatorPod(c *deploy.Cluster, d *deploy.Deployment) (*corev1.Pod, erro
 // stopOperator ensures operator deployment replica counter == 0 and the
 // operator pod gets deleted
 func stopOperator(c *deploy.Cluster, d *deploy.Deployment) error {
-	By("Decrease operator deployment replicas to 0")
+	framework.Logf("Decrease operator deployment replicas to 0")
 	Eventually(func() bool {
 		dep, err := c.ClientSet().AppsV1().Deployments(d.Namespace).Get(context.Background(), "pmem-csi-operator", metav1.GetOptions{})
 		if err != nil && !errors.IsNotFound(err) {
 			return false
 		}
 
-		By(fmt.Sprintf("Replicas : %d", *dep.Spec.Replicas))
 		if *dep.Spec.Replicas == 0 {
 			return true
 		}
@@ -334,7 +317,7 @@ func stopOperator(c *deploy.Cluster, d *deploy.Deployment) error {
 		return false
 	}, "3m", "1s").Should(BeTrue(), "set operator deployment replicas to 0")
 
-	By("Ensure the operator pod deleted")
+	framework.Logf("Ensure the operator pod got deleted.")
 
 	Eventually(func() bool {
 		_, err := c.GetAppInstance("pmem-csi-operator", "", d.Namespace)
@@ -342,7 +325,7 @@ func stopOperator(c *deploy.Cluster, d *deploy.Deployment) error {
 		return err != nil && strings.HasPrefix(err.Error(), "no app")
 	}, "3m", "1s").Should(BeTrue(), "delete operator pod")
 
-	By("Operator pod deleted!")
+	framework.Logf("Operator pod got deleted!")
 
 	return nil
 }
@@ -358,7 +341,6 @@ func startOperator(c *deploy.Cluster, d *deploy.Deployment) {
 			return false
 		}
 
-		By(fmt.Sprintf("Replicas : %d", *dep.Spec.Replicas))
 		if *dep.Spec.Replicas == 1 {
 			return true
 		}
@@ -370,7 +352,7 @@ func startOperator(c *deploy.Cluster, d *deploy.Deployment) {
 		return false
 	}, "3m", "1s").Should(BeTrue(), "increase operator deployment replicas to 1")
 
-	By("Ensure operator pod is ready")
+	framework.Logf("Ensure operator pod is eady.")
 	deploy.WaitForOperator(c, d.Namespace)
-	By("Operator is restored!")
+	framework.Logf("Operator is restored!")
 }

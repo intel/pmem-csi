@@ -36,7 +36,7 @@ import (
 // set which are not the defaults. This call will wait for the expected objects until
 // the context times out.
 func DriverDeploymentEventually(ctx context.Context, client client.Client, k8sver version.Version, namespace string, deployment api.Deployment) error {
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
 	if deployment.GetUID() == "" {

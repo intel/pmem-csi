@@ -19,6 +19,7 @@ import (
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	pmemcontroller "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment/testcases"
 	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
 	"github.com/intel/pmem-csi/pkg/version"
 	"github.com/intel/pmem-csi/test/e2e/operator/validate"
@@ -31,7 +32,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -56,18 +56,7 @@ type pmemDeployment struct {
 	caCert, regCert, regKey, ncCert, ncKey              []byte
 }
 
-func decodeYaml(deploymentYaml string) runtime.Object {
-	klog.Info(deploymentYaml)
-	decode := scheme.Codecs.UniversalDeserializer().Decode
-
-	obj, _, err := decode([]byte(deploymentYaml), nil, nil)
-	Expect(err).Should(BeNil(), "Failed to parse deployment")
-	Expect(obj).ShouldNot(BeNil(), "Nil deployment object")
-
-	return obj
-}
-
-func getDeployment(d *pmemDeployment, c client.Client) *api.Deployment {
+func getDeployment(d *pmemDeployment) *api.Deployment {
 	dep := &api.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Deployment",
@@ -77,12 +66,6 @@ func getDeployment(d *pmemDeployment, c client.Client) *api.Deployment {
 			Name: d.name,
 			UID:  types.UID("fake-uuid-" + d.name),
 		},
-	}
-
-	if c != nil {
-		// Retrieve existing object before updating it.
-		err := c.Get(context.TODO(), types.NamespacedName{Name: d.name}, dep)
-		Expect(err).Should(BeNil(), "failed to retrive existing deployment object")
 	}
 
 	// TODO (?): embed DeploymentSpec inside pmemDeployment instead of splitting it up into individual values.
@@ -232,7 +215,7 @@ var _ = Describe("Operator", func() {
 				name: "test-deployment",
 			}
 
-			dep := getDeployment(d, nil)
+			dep := getDeployment(d)
 
 			err := c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment")
@@ -255,7 +238,7 @@ var _ = Describe("Operator", func() {
 				nodeMemory:       "500Mi",
 			}
 
-			dep := getDeployment(d, nil)
+			dep := getDeployment(d)
 			err := c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
@@ -273,11 +256,11 @@ var _ = Describe("Operator", func() {
 				name: "test-deployment2",
 			}
 
-			dep := getDeployment(d1, nil)
+			dep := getDeployment(d1)
 			err := c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment1")
 
-			dep = getDeployment(d2, nil)
+			dep = getDeployment(d2)
 			err = c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment2")
 
@@ -292,7 +275,7 @@ var _ = Describe("Operator", func() {
 				deviceMode: "foobar",
 			}
 
-			dep := getDeployment(d, nil)
+			dep := getDeployment(d)
 
 			err := c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment")
@@ -311,7 +294,7 @@ var _ = Describe("Operator", func() {
 				name:   "test-deployment",
 				regKey: encodedKey,
 			}
-			dep := getDeployment(d, nil)
+			dep := getDeployment(d)
 			err = c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
@@ -342,7 +325,7 @@ var _ = Describe("Operator", func() {
 				ncKey:   pmemtls.EncodeKey(ncKey),
 				ncCert:  pmemtls.EncodeCert(ncCert),
 			}
-			dep := getDeployment(d, nil)
+			dep := getDeployment(d)
 			err = c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
@@ -373,7 +356,7 @@ var _ = Describe("Operator", func() {
 				ncKey:   pmemtls.EncodeKey(ncKey),
 				ncCert:  pmemtls.EncodeCert(ncCert),
 			}
-			dep := getDeployment(d, nil)
+			dep := getDeployment(d)
 			err = c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
@@ -405,72 +388,67 @@ var _ = Describe("Operator", func() {
 				ncKey:   pmemtls.EncodeKey(ncKey),
 				ncCert:  pmemtls.EncodeCert(ncCert),
 			}
-			dep := getDeployment(d, nil)
+			dep := getDeployment(d)
 			err = c.Create(context.TODO(), dep)
 			Expect(err).Should(BeNil(), "failed to create deployment")
 
 			testReconcilePhase(rc, c, d.name, true, true, api.DeploymentPhaseFailed)
 		})
 
-		It("shall allow to change container resources of a running deployment", func() {
-			d := &pmemDeployment{
-				name:             "test-update-resource",
-				controllerCPU:    "100m",
-				controllerMemory: "10Mi",
-				nodeCPU:          "110m",
-				nodeMemory:       "11Mi",
+		Context("shall support updating", func() {
+			for _, testcase := range testcases.UpdateTests() {
+				testcase := testcase
+				Context(testcase.Name, func() {
+					testIt := func(restart bool) {
+						dep := testcase.Deployment.DeepCopyObject().(*api.Deployment)
+
+						// When working with the fake client, we need to make up a UID.
+						dep.UID = types.UID("fake-uid-" + dep.Name)
+
+						err := c.Create(context.TODO(), dep)
+						Expect(err).ShouldNot(HaveOccurred(), "create deployment")
+
+						testReconcilePhase(rc, c, dep.Name, false, false, api.DeploymentPhaseRunning)
+						validateDriver(dep)
+
+						// Reconcile now should keep phase as running.
+						testReconcilePhase(rc, c, dep.Name, false, false, api.DeploymentPhaseRunning)
+
+						// Retrieve existing object before updating it.
+						err = c.Get(context.TODO(), types.NamespacedName{Name: dep.Name}, dep)
+						Expect(err).ShouldNot(HaveOccurred(), "retrive existing deployment object")
+
+						if restart {
+							// Simulate restarting the operator by creating a new instance.
+							rc, err = deployment.NewReconcileDeployment(c, pmemcontroller.ControllerOptions{
+								Namespace:   testNamespace,
+								K8sVersion:  testK8sVersion,
+								DriverImage: testDriverImage,
+							})
+							Expect(err).ShouldNot(HaveOccurred(), "recreate reconciler")
+						}
+
+						// Update.
+						testcase.Mutate(dep)
+						err = c.Update(context.TODO(), dep)
+						Expect(err).ShouldNot(HaveOccurred(), "update deployment")
+
+						// Reconcile is expected to not fail.
+						testReconcilePhase(rc, c, dep.Name, false, false, api.DeploymentPhaseRunning)
+
+						// Recheck the container resources are updated
+						validateDriver(dep)
+					}
+
+					It("while running", func() {
+						testIt(false)
+					})
+
+					It("while stopped", func() {
+						testIt(true)
+					})
+				})
 			}
-
-			dep := getDeployment(d, nil)
-			err := c.Create(context.TODO(), dep)
-			Expect(err).Should(BeNil(), "failed to create deployment")
-
-			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-			validateDriver(dep)
-
-			// Reconcile now should keep phase as running
-			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-
-			// Update deployment resources
-			d.controllerCPU = "200m"
-			d.controllerMemory = "20Mi"
-			d.nodeCPU = "210m"
-			d.nodeMemory = "21Mi"
-			dep = getDeployment(d, c)
-			err = c.Update(context.TODO(), dep)
-			Expect(err).Should(BeNil(), "failed to update deployment")
-			// Reconcile is expected not to fail
-			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-
-			// Recheck the container resources are updated
-			validateDriver(dep)
-		})
-
-		It("shall allow to change container images of a running deployment", func() {
-			d := &pmemDeployment{
-				name: "test-update-images",
-			}
-
-			dep := getDeployment(d, nil)
-			err := c.Create(context.TODO(), dep)
-			Expect(err).Should(BeNil(), "failed to create deployment")
-
-			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-			validateDriver(dep)
-
-			// Reconcile now should change keep phase as running
-			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-			validateDriver(dep)
-
-			// Update images
-			d.image = "test-pmem-csi-image:v0.0.0"
-			d.provisionerImage = "test-provisioner-image:v0.0.0"
-			d.registrarImage = "test-registrar-image:v0.0.0"
-
-			dep = getDeployment(d, c)
-			Expect(c.Update(context.TODO(), dep)).Should(BeNil(), "failed to update deployment")
-			testReconcilePhase(rc, c, d.name, false, false, api.DeploymentPhaseRunning)
-			validateDriver(dep)
 		})
 	}
 
