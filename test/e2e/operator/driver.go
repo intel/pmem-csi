@@ -12,10 +12,13 @@ import (
 
 	"github.com/intel/pmem-csi/pkg/k8sutil"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
+	"github.com/intel/pmem-csi/test/e2e/driver"
 	"github.com/intel/pmem-csi/test/e2e/operator/validate"
-	runtime "sigs.k8s.io/controller-runtime/pkg/client"
+	"github.com/intel/pmem-csi/test/e2e/storage/dax"
 
 	"k8s.io/kubernetes/test/e2e/framework"
+	"k8s.io/kubernetes/test/e2e/storage/testsuites"
+	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 
 	. "github.com/onsi/ginkgo"
 )
@@ -42,6 +45,18 @@ var _ = deploy.DescribeForSome("driver", func(d *deploy.Deployment) bool {
 		k8sver, err := k8sutil.GetKubernetesVersion(f.ClientConfig())
 		framework.ExpectNoError(err, "get Kubernetes version")
 
-		framework.ExpectNoError(validate.DriverDeploymentEventually(ctx, client, *k8sver, d.Namespace, d.GetDriverDeployment()), "validate driver")
+		// We need the actual CR from the apiserver to check ownership.
+		deployment := d.GetDriverDeployment()
+		deployment = deploy.GetDeploymentCR(f, deployment.Name)
+
+		framework.ExpectNoError(validate.DriverDeploymentEventually(ctx, client, *k8sver, d.Namespace, deployment), "validate driver")
 	})
+
+	// Just very minimal testing at the moment.
+	csiTestDriver := driver.New(d.Name, d.GetDriverDeployment().Name, "" /* only the default fs type */)
+	var csiTestSuites = []func() testsuites.TestSuite{
+		dax.InitDaxTestSuite,
+	}
+
+	testsuites.DefineTestSuite(csiTestDriver, csiTestSuites)
 })
