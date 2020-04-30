@@ -166,6 +166,8 @@ EOF
             scheduler)
                 # Change port number via JSON patch.
                 ${SSH} "cat >>'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
+commonLabels:
+  pmem-csi.intel.com/deployment: ${TEST_DEVICEMODE}-${TEST_DEPLOYMENTMODE}
 patchesJson6902:
   - target:
       version: v1
@@ -181,6 +183,8 @@ EOF
                 ;;
             webhook)
                 ${SSH} "cat >>'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
+commonLabels:
+  pmem-csi.intel.com/deployment: ${TEST_DEVICEMODE}-${TEST_DEPLOYMENTMODE}
 patchesJson6902:
   - target:
       group: admissionregistration.k8s.io

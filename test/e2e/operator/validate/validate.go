@@ -429,6 +429,7 @@ var allObjectTypes = []schema.GroupVersionKind{
 	schema.GroupVersionKind{"", "v1", "SecretList"},
 	schema.GroupVersionKind{"", "v1", "ServiceList"},
 	schema.GroupVersionKind{"", "v1", "ServiceAccountList"},
+	schema.GroupVersionKind{"admissionregistration.k8s.io", "v1beta1", "MutatingWebhookConfigurationList"},
 	schema.GroupVersionKind{"apps", "v1", "DaemonSetList"},
 	schema.GroupVersionKind{"apps", "v1", "DeploymentList"},
 	schema.GroupVersionKind{"apps", "v1", "ReplicaSetList"},
