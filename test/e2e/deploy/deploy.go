@@ -618,6 +618,9 @@ func EnsureDeployment(deploymentName string) *Deployment {
 	ginkgo.AfterEach(func() {
 		// Check list of volumes after test to detect left-overs
 		CheckForLeftoverVolumes(deployment, prevVol)
+
+		// And check that PMEM is in a sane state.
+		CheckPMEM()
 	})
 
 	return deployment
