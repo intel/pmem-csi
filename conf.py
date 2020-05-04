@@ -29,7 +29,7 @@ from shutil import copyfile
 baseBranch = "devel"
 useGitHubURL = True
 commitSHA = getenv('GITHUB_SHA')
-githubBaseURL = "https://github.com/intelkevinputnam/pmem-csi/"
+githubBaseURL = "https://github.com/intel/pmem-csi/"
 githubFileURL = githubBaseURL + "blob/"
 githubDirURL = githubBaseURL + "tree/"
 if commitSHA:
