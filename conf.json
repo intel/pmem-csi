@@ -1,0 +1,29 @@
+{
+    "author": "",
+    "copyright": "2019,",
+    "exclude_patterns": [
+        "_output",
+        "Thumbs.db",
+        ".DS_Store",
+        ".tox",
+	    "_work",
+        "deploy/kustomize",
+        "test/test-config.d",
+        "pkg/scheduler"
+    ],
+    "extensions": [
+        "recommonmark",
+        "sphinx_markdown_tables"
+    ],
+    "html_theme": "sphinx_rtd_theme",
+    "project": "PMEM-CSI",
+    "templates_path": [
+        "_templates"
+    ],
+    "html_copy_source": false,
+    "rst_epilog": ".. include:: /docs/substitutions.txt",
+    "source_suffix": {
+        ".rst": "restructuredtext",
+        ".md": "markdown"
+    }
+}

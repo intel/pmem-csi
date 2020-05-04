@@ -171,7 +171,8 @@ pipeline {
 
                     // Install additional tools:
                     // - ssh client for govm
-                    sh "docker exec ${env.BUILD_CONTAINER} swupd bundle-add openssh-client"
+                    // - python3 for Sphinx (i.e. make html)
+                    sh "docker exec ${env.BUILD_CONTAINER} swupd bundle-add openssh-client python3-basic"
 
                     // Now commit those changes to ensure that the result of "swupd bundle add" gets cached.
                     sh "docker commit ${env.BUILD_CONTAINER} ${env.BUILD_IMAGE}"
@@ -210,6 +211,13 @@ pipeline {
                         error("Creating a new release failed.")
                     }
                 }
+            }
+        }
+
+        stage('docsite') {
+            steps {
+                sh "${RunInBuilder()} ${env.BUILD_CONTAINER} make vhtml"
+                publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: false, reportDir: '_output/html', reportFiles: 'index.html', reportName: 'Doc Site', reportTitles: ''])
             }
         }
 
