@@ -469,6 +469,11 @@ func (ns *nodeServer) createEphemeralDevice(ctx context.Context, req *csi.NodePu
 		return nil, status.Error(codes.InvalidArgument, "ephemeral inline volume parameters: "+err.Error())
 	}
 
+	// If the caller has use the heuristic for detecting ephemeral volumes, the flag won't
+	// be set. Fix that here.
+	ephemeral := parameters.PersistencyEphemeral
+	p.Persistency = &ephemeral
+
 	// Create new device, using the same code that the normal CreateVolume also uses,
 	// so internally this volume will be tracked like persistent volumes.
 	volumeID, _, err := ns.cs.createVolumeInternal(ctx, p, req.VolumeId,
