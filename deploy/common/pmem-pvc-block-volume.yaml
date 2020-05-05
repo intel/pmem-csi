@@ -9,4 +9,4 @@ spec:
   resources:
     requests:
       storage: 8Gi
-  storageClassName: pmem-csi-sc-ext4 # defined in deploy/kubernetes-1.13/pmem-storageclass-ext4.yaml
+  storageClassName: pmem-csi-sc-ext4 # defined in deploy/kubernetes-{VERSION}/pmem-storageclass-ext4.yaml

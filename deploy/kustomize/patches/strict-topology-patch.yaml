@@ -1,4 +1,0 @@
-# Select strict topoloy. The external-provisioner must be in container #1.
-- op: add
-  path: /spec/template/spec/containers/1/args/-
-  value: "--strict-topology=true"
