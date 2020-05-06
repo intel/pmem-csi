@@ -40,9 +40,11 @@ versions:
 | Kubernetes version | Required alpha feature gates   | Support status
 |--------------------|--------------------------------|----------------
 | 1.13               | CSINodeInfo, CSIDriverRegistry,<br>CSIBlockVolume</br>| unsupported <sup>1</sup>
-| 1.14               |                                |
+| 1.14               |                                | unsupported <sup>2</sup>
 | 1.15               | CSIInlineVolume                |
 | 1.16               |                                |
+| 1.17               |                                |
+| 1.18               |                                |
 
 <sup>1</sup> Several relevant features are only available in alpha
 quality in Kubernetes 1.13 and the combination of skip attach and
@@ -52,3 +54,7 @@ available in later versions. The external-provisioner v1.0.1 for
 Kubernetes 1.13 lacks the `--strict-topology` flag and therefore late
 binding is unreliable. It's also a release that is not supported
 officially by upstream anymore.
+
+<sup>2</sup> Lacks support for ephemeral inline volumes.
+Not supported officially by upstream anymore.
+

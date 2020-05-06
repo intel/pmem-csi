@@ -1,6 +1,2 @@
-# It would be nicer to patch webhook-1.14 here, but that leads to
-# complications in test/setup-deployment.sh because it cannot deal
-# with kustomizations which aren't self-contained. As webhook-1.14 is going
-# to become unsupported soon, it's better to keep webhook simple.
 resources:
   - webhook.yaml

@@ -59,12 +59,15 @@ EOF
 
     # For the sake of reproducibility, use fixed versions.
     # List generated with:
-    # for v in 1.13 1.14 1.15 1.16; do for i in kubelet kubeadm kubectl; do echo "$i-$(sudo dnf --showduplicates list kubelet | grep " $v"  | sed -e 's/.* \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/' | sort -u  | tail -n 1)"; done; done
+    # for v in 1.13 1.14 1.15 1.16 1.17 1.18; do for i in kubelet kubeadm kubectl; do echo "$i-$(sudo dnf --showduplicates list kubelet | grep " $v"  | sed -e 's/.* \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/' | sort -u -n -k 2.6 | tail -n 1)"; done; done
+    # Note that -n and -k 2.6 are needed to handle minor versions > 9, and -k 2.6 works only if k8s major versions have form X.XX
     case ${TEST_KUBERNETES_VERSION} in
         1.13) packages+=" kubelet-1.13.12-0 kubeadm-1.13.12-0 kubectl-1.13.12-0";;
         1.14) packages+=" kubelet-1.14.10-0 kubeadm-1.14.10-0 kubectl-1.14.10-0";;
-        1.15) packages+=" kubelet-1.15.8-0 kubeadm-1.15.8-0 kubectl-1.15.8-0";;
-        1.16) packages+=" kubelet-1.16.5-0 kubeadm-1.16.5-0 kubectl-1.16.5-0";;
+        1.15) packages+=" kubelet-1.15.11-0 kubeadm-1.15.11-0 kubectl-1.15.11-0";;
+        1.16) packages+=" kubelet-1.16.9-0 kubeadm-1.16.9-0 kubectl-1.16.9-0";;
+        1.17) packages+=" kubelet-1.17.5-0 kubeadm-1.17.5-0 kubectl-1.17.5-0";;
+        1.18) packages+=" kubelet-1.18.2-0 kubeadm-1.18.2-0 kubectl-1.18.2-0";;
         *) echo >&2 "Kubernetes version ${TEST_KUBERNETES_VERSION} not supported, package list in $0 must be updated."; exit 1;;
     esac
     packages+=" --disableexcludes=kubernetes"

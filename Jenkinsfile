@@ -39,17 +39,6 @@ pipeline {
         CLEAR_LINUX_VERSION_1_16 = "31760"
         CLEAR_LINUX_VERSION_1_15 = "31070"
 
-        /* 29890 broke networking
-        (https://github.com/clearlinux/distribution/issues/904). In
-        29880, Docker forgets containers after a system restart
-        (https://github.com/clearlinux/distribution/issues/891). We
-        need to stay on the latest known-good version. The version
-        between *20 and *80 have not been tested. */
-        CLEAR_LINUX_VERSION_1_14 = "29820"
-
-        /* last version before the 1.14 update in 28630 */
-        CLEAR_LINUX_VERSION_1_13 = "28620"
-
         REGISTRY_NAME = "cloud-native-image-registry.westus.cloudapp.azure.com"
 
         // Per-branch build environment, marked as "do not promote to public registry".
@@ -256,12 +245,22 @@ pipeline {
         // - production deployment is only tested on Clear Linux
         //   and testing deployment only on Fedora
 
-        stage('testing 1.16') {
+        stage('testing 1.18') {
             options {
                 timeout(time: 180, unit: "MINUTES")
             }
             steps {
-                TestInVM("fedora", "", "1.16", "Top.Level..[[:alpha:]]*-production[[:space:]]")
+                TestInVM("fedora", "", "1.18", "Top.Level..[[:alpha:]]*-production[[:space:]]")
+            }
+        }
+
+        stage('testing 1.16') {
+            when { not { changeRequest() } }
+            options {
+                timeout(time: 180, unit: "MINUTES")
+            }
+            steps {
+                TestInVM("fedora", "", "1.16", "")
             }
         }
 
@@ -272,16 +271,6 @@ pipeline {
             }
             steps {
                 TestInVM("fedora", "", "1.15", "")
-            }
-        }
-
-        stage('testing 1.14') {
-            when { not { changeRequest() } }
-            options {
-                timeout(time: 180, unit: "MINUTES")
-            }
-            steps {
-                TestInVM("fedora", "", "1.14", "")
             }
         }
 
