@@ -131,7 +131,7 @@ fi
 # is installed instead of the latest one. Ignored when
 # using Clear Linux as OS because with Clear Linux we have
 # to use the Kubernetes version that ships with it.
-: ${TEST_KUBERNETES_VERSION:=1.16}
+: ${TEST_KUBERNETES_VERSION:=1.18}
 
 # Kubernetes node port number
 # (https://kubernetes.io/docs/concepts/services-networking/service/#nodeport)
