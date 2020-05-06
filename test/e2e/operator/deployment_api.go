@@ -10,13 +10,14 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
+	"github.com/intel/pmem-csi/test/e2e/operator/validate"
 
 	corev1 "k8s.io/api/core/v1"
-	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -31,7 +32,11 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 	// those which did not already install the driver.
 	return d.HasOperator && !d.HasDriver
 }, func(d *deploy.Deployment) {
-	var c *deploy.Cluster
+	var (
+		c      *deploy.Cluster
+		ctx    context.Context
+		cancel func()
+	)
 
 	f := framework.NewDefaultFramework("operator")
 	// test/e2e/deploy.go is using default namespace for deploying operator.
@@ -43,6 +48,15 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		cluster, err := deploy.NewCluster(f.ClientSet, f.DynamicClient)
 		Expect(err).ShouldNot(HaveOccurred(), "new cluster")
 		c = cluster
+
+		// All tests are expected to complete in 5 minutes.
+		// We need to set up the global variables indirectly to avoid a watning about cancel not being called.
+		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Minute)
+		ctx, cancel = ctx2, cancel2
+	})
+
+	AfterEach(func() {
+		cancel()
 	})
 
 	Context("deployment", func() {
@@ -99,7 +113,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 				deploy.CreateDeploymentCR(f, dep)
 				defer deploy.DeleteDeploymentCR(f, deployment.Name)
-				validateDriverDeployment(f, d, deployment)
+				Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver")
 			})
 		}
 
@@ -131,7 +145,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			// operator image should be the driver image
 			deployment.Spec.Image = operatorPod.Spec.Containers[0].Image
-			validateDriverDeployment(f, d, deployment)
+			Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver")
 		})
 
 		It("shall be able to edit running deployment", func() {
@@ -154,7 +168,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			deploy.CreateDeploymentCR(f, dep)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-			validateDriverDeployment(f, d, deployment)
+			Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver before editing")
 
 			// prepare custom certificates
 			ca, err := pmemtls.NewCA(nil, nil)
@@ -207,10 +221,18 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			Expect(err).Should(BeNil(), "existence of node daemonset")
 			dsVersion := ds.GetResourceVersion()
 
+			registrySecret, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Get(context.Background(), deployment.Name+"-registry-secrets", metav1.GetOptions{})
+			Expect(err).Should(BeNil(), "existence of registry secret")
+			registrySecretVersion := registrySecret.GetResourceVersion()
+
+			nodeSecret, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Get(context.Background(), deployment.Name+"-node-secrets", metav1.GetOptions{})
+			Expect(err).Should(BeNil(), "existence of node secret")
+			nodeSecretVersion := nodeSecret.GetResourceVersion()
+
 			deploy.UpdateDeploymentCR(f, dep)
 
 			// Wait till the sub-resources get updated
-			// As a interim solution we are depending on subresoure(daemon set, stateful set)
+			// As a interim solution we are depending on subresoure(daemon set, stateful set, secrets)
 			// versions to make sure the resource got updated. Instead, operator should update
 			// deployment status with appropriate events/condition messages.
 			Eventually(func() bool {
@@ -224,10 +246,20 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					framework.Logf("Get daemon set error: %v", err)
 					return false
 				}
-				return ss.GetResourceVersion() != ssVersion && ds.GetResourceVersion() != dsVersion
+
+				registrySecret, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Get(context.Background(), deployment.Name+"-registry-secrets", metav1.GetOptions{})
+				Expect(err).Should(BeNil(), "update check of registry secret")
+
+				nodeSecret, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Get(context.Background(), deployment.Name+"-node-secrets", metav1.GetOptions{})
+				Expect(err).Should(BeNil(), "update check of node secret")
+
+				return ss.GetResourceVersion() != ssVersion &&
+					ds.GetResourceVersion() != dsVersion &&
+					registrySecret.GetResourceVersion() != registrySecretVersion &&
+					nodeSecret.GetResourceVersion() != nodeSecretVersion
 			}, "3m", "1s").Should(BeTrue(), "expected both daemonset and stateupset get updated")
 
-			validateDriverDeployment(f, d, deployment)
+			Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver after editing")
 		})
 
 		It("shall not allow to change device manager of a running deployment", func() {
@@ -253,7 +285,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			deploy.CreateDeploymentCR(f, dep)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-			validateDriverDeployment(f, d, deployment)
+			Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver")
 
 			dep = deploy.GetDeploymentCR(f, deployment.Name)
 
@@ -278,7 +310,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			Expect(err).ShouldNot(HaveOccurred(), "daemon set should exists")
 			for _, c := range ds.Spec.Template.Spec.Containers {
 				if c.Name == "pmem-driver" {
-					Expect(c.Args).Should(ContainElement("-deviceManager="+string(oldMode)), "mismatched device manager")
+					Expect(c.Command).Should(ContainElement("-deviceManager="+string(oldMode)), "mismatched device manager")
 				}
 			}
 		})
@@ -307,7 +339,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			deploy.CreateDeploymentCR(f, dep)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-			validateDriverDeployment(f, d, deployment)
+			Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver")
 
 			dep = deploy.GetDeploymentCR(f, deployment.Name)
 
@@ -332,7 +364,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			Expect(err).ShouldNot(HaveOccurred(), "daemon set should exists")
 			for _, c := range ds.Spec.Template.Spec.InitContainers {
 				if c.Name == "pmem-ns-init" {
-					Expect(c.Args).Should(ContainElement(fmt.Sprintf("--useforfsdax=%d", oldPercentage)), "mismatched pmem percentage")
+					Expect(c.Command).Should(ContainElement(fmt.Sprintf("--useforfsdax=%d", oldPercentage)), "mismatched pmem percentage")
 				}
 			}
 		})
@@ -366,7 +398,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			deploy.CreateDeploymentCR(f, dep)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-			validateDriverDeployment(f, d, deployment)
+			Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver")
 
 			dep = deploy.GetDeploymentCR(f, deployment.Name)
 
@@ -435,13 +467,13 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			deploy.CreateDeploymentCR(f, dep1)
 			defer deploy.DeleteDeploymentCR(f, deployment1.Name)
-			validateDriverDeployment(f, d, deployment1)
+			Expect(validate.DriverDeployment(ctx, f, d, *deployment1)).Should(BeNil(), "validate driver #1")
 
 			deployment2, err := toDeployment(dep2)
 			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
 			deploy.CreateDeploymentCR(f, dep2)
 			defer deploy.DeleteDeploymentCR(f, deployment2.Name)
-			validateDriverDeployment(f, d, deployment2)
+			Expect(validate.DriverDeployment(ctx, f, d, *deployment2)).Should(BeNil(), "validate driver #2")
 		})
 
 		It("shall not allow multiple deployments with same driver name", func() {
@@ -478,7 +510,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			deploy.CreateDeploymentCR(f, dep1)
 			defer deploy.DeleteDeploymentCR(f, deployment1.Name)
-			validateDriverDeployment(f, d, deployment1)
+			Expect(validate.DriverDeployment(ctx, f, d, *deployment1)).Should(BeNil(), "validate driver #1")
 
 			deployment2, err := toDeployment(dep2)
 			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
@@ -500,7 +532,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			deployment2, err = toDeployment(dep2)
 			Expect(err).ShouldNot(HaveOccurred(), "conversion from unstructured to deployment")
 			// Now it should succeed
-			validateDriverDeployment(f, d, deployment2)
+			Expect(validate.DriverDeployment(ctx, f, d, *deployment2)).Should(BeNil(), "validate driver #2")
 		})
 
 		It("shall be able to use custom CA certificates", func() {
@@ -542,7 +574,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			deploy.CreateDeploymentCR(f, dep)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-			validateDriverDeployment(f, d, deployment)
+			Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver")
 		})
 
 		It("driver deployment shall be running even after operator exit", func() {
@@ -566,7 +598,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			deploy.CreateDeploymentCR(f, dep)
 
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-			validateDriverDeployment(f, d, deployment)
+			Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver before stopping")
 
 			// Stop the operator
 			stopOperator(c, d)
@@ -574,11 +606,9 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			defer startOperator(c, d)
 
 			// Ensure that the driver is running consistently
-			Consistently(func() bool {
-				By("validating driver after operator deletion")
-				validateDriverDeployment(f, d, deployment)
-				return true
-			}, "1m", "20s", "driver validation failure")
+			Consistently(func() error {
+				return validate.DriverDeployment(ctx, f, d, *deployment)
+			}, "1m", "20s").Should(BeNil(), "driver validation failure after restarting")
 		})
 
 		It("should be able to capture deployment changes when operator is not running", func() {
@@ -601,7 +631,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			deploy.CreateDeploymentCR(f, dep)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-			validateDriverDeployment(f, d, deployment)
+			Expect(validate.DriverDeployment(ctx, f, d, *deployment)).Should(BeNil(), "validate driver")
 
 			restored := false
 			stopOperator(c, d)
@@ -669,16 +699,12 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			}, "3m", "2s").Should(BeTrue(), "reconcile updated deployment")
 
 			defer GinkgoRecover()
-			Eventually(func() (success bool) {
-				defer func() {
-					if r := recover(); r != nil {
-						success = false
-					}
-				}()
-				validateDriverDeployment(f, d, deployment)
-				success = true
-				return
-			}, "3m", "2s").Should(BeTrue(), "valdate driver after update")
+			Eventually(func() string {
+				if err := validate.DriverDeployment(ctx, f, d, *deployment); err != nil {
+					return err.Error()
+				}
+				return ""
+			}, "3m", "2s").Should(BeEmpty(), "validate driver after update")
 		})
 	})
 })
@@ -693,163 +719,6 @@ func toDeployment(dep *unstructured.Unstructured) (*api.Deployment, error) {
 	}
 
 	return deployment, nil
-}
-
-func validateDriverDeployment(f *framework.Framework, d *deploy.Deployment, expected *api.Deployment) {
-	deployment := &api.Deployment{}
-	Eventually(func() bool {
-		dep, err := f.DynamicClient.Resource(deploy.DeploymentResource).Get(context.Background(), expected.Name, metav1.GetOptions{})
-		if err != nil {
-			return false
-		}
-
-		if err = deploy.Scheme.Convert(dep, deployment, nil); err != nil {
-			return false
-		}
-		By(fmt.Sprintf("Deployment %q is in %q phase", deployment.Name, deployment.Status.Phase))
-		return deployment.Status.Phase == api.DeploymentPhaseRunning
-	}, "3m", "5s").Should(BeTrue(), "deployment %q not running", expected.Name)
-
-	// Validate sub-resources
-
-	// Secretes
-	caSecret, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Get(context.Background(), expected.Name+"-pmem-ca", metav1.GetOptions{})
-	Expect(err).ShouldNot(HaveOccurred(), "find ca secret")
-	if expected.Spec.CACert != nil {
-		Expect(caSecret.Data[corev1.TLSCertKey]).Should(BeEquivalentTo(expected.Spec.CACert))
-	}
-	regSecret, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Get(context.Background(), expected.Name+"-pmem-registry", metav1.GetOptions{})
-	Expect(err).ShouldNot(HaveOccurred(), "find registry secret")
-	if expected.Spec.RegistryPrivateKey != nil {
-		Expect(regSecret.Data[corev1.TLSPrivateKeyKey]).Should(BeEquivalentTo(expected.Spec.RegistryPrivateKey))
-	}
-	if expected.Spec.RegistryCert != nil {
-		Expect(regSecret.Data[corev1.TLSCertKey]).Should(BeEquivalentTo(expected.Spec.RegistryCert))
-	}
-	nodeControllerSecret, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Get(context.Background(), expected.Name+"-pmem-node-controller", metav1.GetOptions{})
-	Expect(err).ShouldNot(HaveOccurred(), "find node controller secret")
-	if expected.Spec.NodeControllerPrivateKey != nil {
-		Expect(nodeControllerSecret.Data[corev1.TLSPrivateKeyKey]).Should(BeEquivalentTo(expected.Spec.NodeControllerPrivateKey))
-	}
-	if expected.Spec.NodeControllerCert != nil {
-		Expect(nodeControllerSecret.Data[corev1.TLSCertKey]).Should(BeEquivalentTo(expected.Spec.NodeControllerCert))
-	}
-
-	// Statefulset and its containers
-	ss, err := f.ClientSet.AppsV1().StatefulSets(d.Namespace).Get(context.Background(), expected.Name+"-controller", metav1.GetOptions{})
-	Expect(err).Should(BeNil(), "existence of controller stateful set")
-	Expect(*ss.Spec.Replicas).Should(BeEquivalentTo(1), "controller stateful set replication count mismatch")
-	svcName := ss.Spec.ServiceName
-	Expect(svcName).ShouldNot(BeEmpty(), "controller should have a service ")
-	saName := ss.Spec.Template.Spec.ServiceAccountName
-	Expect(saName).ShouldNot(BeEmpty(), "controller should a service account")
-
-	findSecret := func(volumes []corev1.Volume, secret string) bool {
-		for _, v := range volumes {
-			if v.VolumeSource.Secret != nil && v.VolumeSource.Secret.SecretName == secret {
-				return true
-			}
-		}
-		return false
-	}
-	for _, secret := range []string{caSecret.Name, regSecret.Name} {
-		Expect(findSecret(ss.Spec.Template.Spec.Volumes, secret)).Should(BeTrue(), "volume sources of stateful set shall have secret %s", secret)
-	}
-
-	containers := ss.Spec.Template.Spec.Containers
-	Expect(len(containers)).Should(BeEquivalentTo(2), "controller stateful set container count mismatch")
-	for _, c := range containers {
-		cpu := c.Resources.Limits.Cpu()
-		memory := c.Resources.Limits.Memory()
-		Expect(c.ImagePullPolicy).Should(BeEquivalentTo(expected.Spec.PullPolicy), "pmem-driver: mismatched image pull policy")
-		Expect(cpu).Should(BeEquivalentTo(expected.Spec.ControllerResources.Limits.Cpu()), "controller cpu resource limit mismatch")
-		Expect(memory).Should(BeEquivalentTo(expected.Spec.ControllerResources.Limits.Memory()), "controller memory resource limit mismatch")
-		switch c.Name {
-		case "pmem-driver":
-			Expect(c.Image).Should(BeEquivalentTo(expected.Spec.Image), "mismatched driver image")
-			Expect(c.Args).Should(ContainElement("-drivername="+expected.Spec.DriverName), "mismatched driver name")
-			Expect(c.Args).Should(ContainElement(fmt.Sprintf("-v=%d", expected.Spec.LogLevel)), "mismatched logging level")
-		case "provisioner":
-			Expect(c.Image).Should(BeEquivalentTo(expected.Spec.ProvisionerImage), "mismatched provisioner image")
-		default:
-			Fail(fmt.Sprintf("Unknown container name %q in controller stateful set", c.Name))
-		}
-	}
-
-	// Daemonset and its containers
-	ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(context.Background(), expected.Name+"-node", metav1.GetOptions{})
-	Expect(err).ShouldNot(HaveOccurred(), "daemon set should exists")
-	for _, secret := range []string{caSecret.Name, nodeControllerSecret.Name} {
-		Expect(findSecret(ds.Spec.Template.Spec.Volumes, secret)).Should(BeTrue(), "volume sources of daemon set shall have secret %s", secret)
-	}
-
-	if deployment.Spec.DeviceMode == api.DeviceModeLVM {
-		Expect(len(ds.Spec.Template.Spec.InitContainers)).Should(BeEquivalentTo(2), "init container count")
-		for _, c := range ds.Spec.Template.Spec.InitContainers {
-			if c.Name == "pmem-ns-init" {
-				Expect(c.Args).Should(ContainElement(fmt.Sprintf("--useforfsdax=%d", expected.Spec.PMEMPercentage)), "mismatched pmem percentage")
-			}
-		}
-	}
-
-	Expect(len(ds.Spec.Template.Spec.Containers)).Should(BeEquivalentTo(2), "daemon set container count")
-	for _, c := range ds.Spec.Template.Spec.Containers {
-		cpu := c.Resources.Limits.Cpu()
-		memory := c.Resources.Limits.Memory()
-		Expect(c.ImagePullPolicy).Should(BeEquivalentTo(expected.Spec.PullPolicy), "pmem-driver: mismatched image pull policy")
-		Expect(cpu).Should(BeEquivalentTo(expected.Spec.NodeResources.Limits.Cpu()), "node cpu resource limit mismatch")
-		Expect(memory).Should(BeEquivalentTo(expected.Spec.NodeResources.Limits.Memory()), "node memory resource limit mismatch")
-		switch c.Name {
-		case "pmem-driver":
-			Expect(c.Image).Should(BeEquivalentTo(expected.Spec.Image), "mismatched driver image")
-			Expect(c.Args).Should(ContainElement("-drivername="+expected.Spec.DriverName), "mismatched driver name")
-			Expect(c.Args).Should(ContainElement("-deviceManager="+string(expected.Spec.DeviceMode)), "mismatched device manager")
-			Expect(c.Args).Should(ContainElement(fmt.Sprintf("-v=%d", expected.Spec.LogLevel)), "mismatched logging level")
-		case "driver-registrar":
-			Expect(c.Image).Should(BeEquivalentTo(expected.Spec.NodeRegistrarImage), "mismatched driver-registrar image")
-		default:
-			Fail(fmt.Sprintf("Unknown container name %q in controller stateful set", c.Name))
-		}
-	}
-
-	// should have a CSIDriver
-	driver, err := f.ClientSet.StorageV1beta1().CSIDrivers().Get(context.Background(), expected.Spec.DriverName, metav1.GetOptions{})
-	Expect(err).ShouldNot(HaveOccurred(), "expected instance of csi driver")
-	lcModes := []storagev1beta1.VolumeLifecycleMode{
-		storagev1beta1.VolumeLifecycleEphemeral,
-		storagev1beta1.VolumeLifecyclePersistent,
-	}
-	By(fmt.Sprintf("Driver: %s Lifecycle Modes: %v", driver.Name, driver.Spec.VolumeLifecycleModes))
-	Expect(driver.Spec.VolumeLifecycleModes).Should(ConsistOf(lcModes), "mismatched life cycle modes")
-
-	svc, err := f.ClientSet.CoreV1().Services(d.Namespace).Get(context.Background(), svcName, metav1.GetOptions{})
-	Expect(err).ShouldNot(HaveOccurred(), "missing controller service")
-	Expect(len(svc.Spec.Ports)).ShouldNot(BeZero(), "controller service should have a port defined")
-
-	svc, err = f.ClientSet.CoreV1().Services(d.Namespace).Get(context.Background(), expected.Name+"-metrics", metav1.GetOptions{})
-	Expect(err).ShouldNot(HaveOccurred(), "missing metrics service")
-	Expect(len(svc.Spec.Ports)).ShouldNot(BeZero(), "metrics service should have a port defined")
-
-	// should have a service account
-	sa, err := f.ClientSet.CoreV1().ServiceAccounts(d.Namespace).Get(context.Background(), saName, metav1.GetOptions{})
-	Expect(err).ShouldNot(HaveOccurred(), "controller service account")
-	Expect(len(sa.Secrets)).ShouldNot(BeZero(), "controller service account should have valid secrets")
-
-	// should have defined Roles and Role bindings
-	rb, err := f.ClientSet.RbacV1().RoleBindings(d.Namespace).Get(context.Background(), expected.Name, metav1.GetOptions{})
-	Expect(err).ShouldNot(HaveOccurred(), "should have role binding instance")
-	Expect(len(rb.Subjects)).ShouldNot(BeZero(), "role binding have a valid subject")
-	Expect(rb.Subjects[0].Name).Should(BeEquivalentTo(saName), "role binding should have a valid service account")
-
-	_, err = f.ClientSet.RbacV1().Roles(d.Namespace).Get(context.Background(), rb.RoleRef.Name, metav1.GetOptions{})
-	Expect(err).ShouldNot(HaveOccurred(), "roles should have been defined")
-
-	crb, err := f.ClientSet.RbacV1().ClusterRoleBindings().Get(context.Background(), expected.Name, metav1.GetOptions{})
-	Expect(err).ShouldNot(HaveOccurred(), "should have a cluster role binding instance")
-	Expect(len(crb.Subjects)).ShouldNot(BeZero(), "cluster role binding should have a valid subject")
-	Expect(crb.Subjects[0].Name).Should(BeEquivalentTo(saName), "cluster role binding should have a valid service account")
-	_, err = f.ClientSet.RbacV1().Roles(d.Namespace).Get(context.Background(), rb.RoleRef.Name, metav1.GetOptions{})
-	Expect(err).ShouldNot(HaveOccurred(), "roles should have been defined")
 }
 
 func validateDeploymentFailure(f *framework.Framework, name string) {

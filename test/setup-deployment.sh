@@ -55,6 +55,8 @@ apiVersion: v1
 kind: Secret
 metadata:
     name: pmem-csi-registry-secrets
+    labels:
+        pmem-csi.intel.com/deployment: ${TEST_DEVICEMODE}-${TEST_DEPLOYMENTMODE}
 type: kubernetes.io/tls
 data:
     ca.crt: ${CA}
@@ -64,7 +66,9 @@ data:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: pmem-csi-node-secrets
+    name: pmem-csi-node-secrets
+    labels:
+        pmem-csi.intel.com/deployment: ${TEST_DEVICEMODE}-${TEST_DEPLOYMENTMODE}
 type: Opaque
 data:
     ca.crt: ${CA}

@@ -584,33 +584,8 @@ func EnsureDeployment(deploymentName string) *Deployment {
 		if deployment.HasDriver {
 			if deployment.HasOperator {
 				// Deploy driver through operator.
-				dep := &api.Deployment{
-					// TypeMeta is needed because
-					// DefaultUnstructuredConverter does not add it for us. Is there a better way?
-					TypeMeta: metav1.TypeMeta{
-						APIVersion: api.SchemeGroupVersion.String(),
-						Kind:       "Deployment",
-					},
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "pmem-csi",
-						Labels: map[string]string{
-							deploymentLabel: deployment.Name,
-						},
-					},
-					Spec: api.DeploymentSpec{
-						Labels: map[string]string{
-							deploymentLabel: deployment.Name,
-						},
-						// TODO: replace pmemcsidriver.DeviceMode with api.DeviceMode everywhere
-						// and remove this cast here.
-						DeviceMode: api.DeviceMode(deployment.Mode),
-						// As in setup-deployment.sh, only 50% of the available
-						// PMEM must be used for LVM, otherwise other tests cannot
-						// run after the LVM driver was deployed once.
-						PMEMPercentage: 50,
-					},
-				}
-				hash, err := runtime.DefaultUnstructuredConverter.ToUnstructured(dep)
+				dep := deployment.GetDriverDeployment()
+				hash, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&dep)
 				framework.ExpectNoError(err, "convert %v", dep)
 				depUnstructured := &unstructured.Unstructured{
 					Object: hash,
@@ -646,6 +621,37 @@ func EnsureDeployment(deploymentName string) *Deployment {
 	})
 
 	return deployment
+}
+
+// GetDriverDeployment returns the spec for the driver deployment that is used
+// for deployments like operator-lvm-production.
+func (d *Deployment) GetDriverDeployment() api.Deployment {
+	return api.Deployment{
+		// TypeMeta is needed because
+		// DefaultUnstructuredConverter does not add it for us. Is there a better way?
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: api.SchemeGroupVersion.String(),
+			Kind:       "Deployment",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "pmem-csi",
+			Labels: map[string]string{
+				deploymentLabel: d.Name,
+			},
+		},
+		Spec: api.DeploymentSpec{
+			Labels: map[string]string{
+				deploymentLabel: d.Name,
+			},
+			// TODO: replace pmemcsidriver.DeviceMode with api.DeviceMode everywhere
+			// and remove this cast here.
+			DeviceMode: api.DeviceMode(d.Mode),
+			// As in setup-deployment.sh, only 50% of the available
+			// PMEM must be used for LVM, otherwise other tests cannot
+			// run after the LVM driver was deployed once.
+			PMEMPercentage: 50,
+		},
+	}
 }
 
 // DescribeForAll registers tests like gomega.Describe does, except that

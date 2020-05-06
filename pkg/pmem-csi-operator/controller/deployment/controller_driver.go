@@ -38,6 +38,8 @@ type PmemCSIDriver struct {
 	*api.Deployment
 	// operators namespace used for creating sub-resources
 	namespace string
+
+	k8sVersion version.Version
 }
 
 // checkIfNameClash check if d.Spec.DriverName is not clashing with any of the
@@ -72,6 +74,11 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 		if err != nil {
 			return true, err
 		}
+
+		// This is probably not the right solution for https://github.com/intel/pmem-csi/issues/617.
+		// Instead of getting a list of changes, d.changesFromPreDeployed should tell us what
+		// the old deployment looks like. The change list just gets ignored anyway.
+		oldDeployment = d.Deployment
 	}
 
 	klog.Infof("Deployment: %q, state: %q", d.Name, d.Status.Phase)
@@ -182,14 +189,14 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 	// Force update all deployment objects
 	if updateAll {
 		klog.Infof("Updating all objects for deployment %q", d.Name)
-		objs, err := d.getDeploymentObjects(r)
+		objs, err := d.getDeploymentObjects()
 		if err != nil {
 			return true, err
 		}
 		objects = append(objects, objs...)
 	} else {
 		if updateSecrets {
-			objs, err := d.getSecrets(r)
+			objs, err := d.getSecrets()
 			if err != nil {
 				return true, err
 			}
@@ -246,7 +253,7 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 }
 
 func (d *PmemCSIDriver) deployObjects(r *ReconcileDeployment) error {
-	objects, err := d.getDeploymentObjects(r)
+	objects, err := d.getDeploymentObjects()
 	if err != nil {
 		return err
 	}
@@ -259,14 +266,14 @@ func (d *PmemCSIDriver) deployObjects(r *ReconcileDeployment) error {
 }
 
 // getDeploymentObjects returns all objects that are part of a driver deployment.
-func (d *PmemCSIDriver) getDeploymentObjects(r *ReconcileDeployment) ([]runtime.Object, error) {
-	objects, err := d.getSecrets(r)
+func (d *PmemCSIDriver) getDeploymentObjects() ([]runtime.Object, error) {
+	objects, err := d.getSecrets()
 	if err != nil {
 		return nil, err
 	}
 
 	objects = append(objects,
-		d.getCSIDriver(r.k8sVersion),
+		d.getCSIDriver(),
 		d.getControllerServiceAccount(),
 		d.getControllerProvisionerRole(),
 		d.getControllerProvisionerRoleBinding(),
@@ -281,7 +288,7 @@ func (d *PmemCSIDriver) getDeploymentObjects(r *ReconcileDeployment) ([]runtime.
 	return objects, nil
 }
 
-func (d *PmemCSIDriver) getSecrets(r *ReconcileDeployment) ([]runtime.Object, error) {
+func (d *PmemCSIDriver) getSecrets() ([]runtime.Object, error) {
 	// Encoded private keys and certificates
 	caCert := d.Spec.CACert
 	registryPrKey := d.Spec.RegistryPrivateKey
@@ -346,9 +353,8 @@ func (d *PmemCSIDriver) getSecrets(r *ReconcileDeployment) ([]runtime.Object, er
 	}
 
 	return []runtime.Object{
-		d.getSecret("pmem-ca", nil, caCert),
-		d.getSecret("pmem-registry", registryPrKey, registryCert),
-		d.getSecret("pmem-node-controller", ncPrKey, ncCert),
+		d.getSecret("registry-secrets", caCert, registryPrKey, registryCert),
+		d.getSecret("node-secrets", caCert, ncPrKey, ncCert),
 	}, nil
 }
 
@@ -401,7 +407,7 @@ func (d *PmemCSIDriver) getOwnerReference() metav1.OwnerReference {
 	}
 }
 
-func (d *PmemCSIDriver) getCSIDriver(k8sVersion version.Version) *storagev1beta1.CSIDriver {
+func (d *PmemCSIDriver) getCSIDriver() *storagev1beta1.CSIDriver {
 	attachRequired := false
 	podInfoOnMount := true
 
@@ -418,7 +424,7 @@ func (d *PmemCSIDriver) getCSIDriver(k8sVersion version.Version) *storagev1beta1
 	}
 
 	// Volume lifecycle modes are supported only after k8s v1.16
-	if k8sVersion.Compare(1, 16) >= 0 {
+	if d.k8sVersion.Compare(1, 16) >= 0 {
 		csiDriver.Spec.VolumeLifecycleModes = []storagev1beta1.VolumeLifecycleMode{
 			storagev1beta1.VolumeLifecyclePersistent,
 			storagev1beta1.VolumeLifecycleEphemeral,
@@ -428,7 +434,7 @@ func (d *PmemCSIDriver) getCSIDriver(k8sVersion version.Version) *storagev1beta1
 	return csiDriver
 }
 
-func (d *PmemCSIDriver) getSecret(cn string, ecodedKey []byte, ecnodedCert []byte) *corev1.Secret {
+func (d *PmemCSIDriver) getSecret(cn string, ca, ecodedKey, ecnodedCert []byte) *corev1.Secret {
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Secret",
@@ -437,8 +443,10 @@ func (d *PmemCSIDriver) getSecret(cn string, ecodedKey []byte, ecnodedCert []byt
 		ObjectMeta: d.getObjectMeta(d.Name+"-"+cn, false),
 		Type:       corev1.SecretTypeTLS,
 		Data: map[string][]byte{
-			corev1.TLSPrivateKeyKey: ecodedKey,
-			corev1.TLSCertKey:       ecnodedCert,
+			// Same names as in the example secrets and in the v1 API.
+			"ca.crt":  ca,          // no standard name for this one
+			"tls.key": ecodedKey,   // v1.TLSPrivateKeyKey
+			"tls.crt": ecnodedCert, // v1.TLSCertKey
 		},
 	}
 }
@@ -491,7 +499,7 @@ func (d *PmemCSIDriver) getControllerServiceAccount() *corev1.ServiceAccount {
 			Kind:       "ServiceAccount",
 			APIVersion: "v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name, false),
+		ObjectMeta: d.getObjectMeta(d.Name+"-controller", false),
 	}
 }
 
@@ -501,7 +509,7 @@ func (d *PmemCSIDriver) getControllerProvisionerRole() *rbacv1.Role {
 			Kind:       "Role",
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name, false),
+		ObjectMeta: d.getObjectMeta(d.Name+"-external-provisioner-cfg", false),
 		Rules: []rbacv1.PolicyRule{
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
@@ -527,18 +535,18 @@ func (d *PmemCSIDriver) getControllerProvisionerRoleBinding() *rbacv1.RoleBindin
 			Kind:       "RoleBinding",
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name, false),
+		ObjectMeta: d.getObjectMeta(d.Name+"-csi-provisioner-role-cfg", false),
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      d.Name,
+				Name:      d.Name + "-controller",
 				Namespace: d.namespace,
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "Role",
-			Name:     d.Name,
+			Name:     d.Name + "-external-provisioner-cfg",
 		},
 	}
 }
@@ -549,7 +557,7 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRole() *rbacv1.ClusterRol
 			Kind:       "ClusterRole",
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name, true),
+		ObjectMeta: d.getObjectMeta(d.Name+"-external-provisioner-runner", true),
 		Rules: []rbacv1.PolicyRule{
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
@@ -610,18 +618,18 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRoleBinding() *rbacv1.Clu
 			Kind:       "ClusterRoleBinding",
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name, true),
+		ObjectMeta: d.getObjectMeta(d.Name+"-csi-provisioner-role", true),
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      d.Name,
+				Name:      d.Name + "-controller",
 				Namespace: d.namespace,
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     d.Name,
+			Name:     d.Name + "-external-provisioner-runner",
 		},
 	}
 }
@@ -652,7 +660,7 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 						}),
 				},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: d.Name,
+					ServiceAccountName: d.Name + "-controller",
 					Containers: []corev1.Container{
 						d.getControllerContainer(),
 						d.getProvisionerContainer(),
@@ -668,31 +676,7 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 							Name: "registry-cert",
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: d.Name + "-pmem-registry",
-									Items: []corev1.KeyToPath{
-										{
-											Key:  "tls.crt",
-											Path: "pmem-csi-registry.crt",
-										},
-										{
-											Key:  "tls.key",
-											Path: "pmem-csi-registry.key",
-										},
-									},
-								},
-							},
-						},
-						{
-							Name: "ca-cert",
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: d.Name + "-pmem-ca",
-									Items: []corev1.KeyToPath{
-										{
-											Key:  "tls.crt",
-											Path: "ca.crt",
-										},
-									},
+									SecretName: d.Name + "-registry-secrets",
 								},
 							},
 						},
@@ -763,19 +747,19 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 							},
 						},
 						{
-							Name: "pmem-state-dir",
+							Name: "node-cert",
 							VolumeSource: corev1.VolumeSource{
-								HostPath: &corev1.HostPathVolumeSource{
-									Path: "/var/lib/" + d.Spec.DriverName,
-									Type: &directoryOrCreate,
+								Secret: &corev1.SecretVolumeSource{
+									SecretName: d.Name + "-node-secrets",
 								},
 							},
 						},
 						{
-							Name: "sys-dir",
+							Name: "pmem-state-dir",
 							VolumeSource: corev1.VolumeSource{
 								HostPath: &corev1.HostPathVolumeSource{
-									Path: "/sys",
+									// TODO: decide how to handle the state dir (https://github.com/intel/pmem-csi/issues/614)
+									Path: "/var/lib/pmem-csi.intel.com",
 									Type: &directoryOrCreate,
 								},
 							},
@@ -790,34 +774,11 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 							},
 						},
 						{
-							Name: "controller-cert",
+							Name: "sys-dir",
 							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: d.Name + "-pmem-node-controller",
-									Items: []corev1.KeyToPath{
-										{
-											Key:  "tls.crt",
-											Path: "pmem-csi-node-controller.crt",
-										},
-										{
-											Key:  "tls.key",
-											Path: "pmem-csi-node-controller.key",
-										},
-									},
-								},
-							},
-						},
-						{
-							Name: "ca-cert",
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: d.Name + "-pmem-ca",
-									Items: []corev1.KeyToPath{
-										{
-											Key:  "tls.crt",
-											Path: "ca.crt",
-										},
-									},
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/sys",
+									Type: &directoryOrCreate,
 								},
 							},
 						},
@@ -827,7 +788,7 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 		},
 	}
 
-	if d.Spec.DeviceMode == "lvm" {
+	if d.Spec.DeviceMode == api.DeviceModeLVM {
 		ds.Spec.Template.Spec.InitContainers = []corev1.Container{
 			d.getNamespaceInitContainer(),
 			d.getVolumeGroupInitContainer(),
@@ -837,41 +798,39 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 	return ds
 }
 
-func (d *PmemCSIDriver) getControllerArgs() []string {
-	args := []string{
+func (d *PmemCSIDriver) getControllerCommand() []string {
+	return []string{
+		"/usr/local/bin/pmem-csi-driver",
 		fmt.Sprintf("-v=%d", d.Spec.LogLevel),
 		"-mode=controller",
-		"-drivername=" + d.Spec.DriverName,
 		"-endpoint=unix:///csi/csi-controller.sock",
 		fmt.Sprintf("-registryEndpoint=tcp://0.0.0.0:%d", controllerServicePort),
 		fmt.Sprintf("-metricsListen=:%d", controllerMetricsPort),
 		"-nodeid=$(KUBE_NODE_NAME)",
-		"-caFile=/ca-certs/ca.crt",
-		"-certFile=/certs/pmem-csi-registry.crt",
-		"-keyFile=/certs/pmem-csi-registry.key",
+		"-caFile=/certs/ca.crt",
+		"-certFile=/certs/tls.crt",
+		"-keyFile=/certs/tls.key",
+		"-drivername=$(PMEM_CSI_DRIVER_NAME)",
 	}
-
-	return args
 }
 
-func (d *PmemCSIDriver) getNodeDriverArgs() []string {
-	args := []string{
+func (d *PmemCSIDriver) getNodeDriverCommand() []string {
+	return []string{
+		"/usr/local/bin/pmem-csi-driver",
 		fmt.Sprintf("-deviceManager=%s", d.Spec.DeviceMode),
 		fmt.Sprintf("-v=%d", d.Spec.LogLevel),
-		"-drivername=" + d.Spec.DriverName,
 		"-mode=node",
-		"-endpoint=unix:///var/lib/" + d.Spec.DriverName + "/csi.sock",
+		"-endpoint=unix:///pmem-csi/csi.sock",
 		"-nodeid=$(KUBE_NODE_NAME)",
 		fmt.Sprintf("-controllerEndpoint=tcp://$(KUBE_POD_IP):%d", nodeControllerPort),
 		// User controller service name(== deployment name) as registry endpoint.
 		fmt.Sprintf("-registryEndpoint=tcp://%s-controller:%d", d.Name, controllerServicePort),
-		"-statePath=/var/lib/" + d.Spec.DriverName,
-		"-caFile=/ca-certs/ca.crt",
-		"-certFile=/certs/pmem-csi-node-controller.crt",
-		"-keyFile=/certs/pmem-csi-node-controller.key",
+		"-caFile=/certs/ca.crt",
+		"-certFile=/certs/tls.crt",
+		"-keyFile=/certs/tls.key",
+		"-statePath=/pmem-csi",
+		"-drivername=$(PMEM_CSI_DRIVER_NAME)",
 	}
-
-	return args
 }
 
 func (d *PmemCSIDriver) getControllerContainer() corev1.Container {
@@ -879,8 +838,7 @@ func (d *PmemCSIDriver) getControllerContainer() corev1.Container {
 		Name:            "pmem-driver",
 		Image:           d.Spec.Image,
 		ImagePullPolicy: d.Spec.PullPolicy,
-		Command:         []string{"/usr/local/bin/pmem-csi-driver"},
-		Args:            d.getControllerArgs(),
+		Command:         d.getControllerCommand(),
 		Env: []corev1.EnvVar{
 			{
 				Name: "KUBE_NODE_NAME",
@@ -895,6 +853,10 @@ func (d *PmemCSIDriver) getControllerContainer() corev1.Container {
 				Name:  "TERMINATION_LOG_PATH",
 				Value: "/tmp/termination-log",
 			},
+			{
+				Name:  "PMEM_CSI_DRIVER_NAME",
+				Value: d.Spec.DriverName,
+			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -902,15 +864,12 @@ func (d *PmemCSIDriver) getControllerContainer() corev1.Container {
 				MountPath: "/certs",
 			},
 			{
-				Name:      "ca-cert",
-				MountPath: "/ca-certs",
-			},
-			{
 				Name:      "plugin-socket-dir",
 				MountPath: "/csi",
 			},
 		},
-		Resources: *d.Spec.ControllerResources,
+		Resources:              *d.Spec.ControllerResources,
+		TerminationMessagePath: "/tmp/termination-log",
 	}
 }
 
@@ -921,8 +880,7 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 		Name:            "pmem-driver",
 		Image:           d.Spec.Image,
 		ImagePullPolicy: d.Spec.PullPolicy,
-		Command:         []string{"/usr/local/bin/pmem-csi-driver"},
-		Args:            d.getNodeDriverArgs(),
+		Command:         d.getNodeDriverCommand(),
 		Env: []corev1.EnvVar{
 			{
 				Name: "KUBE_NODE_NAME",
@@ -943,6 +901,10 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 				},
 			},
 			{
+				Name:  "PMEM_CSI_DRIVER_NAME",
+				Value: d.Spec.DriverName,
+			},
+			{
 				Name:  "TERMINATION_LOG_PATH",
 				Value: "/tmp/termination-log",
 			},
@@ -959,26 +921,23 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 				MountPropagation: &bidirectional,
 			},
 			{
-				Name:      "controller-cert",
+				Name:      "node-cert",
 				MountPath: "/certs",
-			},
-			{
-				Name:      "ca-cert",
-				MountPath: "/ca-certs",
-			},
-			{
-				Name:      "pmem-state-dir",
-				MountPath: "/var/lib/" + d.Spec.DriverName,
 			},
 			{
 				Name:      "dev-dir",
 				MountPath: "/dev",
+			},
+			{
+				Name:      "pmem-state-dir",
+				MountPath: "/pmem-csi",
 			},
 		},
 		Resources: *d.Spec.NodeResources,
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &true,
 		},
+		TerminationMessagePath: "/tmp/termination-log",
 	}
 
 	// Driver in 'direct' mode requires /sys mounting
@@ -994,15 +953,15 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 
 func (d *PmemCSIDriver) getProvisionerContainer() corev1.Container {
 	return corev1.Container{
-		Name:            "provisioner",
+		Name:            "external-provisioner",
 		Image:           d.Spec.ProvisionerImage,
 		ImagePullPolicy: d.Spec.PullPolicy,
 		Args: []string{
-			"--timeout=5m",
-			fmt.Sprintf("--v=%d", d.Spec.LogLevel),
+			fmt.Sprintf("-v=%d", d.Spec.LogLevel),
 			"--csi-address=/csi/csi-controller.sock",
 			"--feature-gates=Topology=true",
 			"--strict-topology=true",
+			"--timeout=5m",
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -1022,9 +981,7 @@ func (d *PmemCSIDriver) getNamespaceInitContainer() corev1.Container {
 		ImagePullPolicy: d.Spec.PullPolicy,
 		Command: []string{
 			"/usr/local/bin/pmem-ns-init",
-		},
-		Args: []string{
-			fmt.Sprintf("--v=%d", d.Spec.LogLevel),
+			fmt.Sprintf("-v=%d", d.Spec.LogLevel),
 			fmt.Sprintf("--useforfsdax=%d", d.Spec.PMEMPercentage),
 		},
 		Env: []corev1.EnvVar{
@@ -1043,6 +1000,7 @@ func (d *PmemCSIDriver) getNamespaceInitContainer() corev1.Container {
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &true,
 		},
+		TerminationMessagePath: "/tmp/pmem-ns-init-termination-log",
 	}
 }
 
@@ -1054,9 +1012,7 @@ func (d *PmemCSIDriver) getVolumeGroupInitContainer() corev1.Container {
 		ImagePullPolicy: d.Spec.PullPolicy,
 		Command: []string{
 			"/usr/local/bin/pmem-vgm",
-		},
-		Args: []string{
-			fmt.Sprintf("--v=%d", d.Spec.LogLevel),
+			fmt.Sprintf("-v=%d", d.Spec.LogLevel),
 		},
 		Env: []corev1.EnvVar{
 			{
@@ -1068,6 +1024,7 @@ func (d *PmemCSIDriver) getVolumeGroupInitContainer() corev1.Container {
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &true,
 		},
+		TerminationMessagePath: "/tmp/pmem-vgm-termination-log",
 	}
 }
 
@@ -1077,8 +1034,8 @@ func (d *PmemCSIDriver) getNodeRegistrarContainer() corev1.Container {
 		Image:           d.Spec.NodeRegistrarImage,
 		ImagePullPolicy: d.Spec.PullPolicy,
 		Args: []string{
-			fmt.Sprintf("--v=%d", d.Spec.LogLevel),
-			fmt.Sprintf("--kubelet-registration-path=/var/lib/%s/csi.sock", d.Spec.DriverName),
+			fmt.Sprintf("-v=%d", d.Spec.LogLevel),
+			"--kubelet-registration-path=/var/lib/$(PMEM_CSI_DRIVER_NAME)/csi.sock",
 			"--csi-address=/pmem-csi/csi.sock",
 		},
 		VolumeMounts: []corev1.VolumeMount{
@@ -1089,6 +1046,12 @@ func (d *PmemCSIDriver) getNodeRegistrarContainer() corev1.Container {
 			{
 				Name:      "registration-dir",
 				MountPath: "/registration",
+			},
+		},
+		Env: []corev1.EnvVar{
+			{
+				Name:  "PMEM_CSI_DRIVER_NAME",
+				Value: d.Spec.DriverName,
 			},
 		},
 		Resources: *d.Spec.NodeResources,
@@ -1139,9 +1102,6 @@ func (d *PmemCSIDriver) changesFromPreDeployed(r *ReconcileDeployment) (map[api.
 		if c.Name == "pmem-driver" {
 			args := argsToMap(c.Args)
 
-			if args["-driverName"] != d.Spec.DriverName {
-				changes[api.DriverName] = struct{}{}
-			}
 			if api.DeviceMode(args["-deviceManager"]) != d.Spec.DeviceMode {
 				changes[api.DriverMode] = struct{}{}
 			}
