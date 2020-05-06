@@ -32,21 +32,20 @@ func NewPmemDeviceManagerNdctl() (PmemDeviceManager, error) {
 	// Check is /sys writable. If not then there is no point starting
 	mounts, _ := mount.New("").List()
 	for _, mnt := range mounts {
-		klog.V(5).Infof("NewPmemDeviceManagerNdctl: Check mounts: device=%s path=%s opts=%s",
-			mnt.Device, mnt.Path, mnt.Opts)
 		if mnt.Device == "sysfs" && mnt.Path == "/sys" {
+			klog.V(5).Infof("NewPmemDeviceManagerNdctl: sysfs mount options:%s", mnt.Opts)
 			for _, opt := range mnt.Opts {
 				if opt == "rw" {
 					klog.V(4).Info("NewPmemDeviceManagerNdctl: /sys mounted read-write, good")
+					return &pmemNdctl{}, nil
 				} else if opt == "ro" {
 					return nil, fmt.Errorf("FATAL: /sys mounted read-only, can not operate")
 				}
 			}
-			break
+			return nil, fmt.Errorf("FATAL: /sys mount entry exists but does not have neither 'rw' or 'ro' option")
 		}
 	}
-
-	return &pmemNdctl{}, nil
+	return nil, fmt.Errorf("FATAL: /sys mount entry not present")
 }
 
 func (pmem *pmemNdctl) GetCapacity() (uint64, error) {

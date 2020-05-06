@@ -85,9 +85,9 @@ while ! dnf install -y $packages; do
     fi
     cnt=$(($cnt + 1))
     # If it works, proceed immediately. If it fails, sleep and try again without aborting on an error.
-    if ! dnf update -y --refresh; then
+    if ! dnf update -q -y --refresh; then
         sleep 20
-        dnf update -y --refresh || true
+        dnf update -q -y --refresh || true
     fi
 done
 
@@ -100,7 +100,7 @@ if $INIT_KUBERNETES; then
     # We create /opt/cni/bin containing symlinks for every binary:
     mkdir -p /opt/cni/bin
     for i in /usr/libexec/cni/*; do
-        ln -vs $i /opt/cni/bin/
+        ln -s $i /opt/cni/bin/
     done
 
     # Testing may involve a Docker registry running on the build host (see
