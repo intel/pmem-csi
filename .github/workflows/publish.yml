@@ -4,6 +4,7 @@ on:
   push:
     branches:
         - devel
+        - release-0.7
 
 jobs:
   build:
@@ -11,26 +12,43 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v1
     - name: Install dependencies
       run: |
-        export PATH="$HOME/.local/bin:$PATH"
-        sudo apt-get install -y python3-setuptools
-        pip3 install --user -r docs/requirements.txt
-    - name: Build the docs
-      run: |
-        export PATH="$HOME/.local/bin:$PATH"
-        make html
-    - name: Deploy the docs
+        sudo apt-get update
+        sudo apt-get install -y python3-venv git
+    - uses: actions/checkout@v2
+      with:
+        ref: devel
+    - name: Set up shared doc directory
       run: |
         mkdir $HOME/output
-        mv _output/html $HOME/output/latest
         touch $HOME/output/.nojekyll
-        mv docs/html/index2.html $HOME/output/index.html
+        # This is the static index page for https://intel.github.io/pmem-csi,
+        # copied from the "devel" branch.
+        cp docs/html/index2.html $HOME/output/index.html
+    - name: Build latest
+      run: |
+        GITHUB_SHA=$(git rev-parse HEAD)
+        export GITHUB_SHA
+        rm -rf _work/venv
+        make vhtml
+        mv _output/html $HOME/output/latest
+    - uses: actions/checkout@v2
+      with:
+        ref: release-0.7
+    - name: Build release-0.7
+      run: |
+        GITHUB_SHA=$(git rev-parse HEAD)
+        export GITHUB_SHA
+        rm -rf _work/venv
+        make vhtml
+        mv _output/html $HOME/output/0.7
+    - name: Deploy the docs
+      run: |
         cd $HOME/output
         git init
         git config --global user.name "${GITHUB_ACTOR}"
         git config --global user.email "${GITHUB_ACTOR}@github.com"
         git add .
         git commit -m "latest html output"
-        git push -f https://${GITHUB_ACTOR}:${{secrets.ACCESS_TOKEN}}@github.com/intel/pmem-csi.git HEAD:gh-pages
+        git push -f https://${GITHUB_ACTOR}:${{secrets.ACCESS_TOKEN}}@github.com/${GITHUB_REPOSITORY}.git HEAD:gh-pages
