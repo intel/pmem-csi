@@ -273,8 +273,40 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 		vol = ns.cs.getVolumeByName(req.VolumeId)
 	}
 
+	// The CSI spec 1.2 requires that the SP returns NOT_FOUND
+	// when the volume is not known.  This is problematic for
+	// idempotent calls, in particular for ephemeral volumes,
+	// because the first call will remove the volume and then the
+	// second would fail. Even for persistent volumes this may be
+	// problematic and therefore it was already changed for
+	// ControllerUnpublishVolume
+	// (https://github.com/container-storage-interface/spec/pull/375).
+	//
+	// For NodeUnpublishVolume, a bug is currently pending in
+	// https://github.com/kubernetes/kubernetes/issues/90752.
+
+	// Check if the target path is really a mount point. If it's not a mount point *and* we don't
+	// have such a volume, then we are done.
+	notMnt, err := ns.mounter.IsLikelyNotMountPoint(targetPath)
+	if (notMnt || err != nil && !os.IsNotExist(err)) && vol == nil {
+		klog.V(5).Infof("NodeUnpublishVolume: %s is not mount point, no such volume -> done", targetPath)
+		return &csi.NodeUnpublishVolumeResponse{}, nil
+	}
+
+	// If we don't have volume information, we can't proceed. But
+	// what we return depends on the circumstances.
 	if vol == nil {
-		return nil, status.Errorf(codes.NotFound, "no volume found with volume id %q", req.VolumeId)
+		if err == nil && !notMnt {
+			// It is a mount point and we don't know the volume. Don't
+			// do anything because the call is invalid. We return
+			// NOT_FOUND as required by the spec.
+			return nil, status.Errorf(codes.NotFound, "no volume found with volume id %q", req.VolumeId)
+		}
+		// No volume, no mount point. Looks like an
+		// idempotent call for an operation that was
+		// completed earlier, so don't return an
+		// error.
+		return &csi.NodeUnpublishVolumeResponse{}, nil
 	}
 
 	p, err := parameters.Parse(parameters.NodeVolumeOrigin, vol.Params)
@@ -285,18 +317,15 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 		return nil, status.Errorf(codes.Internal, "previously stored volume parameters for volume with ID %q: %v", req.VolumeId, err)
 	}
 
-	// Check if the target path is really a mount point. If its not a mount point do nothing
-	if notMnt, err := ns.mounter.IsLikelyNotMountPoint(targetPath); notMnt || err != nil && !os.IsNotExist(err) {
-		klog.V(5).Infof("NodeUnpublishVolume: %s is not mount point, skip", targetPath)
-		return &csi.NodeUnpublishVolumeResponse{}, nil
+	// Unmounting the image if still mounted. It might have been unmounted before if
+	// a previous NodeUnpublishVolume call was interrupted.
+	if err == nil && !notMnt {
+		klog.V(3).Infof("NodeUnpublishVolume: unmount %s", targetPath)
+		if err := ns.mounter.Unmount(targetPath); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		klog.V(5).Infof("NodeUnpublishVolume: volume id:%s targetpath:%s has been unmounted", req.VolumeId, targetPath)
 	}
-
-	// Unmounting the image
-	klog.V(3).Infof("NodeUnpublishVolume: unmount %s", targetPath)
-	if err := ns.mounter.Unmount(targetPath); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	klog.V(5).Infof("NodeUnpublishVolume: volume id:%s targetpath:%s has been unmounted", req.VolumeId, targetPath)
 
 	os.Remove(targetPath) // nolint: gosec, errorchk
 
@@ -439,6 +468,11 @@ func (ns *nodeServer) createEphemeralDevice(ctx context.Context, req *csi.NodePu
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "ephemeral inline volume parameters: "+err.Error())
 	}
+
+	// If the caller has use the heuristic for detecting ephemeral volumes, the flag won't
+	// be set. Fix that here.
+	ephemeral := parameters.PersistencyEphemeral
+	p.Persistency = &ephemeral
 
 	// Create new device, using the same code that the normal CreateVolume also uses,
 	// so internally this volume will be tracked like persistent volumes.

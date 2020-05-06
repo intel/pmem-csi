@@ -682,6 +682,74 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 					Expect(len(currentVolumes.Entries)).To(Equal(len(node.volumes)), "same volumes as before on node %s", nodeName)
 				}
 			})
+
+			Context("ephemeral volumes", func() {
+				doit := func(withFlag bool, repeatCalls int) {
+					targetPath := sc.TargetPath + "/ephemeral"
+					params := map[string]string{
+						"size": "1Mi",
+					}
+					if withFlag {
+						params["csi.storage.k8s.io/ephemeral"] = "true"
+					}
+					req := csi.NodePublishVolumeRequest{
+						VolumeId:      "fake-ephemeral-volume-id",
+						VolumeContext: params,
+						VolumeCapability: &csi.VolumeCapability{
+							AccessType: &csi.VolumeCapability_Mount{
+								Mount: &csi.VolumeCapability_MountVolume{},
+							},
+							AccessMode: &csi.VolumeCapability_AccessMode{
+								Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+							},
+						},
+						TargetPath: targetPath,
+					}
+					published := false
+					var failedPublish, failedUnpublish error
+					for i := 0; i < repeatCalls; i++ {
+						_, err := nc.NodePublishVolume(context.Background(), &req)
+						if err == nil {
+							published = true
+							break
+						} else if failedPublish == nil {
+							failedPublish = fmt.Errorf("NodePublishVolume for ephemeral volume, attempt #%d: %v", i, err)
+						}
+					}
+					if published {
+						req := csi.NodeUnpublishVolumeRequest{
+							VolumeId:   "fake-ephemeral-volume-id",
+							TargetPath: targetPath,
+						}
+						for i := 0; i < repeatCalls; i++ {
+							_, err := nc.NodeUnpublishVolume(context.Background(), &req)
+							if err != nil && failedUnpublish == nil {
+								failedUnpublish = fmt.Errorf("NodeUnpublishVolume for ephemeral volume, attempt #%d: %v", i, err)
+							}
+						}
+					}
+					framework.ExpectNoError(failedPublish)
+					framework.ExpectNoError(failedUnpublish)
+				}
+
+				doall := func(withFlag bool) {
+					It("work", func() {
+						doit(withFlag, 1)
+					})
+
+					It("are idempotent", func() {
+						doit(withFlag, 10)
+					})
+				}
+
+				Context("with csi.storage.k8s.io/ephemeral", func() {
+					doall(true)
+				})
+
+				Context("without csi.storage.k8s.io/ephemeral", func() {
+					doall(false)
+				})
+			})
 		})
 	})
 })
