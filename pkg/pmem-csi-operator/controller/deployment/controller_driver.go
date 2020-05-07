@@ -10,6 +10,7 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -24,7 +25,7 @@ import (
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	apiruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog"
 )
 
@@ -184,7 +185,7 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 		}
 	}
 
-	objects := []runtime.Object{}
+	objects := []apiruntime.Object{}
 
 	// Force update all deployment objects
 	if updateAll {
@@ -266,7 +267,7 @@ func (d *PmemCSIDriver) deployObjects(r *ReconcileDeployment) error {
 }
 
 // getDeploymentObjects returns all objects that are part of a driver deployment.
-func (d *PmemCSIDriver) getDeploymentObjects() ([]runtime.Object, error) {
+func (d *PmemCSIDriver) getDeploymentObjects() ([]apiruntime.Object, error) {
 	objects, err := d.getSecrets()
 	if err != nil {
 		return nil, err
@@ -288,7 +289,7 @@ func (d *PmemCSIDriver) getDeploymentObjects() ([]runtime.Object, error) {
 	return objects, nil
 }
 
-func (d *PmemCSIDriver) getSecrets() ([]runtime.Object, error) {
+func (d *PmemCSIDriver) getSecrets() ([]apiruntime.Object, error) {
 	// Encoded private keys and certificates
 	caCert := d.Spec.CACert
 	registryPrKey := d.Spec.RegistryPrivateKey
@@ -352,7 +353,11 @@ func (d *PmemCSIDriver) getSecrets() ([]runtime.Object, error) {
 		}
 	}
 
-	return []runtime.Object{
+	// Instead of waiting for next GC cycle, initiate garbage collector manually
+	// so that the unneeded CA key, certificate get removed.
+	defer runtime.GC()
+
+	return []apiruntime.Object{
 		d.getSecret("registry-secrets", caCert, registryPrKey, registryCert),
 		d.getSecret("node-secrets", caCert, ncPrKey, ncCert),
 	}, nil
@@ -434,7 +439,7 @@ func (d *PmemCSIDriver) getCSIDriver() *storagev1beta1.CSIDriver {
 	return csiDriver
 }
 
-func (d *PmemCSIDriver) getSecret(cn string, ca, ecodedKey, ecnodedCert []byte) *corev1.Secret {
+func (d *PmemCSIDriver) getSecret(cn string, ca, encodedKey, encodedCert []byte) *corev1.Secret {
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Secret",
@@ -445,8 +450,8 @@ func (d *PmemCSIDriver) getSecret(cn string, ca, ecodedKey, ecnodedCert []byte) 
 		Data: map[string][]byte{
 			// Same names as in the example secrets and in the v1 API.
 			"ca.crt":  ca,          // no standard name for this one
-			"tls.key": ecodedKey,   // v1.TLSPrivateKeyKey
-			"tls.crt": ecnodedCert, // v1.TLSCertKey
+			"tls.key": encodedKey,  // v1.TLSPrivateKeyKey
+			"tls.crt": encodedCert, // v1.TLSCertKey
 		},
 	}
 }

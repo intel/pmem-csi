@@ -10,6 +10,7 @@ import (
 	"crypto"
 	"errors"
 	"math"
+	"runtime"
 	"time"
 
 	"crypto/rand"
@@ -22,12 +23,21 @@ import (
 )
 
 const (
-	rasKeySize = 2048
+	rasKeySize = 3072
 )
 
 // NewPrivateKey generate an rsa private key
 func NewPrivateKey() (*rsa.PrivateKey, error) {
-	return rsa.GenerateKey(rand.Reader, rasKeySize)
+	key, err := rsa.GenerateKey(rand.Reader, rasKeySize)
+	if err != nil {
+		return nil, err
+	}
+
+	runtime.SetFinalizer(key, func(k *rsa.PrivateKey) {
+		// Zero key after usage
+		*k = rsa.PrivateKey{}
+	})
+	return key, nil
 }
 
 // EncodeKey returns PEM encoding of give private key
@@ -45,7 +55,18 @@ func EncodeKey(key *rsa.PrivateKey) []byte {
 func DecodeKey(encodedKey []byte) (*rsa.PrivateKey, error) {
 	block, _ := pem.Decode(encodedKey)
 
-	return x509.ParsePKCS1PrivateKey(block.Bytes)
+	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	wipe(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	runtime.SetFinalizer(key, func(k *rsa.PrivateKey) {
+		// Zero key after usage
+		*k = rsa.PrivateKey{}
+	})
+
+	return key, nil
 }
 
 // EncodeCert returns PEM encoding of given cert
@@ -63,7 +84,23 @@ func EncodeCert(cert *x509.Certificate) []byte {
 func DecodeCert(encodedCert []byte) (*x509.Certificate, error) {
 	block, _ := pem.Decode(encodedCert)
 
-	return x509.ParseCertificate(block.Bytes)
+	cert, err := x509.ParseCertificate(block.Bytes)
+	wipe(block.Bytes)
+
+	if err != nil {
+		return nil, err
+	}
+	runtime.SetFinalizer(cert, func(c *x509.Certificate) {
+		*c = x509.Certificate{}
+	})
+
+	return cert, nil
+}
+
+func wipe(arr []byte) {
+	for i := range arr {
+		arr[i] = 0
+	}
 }
 
 // CA type representation for a self-signed certificate authority
@@ -164,11 +201,21 @@ func NewCACertificate(key *rsa.PrivateKey) (*x509.Certificate, error) {
 		},
 	}
 	certBytes, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, key.Public(), key)
+	*tmpl = x509.Certificate{}
 	if err != nil {
 		return nil, err
 	}
 
-	return x509.ParseCertificate(certBytes)
+	cert, err := x509.ParseCertificate(certBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	runtime.SetFinalizer(cert, func(c *x509.Certificate) {
+		*c = x509.Certificate{}
+	})
+
+	return cert, nil
 }
 
 func (ca *CA) generateCertificate(cn string, notBefore, notAfter time.Time, key crypto.PublicKey) (*x509.Certificate, error) {
@@ -191,9 +238,19 @@ func (ca *CA) generateCertificate(cn string, notBefore, notAfter time.Time, key 
 	}
 
 	certBytes, err := x509.CreateCertificate(rand.Reader, tmpl, ca.cert, key, ca.prKey)
+	*tmpl = x509.Certificate{}
 	if err != nil {
 		return nil, err
 	}
 
-	return x509.ParseCertificate(certBytes)
+	cert, err := x509.ParseCertificate(certBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	runtime.SetFinalizer(cert, func(c *x509.Certificate) {
+		*c = x509.Certificate{}
+	})
+
+	return cert, nil
 }
