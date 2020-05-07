@@ -5,6 +5,7 @@
 ! Makefile
 ! cmd/**
 ! pkg/**
+! test/cmd/**
 ! test/test-config.d/**
 ! test/test-config.sh
 ! hack/**

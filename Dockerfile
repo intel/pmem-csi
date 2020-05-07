@@ -87,6 +87,9 @@ RUN set -x && \
     mv _output/pmem-csi-driver${BIN_SUFFIX} /usr/local/bin/pmem-csi-driver && \
     mv _output/pmem-vgm${BIN_SUFFIX} /usr/local/bin/pmem-vgm && \
     mv _output/pmem-ns-init${BIN_SUFFIX} /usr/local/bin/pmem-ns-init && \
+    if [ "$BIN_SUFFIX" = "-test" ]; then GOOS=linux GO111MODULE=on \
+        go build -o /usr/local/bin/pmem-dax-check ./test/cmd/pmem-dax-check && \
+	swupd bundle-add fio; fi && \
     mkdir -p /usr/local/share/package-licenses && \
     hack/copy-modules-license.sh /usr/local/share/package-licenses ./cmd/pmem-csi-driver ./cmd/pmem-vgm ./cmd/pmem-ns-init && \
     cp /go/LICENSE /usr/local/share/package-licenses/go.LICENSE && \
