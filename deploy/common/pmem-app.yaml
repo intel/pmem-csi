@@ -5,7 +5,7 @@ metadata:
 spec:
   containers:
     - name: my-frontend
-      image: busybox
+      image: intel/pmem-csi-driver-test:canary
       command: [ "sleep", "100000" ]
       volumeMounts:
       - mountPath: "/data"
@@ -22,7 +22,7 @@ metadata:
 spec:
   containers:
     - name: my-frontend
-      image: busybox
+      image: intel/pmem-csi-driver-test:canary
       command: [ "sleep", "100000" ]
       volumeMounts:
       - mountPath: "/data"
