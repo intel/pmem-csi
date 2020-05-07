@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pmem-memcached
+  namespace: default
+spec:
+  ports:
+  - name: db
+    port: 11211
+    protocol: TCP
+    targetPort: db
+  selector:
+    app.kubernetes.io/kind: memcached
+    app.kubernetes.io/name: pmem-memcached
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pmem-memcached
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/kind: memcached
+      app.kubernetes.io/name: pmem-memcached
+  serviceName: pmem-memcached
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/kind: memcached
+        app.kubernetes.io/name: pmem-memcached
+    spec:
+      initContainers:
+      - name: data-volume-init
+        # This first creates a file that is as large as root can make it (larger
+        # than a normal user because of reserved blocks). Size is rounded down to
+        # MiB because that is what memcached expects and 50 MiB are substracted
+        # for filesystem overhead and the memcached state files.
+        #
+        # Then it changes the ownership of the data volume so that the memcached user
+        # can read and write files there. The exact UID varies between
+        # memcached image versions (therefore we cannot use Kubernetes to change
+        # the ownership for us as that relies on a numeric value), but the "memcache"
+        # name is the same, so by running in the same image as memcached we can set
+        # the owner by name.
+        command:
+        - sh
+        - -c
+        - |
+          fallocate --length=$(( $(stat --file-system --format='%b * %s / 1024 / 1024 - 50' /data) ))MiB /data/memcached-memory-file &&
+          chown -R memcache /data
+        image: memcached:1.5.22
+        securityContext:
+          privileged: true
+          runAsUser: 0
+        volumeMounts:
+        - mountPath: /data
+          name: memcached-data-volume
+      containers:
+      - name: memcached
+        image: memcached:1.5.22
+        command:
+        - sh
+        - -c
+        - |
+          set -x
+          memcached --memory-limit=$(( $(stat --format='%s / 1024 / 1024' /data/memcached-memory-file) )) --memory-file=/data/memcached-memory-file $(MEMCACHED_ARGS) &
+          pid=$$!
+          trap 'kill -USR1 $$pid; wait $$pid' TERM
+          wait $$pid
+        ports:
+        - containerPort: 11211
+          name: db
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /data
+          name: memcached-data-volume
+        env:
+        - name: MEMCACHED_ARGS
+          value:
+      terminationGracePeriodSeconds: 30
+  volumeClaimTemplates:
+    - metadata:
+        name: memcached-data-volume
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        storageClassName: pmem-csi-sc-ext4
+        resources:
+          requests:
+            storage: 200Mi
