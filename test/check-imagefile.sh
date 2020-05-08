@@ -110,24 +110,41 @@ start_vm () {
     print_govm_yaml >"${GOVM_YAML}" || die "failed to create ${GOVM_YAML}"
     govm compose -f "${GOVM_YAML}" || die "govm failed"
     IP=$(govm list -f '{{select (filterRegexp . "Name" "^'${GOVM_NAME}'$") "IP"}}')
-    echo "Waiting for ssh connectivity on vm with ip $IP"
-    while ! ssh $SSH_ARGS ${CLOUD_USER}@${IP} exit 2>/dev/null; do
+}
+
+sshtovm () {
+    echo "Running $@ on VM."
+    while true; do
+        if out=$(ssh $SSH_ARGS ${CLOUD_USER}@${IP} "$@" 2>&1); then
+            # Success!
+            echo "$out"
+            return
+        fi
+        # SSH access to the VM is unavailable directly after booting and (with Fedora 31)
+        # even intermittently when the SSH server restarts. We deal with this by
+        # retrying for a while when we get "connection refused" errors.
         if [ "$SECONDS" -gt "$SSH_TIMEOUT" ]; then
             ( set -x;
               govm list
               docker ps
               docker logs govm.$(id -n -u).${GOVM_NAME}
             )
-            die "timeout accessing ${ip} through ssh"
+            die "timeout accessing ${IP} through ssh"
+        fi
+        if ! echo "$out" | grep -q "connect to host ${IP}"; then
+            # Some other error, probably in the command itself. Give up.
+            echo "$out"
+            return 1
         fi
     done
 }
 
 result=
 test_nvdimm () {
-    ssh $SSH_ARGS ${CLOUD_USER}@${IP} sudo mkdir -p /mnt || die "cannot created /mnt"
-    if ! ssh $SSH_ARGS ${CLOUD_USER}@${IP} sudo mount -odax /dev/pmem0 /mnt; then
-        ssh $SSH_ARGS ${CLOUD_USER}@${IP} sudo dmesg
+    sshtovm sudo mkdir -p /mnt || die "cannot created /mnt"
+    if ! sshtovm sudo mount -odax /dev/pmem0 /mnt; then
+        echo
+        sshtovm sudo dmesg
         die "cannot mount /dev/pmem0 with -odax"
     fi
     result="fstype=$(ssh $SSH_ARGS ${CLOUD_USER}@${IP} stat --file-system -c %T /mnt)"
