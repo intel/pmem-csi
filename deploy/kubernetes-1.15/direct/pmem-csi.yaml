@@ -231,6 +231,8 @@ spec:
         - --csi-address=/csi/csi-controller.sock
         - --feature-gates=Topology=true
         - --strict-topology=true
+        - --timeout=5m
+        - --strict-topology=true
         image: quay.io/k8scsi/csi-provisioner:v1.2.1
         imagePullPolicy: Always
         name: external-provisioner

@@ -1,0 +1,22 @@
+namePrefix: pmem-csi-
+
+# We have to use local files, see https://github.com/kubernetes-sigs/kustomize/issues/970.
+# The content of these files must match the image versions in the parent kustomize.yaml.
+resources:
+- external-provisioner-rbac.yaml
+
+# We use the upstream [Cluster]RoleBinding and just replace
+# the account name.
+patchesJson6902:
+- target:
+    group: rbac.authorization.k8s.io
+    version: v1
+    kind: ClusterRoleBinding
+    name: csi-provisioner-role
+  path: ../../patches/controller-role-patch.yaml
+- target:
+    group: rbac.authorization.k8s.io
+    version: v1
+    kind: RoleBinding
+    name: csi-provisioner-role-cfg
+  path: ../../patches/controller-role-patch.yaml
