@@ -28,7 +28,7 @@ curl --location --fail --silent \
     ${KUBECTL} apply -f -
 
 echo "Waiting for kata-deploy to label nodes..."
-TIMEOUT=120
+TIMEOUT=300
 while [ "$SECONDS" -lt "$TIMEOUT" ]; do
     # We either get "No resources found in default namespace." or header plus node names.
     if [ $(${KUBECTL} get nodes -l katacontainers.io/kata-runtime=true 2>&1 | wc -l) -gt 1 ]; then
