@@ -475,6 +475,12 @@ function cleanup() (
     if $FAILED; then
         set +xe
         echo "Cluster creation failed."
+        if [ -e ${CLUSTER_DIRECTORY}/kube.config ] && [ -e ${CLUSTER_DIRECTORY}/ssh.0 ]; then
+            echo "Kubernetes status: "
+            ${CLUSTER_DIRECTORY}/ssh.0 kubectl get all --all-namespaces -o wide
+        else
+            echo "No ${CLUSTER_DIRECTORY}/kube.config or no ssh.0 -> no Kubernetes."
+        fi
         echo "govm status:"
         govm list
         echo "Docker status:"
