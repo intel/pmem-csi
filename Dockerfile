@@ -51,6 +51,7 @@ RUN echo "For source code and licensing of ndctl, see https://github.com/pmem/nd
 FROM ${CLEAR_LINUX_BASE} as runtime
 ARG CLEAR_LINUX_BASE
 ARG SWUPD_UPDATE_ARG
+ARG BIN_SUFFIX
 LABEL maintainers="Intel"
 LABEL description="PMEM CSI Driver"
 
@@ -60,7 +61,9 @@ LABEL description="PMEM CSI Driver"
 # storge-utils - for lvm2 and ext4(e2fsprogs) utilities
 ARG CACHEBUST
 RUN echo "Updating runtime image from ${CLEAR_LINUX_BASE} to ${SWUPD_UPDATE_ARG:-the latest release}."
-RUN swupd update ${SWUPD_UPDATE_ARG} && swupd bundle-add file xfsprogs storage-utils && rm -rf /var/lib/swupd /var/tmp/swupd
+RUN swupd update ${SWUPD_UPDATE_ARG} && swupd bundle-add file xfsprogs storage-utils \
+    $(if [ "$BIN_SUFFIX" = "-test" ]; then echo fio; fi) && \
+    rm -rf /var/lib/swupd /var/tmp/swupd
 
 # Image in which PMEM-CSI binaries get built.
 FROM build as binaries
@@ -87,6 +90,8 @@ RUN set -x && \
     mv _output/pmem-csi-driver${BIN_SUFFIX} /usr/local/bin/pmem-csi-driver && \
     mv _output/pmem-vgm${BIN_SUFFIX} /usr/local/bin/pmem-vgm && \
     mv _output/pmem-ns-init${BIN_SUFFIX} /usr/local/bin/pmem-ns-init && \
+    if [ "$BIN_SUFFIX" = "-test" ]; then GOOS=linux GO111MODULE=on \
+        go build -o /usr/local/bin/pmem-dax-check ./test/cmd/pmem-dax-check; fi && \
     mkdir -p /usr/local/share/package-licenses && \
     hack/copy-modules-license.sh /usr/local/share/package-licenses ./cmd/pmem-csi-driver ./cmd/pmem-vgm ./cmd/pmem-ns-init && \
     cp /go/LICENSE /usr/local/share/package-licenses/go.LICENSE && \
