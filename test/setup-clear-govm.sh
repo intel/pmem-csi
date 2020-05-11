@@ -153,13 +153,21 @@ EOF
 After=$cri_daemon.service
 EOF
 
-        # flannel + CRI-O + Kata Containers needs a crio.conf change (https://clearlinux.org/documentation/clear-linux/tutorials/kubernetes):
+        # flannel + CRI-O + Kata Containers needs a crio.conf change (https://docs.01.org/clearlinux/latest/tutorials/kubernetes.html):
         #    If you are using CRI-O and flannel and you want to use Kata Containers, edit the /etc/crio/crio.conf file to add:
         #    [crio.runtime]
         #    manage_network_ns_lifecycle = true
         #
-        # We don't use Kata Containers, so that particular change is not made to /etc/crio/crio.conf
-        # at this time.
+        # That comment seems to be out-dated, /usr/share/defaults/crio/crio.conf already contains that.
+        #
+        # If kata-runtime is installed, it may install a systemd overlay which copies the defaults to
+        # /etc/crio, something that is needed to enable Kata Containers because some entries for that
+        # runtime have to be added there. "kata-deploy" will fail if /etc/crio/crio.conf does not exist.
+        #
+        # But that systemd mechanism seems to be unreliable (failed in CI, worked locally) and is
+        # meant to be removed, so we do it ourselves here.
+        mkdir -p /etc/crio
+        cp /usr/share/defaults/crio/crio.conf /etc/crio
 
         # /opt/cni/bin is where runtimes like CRI-O expect CNI plugins. But cloud-native-basic installs into
         # /usr/libexec/cni. Instructions at https://clearlinux.org/documentation/clear-linux/tutorials/kubernetes#id2
