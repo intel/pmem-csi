@@ -136,7 +136,9 @@ fi
 # If non-empty, the version of Kata Containers which is to be installed
 # in the Kubernetes cluster. Installation is done with
 # https://hub.docker.com/r/katadocker/kata-deploy
-: ${TEST_KATA_CONTAINERS_VERSION:=1.11.0-rc0}
+#
+# The version should be >= 1.11.0-rc0 for support of PMEM volumes.
+: ${TEST_KATA_CONTAINERS_VERSION:=}
 
 # Kubernetes node port number
 # (https://kubernetes.io/docs/concepts/services-networking/service/#nodeport)

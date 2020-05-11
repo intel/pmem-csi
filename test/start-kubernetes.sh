@@ -517,7 +517,7 @@ if init_workdir &&
    NO_PROXY=$(extend_no_proxy) &&
    init_pmem_regions &&
    init_kubernetes_cluster &&
-   ( [ $TEST_CRI = docker ] || ${TEST_DIRECTORY}/setup-kata-containers.sh ); then
+   ( ! [ "${TEST_KATA_CONTAINERS_VERSION}" ] || ${TEST_DIRECTORY}/setup-kata-containers.sh ); then
     FAILED=false
 else
     exit 1

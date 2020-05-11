@@ -11,20 +11,21 @@ REPO_DIRECTORY="${REPO_DIRECTORY:-$(dirname $(dirname $(readlink -f $0)))}"
 CLUSTER_DIRECTORY="${CLUSTER_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
 SSH="${CLUSTER_DIRECTORY}/ssh.0"
 KUBECTL="${SSH} kubectl" # Always use the kubectl installed in the cluster.
+VERSION="${TEST_KATA_CONTAINERS_VERSION:-1.11.0-rc0}"
 
 curl --location --fail --silent \
-     https://github.com/kata-containers/packaging/raw/${TEST_KATA_CONTAINERS_VERSION}/kata-deploy/kata-rbac/base/kata-rbac.yaml |
+     https://github.com/kata-containers/packaging/raw/${VERSION}/kata-deploy/kata-rbac/base/kata-rbac.yaml |
     ${KUBECTL} apply -f -
 
 # kata-deploy.yaml always installs the latest Kata Containers. We override that
 # here by locking the image to the specific version that we want.
 curl --location --fail --silent \
-     https://github.com/kata-containers/packaging/raw/${TEST_KATA_CONTAINERS_VERSION}/kata-deploy/kata-deploy/base/kata-deploy.yaml |
-    sed -e "s;image: katadocker/kata-deploy.*;image: katadocker/kata-deploy:${TEST_KATA_CONTAINERS_VERSION};" |
+     https://github.com/kata-containers/packaging/raw/${VERSION}/kata-deploy/kata-deploy/base/kata-deploy.yaml |
+    sed -e "s;image: katadocker/kata-deploy.*;image: katadocker/kata-deploy:${VERSION};" |
     ${KUBECTL} apply -f -
 
 curl --location --fail --silent \
-     https://raw.githubusercontent.com/kata-containers/packaging/${TEST_KATA_CONTAINERS_VERSION}/kata-deploy/k8s-1.14/kata-qemu-runtimeClass.yaml |
+     https://raw.githubusercontent.com/kata-containers/packaging/${VERSION}/kata-deploy/k8s-1.14/kata-qemu-runtimeClass.yaml |
     ${KUBECTL} apply -f -
 
 echo "Waiting for kata-deploy to label nodes..."
