@@ -75,21 +75,44 @@ func NewNodeControllerServer(nodeID string, dm pmdmanager.PmemDeviceManager, sm 
 		}
 
 		for _, id := range ids {
+			// retrieve volume info
+			vol := &nodeVolume{}
+			if err := sm.Get(id, vol); err != nil {
+				klog.Warningf("Failed to retrieve volume info for id %q from state: %v", id, err)
+				continue
+			}
+			v, err := parameters.Parse(parameters.NodeVolumeOrigin, vol.Params)
+			if err != nil {
+				klog.Warningf("Failed to parse volume parameters for volume %q: %v", id, err)
+				continue
+			}
+
 			found := false
-			// See if the device data stored at StateManager is still valid
-			for _, devInfo := range devices {
-				if devInfo.VolumeId == id {
+			if v.GetDeviceMode() != dm.GetMode() {
+				dm, err := newDeviceManager(v.GetDeviceMode())
+				if err != nil {
+					klog.Warningf("Failed to initialize device manager for state volume '%s'(volume mode: '%s'): %v", id, v.GetDeviceMode(), err)
+					continue
+				}
+
+				if _, err := dm.GetDevice(id); err == nil {
 					found = true
-					break
+				} else if !errors.Is(err, pmdmanager.ErrDeviceNotFound) {
+					klog.Warningf("Failed to fetch device for state volume '%s'(volume mode: '%s'): %v", id, v.GetDeviceMode(), err)
+					// Let's ignore this volume
+					continue
+				}
+			} else {
+				// See if the device data stored at StateManager is still valid
+				for _, devInfo := range devices {
+					if devInfo.VolumeId == id {
+						found = true
+						break
+					}
 				}
 			}
 
 			if found {
-				// retrieve volume info
-				vol := &nodeVolume{}
-				if err := sm.Get(id, vol); err != nil {
-					klog.Warningf("Failed to retrieve volume info for id %q from state: %v", id, err)
-				}
 				ncs.pmemVolumes[id] = vol
 			} else {
 				// if not found in DeviceManager's list, add to cleanupList
@@ -206,6 +229,10 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 		}
 	}
 
+	// Set which device manager was used to create the volume
+	mode := cs.dm.GetMode()
+	p.DeviceMode = &mode
+
 	vol := &nodeVolume{
 		ID:     volumeID,
 		Size:   asked,
@@ -280,7 +307,15 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 		return nil, status.Errorf(codes.Internal, "previously stored volume parameters for volume with ID %q: %v", req.VolumeId, err)
 	}
 
-	if err := cs.dm.DeleteDevice(req.VolumeId, p.GetEraseAfter()); err != nil {
+	dm := cs.dm
+	if dm.GetMode() != p.GetDeviceMode() {
+		dm, err = newDeviceManager(p.GetDeviceMode())
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to initialize device manager for volume(ID %q, mode: %s): %v", req.VolumeId, p.GetDeviceMode(), err)
+		}
+	}
+
+	if err := dm.DeleteDevice(req.VolumeId, p.GetEraseAfter()); err != nil {
 		if errors.Is(err, pmdmanager.ErrDeviceInUse) {
 			return nil, status.Errorf(codes.FailedPrecondition, err.Error())
 		}

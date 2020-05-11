@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -26,6 +27,7 @@ const (
 	PersistencyModel = "persistencyModel"
 	VolumeID         = "_id"
 	Size             = "size"
+	DeviceMode       = "deviceMode"
 
 	// Kubernetes v1.16+ adds this key to NodePublishRequest.VolumeContext
 	// while provisioning ephemeral volume.
@@ -106,6 +108,7 @@ var valid = map[Origin][]string{
 		Name,
 		PersistencyModel,
 		Size,
+		DeviceMode,
 	},
 }
 
@@ -121,6 +124,7 @@ type Volume struct {
 	Persistency    *Persistency
 	Size           *int64
 	VolumeID       *string
+	DeviceMode     *api.DeviceMode
 }
 
 // VolumeContext represents the same settings as a string map.
@@ -206,6 +210,12 @@ func Parse(origin Origin, stringmap map[string]string) (Volume, error) {
 				p := PersistencyEphemeral
 				result.Persistency = &p
 			}
+		case DeviceMode:
+			var mode api.DeviceMode
+			if err := mode.Set(value); err != nil {
+				return result, fmt.Errorf("parameter %q: failed to parse %q as DeviceMode: %v", key, value, err)
+			}
+			result.DeviceMode = &mode
 		case ProvisionerID:
 		default:
 			if !strings.HasPrefix(key, PodInfoPrefix) {
@@ -255,6 +265,9 @@ func (v Volume) ToContext() VolumeContext {
 	}
 	if v.KataContainers != nil {
 		result[KataContainers] = fmt.Sprintf("%v", *v.KataContainers)
+	}
+	if v.DeviceMode != nil {
+		result[DeviceMode] = string(*v.DeviceMode)
 	}
 
 	return result
@@ -306,5 +319,13 @@ func (v Volume) GetVolumeID() string {
 	if v.VolumeID != nil {
 		return *v.VolumeID
 	}
+	return ""
+}
+
+func (v Volume) GetDeviceMode() api.DeviceMode {
+	if v.DeviceMode != nil {
+		return *v.DeviceMode
+	}
+
 	return ""
 }
