@@ -101,6 +101,14 @@ fi
 # Allowed values: testing (default), production
 : ${TEST_DEPLOYMENTMODE:=testing}
 
+# Namespace used by test/start-operator.sh for the operator
+# itself.
+: ${TEST_OPERATOR_NAMESPACE:=default}
+
+# A value for the pmem-csi.intel.com/deployment label that is
+# set for all objects created by test/start-operator.sh.
+: ${TEST_OPERATOR_DEPLOYMENT:=operator}
+
 # TLS certificates installed by test/setup-deployment.sh.
 : ${TEST_CA:=_work/pmem-ca/ca.pem}
 : ${TEST_REGISTRY_CERT:=_work/pmem-ca/pmem-registry.pem}

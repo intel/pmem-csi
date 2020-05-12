@@ -16,7 +16,7 @@
 GO_BINARY=go
 GO=GOOS=linux GO111MODULE=on $(GO_BINARY)
 IMPORT_PATH=github.com/intel/pmem-csi
-CMDS=pmem-csi-driver pmem-vgm pmem-ns-init
+CMDS=pmem-csi-driver pmem-vgm pmem-ns-init pmem-csi-operator
 TEST_CMDS=$(addsuffix -test,$(CMDS))
 SHELL=bash
 export PWD=$(shell pwd)
@@ -65,6 +65,9 @@ build: $(CMDS) $(TEST_CMDS) check-go-version-$(GO_BINARY)
 # "make test" runs a variety of fast tests, including building all source code.
 # More tests are added elsewhere in this Makefile and test/test.make.
 test: build
+
+# "make generate" invokes code generators.
+generate: operator-generate-k8s
 
 # Build production binaries.
 $(CMDS): check-go-version-$(GO_BINARY)
@@ -124,6 +127,8 @@ clean:
 
 .PHONY: all build test clean $(CMDS) $(TEST_CMDS)
 
+include operator/operator.make
+
 # Add support for creating and booting a cluster under QEMU.
 # All of the commands operate on a cluster stored in _work/$(CLUSTER),
 # which defaults to _work/clear-govm. This can be changed with
@@ -176,7 +181,9 @@ KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-cache.yaml
 KUSTOMIZATION_deploy/common/pmem-storageclass-cache.yaml = deploy/kustomize/storageclass-cache
 KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-late-binding.yaml
 KUSTOMIZATION_deploy/common/pmem-storageclass-late-binding.yaml = deploy/kustomize/storageclass-late-binding
-kustomize: $(KUSTOMIZE_OUTPUT)
+kustomize: _work/go-bindata $(KUSTOMIZE_OUTPUT)
+	$< -o deploy/bindata_generated.go -pkg deploy deploy/kubernetes-*/*/pmem-csi.yaml
+
 $(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
 	$< build --load_restrictor none $(KUSTOMIZATION_$@) >$@
 	if echo "$@" | grep -q '/pmem-csi-'; then \
@@ -195,6 +202,13 @@ clean: clean-kustomize
 clean-kustomize:
 	rm -f _work/kustomize-*
 	rm -f _work/kustomize
+
+.PHONY: clean-go-bindata
+clean: clean-go-bindata
+clean-go-bindata:
+	rm -f _work/go-bindata
+_work/go-bindata:
+	$(GO_BINARY) build -o $@ github.com/go-bindata/go-bindata/go-bindata
 
 .PHONY: test-kustomize $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
 test: test-kustomize
