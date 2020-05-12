@@ -233,14 +233,15 @@ SOURCEDIR     = .
 BUILDDIR      = _output
 
 # Generate doc site under _build/html with Sphinx.
+# "vhtml" will set up tools, "html" expects them to be installed.
+# GITHUB_SHA will be used for file references to the GitHub repo,
+# if set.
+GEN_DOCS = $(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O) && \
+	cp docs/html/index.html $(BUILDDIR)/html/index.html
 vhtml: _work/venv/.stamp
-	. _work/venv/bin/activate && \
-		$(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O) && \
-		cp docs/html/index.html $(BUILDDIR)/html/index.html
-
+	. _work/venv/bin/activate && $(GEN_DOCS)
 html:
-		$(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O) && \
-		cp docs/html/index.html $(BUILDDIR)/html/index.html
+	$(GEN_DOCS)
 
 clean-html:
 	rm -rf _output/html
