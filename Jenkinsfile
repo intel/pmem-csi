@@ -206,7 +206,7 @@ pipeline {
 
         stage('docsite') {
             steps {
-                sh "${RunInBuilder()} ${env.BUILD_CONTAINER} make vhtml"
+                sh "${RunInBuilder()} ${env.BUILD_CONTAINER} env GITHUB_SHA=${GIT_COMMIT} GITHUB_REPOSITORY=${SourceRepo()} make vhtml"
                 publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: false, reportDir: '_output/html', reportFiles: 'index.html', reportName: 'Doc Site', reportTitles: ''])
             }
         }
@@ -380,6 +380,16 @@ String RunInBuilder() {
     --user `id -u`:`stat --format %g /var/run/docker.sock` \
     --workdir ${WORKSPACE} \
     "
+}
+
+/*
+ Returns <owner>/<repo> from which the code was built.
+*/
+String SourceRepo() {
+    // Content of CHANGE_FORK varies, see https://issues.jenkins-ci.org/browse/JENKINS-58450.
+    env.CHANGE_FORK.matches('.*/.*') ?
+        env.CHANGE_FORK :
+        env.CHANGE_FORK + '/pmem-csi'
 }
 
 void TestInVM(distro, distroVersion, kubernetesVersion, skipIfPR) {

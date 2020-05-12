@@ -234,9 +234,13 @@ BUILDDIR      = _output
 
 # Generate doc site under _build/html with Sphinx.
 # "vhtml" will set up tools, "html" expects them to be installed.
-# GITHUB_SHA will be used for file references to the GitHub repo,
-# if set.
+# GITHUB_SHA will be used for kustomize references to the GitHub
+# repo (= github.com/intel/pmem-csi/deploy, a syntax that is only
+# valid there) if set.
 GEN_DOCS = $(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O) && \
+	( ! [ "$$GITHUB_SHA" ] || ! [ "$$GITHUB_REPOSITORY" ] || \
+	  find $(BUILDDIR)/html/ -name '*.html' | \
+	  xargs sed -i -e "s;github.com/intel/pmem-csi/\\(deploy/\\S*\\);github.com/$$GITHUB_REPOSITORY/\\1?ref=$$GITHUB_SHA;g" ) && \
 	cp docs/html/index.html $(BUILDDIR)/html/index.html
 vhtml: _work/venv/.stamp
 	. _work/venv/bin/activate && $(GEN_DOCS)
