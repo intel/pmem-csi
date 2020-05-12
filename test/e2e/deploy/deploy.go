@@ -21,8 +21,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/kubernetes/test/e2e/framework"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
@@ -80,7 +78,7 @@ func WaitForOperator(c *Cluster, namespace string) (operator *v1.Pod) {
 // - controller service is up and running
 // - all nodes have registered
 func WaitForPMEMDriver(c *Cluster, namespace string) {
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	deadline, cancel := context.WithTimeout(context.Background(), framework.TestContext.SystemDaemonsetStartupTimeout)
 	defer cancel()
@@ -268,6 +266,14 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 					_, err := c.cs.AppsV1().Deployments(object.Namespace).Update(context.Background(), &object, metav1.UpdateOptions{})
 					failure(err)
 				}
+			}
+		}
+
+		if list, err := c.cs.AdmissionregistrationV1beta1().MutatingWebhookConfigurations().List(context.Background(), filter); !failure(err) {
+			for _, object := range list.Items {
+				del(object.ObjectMeta, object, func() error {
+					return c.cs.AdmissionregistrationV1beta1().MutatingWebhookConfigurations().Delete(context.Background(), object.Name, metav1.DeleteOptions{})
+				})
 			}
 		}
 
@@ -585,12 +591,7 @@ func EnsureDeployment(deploymentName string) *Deployment {
 			if deployment.HasOperator {
 				// Deploy driver through operator.
 				dep := deployment.GetDriverDeployment()
-				hash, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&dep)
-				framework.ExpectNoError(err, "convert %v", dep)
-				depUnstructured := &unstructured.Unstructured{
-					Object: hash,
-				}
-				EnsureDeploymentCR(f, depUnstructured)
+				EnsureDeploymentCR(f, dep)
 			} else {
 				// Deploy with script.
 				cmd := exec.Command("test/setup-deployment.sh")
@@ -618,6 +619,9 @@ func EnsureDeployment(deploymentName string) *Deployment {
 	ginkgo.AfterEach(func() {
 		// Check list of volumes after test to detect left-overs
 		CheckForLeftoverVolumes(deployment, prevVol)
+
+		// And check that PMEM is in a sane state.
+		CheckPMEM()
 	})
 
 	return deployment

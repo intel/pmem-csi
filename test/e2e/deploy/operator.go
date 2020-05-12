@@ -8,7 +8,6 @@ package deploy
 
 import (
 	"context"
-	"fmt"
 
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,7 +19,6 @@ import (
 	"github.com/intel/pmem-csi/pkg/apis"
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 
-	"github.com/onsi/ginkgo"
 	"github.com/onsi/gomega"
 )
 
@@ -41,39 +39,69 @@ func init() {
 	}
 }
 
-func CreateDeploymentCR(f *framework.Framework, dep *unstructured.Unstructured) *unstructured.Unstructured {
-	var outDep *unstructured.Unstructured
-	depName := dep.GetName()
-	gomega.Eventually(func() error {
-		var err error
-		outDep, err = f.DynamicClient.Resource(DeploymentResource).Create(context.Background(), dep, metav1.CreateOptions{})
-		LogError(err, "create deployment error: %v, will retry...", err)
-		return err
-	}, "3m", "10s").Should(gomega.BeNil(), "create deployment %q", depName)
-	ginkgo.By(fmt.Sprintf("Created deployment %q", depName))
-	return outDep
+func DeploymentToUnstructured(in *api.Deployment) *unstructured.Unstructured {
+	if in == nil {
+		return nil
+	}
+	var out unstructured.Unstructured
+	err := Scheme.Convert(in, &out, nil)
+	framework.ExpectNoError(err, "convert to unstructured deployment")
+
+	// Ensure that type info is set. It's required when passing
+	// the unstructured object to a dynamic client.
+	out.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "pmem-csi.intel.com",
+		Version: "v1alpha1",
+		Kind:    "Deployment",
+	})
+	return &out
 }
 
-func EnsureDeploymentCR(f *framework.Framework, dep *unstructured.Unstructured) *unstructured.Unstructured {
-	var outDep *unstructured.Unstructured
-	depName := dep.GetName()
+func DeploymentFromUnstructured(in *unstructured.Unstructured) *api.Deployment {
+	if in == nil {
+		return nil
+	}
+	var out api.Deployment
+	err := Scheme.Convert(in, &out, nil)
+	framework.ExpectNoError(err, "convert from unstructured deployment")
+	return &out
+}
+
+func CreateDeploymentCR(f *framework.Framework, dep api.Deployment) api.Deployment {
+	in := DeploymentToUnstructured(&dep)
+	var out *unstructured.Unstructured
+
 	gomega.Eventually(func() error {
-		existingDep, err := f.DynamicClient.Resource(DeploymentResource).Get(context.Background(), depName, metav1.GetOptions{})
+		var err error
+		out, err = f.DynamicClient.Resource(DeploymentResource).Create(context.Background(), in, metav1.CreateOptions{})
+		LogError(err, "create deployment error: %v, will retry...", err)
+		return err
+	}, "3m", "1s").Should(gomega.BeNil(), "create deployment %q", dep.Name)
+	framework.Logf("Created deployment %q", dep.Name)
+	return *DeploymentFromUnstructured(out)
+}
+
+func EnsureDeploymentCR(f *framework.Framework, dep api.Deployment) api.Deployment {
+	var out *unstructured.Unstructured
+	gomega.Eventually(func() error {
+		existingDep, err := f.DynamicClient.Resource(DeploymentResource).Get(context.Background(), dep.Name, metav1.GetOptions{})
 		if err == nil {
-			dep.SetResourceVersion(existingDep.GetResourceVersion())
-			outDep, err = f.DynamicClient.Resource(DeploymentResource).Update(context.Background(), dep, metav1.UpdateOptions{})
+			dep.ResourceVersion = existingDep.GetResourceVersion()
+			in := DeploymentToUnstructured(&dep)
+			out, err = f.DynamicClient.Resource(DeploymentResource).Update(context.Background(), in, metav1.UpdateOptions{})
 			LogError(err, "update deployment error: %v, will retry...", err)
 			return err
 		}
 		if apierrs.IsNotFound(err) {
-			outDep, err = f.DynamicClient.Resource(DeploymentResource).Create(context.Background(), dep, metav1.CreateOptions{})
+			in := DeploymentToUnstructured(&dep)
+			out, err = f.DynamicClient.Resource(DeploymentResource).Create(context.Background(), in, metav1.CreateOptions{})
 			LogError(err, "create deployment error: %v, will retry...", err)
 			return err
 		}
 		return err
-	}, "3m", "10s").Should(gomega.BeNil(), "create deployment %q", depName)
-	ginkgo.By(fmt.Sprintf("Created deployment %q", depName))
-	return outDep
+	}, "3m", "1s").Should(gomega.BeNil(), "create deployment %q", dep.Name)
+	framework.Logf("Created deployment %q", dep.Name)
+	return *DeploymentFromUnstructured(out)
 }
 
 func DeleteDeploymentCR(f *framework.Framework, name string) {
@@ -88,35 +116,34 @@ func DeleteDeploymentCR(f *framework.Framework, name string) {
 		}
 		LogError(err, "delete deployment error: %v, will retry...", err)
 		return false
-	}, "3m", "10s").Should(gomega.BeTrue(), "delete deployment %q", name)
-	ginkgo.By(fmt.Sprintf("Deleted deployment %q", name))
+	}, "3m", "1s").Should(gomega.BeTrue(), "delete deployment %q", name)
+	framework.Logf("Deleted deployment %q", name)
 }
 
-func UpdateDeploymentCR(f *framework.Framework, dep *unstructured.Unstructured) *unstructured.Unstructured {
-	var outDep *unstructured.Unstructured
-	depName := dep.GetName()
+func UpdateDeploymentCR(f *framework.Framework, dep api.Deployment) api.Deployment {
+	in := DeploymentToUnstructured(&dep)
+	var out *unstructured.Unstructured
 
 	gomega.Eventually(func() error {
 		var err error
-		outDep, err = f.DynamicClient.Resource(DeploymentResource).Update(context.Background(), dep, metav1.UpdateOptions{})
+		out, err = f.DynamicClient.Resource(DeploymentResource).Update(context.Background(), in, metav1.UpdateOptions{})
 		LogError(err, "update deployment error: %v, will retry...", err)
 		return err
-	}, "3m", "10s").Should(gomega.BeNil(), "update deployment: %q", depName)
+	}, "3m", "1s").Should(gomega.BeNil(), "update deployment: %q", dep.Name)
 
-	ginkgo.By(fmt.Sprintf("Updated deployment %q", depName))
-	return outDep
+	framework.Logf("Updated deployment %q", dep.Name)
+	return *DeploymentFromUnstructured(out)
 }
 
-func GetDeploymentCR(f *framework.Framework, name string) *unstructured.Unstructured {
-	var outDep *unstructured.Unstructured
+func GetDeploymentCR(f *framework.Framework, name string) api.Deployment {
+	var out *unstructured.Unstructured
 	gomega.Eventually(func() error {
 		var err error
-		outDep, err = f.DynamicClient.Resource(DeploymentResource).Get(context.Background(), name, metav1.GetOptions{})
+		out, err = f.DynamicClient.Resource(DeploymentResource).Get(context.Background(), name, metav1.GetOptions{})
 		LogError(err, "get deployment error: %v, will retry...", err)
 		return err
-	}, "3m", "10s").Should(gomega.BeNil(), "get deployment")
-
-	return outDep
+	}, "3m", "1s").Should(gomega.BeNil(), "get deployment")
+	return *DeploymentFromUnstructured(out)
 }
 
 // LogError will log the message only if err is non-nil. The error

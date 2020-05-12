@@ -32,8 +32,6 @@ type DeploymentSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make operator-generate-k8s" to regenerate code after modifying this file
 
-	// DriverName represents the name of the PMEM-CSI driver to be deployed
-	DriverName string `json:"driverName,omitempty"`
 	// Image holds container image options
 	Image string `json:"image,omitempty"`
 	// PullPolicy image pull policy one of Always, Never, IfNotPresent
@@ -113,8 +111,6 @@ func init() {
 }
 
 const (
-	// DefaultDriverName default driver name to be used for a deployment
-	DefaultDriverName = "pmem-csi.intel.com"
 	// DefaultLogLevel default logging level used for the driver
 	DefaultLogLevel = uint16(5)
 	// DefaultImagePullPolicy default image pull policy for all the images used by the deployment
@@ -172,8 +168,7 @@ const (
 type DeploymentChange int
 
 const (
-	DriverName DeploymentChange = iota + 1
-	DriverMode
+	DriverMode = iota + 1
 	DriverImage
 	PullPolicy
 	LogLevel
@@ -193,7 +188,6 @@ const (
 
 func (c DeploymentChange) String() string {
 	return map[DeploymentChange]string{
-		DriverName:                "driverName",
 		DriverMode:                "deviceMode",
 		DriverImage:               "image",
 		PullPolicy:                "imagePullPolicy",
@@ -215,9 +209,6 @@ func (c DeploymentChange) String() string {
 
 // EnsureDefaults make sure that the deployment object has all defaults set properly
 func (d *Deployment) EnsureDefaults(operatorImage string) error {
-	if d.Spec.DriverName == "" {
-		d.Spec.DriverName = DefaultDriverName
-	}
 	if d.Spec.Image == "" {
 		// If provided use operatorImage
 		if operatorImage != "" {
@@ -294,9 +285,6 @@ func (d *Deployment) Compare(other *Deployment) map[DeploymentChange]struct{} {
 		return changes
 	}
 
-	if d.Spec.DriverName != other.Spec.DriverName {
-		changes[DriverName] = struct{}{}
-	}
 	if d.Spec.DeviceMode != other.Spec.DeviceMode {
 		changes[DriverMode] = struct{}{}
 	}
@@ -364,10 +352,6 @@ func GetDeploymentCRDSchema() *apiextensions.JSONSchemaProps {
 				Type:        "object",
 				Description: "DeploymentSpec defines the desired state of Deployment",
 				Properties: map[string]apiextensions.JSONSchemaProps{
-					"driverName": apiextensions.JSONSchemaProps{
-						Type:        "string",
-						Description: "CSI Driver name",
-					},
 					"logLevel": apiextensions.JSONSchemaProps{
 						Type:        "integer",
 						Description: "logging level",

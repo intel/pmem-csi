@@ -40,6 +40,12 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 		// This renames objects in "name:", "app:", "secretName:".
 		*yaml = bytes.ReplaceAll(*yaml, []byte(": pmem-csi"), []byte(": "+name))
 
+		// Update the driver name inside the state dir.
+		*yaml = bytes.ReplaceAll(*yaml, []byte("path: /var/lib/pmem-csi.intel.com"), []byte("path: /var/lib/"+name))
+
+		// This assumes that all namespaced objects actually have "namespace: default".
+		*yaml = bytes.ReplaceAll(*yaml, []byte("namespace: default"), []byte("namespace: "+namespace))
+
 		// Also rename the prefix inside the registry endpoint.
 		*yaml = bytes.ReplaceAll(*yaml,
 			[]byte("tcp://pmem-csi"),
@@ -67,7 +73,7 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 
 		switch obj.GetKind() {
 		case "CSIDriver":
-			obj.SetName(deployment.Spec.DriverName)
+			obj.SetName(deployment.Name)
 		case "StatefulSet":
 			if err := patchPodTemplate(obj, deployment, deployment.Spec.ControllerResources); err != nil {
 				// TODO: avoid panic
@@ -77,6 +83,16 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 			if err := patchPodTemplate(obj, deployment, deployment.Spec.NodeResources); err != nil {
 				// TODO: avoid panic
 				panic(fmt.Errorf("set node resources: %v", err))
+			}
+			outerSpec := obj.Object["spec"].(map[string]interface{})
+			template := outerSpec["template"].(map[string]interface{})
+			spec := template["spec"].(map[string]interface{})
+			if deployment.Spec.NodeSelector != nil {
+				selector := map[string]interface{}{}
+				for key, value := range deployment.Spec.NodeSelector {
+					selector[key] = value
+				}
+				spec["nodeSelector"] = selector
 			}
 		}
 	}
@@ -147,7 +163,7 @@ func patchPodTemplate(obj *unstructured.Unstructured, deployment api.Deployment,
 			for _, entry := range env {
 				entry := entry.(map[string]interface{})
 				if entry["name"].(string) == "PMEM_CSI_DRIVER_NAME" {
-					entry["value"] = deployment.Spec.DriverName
+					entry["value"] = deployment.Name
 					break
 				}
 			}

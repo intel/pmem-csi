@@ -11,8 +11,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"runtime"
-	"strconv"
-	"strings"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
@@ -26,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/klog"
 )
 
@@ -43,20 +42,6 @@ type PmemCSIDriver struct {
 	k8sVersion version.Version
 }
 
-// checkIfNameClash check if d.Spec.DriverName is not clashing with any of the
-// known deploments by the reconciler. If clash found returns the reference of
-// that deployment else nil.
-func (d *PmemCSIDriver) checkIfNameClash(r *ReconcileDeployment) *api.Deployment {
-	for _, dep := range r.deployments {
-		if dep.Spec.DriverName == d.Spec.DriverName &&
-			dep.Name != d.Name {
-			return dep
-		}
-	}
-
-	return nil
-}
-
 // Reconcile reconciles the driver deployment
 func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 	changes := map[api.DeploymentChange]struct{}{}
@@ -64,40 +49,11 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 	oldDeployment, foundInCache := r.deployments[d.Name]
 	if foundInCache {
 		changes = d.Compare(oldDeployment)
-		// We should not trust the deployment status, as it might be tampered.
-		// Use existing objects Status instead.
-		oldDeployment.Status.DeepCopyInto(&d.Status)
-	} else {
-		var err error
-		// Possibly that operator restarted, check if any conflicting changes
-		// to deployment
-		changes, err = d.changesFromPreDeployed(r)
-		if err != nil {
-			return true, err
-		}
-
-		// This is probably not the right solution for https://github.com/intel/pmem-csi/issues/617.
-		// Instead of getting a list of changes, d.changesFromPreDeployed should tell us what
-		// the old deployment looks like. The change list just gets ignored anyway.
-		oldDeployment = d.Deployment
 	}
 
-	klog.Infof("Deployment: %q, state: %q", d.Name, d.Status.Phase)
+	klog.Infof("Deployment: %q, state %q, changes %v, in cache %v", d.Name, d.Status.Phase, changes, foundInCache)
 
-	switch d.Status.Phase {
-	// We treat same both new and failed deployments
-	case api.DeploymentPhaseNew, api.DeploymentPhaseFailed:
-		if dep := d.checkIfNameClash(r); dep != nil {
-			d.Status.Phase = api.DeploymentPhaseFailed
-			return true, fmt.Errorf("driver name %q is already taken by deployment %q",
-				dep.Spec.DriverName, dep.Name)
-		}
-		// Update local cache so that we can catch if any change in deployment
-		r.deployments[d.Name] = d.Deployment
-	}
-
-	// Deployment successfull, so no more reconcile needed for this deployment
-	requeue, err := d.reconcileDeploymentChanges(r, oldDeployment, changes, foundInCache)
+	requeue, err := d.reconcileDeploymentChanges(r, changes, foundInCache)
 	if err == nil {
 		// If everything ok, update local cache
 		r.deployments[d.Name] = d.Deployment
@@ -113,15 +69,10 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 }
 
 // reconcileDeploymentChanges examines the changes and updates the appropriate objects.
-// Reverts deployment if and incompatible found compareted to existing deployment, such as deviceMode, driverName, pmemSpace.
 // In case of foundInCache is false, all the objects gets refreshed/updated.
-func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, existing *api.Deployment, changes map[api.DeploymentChange]struct{}, foundInCache bool) (bool, error) {
-
-	klog.Infof("Changes detected: %v", changes)
-
+func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, changes map[api.DeploymentChange]struct{}, foundInCache bool) (bool, error) {
 	updateController := false
 	updateNodeDriver := false
-	updateDeployment := false
 	updateSecrets := false
 	updateAll := false // Update all objects of the deployment
 
@@ -141,47 +92,20 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 		case api.DriverImage, api.LogLevel, api.PullPolicy:
 			updateController = true
 			updateNodeDriver = true
-		case api.DriverName:
-			if dep := d.checkIfNameClash(r); dep != nil {
-				err = fmt.Errorf("cannot update deployment(%q) driver name as name %q is already taken by deployment %q",
-					d.Name, d.Spec.DriverName, dep.Name)
-
-				// DriverName cannot be updated, revert from deployment spec
-				d.Spec.DriverName = existing.Spec.DriverName
-				updateDeployment = true
-			} else {
-				updateController = true
-				updateNodeDriver = true
-			}
 		case api.DriverMode:
-			d.Spec.DeviceMode = existing.Spec.DeviceMode
-			updateDeployment = true
-			err = fmt.Errorf("changing %q of a running deployment %q is not allowed", c, d.Name)
+			updateNodeDriver = true
 		case api.NodeSelector:
 			updateNodeDriver = true
 		case api.PMEMPercentage:
-			d.Spec.PMEMPercentage = existing.Spec.PMEMPercentage
-			updateDeployment = true
-			err = fmt.Errorf("changing %q of a running deployment %q is not allowed", c, d.Name)
+			updateNodeDriver = true
 		case api.Labels:
-			d.Spec.Labels = existing.Spec.Labels
-			updateDeployment = true
-			err = fmt.Errorf("changing %q of a running deployment %q is not allowed", c, d.Name)
+			updateAll = true
 		case api.CACertificate, api.RegistryCertificate, api.NodeControllerCertificate:
 			updateSecrets = true
 		}
 
 		if err != nil {
 			klog.Warningf("Incompatible change of deployment occurred: %v", err)
-		}
-	}
-
-	// Reject changes which cannot be applied
-	// by updating the deployment object
-	if updateDeployment {
-		klog.Infof("Updating deployment %q", d.Name)
-		if err := r.Update(d.Deployment); err != nil {
-			return true, err
 		}
 	}
 
@@ -239,6 +163,14 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, exist
 				existingService.Spec.Ports = append(existingService.Spec.Ports, p)
 			}
 			existingService.Spec.Selector = s.Spec.Selector
+			if len(s.Labels) > 0 {
+				if existingService.Labels == nil {
+					existingService.Labels = map[string]string{}
+				}
+				for key, value := range s.Labels {
+					existingService.Labels[key] = value
+				}
+			}
 			klog.Infof("updating service '%s' service ports and selector", s.GetName())
 			if err := r.Update(existingService); err != nil {
 				return true, err
@@ -419,9 +351,9 @@ func (d *PmemCSIDriver) getCSIDriver() *storagev1beta1.CSIDriver {
 	csiDriver := &storagev1beta1.CSIDriver{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "CSIDriver",
-			APIVersion: "v1beta1",
+			APIVersion: "storage.k8s.io/v1beta1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Spec.DriverName, true),
+		ObjectMeta: d.getObjectMeta(d.Name, true),
 		Spec: storagev1beta1.CSIDriverSpec{
 			AttachRequired: &attachRequired,
 			PodInfoOnMount: &podInfoOnMount,
@@ -468,6 +400,9 @@ func (d *PmemCSIDriver) getControllerService() *corev1.Service {
 			Ports: []corev1.ServicePort{
 				corev1.ServicePort{
 					Port: controllerServicePort,
+					TargetPort: intstr.IntOrString{
+						IntVal: controllerServicePort,
+					},
 				},
 			},
 			Selector: map[string]string{
@@ -489,6 +424,9 @@ func (d *PmemCSIDriver) getMetricsService() *corev1.Service {
 			Ports: []corev1.ServicePort{
 				corev1.ServicePort{
 					Port: controllerMetricsPort,
+					TargetPort: intstr.IntOrString{
+						IntVal: controllerMetricsPort,
+					},
 				},
 			},
 			Selector: map[string]string{
@@ -763,8 +701,7 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 							Name: "pmem-state-dir",
 							VolumeSource: corev1.VolumeSource{
 								HostPath: &corev1.HostPathVolumeSource{
-									// TODO: decide how to handle the state dir (https://github.com/intel/pmem-csi/issues/614)
-									Path: "/var/lib/pmem-csi.intel.com",
+									Path: "/var/lib/" + d.Name,
 									Type: &directoryOrCreate,
 								},
 							},
@@ -860,7 +797,7 @@ func (d *PmemCSIDriver) getControllerContainer() corev1.Container {
 			},
 			{
 				Name:  "PMEM_CSI_DRIVER_NAME",
-				Value: d.Spec.DriverName,
+				Value: d.Name,
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
@@ -907,7 +844,7 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 			},
 			{
 				Name:  "PMEM_CSI_DRIVER_NAME",
-				Value: d.Spec.DriverName,
+				Value: d.Name,
 			},
 			{
 				Name:  "TERMINATION_LOG_PATH",
@@ -1056,7 +993,7 @@ func (d *PmemCSIDriver) getNodeRegistrarContainer() corev1.Container {
 		Env: []corev1.EnvVar{
 			{
 				Name:  "PMEM_CSI_DRIVER_NAME",
-				Value: d.Spec.DriverName,
+				Value: d.Name,
 			},
 		},
 		Resources: *d.Spec.NodeResources,
@@ -1086,57 +1023,4 @@ func joinMaps(left, right map[string]string) map[string]string {
 		result[key] = value
 	}
 	return result
-}
-
-// changesFromPreDeployed checks if any conflicting changes observed
-// in deployment compared to pre-deployed driver for that deployment if any.
-func (d *PmemCSIDriver) changesFromPreDeployed(r *ReconcileDeployment) (map[api.DeploymentChange]struct{}, error) {
-	changes := map[api.DeploymentChange]struct{}{}
-
-	ds := &appsv1.DaemonSet{
-		ObjectMeta: d.getObjectMeta(d.Name+"-node", false),
-	}
-	if err := r.Get(ds); err != nil {
-		if errors.IsNotFound(err) {
-			return changes, nil
-		}
-		return nil, err
-	}
-
-	for _, c := range ds.Spec.Template.Spec.Containers {
-		if c.Name == "pmem-driver" {
-			args := argsToMap(c.Args)
-
-			if api.DeviceMode(args["-deviceManager"]) != d.Spec.DeviceMode {
-				changes[api.DriverMode] = struct{}{}
-			}
-			break
-		}
-	}
-
-	for _, c := range ds.Spec.Template.Spec.InitContainers {
-		if c.Name == "pmem-ns-init" {
-			args := argsToMap(c.Args)
-			if fsdaxStr, ok := args["--useforfsdax"]; ok {
-				useOfFsdax, err := strconv.ParseUint(fsdaxStr, 10, 16)
-				if err != nil {
-					klog.Warningf("failed to parse use-of-fsdax(%s) argument: %v", fsdaxStr, err)
-				} else if d.Spec.PMEMPercentage != uint16(useOfFsdax) {
-					changes[api.PMEMPercentage] = struct{}{}
-				}
-			}
-			break
-		}
-	}
-
-	return changes, nil
-}
-
-func argsToMap(args []string) map[string]string {
-	argsMap := map[string]string{}
-	for _, arg := range args {
-		vals := strings.SplitN(arg, "=", 2)
-		argsMap[vals[0]] = vals[1]
-	}
-	return argsMap
 }
