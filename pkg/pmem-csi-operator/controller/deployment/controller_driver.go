@@ -10,6 +10,9 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path"
 	"runtime"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
@@ -301,7 +304,11 @@ func (d *PmemCSIDriver) getSecrets() ([]apiruntime.Object, error) {
 // As we use mutual-tls, testing one server is enough to make sure that the provided
 // certificates works
 func validateCertificates(caCert, regKey, regCert, ncKey, ncCert []byte) error {
-	const endpoint = "0.0.0.0:10000"
+	tmp, err := ioutil.TempDir("", "pmem-csi-validate-certs-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmp)
 
 	// Registry server config
 	regCfg, err := pmemgrpc.ServerTLS(caCert, regCert, regKey, "pmem-node-controller")
@@ -316,12 +323,13 @@ func validateCertificates(caCert, regKey, regCert, ncKey, ncCert []byte) error {
 
 	// start a registry server
 	server := grpcserver.NewNonBlockingGRPCServer()
-	if err := server.Start("tcp://"+endpoint, regCfg); err != nil {
+	path := path.Join(tmp, "socket")
+	if err := server.Start("unix://"+path, regCfg); err != nil {
 		return err
 	}
 	defer server.ForceStop()
 
-	conn, err := tls.Dial("tcp", endpoint, clientCfg)
+	conn, err := tls.Dial("unix", path, clientCfg)
 	if err != nil {
 		return err
 	}
