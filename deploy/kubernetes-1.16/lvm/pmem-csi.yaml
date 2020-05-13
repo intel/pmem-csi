@@ -233,7 +233,7 @@ spec:
         - --feature-gates=Topology=true
         - --strict-topology=true
         - --timeout=5m
-        image: quay.io/k8scsi/csi-provisioner:v1.2.1
+        image: quay.io/k8scsi/csi-provisioner:v1.6.0
         imagePullPolicy: Always
         name: external-provisioner
         volumeMounts:
@@ -323,7 +323,7 @@ spec:
         env:
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
-        image: quay.io/k8scsi/csi-node-driver-registrar:v1.1.0
+        image: quay.io/k8scsi/csi-node-driver-registrar:v1.2.0
         imagePullPolicy: Always
         name: driver-registrar
         volumeMounts:

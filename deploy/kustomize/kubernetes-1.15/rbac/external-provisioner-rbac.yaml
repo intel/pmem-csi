@@ -1,5 +1,5 @@
-# From https://raw.githubusercontent.com/kubernetes-csi/external-provisioner/v1.1.0/deploy/kubernetes/rbac.yaml
-# with ServiceAccount stripped.
+# From https://github.com/kubernetes-csi/external-provisioner/raw/v1.6.0/deploy/kubernetes/rbac.yaml
+# with ServiceAccount csi-provisioner removed.
 
 # This YAML file contains all RBAC objects that are necessary to run external
 # CSI provisioner.
@@ -11,6 +11,7 @@
 #   provisioner, in which case leadership election must be enabled;
 #   this influences the RBAC setup, see below
 
+---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
