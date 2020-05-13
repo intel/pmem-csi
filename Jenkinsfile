@@ -248,7 +248,7 @@ pipeline {
 
         stage('testing 1.18') {
             options {
-                timeout(time: 180, unit: "MINUTES")
+                timeout(time: 240, unit: "MINUTES")
             }
             steps {
                 TestInVM("fedora", "", "1.18", "Top.Level..[[:alpha:]]*-production[[:space:]]")
@@ -258,7 +258,7 @@ pipeline {
         stage('testing 1.16') {
             when { not { changeRequest() } }
             options {
-                timeout(time: 180, unit: "MINUTES")
+                timeout(time: 240, unit: "MINUTES")
             }
             steps {
                 TestInVM("fedora", "", "1.16", "")
@@ -268,7 +268,7 @@ pipeline {
         stage('testing 1.15') {
             when { not { changeRequest() } }
             options {
-                timeout(time: 180, unit: "MINUTES")
+                timeout(time: 240, unit: "MINUTES")
             }
             steps {
                 TestInVM("fedora", "", "1.15", "")
@@ -277,7 +277,7 @@ pipeline {
 
         stage('Clear Linux') {
             options {
-                timeout(time: 180, unit: "MINUTES")
+                timeout(time: 240, unit: "MINUTES")
             }
             steps {
                 TestInVM("clear", "${env.CLEAR_LINUX_VERSION_1_17}", "",  "Top.Level..[[:alpha:]]*-testing[[:space:]]")
