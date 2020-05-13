@@ -15,4 +15,5 @@ PMEM-CSI
    docs/DEVELOPMENT.md
    docs/autotest.md
    examples/readme.rst
+   operator/README.md
    Project GitHub repository <https://github.com/intel/pmem-csi>
