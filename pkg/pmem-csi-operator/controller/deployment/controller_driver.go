@@ -281,7 +281,7 @@ func (d *PmemCSIDriver) getSecrets() ([]apiruntime.Object, error) {
 	} else {
 		// check if the provided certificates are valid
 		if err := validateCertificates(caCert, registryPrKey, registryCert, ncPrKey, ncCert); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("validate CA certificates: %v", err)
 		}
 	}
 
