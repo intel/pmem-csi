@@ -210,7 +210,7 @@ $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT)): test-kustomize-%: _work/kustom
 check-go-version-%:
 	@ hack/verify-go-version.sh "$*"
 
-SPHINXOPTS    =
+SPHINXOPTS    = -W --keep-going # Warn about everything, abort with an error at the end.
 SPHINXBUILD   = sphinx-build
 SOURCEDIR     = .
 BUILDDIR      = _output
