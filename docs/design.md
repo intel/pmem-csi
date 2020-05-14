@@ -4,6 +4,7 @@
     - [Architecture and Operation](#architecture-and-operation)
     - [LVM device mode](#lvm-device-mode)
     - [Direct device mode](#direct-device-mode)
+    - [Kata Containers support](#kata-containers-support)
     - [Driver modes](#driver-modes)
     - [Driver Components](#driver-components)
     - [Communication between components](#communication-between-components)
@@ -125,6 +126,47 @@ pre-allocated pools that are used in LVM device mode.
 In direct device mode, the driver does not attempt to limit space
 use. It also does not mark "own" namespaces. The _Name_ field of a
 namespace gets value of the VolumeID.
+
+## Kata Container support
+
+[Kata Containers](https://katacontainers.io) runs applications inside a
+virtual machine. This poses a problem for App Direct mode, because
+access to the filesystem prepared by PMEM-CSI is provided inside the
+virtual machine by the 9p or virtio-fs filesystems. Both do not
+support App Direct mode:
+- 9p does not support `mmap` at all.
+- virtio-fs only supports it when not using `MAP_SYNC`, i.e. without dax
+  semantic.
+
+This gets solved as follows:
+- PMEM-CSI creates a volume as usual, either in direct mode or LVM mode.
+- Inside that volume it sets up an ext4 or xfs filesystem.
+- Inside that filesystem it creates a `pmem-csi-vm.img` file that contains
+  partition tables, dax metadata and a partition that takes up most of the
+  space available in the volume.
+- That partition is bound to a `/dev/loop` device and the formatted
+  with the requested filesystem type for the volume.
+- When an application needs access to the volume, PMEM-CSI mounts
+  that `/dev/loop` device.
+- An application not running under Kata Containers then uses
+  that filesystem normally *but* due to limitations in the Linux
+  kernel, mounting might have to be done without `-odax` and thus
+  App Direct access does not work.
+- When the Kata Container runtime is asked to provide access to that
+  filesystem, it will instead pass the underlying `pmem-csi-vm.img`
+  file into QEMU as a [nvdimm
+  device](https://github.com/qemu/qemu/blob/master/docs/nvdimm.txt)
+  and inside the VM mount the `/dev/pmem0p1` partition that the
+  Linux kernel sets up based on the dax meta data that was placed in the
+  file by PMEM-CSI. Inside the VM, the App Direct semantic is fully
+  supported.
+
+Such volumes can be used with full dax semantic *only* inside Kata
+Containers. They are still usable with other runtimes, just not
+with dax semantic. Because of that and the additional space overhead,
+Kata Container support has to be enabled explicitly via a [storage
+class parameter and Kata Containers must be set up
+appropriately](install.md#kata-containers-support)
 
 ## Driver modes
 

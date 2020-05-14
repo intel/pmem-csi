@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -280,7 +281,7 @@ func (pmemd *pmemDriver) Run() error {
 			return err
 		}
 		cs := NewNodeControllerServer(pmemd.cfg.NodeID, dm, sm)
-		ns := NewNodeServer(cs)
+		ns := NewNodeServer(cs, filepath.Clean(pmemd.cfg.StateBasePath)+"/mount")
 
 		if pmemd.cfg.Endpoint != pmemd.cfg.ControllerEndpoint {
 			if err := s.Start(pmemd.cfg.ControllerEndpoint, pmemd.serverTLSConfig, cs); err != nil {

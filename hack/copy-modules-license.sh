@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #
 # Copyright 2019 Intel Corporation.
 #
@@ -31,9 +31,22 @@ pushd vendor > /dev/null
 
 for lic in $LICENSE_FILES; do
 	# Copy the license if its repository path is found in package .Deps
-	if [ $(echo $PACKAGE_DEPS | grep -c `dirname $lic`) -gt 0 ]; then
-		cp -t "$licensedir" --parent $lic
+	if echo "$PACKAGE_DEPS" | grep -q "^$(dirname $lic)"; then
+		cp -t "$licensedir" --parents $lic
 	fi
+done
+
+popd > /dev/null
+
+# Same for forked third-party code.
+LICENSE_FILES=$(find third-party | grep -e LICENSE -e NOTICE | cut -d / -f 2-)
+
+pushd third-party > /dev/null
+
+for lic in $LICENSE_FILES; do
+    if echo "$PACKAGE_DEPS" | grep -q "^github.com/intel/pmem-csi/third-party/$(dirname $lic)"; then
+        cp -t "$licensedir" --parents $lic
+    fi
 done
 
 popd > /dev/null

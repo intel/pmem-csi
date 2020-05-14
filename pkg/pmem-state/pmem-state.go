@@ -44,7 +44,9 @@ var _ StateManager = &fileState{}
 
 // NewFileState instantiates the file state manager with given directory
 // location. It ensures the provided directory exists.
-// Returns error, if fails to create the directory in case of not pre-existing.
+// State entries are mapped to files with the .json suffix in that directory and
+// vice versa. Other directory content is ignored, which makes it possible
+// to use the directory also for other state information.
 func NewFileState(directory string) (StateManager, error) {
 	if err := ensureLocation(directory); err != nil {
 		return nil, err

@@ -30,7 +30,9 @@ esac
 DEPLOY=(
     ${TEST_DEVICEMODE}${deployment_suffix}
     pmem-storageclass-ext4.yaml
+    pmem-storageclass-ext4-kata.yaml
     pmem-storageclass-xfs.yaml
+    pmem-storageclass-xfs-kata.yaml
     pmem-storageclass-cache.yaml
     pmem-storageclass-late-binding.yaml
     scheduler

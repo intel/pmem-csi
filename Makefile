@@ -176,7 +176,7 @@ KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-cache.yaml
 KUSTOMIZATION_deploy/common/pmem-storageclass-cache.yaml = deploy/kustomize/storageclass-cache
 KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-late-binding.yaml
 KUSTOMIZATION_deploy/common/pmem-storageclass-late-binding.yaml = deploy/kustomize/storageclass-late-binding
-kustomize: $(KUSTOMIZE_OUTPUT)
+kustomize: clean_kustomize_output $(KUSTOMIZE_OUTPUT)
 $(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
 	$< build --load_restrictor none $(KUSTOMIZATION_$@) >$@
 	if echo "$@" | grep -q '/pmem-csi-'; then \
@@ -185,6 +185,8 @@ $(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
 		cp $@ $$dir/pmem-csi.yaml && \
 		echo 'resources: [ pmem-csi.yaml ]' > $$dir/kustomization.yaml; \
 	fi
+clean_kustomize_output:
+	rm -f $(KUSTOMIZE_OUTPUT)
 
 # Always re-generate the output files because "git rebase" might have
 # left us with an inconsistent state.

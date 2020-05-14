@@ -200,6 +200,43 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 			wg.Wait()
 		})
 	})
+
+	// Also run some limited tests with Kata Containers.
+	kataDriver := &manifestDriver{
+		driverInfo: testsuites.DriverInfo{
+			Name:        d.Name + "-pmem-csi-kata",
+			MaxFileSize: testpatterns.FileSizeMedium,
+			SupportedFsType: sets.NewString(
+				"xfs",
+				"ext4",
+			),
+			Capabilities: map[testsuites.Capability]bool{
+				testsuites.CapPersistence: true,
+				testsuites.CapFsGroup:     true,
+				testsuites.CapExec:        true,
+				testsuites.CapBlock:       true,
+			},
+			SupportedSizeRange: e2evolume.SizeRange{
+				// There is test in VolumeIO suite creating 102 MB of content
+				// so we use 110 MB as minimum size to fit that with some margin.
+				// TODO: fix that upstream test to have a suitable minimum size
+				//
+				// Without VolumeIO suite, 16Mi would be enough as smallest xfs system size.
+				// Ref: http://man7.org/linux/man-pages/man8/mkfs.xfs.8.html
+				Min: "110Mi",
+			},
+		},
+		scManifest: map[string]string{
+			"ext4": "deploy/common/pmem-storageclass-ext4-kata.yaml",
+			"xfs":  "deploy/common/pmem-storageclass-xfs-kata.yaml",
+		},
+		csiDriverName: "pmem-csi.intel.com",
+	}
+	Context("Kata Containers", func() {
+		testsuites.DefineTestSuite(kataDriver, []func() testsuites.TestSuite{
+			dax.InitDaxTestSuite,
+		})
+	})
 })
 
 type manifestDriver struct {
@@ -213,12 +250,16 @@ type manifestDriver struct {
 
 var _ testsuites.TestDriver = &manifestDriver{}
 var _ testsuites.DynamicPVTestDriver = &manifestDriver{}
+var _ testsuites.EphemeralTestDriver = &manifestDriver{}
 
 func (m *manifestDriver) GetDriverInfo() *testsuites.DriverInfo {
 	return &m.driverInfo
 }
 
-func (m *manifestDriver) SkipUnsupportedTest(testpatterns.TestPattern) {
+func (m *manifestDriver) SkipUnsupportedTest(pattern testpatterns.TestPattern) {
+	if !m.driverInfo.SupportedFsType.Has(pattern.FsType) {
+		skipper.Skipf("fsType %q not supported", pattern.FsType)
+	}
 }
 
 func (m *manifestDriver) GetDynamicProvisionStorageClass(config *testsuites.PerTestConfig, fsType string) *storagev1.StorageClass {
@@ -241,6 +282,18 @@ func (m *manifestDriver) GetDynamicProvisionStorageClass(config *testsuites.PerT
 }
 
 func (m *manifestDriver) PrepareTest(f *framework.Framework) (*testsuites.PerTestConfig, func()) {
+	// If the driver depends on Kata Containers, first make sure
+	// that we have it on at least one node.
+	if strings.HasSuffix(m.driverInfo.Name, "-kata") {
+		nodes, err := f.ClientSet.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{
+			LabelSelector: "katacontainers.io/kata-runtime=true",
+		})
+		framework.ExpectNoError(err, "list nodes")
+		if len(nodes.Items) == 0 {
+			skipper.Skipf("no nodes found with Kata Container runtime")
+		}
+	}
+
 	By(fmt.Sprintf("deploying %s driver", m.driverInfo.Name))
 	config := &testsuites.PerTestConfig{
 		Driver:    m,
@@ -272,6 +325,9 @@ func (m *manifestDriver) GetVolume(config *testsuites.PerTestConfig, volumeNumbe
 	attributes := map[string]string{"size": m.driverInfo.SupportedSizeRange.Min}
 	shared := false
 	readOnly := false
+	if strings.HasSuffix(m.driverInfo.Name, "-kata") {
+		attributes["kataContainers"] = "true"
+	}
 
 	return attributes, shared, readOnly
 }

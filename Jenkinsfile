@@ -161,7 +161,8 @@ pipeline {
                     // Install additional tools:
                     // - ssh client for govm
                     // - python3 for Sphinx (i.e. make html)
-                    sh "docker exec ${env.BUILD_CONTAINER} swupd bundle-add openssh-client python3-basic"
+                    // - parted, xfsprogs, os-cloudguest-aws (contains mkfs.ext4) for ImageFile test
+                    sh "docker exec ${env.BUILD_CONTAINER} swupd bundle-add openssh-client python3-basic parted xfsprogs os-cloudguest-aws"
 
                     // Now commit those changes to ensure that the result of "swupd bundle add" gets cached.
                     sh "docker commit ${env.BUILD_CONTAINER} ${env.BUILD_IMAGE}"

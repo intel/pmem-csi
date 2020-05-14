@@ -118,11 +118,13 @@ func (p *daxTestSuite) DefineTests(driver testsuites.TestDriver, pattern testpat
 		}
 	}
 
+	withKataContainers := strings.HasSuffix(driver.GetDriverInfo().Name, "-kata")
+
 	It("should support MAP_SYNC", func() {
 		init()
 		defer cleanup()
 
-		l.testDaxInPod(f, l.resource.Pattern.VolMode, l.resource.VolSource, l.config)
+		l.testDaxInPod(f, l.resource.Pattern.VolMode, l.resource.VolSource, l.config, withKataContainers)
 	})
 }
 
@@ -130,7 +132,9 @@ func (l local) testDaxInPod(
 	f *framework.Framework,
 	volumeMode v1.PersistentVolumeMode,
 	source *v1.VolumeSource,
-	config *testsuites.PerTestConfig) {
+	config *testsuites.PerTestConfig,
+	withKataContainers bool,
+) {
 
 	const (
 		volPath       = "/vol1"
@@ -163,7 +167,20 @@ func (l local) testDaxInPod(
 			RestartPolicy: v1.RestartPolicyNever,
 		},
 	}
-	e2epod.SetNodeSelection(&pod.Spec, config.ClientNodeSelection)
+	if withKataContainers {
+		pod.Name += "-kata"
+		runtimeClassName := "kata-qemu"
+		pod.Spec.RuntimeClassName = &runtimeClassName
+		pod.Spec.NodeSelector = map[string]string{
+			"katacontainers.io/kata-runtime": "true",
+		}
+		if pod.Labels == nil {
+			pod.Labels = map[string]string{}
+		}
+		pod.Labels["io.katacontainers.config.hypervisor.memory_offset"] = "2147483648" // large enough for all test volumes
+	} else {
+		e2epod.SetNodeSelection(&pod.Spec, config.ClientNodeSelection)
+	}
 	switch volumeMode {
 	case v1.PersistentVolumeBlock:
 		// This is what we would like to use:
@@ -244,9 +261,36 @@ func (l local) testDaxInPod(
 	pmempod.RunInPod(f, l.root, []string{l.daxCheckBinary}, l.daxCheckBinary+" /no-dax; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
 
 	By("checking volume for DAX support")
-	pmempod.RunInPod(f, l.root, []string{l.daxCheckBinary}, l.daxCheckBinary+" /mnt/daxtest", ns, pod.Name, containerName)
+	pmempod.RunInPod(f, l.root, []string{l.daxCheckBinary}, "lsblk; mount | grep /mnt; "+l.daxCheckBinary+" /mnt/daxtest", ns, pod.Name, containerName)
+
+	// Data written in a container running under Kata Containers
+	// should be visible also in a normal container, unless the
+	// volume itself is ephemeral of course.  We currently don't
+	// have DAX support there, though.
+	checkWithNormalRuntime := withKataContainers && source.CSI == nil
+	if checkWithNormalRuntime {
+		By("creating file for usage under normal pod")
+		pmempod.RunInPod(f, l.root, nil, "touch /mnt/hello-world", ns, pod.Name, containerName)
+	}
 
 	By(fmt.Sprintf("Deleting pod %s", pod.Name))
 	err := e2epod.DeletePodWithWait(f.ClientSet, pod)
 	framework.ExpectNoError(err, "while deleting pod")
+
+	if checkWithNormalRuntime {
+		// Check for data written earlier.
+		pod.Spec.RuntimeClassName = nil
+		pod.Name = "data-volume-test"
+
+		By(fmt.Sprintf("Creating pod %s", pod.Name))
+		createdPod = podClient.Create(pod)
+		podErr := e2epod.WaitForPodRunningInNamespace(f.ClientSet, createdPod)
+		framework.ExpectNoError(podErr, "running second pod")
+		By("checking for previously created file under normal pod")
+		pmempod.RunInPod(f, l.root, nil, "ls -l /mnt/hello-world", ns, pod.Name, containerName)
+
+		By(fmt.Sprintf("Deleting pod %s", pod.Name))
+		err := e2epod.DeletePodWithWait(f.ClientSet, pod)
+		framework.ExpectNoError(err, "while deleting pod")
+	}
 }
