@@ -565,15 +565,20 @@ func EnsureDeployment(deploymentName string) *Deployment {
 		if running != nil {
 			if reflect.DeepEqual(deployment, running) {
 				framework.Logf("reusing existing %s PMEM-CSI components", deployment.Name)
-			} else {
-				framework.Logf("have %s PMEM-CSI deployment, want %s -> delete existing deployment", running.Name, deployment.Name)
-				err := RemoveObjects(c, running.Name)
-				framework.ExpectNoError(err, "remove PMEM-CSI deployment")
+				// Do some sanity checks on the running deployment before the test.
+				if deployment.HasDriver {
+					WaitForPMEMDriver(c, deployment.Namespace)
+				}
+				if deployment.HasOperator {
+					WaitForOperator(c, deployment.Namespace)
+				}
+				return
 			}
+			framework.Logf("have %s PMEM-CSI deployment, want %s -> delete existing deployment", running.Name, deployment.Name)
+			err := RemoveObjects(c, running.Name)
+			framework.ExpectNoError(err, "remove PMEM-CSI deployment")
 		}
 
-		// The code below runs also for existing deployments. It must be idempotent and
-		// fix the existing deployment in case that it was modified by the previous test.
 		if deployment.HasOperator {
 			// At the moment, the only supported deployment method is via test/start-operator.sh.
 			cmd := exec.Command("test/start-operator.sh")
