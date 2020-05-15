@@ -8,6 +8,7 @@
         ".tox",
 	    "_work",
         "deploy/kustomize",
+        "third-party",
         "test/test-config.d",
         "pkg/scheduler"
     ],

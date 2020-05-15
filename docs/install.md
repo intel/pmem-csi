@@ -426,13 +426,13 @@ Error: container create failed: QMP command failed: not enough space, currently 
 ```
 
 The examples for usage of Kata Containers [with
-ephemeral](../deploy/common/pmem-kata-app-ephemeral.yaml) and
-[persistent](../deploy/common/pmem-kata-app.yaml) volumes use the pod
+ephemeral](/deploy/common/pmem-kata-app-ephemeral.yaml) and
+[persistent](/deploy/common/pmem-kata-app.yaml) volumes use the pod
 label. They assume that the `kata-qemu` runtime class [is
 installed](https://github.com/kata-containers/packaging/tree/1.11.0-rc0/kata-deploy#run-a-sample-workload).
 
 For the QEMU test cluster,
-[`setup-kata-containers.sh`](../test/setup-kata-containers.sh) can be
+[`setup-kata-containers.sh`](/test/setup-kata-containers.sh) can be
 used to install Kata Containers. However, this currently only works on
 Clear Linux because on Fedora, the Docker container runtime is used
 and Kata Containers does not support that one.
@@ -440,7 +440,7 @@ and Kata Containers does not support that one.
 
 ### Ephemeral inline volumes
 
-Volume requests [embedded in the pod spec]() are provisioned as
+Volume requests [embedded in the pod spec](https://kubernetes-csi.github.io/docs/ephemeral-local-volumes.html#example-of-inline-csi-pod-spec) are provisioned as
 ephemeral volumes. The volume request could use below fields as
 [`volumeAttributes`](https://kubernetes.io/docs/concepts/storage/volumes/#csi):
 

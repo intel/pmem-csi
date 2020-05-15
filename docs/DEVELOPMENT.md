@@ -417,6 +417,9 @@ warning in the build. This document has a ``toctree`` in:
 1. ``index.rst``
 2.  ``examples/readme.rst``
 
+Files or directories that are intentionally not referenced can be excluded
+in [`conf.json`](/conf.json).
+
 NOTE: Though GitHub can parse reST files, the ``toctree`` directive is Sphinx
 specific, so it is not understood by GitHub. ``examples/readme.rst`` is a good
 example. Adding the ``:hidden:`` argument to the ``toctree`` directive means
