@@ -24,9 +24,11 @@ import (
 	"k8s.io/utils/mount"
 
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
+	"github.com/intel/pmem-csi/pkg/imagefile"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
+	"github.com/intel/pmem-csi/pkg/volumepathhandler"
 )
 
 const (
@@ -35,6 +37,13 @@ const (
 	// the driver
 	volumeProvisionerIdentity = "storage.kubernetes.io/csiProvisionerIdentity"
 	defaultFilesystem         = "ext4"
+
+	// kataContainersImageFilename is the image file that Kata Containers
+	// needs to make available inside the VM.
+	kataContainersImageFilename = "kata-containers-pmem-csi-vm.img"
+
+	// Mount point inside the target directory for the original volume.
+	kataContainersMount = "kata-containers-host-volume"
 )
 
 type volumeInfo struct {
@@ -49,12 +58,15 @@ type nodeServer struct {
 	// Driver deployed to provision only ephemeral volumes(only for Kubernetes v1.15)
 	mounter mount.Interface
 	volInfo map[string]volumeInfo
+
+	// A directory for additional mount points.
+	mountDirectory string
 }
 
 var _ csi.NodeServer = &nodeServer{}
 var _ grpcserver.PmemService = &nodeServer{}
 
-func NewNodeServer(cs *nodeControllerServer) *nodeServer {
+func NewNodeServer(cs *nodeControllerServer, mountDirectory string) *nodeServer {
 	return &nodeServer{
 		nodeCaps: []*csi.NodeServiceCapability{
 			{
@@ -65,9 +77,10 @@ func NewNodeServer(cs *nodeControllerServer) *nodeServer {
 				},
 			},
 		},
-		cs:      cs,
-		mounter: mount.New(""),
-		volInfo: map[string]volumeInfo{},
+		cs:             cs,
+		mounter:        mount.New(""),
+		volInfo:        map[string]volumeInfo{},
+		mountDirectory: mountDirectory,
 	}
 }
 
@@ -147,8 +160,15 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		ephemeral = device == nil && !ok && len(srcPath) == 0
 	}
 
+	var volumeParameters parameters.Volume
 	if ephemeral {
-		device, err := ns.createEphemeralDevice(ctx, req)
+		v, err := parameters.Parse(parameters.EphemeralVolumeOrigin, req.GetVolumeContext())
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, "ephemeral inline volume parameters: "+err.Error())
+		}
+		volumeParameters = v
+
+		device, err := ns.createEphemeralDevice(ctx, req, volumeParameters)
 		if err != nil {
 			// createEphemeralDevice() returns status.Error, so safe to return
 			return nil, err
@@ -156,10 +176,12 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		srcPath = device.Path
 		mountFlags = append(mountFlags, "dax")
 	} else {
-		// Validate parameters. We don't actually use any of them here, but a sanity check is worthwhile anyway.
-		if _, err := parameters.Parse(parameters.PersistentVolumeOrigin, req.GetVolumeContext()); err != nil {
+		// Validate parameters.
+		v, err := parameters.Parse(parameters.PersistentVolumeOrigin, req.GetVolumeContext())
+		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, "persistent volume context: "+err.Error())
 		}
+		volumeParameters = v
 
 		if device, err = ns.cs.dm.GetDevice(req.VolumeId); err != nil {
 			if errors.Is(err, pmdmanager.ErrDeviceNotFound) {
@@ -179,26 +201,12 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	sort.Strings(mountFlags)
 	joinedMountFlags := strings.Join(mountFlags[:], ",")
 
+	rawBlock := false
 	switch req.VolumeCapability.GetAccessType().(type) {
 	case *csi.VolumeCapability_Block:
+		rawBlock = true
 		// For block volumes, source path is the actual Device path
 		srcPath = device.Path
-		targetDir := filepath.Dir(targetPath)
-		// Make sure that parent directory of target path is existing, otherwise create it
-		targetPreExisting, err := ensureDirectory(ns.mounter, targetDir)
-		if err != nil {
-			return nil, err
-		}
-		f, err := os.OpenFile(targetPath, os.O_CREATE, os.FileMode(0644))
-		defer f.Close()
-		if err != nil && !os.IsExist(err) {
-			if !targetPreExisting {
-				if rerr := os.Remove(targetDir); rerr != nil {
-					klog.Warningf("Could not remove created mount target %q: %v", targetDir, rerr)
-				}
-			}
-			return nil, status.Errorf(codes.Internal, "Could not create target device file %q: %v", targetPath, err)
-		}
 	case *csi.VolumeCapability_Mount:
 		if !ephemeral && len(srcPath) == 0 {
 			return nil, status.Error(codes.FailedPrecondition, "Staging target path missing in request")
@@ -233,19 +241,95 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 				return nil, status.Error(codes.AlreadyExists, "Volume published but is incompatible")
 			}
 		}
+	}
 
-		if err := os.Mkdir(targetPath, os.FileMode(0755)); err != nil {
-			// Kubernetes is violating the CSI spec and creates the
-			// directory for us
-			// (https://github.com/kubernetes/kubernetes/issues/75535). We
-			// allow that by ignoring the "already exists" error.
-			if !os.IsExist(err) {
-				return nil, status.Error(codes.Internal, "make target dir: "+err.Error())
-			}
+	if rawBlock && volumeParameters.GetKataContainers() {
+		// We cannot pass block devices with DAX semantic into QEMU.
+		// TODO: add validation of CreateVolumeRequest.VolumeCapabilities and already detect the problem there.
+		return nil, status.Error(codes.InvalidArgument, "raw block volumes are incompatible with Kata Containers")
+	}
+
+	// We always (bind) mount. This is not strictly necessary for
+	// Kata Containers and persistent volumes because we could use
+	// the mounted filesystem at the staging path, but done anyway
+	// for two reason:
+	// - avoids special cases
+	// - we don't have the staging path in NodeUnpublishVolume
+	//   and can't undo some of the operations there if they refer to
+	//   the staging path
+	hostMount := targetPath
+	if volumeParameters.GetKataContainers() {
+		// Create a mount point inside our state directory. Mount directory gets created here,
+		// the mount point itself in ns.mount().
+		if err := os.MkdirAll(ns.mountDirectory, os.FileMode(0755)); err != nil && !os.IsExist(err) {
+			return nil, status.Error(codes.Internal, "create parent directory for mounts: "+err.Error())
+		}
+		hostMount = filepath.Join(ns.mountDirectory, req.GetVolumeId())
+	}
+	if err := ns.mount(srcPath, hostMount, mountFlags, rawBlock); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	if !volumeParameters.GetKataContainers() {
+		// A normal volume, return early.
+		ns.volInfo[req.VolumeId] = volumeInfo{readOnly: readOnly, targetPath: targetPath, mountFlags: joinedMountFlags}
+		return &csi.NodePublishVolumeResponse{}, nil
+	}
+
+	// When we get here, the volume is for Kata Containers and the
+	// following has already happened:
+	// - persistent filesystem volumes or ephemeral volume: formatted and mounted at hostMount
+	// - persistent raw block volumes: we bailed out with an error
+	//
+	// To support Kata Containers for ephemeral and persistent filesystem volumes,
+	// we now need to:
+	// - create the image file inside the mounted volume
+	// - bind-mount the partition inside that file to a loop device
+	// - mount the loop device instead of the original volume
+	//
+	// All of that has to be idempotent (because we might get
+	// killed while working on this) *and* we have to undo it when
+	// returning a failure (because then NodePublishVolume might
+	// not be called again - see in particular the final errors in
+	// https://github.com/kubernetes/kubernetes/blob/ca532c6fb2c08f859eca13e0557f3b2aec9a18e0/pkg/volume/csi/csi_client.go#L627-L649).
+
+	// There's some overhead for the imagefile inside the host filesystem, but that should be small
+	// relative to the size of the volumes, so we simply create an image file that is as large as
+	// the mounted filesystem allows. Create() is not idempotent, so we have to check for the
+	// file before overwriting something that was already created earlier.
+	imageFile := filepath.Join(hostMount, kataContainersImageFilename)
+	if _, err := os.Stat(imageFile); err != nil {
+		if !os.IsNotExist(err) {
+			return nil, status.Error(codes.Internal, "unexpected error while checking for image file: "+err.Error())
+		}
+		var imageFsType imagefile.FsType
+		switch fsType {
+		case "xfs":
+			imageFsType = imagefile.Xfs
+		case "":
+			fallthrough
+		case "ext4":
+			imageFsType = imagefile.Ext4
+		default:
+			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("fsType %q not supported for Kata Containers", fsType))
+		}
+		if err := imagefile.Create(imageFile, 0 /* no fixed size */, imageFsType); err != nil {
+			return nil, status.Error(codes.Internal, "create Kata Container image file: "+err.Error())
 		}
 	}
 
-	if err := ns.mount(srcPath, targetPath, mountFlags); err != nil {
+	// If this offset ever changes, then we have to make future versions of PMEM-CSI more
+	// flexible and dynamically determine the offset. For now we assume that the
+	// file was created by the current version and thus use the fixed offset.
+	offset := int64(imagefile.HeaderSize)
+	handler := volumepathhandler.VolumePathHandler{}
+	loopDev, err := handler.AttachFileDeviceWithOffset(imageFile, offset)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "create loop device: "+err.Error())
+	}
+
+	// TODO: Try to mount with dax first, fall back to mount without it if not supported.
+	if err := ns.mount(loopDev, targetPath, []string{}, false); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
@@ -328,7 +412,15 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 		klog.V(5).Infof("NodeUnpublishVolume: volume id:%s targetpath:%s has been unmounted", req.VolumeId, targetPath)
 	}
 
-	os.Remove(targetPath) // nolint: gosec, errorchk
+	if p.GetKataContainers() {
+		if err := ns.nodeUnpublishKataContainerImage(ctx, req, p); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := os.Remove(targetPath); err != nil {
+		return nil, status.Error(codes.Internal, "unexpected error while removing target path: "+err.Error())
+	}
 
 	if p.GetPersistency() == parameters.PersistencyEphemeral {
 		if _, err := ns.cs.DeleteVolume(ctx, &csi.DeleteVolumeRequest{VolumeId: vol.ID}); err != nil {
@@ -338,6 +430,34 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	delete(ns.volInfo, req.VolumeId)
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
+}
+
+func (ns *nodeServer) nodeUnpublishKataContainerImage(cxt context.Context, req *csi.NodeUnpublishVolumeRequest, p parameters.Volume) error {
+	// Reconstruct where the volume was mounted before creating the image file.
+	hostMount := filepath.Join(ns.mountDirectory, req.GetVolumeId())
+
+	// We know the parent and the well-known image name, so we have the full path now
+	// and can detach the loop device from it.
+	imageFile := filepath.Join(hostMount, kataContainersImageFilename)
+	handler := volumepathhandler.VolumePathHandler{}
+	// This will warn if the loop device is not found, but won't treat that as an error.
+	// This is the behavior that we want.
+	if err := handler.DetachFileDevice(imageFile); err != nil {
+		return status.Error(codes.Internal, fmt.Sprintf("remove loop device for Kata Container image file %q: %v", imageFile, err))
+	}
+
+	// We do *not* remove the image file. It may be needed again
+	// when mounting a persistent volume a second time. If not,
+	// it'll get deleted together with the device. But before
+	// the device can be deleted, we need to unmount it.
+	if err := ns.mounter.Unmount(hostMount); err != nil {
+		return status.Error(codes.Internal, fmt.Sprintf("unmount ephemeral Kata Container volume: %v", err))
+	}
+	if err := os.Remove(hostMount); err != nil {
+		return status.Error(codes.Internal, "unexpected error while removing ephemeral volume mount point: "+err.Error())
+	}
+
+	return nil
 }
 
 func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
@@ -404,7 +524,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 
 	mountOptions = append(mountOptions, "dax")
 
-	if err = ns.mount(device.Path, stagingtargetPath, mountOptions); err != nil {
+	if err = ns.mount(device.Path, stagingtargetPath, mountOptions, false /* raw block */); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
@@ -464,12 +584,7 @@ func (ns *nodeServer) NodeExpandVolume(context.Context, *csi.NodeExpandVolumeReq
 
 // createEphemeralDevice creates new pmem device for given req.
 // On failure it returns one of status errors.
-func (ns *nodeServer) createEphemeralDevice(ctx context.Context, req *csi.NodePublishVolumeRequest) (*pmdmanager.PmemDeviceInfo, error) {
-	p, err := parameters.Parse(parameters.EphemeralVolumeOrigin, req.GetVolumeContext())
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "ephemeral inline volume parameters: "+err.Error())
-	}
-
+func (ns *nodeServer) createEphemeralDevice(ctx context.Context, req *csi.NodePublishVolumeRequest, p parameters.Volume) (*pmdmanager.PmemDeviceInfo, error) {
 	// If the caller has use the heuristic for detecting ephemeral volumes, the flag won't
 	// be set. Fix that here.
 	ephemeral := parameters.PersistencyEphemeral
@@ -499,8 +614,8 @@ func (ns *nodeServer) createEphemeralDevice(ctx context.Context, req *csi.NodePu
 	return device, nil
 }
 
-// provisionDevice initializes the device with requested filesystem
-// and mounts at given targetPath.
+// provisionDevice initializes the device with requested filesystem.
+// It can be called multiple times for the same device (idempotent).
 func (ns *nodeServer) provisionDevice(device *pmdmanager.PmemDeviceInfo, fsType string) error {
 	if fsType == "" {
 		// Empty FsType means "unspecified" and we pick default, currently hard-coded to ext4
@@ -523,13 +638,22 @@ func (ns *nodeServer) provisionDevice(device *pmdmanager.PmemDeviceInfo, fsType 
 	}
 	output, err := pmemexec.RunCommand(cmd, args...)
 	if err != nil {
+		// If the filesystem is already mounted, then
+		// formatting it fails.  In that case we don't need to
+		// format and can ignore that error.  We could check
+		// for that ourselves in advance, but that would be
+		// extra code.
+		if strings.Contains(output, "contains a mounted filesystem") {
+			return nil
+		}
 		return fmt.Errorf("mkfs failed: %s", output)
 	}
 
 	return nil
 }
 
-func (ns *nodeServer) mount(sourcePath, targetPath string, mountOptions []string) error {
+// mount creates the target path (parent must exist) and mounts the source there. It is idempotent.
+func (ns *nodeServer) mount(sourcePath, targetPath string, mountOptions []string, rawBlock bool) error {
 	notMnt, err := ns.mounter.IsLikelyNotMountPoint(targetPath)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to determain if '%s' is a valid mount point: %s", targetPath, err.Error())
@@ -538,13 +662,20 @@ func (ns *nodeServer) mount(sourcePath, targetPath string, mountOptions []string
 		return nil
 	}
 
-	if err := os.Mkdir(targetPath, os.FileMode(0755)); err != nil {
-		// Kubernetes is violating the CSI spec and creates the
-		// directory for us
-		// (https://github.com/kubernetes/kubernetes/issues/75535). We
-		// allow that by ignoring the "already exists" error.
-		if !os.IsExist(err) {
-			return fmt.Errorf("failed to create '%s': %s", targetPath, err.Error())
+	// Create target path, using a file for raw block bind mounts
+	// or a directory for filesystems. Might already exist from a
+	// previous call or because Kubernetes erronously created it
+	// for us.
+	if rawBlock {
+		f, err := os.OpenFile(targetPath, os.O_CREATE, os.FileMode(0644))
+		if err == nil {
+			defer f.Close()
+		} else if !os.IsExist(err) {
+			return fmt.Errorf("create target device file: %w", err)
+		}
+	} else {
+		if err := os.Mkdir(targetPath, os.FileMode(0755)); err != nil && !os.IsExist(err) {
+			return fmt.Errorf("create target directory: %w", err)
 		}
 	}
 

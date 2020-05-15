@@ -56,7 +56,7 @@ case ${TEST_DISTRO} in
         else
             # Either cloud.img or cloudguest.img is fine, should have the same content.
             CLOUD_IMAGE=${CLOUD_IMAGE:-$(\
-                       curl -s https://download.clearlinux.org/image/latest-images |
+                       curl -s https://download.clearlinux.org/image/latest-images.json |
                            awk '/cloud.img|cloudguest.img/ {print $0}' |
                            head -n1)}
         fi
@@ -475,6 +475,12 @@ function cleanup() (
     if $FAILED; then
         set +xe
         echo "Cluster creation failed."
+        if [ -e ${CLUSTER_DIRECTORY}/kube.config ] && [ -e ${CLUSTER_DIRECTORY}/ssh.0 ]; then
+            echo "Kubernetes status: "
+            ${CLUSTER_DIRECTORY}/ssh.0 kubectl get all --all-namespaces -o wide
+        else
+            echo "No ${CLUSTER_DIRECTORY}/kube.config or no ssh.0 -> no Kubernetes."
+        fi
         echo "govm status:"
         govm list
         echo "Docker status:"
@@ -506,10 +512,12 @@ trap cleanup EXIT
 
 if init_workdir &&
    CLOUD_IMAGE=$(download_image) &&
+   ln -sf ${RESOURCES_DIRECTORY}/${CLOUD_IMAGE} ${CLUSTER_DIRECTORY}/cloud-image.qcow2 &&
    create_vms &&
    NO_PROXY=$(extend_no_proxy) &&
    init_pmem_regions &&
-   init_kubernetes_cluster; then
+   init_kubernetes_cluster &&
+   ( ! [ "${TEST_KATA_CONTAINERS_VERSION}" ] || ${TEST_DIRECTORY}/setup-kata-containers.sh ); then
     FAILED=false
 else
     exit 1

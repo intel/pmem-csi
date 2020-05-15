@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pmem-csi-pvc-kata
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 4Gi
+  storageClassName: pmem-csi-sc-ext4-kata # defined in pmem-storageclass-ext4-kata.yaml

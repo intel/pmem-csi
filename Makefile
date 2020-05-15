@@ -181,7 +181,7 @@ KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-cache.yaml
 KUSTOMIZATION_deploy/common/pmem-storageclass-cache.yaml = deploy/kustomize/storageclass-cache
 KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-late-binding.yaml
 KUSTOMIZATION_deploy/common/pmem-storageclass-late-binding.yaml = deploy/kustomize/storageclass-late-binding
-kustomize: _work/go-bindata $(KUSTOMIZE_OUTPUT)
+kustomize: _work/go-bindata clean_kustomize_output $(KUSTOMIZE_OUTPUT)
 	$< -o deploy/bindata_generated.go -pkg deploy deploy/kubernetes-*/*/pmem-csi.yaml
 
 $(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
@@ -192,6 +192,9 @@ $(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
 		cp $@ $$dir/pmem-csi.yaml && \
 		echo 'resources: [ pmem-csi.yaml ]' > $$dir/kustomization.yaml; \
 	fi
+
+clean_kustomize_output:
+	rm -f $(KUSTOMIZE_OUTPUT)
 
 # Always re-generate the output files because "git rebase" might have
 # left us with an inconsistent state.
@@ -224,7 +227,7 @@ $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT)): test-kustomize-%: _work/kustom
 check-go-version-%:
 	@ hack/verify-go-version.sh "$*"
 
-SPHINXOPTS    =
+SPHINXOPTS    = -W --keep-going # Warn about everything, abort with an error at the end.
 SPHINXBUILD   = sphinx-build
 SOURCEDIR     = .
 BUILDDIR      = _output

@@ -1,0 +1,13 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: pmem-csi-sc-xfs-kata
+parameters:
+  csi.storage.k8s.io/fstype: xfs
+  eraseafter: "true"
+  kataContainers: "true"
+provisioner: pmem-csi.intel.com
+reclaimPolicy: Delete
+# Kata Containers might not be available on all nodes, wait for pod scheduling
+# and then create volume on the chosen node(s).
+volumeBindingMode: WaitForFirstConsumer

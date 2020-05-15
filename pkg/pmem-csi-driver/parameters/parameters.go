@@ -21,6 +21,7 @@ type Origin int
 const (
 	CacheSize        = "cacheSize"
 	EraseAfter       = "eraseafter"
+	KataContainers   = "kataContainers"
 	Name             = "name"
 	PersistencyModel = "persistencyModel"
 	VolumeID         = "_id"
@@ -58,6 +59,7 @@ var valid = map[Origin][]string{
 	CreateVolumeOrigin: []string{
 		CacheSize,
 		EraseAfter,
+		KataContainers,
 		PersistencyModel,
 	},
 
@@ -65,6 +67,7 @@ var valid = map[Origin][]string{
 	CreateVolumeInternalOrigin: []string{
 		CacheSize,
 		EraseAfter,
+		KataContainers,
 		PersistencyModel,
 
 		VolumeID,
@@ -73,6 +76,7 @@ var valid = map[Origin][]string{
 	// Parameters from Kubernetes and users.
 	EphemeralVolumeOrigin: []string{
 		EraseAfter,
+		KataContainers,
 		PodInfoPrefix,
 		Size,
 	},
@@ -85,6 +89,7 @@ var valid = map[Origin][]string{
 	PersistentVolumeOrigin: []string{
 		CacheSize,
 		EraseAfter,
+		KataContainers,
 		PersistencyModel,
 
 		Name,
@@ -97,6 +102,7 @@ var valid = map[Origin][]string{
 	NodeVolumeOrigin: []string{
 		CacheSize,
 		EraseAfter,
+		KataContainers,
 		Name,
 		PersistencyModel,
 		Size,
@@ -108,12 +114,13 @@ var valid = map[Origin][]string{
 // The accessor functions always return a value, if unset
 // the default.
 type Volume struct {
-	CacheSize   *uint
-	EraseAfter  *bool
-	Name        *string
-	Persistency *Persistency
-	Size        *int64
-	VolumeID    *string
+	CacheSize      *uint
+	EraseAfter     *bool
+	KataContainers *bool
+	Name           *string
+	Persistency    *Persistency
+	Size           *int64
+	VolumeID       *string
 }
 
 // VolumeContext represents the same settings as a string map.
@@ -171,6 +178,12 @@ func Parse(origin Origin, stringmap map[string]string) (Volume, error) {
 			}
 			u := uint(c)
 			result.CacheSize = &u
+		case KataContainers:
+			b, err := strconv.ParseBool(value)
+			if err != nil {
+				return result, fmt.Errorf("parameter %q: failed to parse %q as boolean: %v", key, value, err)
+			}
+			result.KataContainers = &b
 		case Size:
 			quantity, err := resource.ParseQuantity(value)
 			if err != nil {
@@ -240,6 +253,9 @@ func (v Volume) ToContext() VolumeContext {
 	if v.Size != nil {
 		result[Size] = fmt.Sprintf("%d", *v.Size)
 	}
+	if v.KataContainers != nil {
+		result[KataContainers] = fmt.Sprintf("%v", *v.KataContainers)
+	}
 
 	return result
 }
@@ -277,6 +293,13 @@ func (v Volume) GetSize() int64 {
 		return *v.Size
 	}
 	return 0
+}
+
+func (v Volume) GetKataContainers() bool {
+	if v.KataContainers != nil {
+		return *v.KataContainers
+	}
+	return false
 }
 
 func (v Volume) GetVolumeID() string {

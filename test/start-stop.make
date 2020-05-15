@@ -1,9 +1,11 @@
 # Build a suitable https://github.com/govm-project/govm/releases/tag/latest version.
 GOVM_VERSION=0.9-alpha
 _work/govm_$(GOVM_VERSION)_Linux_amd64.tar.gz:
+	mkdir -p $(@D)
 	curl -L https://github.com/govm-project/govm/releases/download/$(GOVM_VERSION)/govm_$(GOVM_VERSION)_Linux_x86_64.tar.gz -o $(abspath $@)
 
 _work/bin/govm: _work/govm_$(GOVM_VERSION)_Linux_amd64.tar.gz
+	mkdir -p $(@D)
 	tar zxf $< -C _work/bin/
 	touch $@
 

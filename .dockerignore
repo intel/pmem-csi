@@ -8,6 +8,7 @@
 ! test/cmd/**
 ! test/test-config.d/**
 ! test/test-config.sh
+! third-party/**
 ! hack/**
 ! vendor/**
 ! go.mod

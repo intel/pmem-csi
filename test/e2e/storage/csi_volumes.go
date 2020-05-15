@@ -47,7 +47,7 @@ var (
 )
 
 var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
-	csiTestDriver := driver.New(d.Name, "pmem-csi.intel.com")
+	csiTestDriver := driver.New(d.Name, "pmem-csi.intel.com", nil, nil)
 
 	// List of testSuites to be added below.
 	var csiTestSuites = []func() testsuites.TestSuite{
@@ -152,6 +152,21 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 				}()
 			}
 			wg.Wait()
+		})
+	})
+
+	// Also run some limited tests with Kata Containers, using different
+	// storage classes than usual.
+	kataDriver := driver.New(d.Name+"-pmem-csi-kata", "pmem-csi.intel.com",
+		[]string{"xfs", "ext4"},
+		map[string]string{
+			"ext4": "deploy/common/pmem-storageclass-ext4-kata.yaml",
+			"xfs":  "deploy/common/pmem-storageclass-xfs-kata.yaml",
+		},
+	)
+	Context("Kata Containers", func() {
+		testsuites.DefineTestSuite(kataDriver, []func() testsuites.TestSuite{
+			dax.InitDaxTestSuite,
 		})
 	})
 })

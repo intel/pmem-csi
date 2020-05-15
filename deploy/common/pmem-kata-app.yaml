@@ -1,0 +1,22 @@
+kind: Pod
+apiVersion: v1
+metadata:
+  name: my-csi-kata-app
+  labels:
+    io.katacontainers.config.hypervisor.memory_offset: "2147483648" # 2Gi, must be at least as large as the PMEM volume
+spec:
+  # see https://github.com/kata-containers/packaging/tree/1.11.0-rc0/kata-deploy#run-a-sample-workload
+  runtimeClassName: kata-qemu
+  nodeSelector:
+    katacontainers.io/kata-runtime: "true"
+  containers:
+    - name: my-frontend
+      image: intel/pmem-csi-driver-test:canary
+      command: [ "sleep", "100000" ]
+      volumeMounts:
+      - mountPath: "/data"
+        name: my-csi-volume
+  volumes:
+  - name: my-csi-volume
+    persistentVolumeClaim:
+      claimName: pmem-csi-pvc-kata # see pmem-kata-pvc.yaml

@@ -871,8 +871,9 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 				MountPath: "/dev",
 			},
 			{
-				Name:      "pmem-state-dir",
-				MountPath: "/pmem-csi",
+				Name:             "pmem-state-dir",
+				MountPath:        "/pmem-csi",
+				MountPropagation: &bidirectional,
 			},
 		},
 		Resources: *d.Spec.NodeResources,

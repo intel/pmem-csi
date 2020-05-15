@@ -351,6 +351,7 @@ spec:
         - mountPath: /dev
           name: dev-dir
         - mountPath: /pmem-csi
+          mountPropagation: Bidirectional
           name: pmem-state-dir
         - mountPath: /var/lib/pmem-csi-coverage
           name: coverage-dir

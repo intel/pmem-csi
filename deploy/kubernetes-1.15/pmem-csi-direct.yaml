@@ -314,6 +314,7 @@ spec:
         - mountPath: /dev
           name: dev-dir
         - mountPath: /pmem-csi
+          mountPropagation: Bidirectional
           name: pmem-state-dir
         - mountPath: /sys
           name: sys-dir

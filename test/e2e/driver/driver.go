@@ -17,12 +17,15 @@ limitations under the License.
 package driver
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	storagev1 "k8s.io/api/storage/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/kubernetes/test/e2e/framework"
+	"k8s.io/kubernetes/test/e2e/framework/skipper"
 	e2evolume "k8s.io/kubernetes/test/e2e/framework/volume"
 	"k8s.io/kubernetes/test/e2e/storage/testpatterns"
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
@@ -32,9 +35,16 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func New(name, csiDriverName string, fsTypes ...string) testsuites.TestDriver {
-	if len(fsTypes) == 0 {
+func New(name, csiDriverName string, fsTypes []string, scManifests map[string]string) testsuites.TestDriver {
+	if fsTypes == nil {
 		fsTypes = []string{"", "ext4", "xfs"}
+	}
+	if scManifests == nil {
+		scManifests = map[string]string{
+			"":     "deploy/common/pmem-storageclass-ext4.yaml",
+			"ext4": "deploy/common/pmem-storageclass-ext4.yaml",
+			"xfs":  "deploy/common/pmem-storageclass-xfs.yaml",
+		}
 	}
 	return &manifestDriver{
 		driverInfo: testsuites.DriverInfo{
@@ -57,11 +67,7 @@ func New(name, csiDriverName string, fsTypes ...string) testsuites.TestDriver {
 				Min: "110Mi",
 			},
 		},
-		scManifest: map[string]string{
-			"":     "deploy/common/pmem-storageclass-ext4.yaml",
-			"ext4": "deploy/common/pmem-storageclass-ext4.yaml",
-			"xfs":  "deploy/common/pmem-storageclass-xfs.yaml",
-		},
+		scManifest:    scManifests,
 		csiDriverName: csiDriverName,
 	}
 }
@@ -77,12 +83,16 @@ type manifestDriver struct {
 
 var _ testsuites.TestDriver = &manifestDriver{}
 var _ testsuites.DynamicPVTestDriver = &manifestDriver{}
+var _ testsuites.EphemeralTestDriver = &manifestDriver{}
 
 func (m *manifestDriver) GetDriverInfo() *testsuites.DriverInfo {
 	return &m.driverInfo
 }
 
-func (m *manifestDriver) SkipUnsupportedTest(testpatterns.TestPattern) {
+func (m *manifestDriver) SkipUnsupportedTest(pattern testpatterns.TestPattern) {
+	if !m.driverInfo.SupportedFsType.Has(pattern.FsType) {
+		skipper.Skipf("fsType %q not supported", pattern.FsType)
+	}
 }
 
 func (m *manifestDriver) GetDynamicProvisionStorageClass(config *testsuites.PerTestConfig, fsType string) *storagev1.StorageClass {
@@ -106,6 +116,18 @@ func (m *manifestDriver) GetDynamicProvisionStorageClass(config *testsuites.PerT
 }
 
 func (m *manifestDriver) PrepareTest(f *framework.Framework) (*testsuites.PerTestConfig, func()) {
+	// If the driver depends on Kata Containers, first make sure
+	// that we have it on at least one node.
+	if strings.HasSuffix(m.driverInfo.Name, "-kata") {
+		nodes, err := f.ClientSet.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{
+			LabelSelector: "katacontainers.io/kata-runtime=true",
+		})
+		framework.ExpectNoError(err, "list nodes")
+		if len(nodes.Items) == 0 {
+			skipper.Skipf("no nodes found with Kata Container runtime")
+		}
+	}
+
 	config := &testsuites.PerTestConfig{
 		Driver:    m,
 		Prefix:    "pmem",
@@ -142,6 +164,9 @@ func (m *manifestDriver) GetVolume(config *testsuites.PerTestConfig, volumeNumbe
 	attributes := map[string]string{"size": m.driverInfo.SupportedSizeRange.Min}
 	shared := false
 	readOnly := false
+	if strings.HasSuffix(m.driverInfo.Name, "-kata") {
+		attributes["kataContainers"] = "true"
+	}
 
 	return attributes, shared, readOnly
 }
