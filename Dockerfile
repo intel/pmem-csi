@@ -118,3 +118,7 @@ RUN echo "global { use_lvmetad = 0 }" >> /etc/lvm/lvm.conf && \
     echo "activation { udev_sync = 0 udev_rules = 0 }" >> /etc/lvm/lvm.conf
 
 ENV LD_LIBRARY_PATH=/usr/lib
+# By default container runs with non-root user
+# Choose root user explicitly only where needed, like - node driver
+RUN useradd --uid 1000 --user-group --shell /bin/bash pmem-csi
+USER 1000
