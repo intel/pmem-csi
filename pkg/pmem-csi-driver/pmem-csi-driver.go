@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
@@ -235,7 +236,7 @@ func (pmemd *pmemDriver) Run() error {
 		return err
 	}
 
-	s := NewNonBlockingGRPCServer()
+	s := grpcserver.NewNonBlockingGRPCServer()
 	// Ensure that the server is stopped before we return.
 	defer func() {
 		s.ForceStop()
@@ -290,7 +291,7 @@ func (pmemd *pmemDriver) Run() error {
 			if err := pmemd.registerNodeController(); err != nil {
 				return err
 			}
-			services := []PmemService{ids, ns}
+			services := []grpcserver.PmemService{ids, ns}
 			if pmemd.cfg.TestEndpoint {
 				services = append(services, cs)
 			}

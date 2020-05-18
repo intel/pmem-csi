@@ -3,9 +3,9 @@ module github.com/intel/pmem-csi
 go 1.13
 
 require (
-	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/container-storage-interface/spec v1.2.0
 	github.com/docker/spdystream v0.0.0-20181023171402-6480d4af844c // indirect
+	github.com/go-bindata/go-bindata v3.1.2+incompatible
 	github.com/go-logr/logr v0.1.0
 	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9 // indirect
 	github.com/golang/protobuf v1.3.2
@@ -17,9 +17,10 @@ require (
 	github.com/kubernetes-csi/csi-test/v3 v3.0.0
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.8.1
+	github.com/operator-framework/operator-sdk v0.13.0
 	github.com/pkg/errors v0.8.1
-	github.com/prometheus/client_golang v1.0.0
-	github.com/prometheus/common v0.4.1
+	github.com/prometheus/client_golang v1.1.0
+	github.com/prometheus/common v0.6.0
 	github.com/prometheus/procfs v0.0.5 // indirect
 	github.com/stretchr/testify v1.4.0
 	go.uber.org/multierr v1.2.0 // indirect
@@ -31,9 +32,11 @@ require (
 	google.golang.org/grpc v1.26.0
 	gopkg.in/freddierice/go-losetup.v1 v1.0.0-20170407175016-fc9adea44124
 	gopkg.in/square/go-jose.v2 v2.4.0 // indirect
+	gopkg.in/yaml.v2 v2.2.8
 	k8s.io/api v0.18.1
+	k8s.io/apiextensions-apiserver v0.18.1
 	k8s.io/apimachinery v0.18.1
-	k8s.io/client-go v0.18.1
+	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/component-base v0.18.1
 	k8s.io/klog v1.0.0
 	k8s.io/kube-scheduler v0.18.1
@@ -68,6 +71,12 @@ replace (
 	k8s.io/sample-cli-plugin => k8s.io/sample-cli-plugin v0.18.1
 	k8s.io/sample-controller => k8s.io/sample-controller v0.18.1
 )
+
+//  Operator:-  To resolve below ambigutiy, pin Azure/go-autorest/autorest to v13.3.0
+// 	github.com/Azure/go-autorest/autorest: ambiguous import: found github.com/Azure/go-autorest/autorest in multiple modules:
+//	github.com/Azure/go-autorest v11.1.0+incompatible (/home/avalluri/work/go/pkg/mod/github.com/!azure/go-autorest@v11.1.0+incompatible/autorest)
+//	github.com/Azure/go-autorest/autorest v0.9.0 (/home/avalluri/work/go/pkg/mod/github.com/!azure/go-autorest/autorest@v0.9.0)
+replace github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.0+incompatible
 
 // Temporary fork based on 1.18.1 with additional PRs:
 // - https://github.com/kubernetes/kubernetes/pull/89819

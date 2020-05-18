@@ -153,6 +153,7 @@ metadata:
 spec:
   ports:
   - port: 10000
+    targetPort: 10000
   selector:
     app: pmem-csi-controller
     pmem-csi.intel.com/deployment: direct-production
@@ -167,6 +168,7 @@ metadata:
 spec:
   ports:
   - port: 10010
+    targetPort: 10010
   selector:
     app: pmem-csi-controller
     pmem-csi.intel.com/deployment: direct-production
@@ -197,7 +199,6 @@ spec:
       - command:
         - /usr/local/bin/pmem-csi-driver
         - -v=3
-        - -drivername=pmem-csi.intel.com
         - -mode=controller
         - -endpoint=unix:///csi/csi-controller.sock
         - -registryEndpoint=tcp://0.0.0.0:10000
@@ -206,6 +207,7 @@ spec:
         - -caFile=/certs/ca.crt
         - -certFile=/certs/tls.crt
         - -keyFile=/certs/tls.key
+        - -drivername=$(PMEM_CSI_DRIVER_NAME)
         env:
         - name: KUBE_NODE_NAME
           valueFrom:
@@ -214,32 +216,30 @@ spec:
               fieldPath: spec.nodeName
         - name: TERMINATION_LOG_PATH
           value: /tmp/termination-log
+        - name: PMEM_CSI_DRIVER_NAME
+          value: pmem-csi.intel.com
         image: intel/pmem-csi-driver:canary
         imagePullPolicy: Always
         name: pmem-driver
-        securityContext:
-          privileged: true
         terminationMessagePath: /tmp/termination-log
         volumeMounts:
-        - mountPath: /certs/
+        - mountPath: /certs
           name: registry-cert
         - mountPath: /csi
           name: plugin-socket-dir
       - args:
-        - --timeout=5m
-        - --v=3
+        - -v=3
         - --csi-address=/csi/csi-controller.sock
         - --feature-gates=Topology=true
         - --strict-topology=true
         - --timeout=5m
-        - --strict-topology=true
         image: quay.io/k8scsi/csi-provisioner:v1.2.1
         imagePullPolicy: Always
         name: external-provisioner
         volumeMounts:
         - mountPath: /csi
           name: plugin-socket-dir
-      serviceAccount: pmem-csi-controller
+      serviceAccountName: pmem-csi-controller
       volumes:
       - emptyDir: null
         name: plugin-socket-dir
@@ -269,21 +269,19 @@ spec:
       containers:
       - command:
         - /usr/local/bin/pmem-csi-driver
-        - -deviceManager=ndctl
+        - -deviceManager=direct
         - -v=3
-        - -drivername=pmem-csi.intel.com
         - -mode=node
-        - -endpoint=$(CSI_ENDPOINT)
+        - -endpoint=unix:///pmem-csi/csi.sock
         - -nodeid=$(KUBE_NODE_NAME)
         - -controllerEndpoint=tcp://$(KUBE_POD_IP):10001
         - -registryEndpoint=tcp://pmem-csi-controller:10000
         - -caFile=/certs/ca.crt
         - -certFile=/certs/tls.crt
         - -keyFile=/certs/tls.key
-        - -statePath=/var/lib/pmem-csi.intel.com
+        - -statePath=/pmem-csi
+        - -drivername=$(PMEM_CSI_DRIVER_NAME)
         env:
-        - name: CSI_ENDPOINT
-          value: unix:///var/lib/pmem-csi.intel.com/csi.sock
         - name: KUBE_NODE_NAME
           valueFrom:
             fieldRef:
@@ -294,6 +292,8 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: status.podIP
+        - name: PMEM_CSI_DRIVER_NAME
+          value: pmem-csi.intel.com
         - name: TERMINATION_LOG_PATH
           value: /tmp/termination-log
         image: intel/pmem-csi-driver:canary
@@ -309,19 +309,22 @@ spec:
         - mountPath: /var/lib/kubelet/pods
           mountPropagation: Bidirectional
           name: pods-dir
-        - mountPath: /certs/
-          name: registry-cert
+        - mountPath: /certs
+          name: node-cert
         - mountPath: /dev
           name: dev-dir
-        - mountPath: /var/lib/pmem-csi.intel.com
+        - mountPath: /pmem-csi
           mountPropagation: Bidirectional
           name: pmem-state-dir
         - mountPath: /sys
           name: sys-dir
       - args:
         - -v=3
-        - --kubelet-registration-path=/var/lib/pmem-csi.intel.com/csi.sock
+        - --kubelet-registration-path=/var/lib/$(PMEM_CSI_DRIVER_NAME)/csi.sock
         - --csi-address=/pmem-csi/csi.sock
+        env:
+        - name: PMEM_CSI_DRIVER_NAME
+          value: pmem-csi.intel.com
         image: quay.io/k8scsi/csi-node-driver-registrar:v1.1.0
         imagePullPolicy: Always
         name: driver-registrar
@@ -345,7 +348,7 @@ spec:
           path: /var/lib/kubelet/pods
           type: DirectoryOrCreate
         name: pods-dir
-      - name: registry-cert
+      - name: node-cert
         secret:
           secretName: pmem-csi-node-secrets
       - hostPath:

@@ -23,6 +23,7 @@ import (
 	"k8s.io/klog"
 	"k8s.io/utils/mount"
 
+	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	"github.com/intel/pmem-csi/pkg/imagefile"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
@@ -63,7 +64,7 @@ type nodeServer struct {
 }
 
 var _ csi.NodeServer = &nodeServer{}
-var _ PmemService = &nodeServer{}
+var _ grpcserver.PmemService = &nodeServer{}
 
 func NewNodeServer(cs *nodeControllerServer, mountDirectory string) *nodeServer {
 	return &nodeServer{
