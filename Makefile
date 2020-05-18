@@ -71,7 +71,7 @@ generate: operator-generate-k8s
 
 # Build production binaries.
 $(CMDS): check-go-version-$(GO_BINARY)
-	$(GO) build -ldflags '-X github.com/intel/pmem-csi/pkg/$@.version=${VERSION}' -a -o ${OUTPUT_DIR}/$@ ./cmd/$@
+	$(GO) build -ldflags '-X github.com/intel/pmem-csi/pkg/$@.version=${VERSION} -s -w' -a -o ${OUTPUT_DIR}/$@ ./cmd/$@
 
 # Build a test binary that can be used instead of the normal one with
 # additional "-run" parameters. In contrast to the normal it then also
