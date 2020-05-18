@@ -587,6 +587,8 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRoleBinding() *rbacv1.Clu
 
 func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 	replicas := int32(1)
+	true := true
+	pmemcsiUser := int64(1000)
 	ss := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "StatefulSet",
@@ -611,6 +613,11 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 						}),
 				},
 				Spec: corev1.PodSpec{
+					SecurityContext: &corev1.PodSecurityContext{
+						// Controller pod must run as non-root user
+						RunAsNonRoot: &true,
+						RunAsUser:    &pmemcsiUser,
+					},
 					ServiceAccountName: d.Name + "-controller",
 					Containers: []corev1.Container{
 						d.getControllerContainer(),
@@ -856,6 +863,7 @@ func (d *PmemCSIDriver) getControllerContainer() corev1.Container {
 func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 	bidirectional := corev1.MountPropagationBidirectional
 	true := true
+	root := int64(0)
 	c := corev1.Container{
 		Name:            "pmem-driver",
 		Image:           d.Spec.Image,
@@ -917,6 +925,8 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 		Resources: *d.Spec.NodeResources,
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &true,
+			// Node driver must run as root user
+			RunAsUser: &root,
 		},
 		TerminationMessagePath: "/tmp/termination-log",
 	}
@@ -956,6 +966,7 @@ func (d *PmemCSIDriver) getProvisionerContainer() corev1.Container {
 
 func (d *PmemCSIDriver) getNamespaceInitContainer() corev1.Container {
 	true := true
+	root := int64(0)
 	return corev1.Container{
 		Name:            "pmem-ns-init",
 		Image:           d.Spec.Image,
@@ -980,6 +991,8 @@ func (d *PmemCSIDriver) getNamespaceInitContainer() corev1.Container {
 		Resources: *d.Spec.NodeResources,
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &true,
+			// Node driver must run as root user
+			RunAsUser: &root,
 		},
 		TerminationMessagePath: "/tmp/pmem-ns-init-termination-log",
 	}
@@ -987,6 +1000,7 @@ func (d *PmemCSIDriver) getNamespaceInitContainer() corev1.Container {
 
 func (d *PmemCSIDriver) getVolumeGroupInitContainer() corev1.Container {
 	true := true
+	root := int64(0)
 	return corev1.Container{
 		Name:            "pmem-vgm",
 		Image:           d.Spec.Image,
@@ -1004,6 +1018,8 @@ func (d *PmemCSIDriver) getVolumeGroupInitContainer() corev1.Container {
 		Resources: *d.Spec.NodeResources,
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &true,
+			// Node driver must run as root user
+			RunAsUser: &root,
 		},
 		TerminationMessagePath: "/tmp/pmem-vgm-termination-log",
 	}
