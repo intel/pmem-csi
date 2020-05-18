@@ -48,10 +48,10 @@ name and other parameters in the deployment can be modified with
 how one can change the namespace, volume size or add additional
 command line parameters:
 
-```sh
-mkdir -p my-memcached-deployment
+```console
+$ mkdir -p my-memcached-deployment
 
-cat >my-memcached-deployment/kustomization.yaml <<EOF
+$ cat >my-memcached-deployment/kustomization.yaml <<EOF
 namespace: demo
 bases:
  - github.com/intel/pmem-csi/deploy/kustomize/memcached/ephemeral
@@ -59,7 +59,7 @@ patchesStrategicMerge:
 - update-deployment.yaml
 EOF
 
-cat >my-memcached-deployment/update-deployment.yaml <<EOF
+$ cat >my-memcached-deployment/update-deployment.yaml <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -81,24 +81,17 @@ EOF
 ```
 
 These commands then create the namespace and the deployment:
-```sh
-kubectl create ns demo
-kubectl create --kustomize my-memcached-deployment
-```
-
-The expected output is:
-```
+```console
+$ kubectl create ns demo
 namespace/demo created
+$ kubectl create --kustomize my-memcached-deployment
 service/pmem-memcached created
 deployment.apps/pmem-memcached created
 ```
 
 Eventually, there will be one pod with memcached running:
-```sh
-kubectl wait --for=condition=Ready -n demo pods -l app.kubernetes.io/name=pmem-memcached
-```
-
-```
+```console
+$ kubectl wait --for=condition=Ready -n demo pods -l app.kubernetes.io/name=pmem-memcached
 pod/pmem-memcached-96f6b5986-hdx6n condition met
 ```
 
@@ -108,21 +101,15 @@ use [`kubectl
 port-forward`](https://kubernetes.io/docs/tasks/access-application-cluster/port-forward-access-application-cluster/)
 to access the service. Run this command in one shell and keep it
 running there:
-```sh
-kubectl port-forward -n demo service/pmem-memcached 11211
-```
-
-```
+```console
+$ kubectl port-forward -n demo service/pmem-memcached 11211
 Forwarding from 127.0.0.1:11211 -> 11211
 Forwarding from [::1]:11211 -> 11211
 ```
 
 In another shell we can now use `telnet` to connect to memcached:
-```sh
-telnet localhost 11211
-```
-
-```
+```console
+$ telnet localhost 11211
 Trying ::1...
 Connected to localhost.
 Escape character is '^]'.
@@ -162,21 +149,14 @@ Connection closed by foreign host.
 
 The following command verifies the data was stored in a persistent
 memory data volume:
-```sh
-pod=$(kubectl get -n demo pods -l app.kubernetes.io/name=pmem-memcached -o jsonpath={..metadata.name})
-kubectl exec -n demo $pod grep 'I am PMEM.' /data/memcached-memory-file
-```
-
-```
+```console
+$ kubectl exec -n demo $(kubectl get -n demo pods -l app.kubernetes.io/name=pmem-memcached -o jsonpath={..metadata.name}) grep 'I am PMEM.' /data/memcached-memory-file
 Binary file /data/memcached-memory-file matches
 ```
 
 To clean up, terminate the `kubectl port-forward` command and delete the memcached deployment with:
-```sh
-kubectl delete --kustomize my-memcached-deployment
-```
-
-```
+```console
+$ kubectl delete --kustomize my-memcached-deployment
 service "pmem-memcached" deleted
 deployment.apps "pmem-memcached" deleted
 ```
@@ -212,11 +192,8 @@ This example can also be kustomized. It uses the [`pmem-csi-sc-ext4`
 storage class](/deploy/common/pmem-storageclass-ext4.yaml). Here we
 just use the defaults, in particular the default namespace:
 
-```sh
-kubectl apply --kustomize github.com/intel/pmem-csi/deploy/kustomize/memcached/persistent
-```
-
-```
+```console
+$ kubectl apply --kustomize github.com/intel/pmem-csi/deploy/kustomize/memcached/persistent
 service/pmem-memcached created
 statefulset.apps/pmem-memcached created
 ```
@@ -224,41 +201,29 @@ statefulset.apps/pmem-memcached created
 We can verify that memcached really does a warm restart by storing
 some data, removing the instance and then starting it again.
 
-```sh
-kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=pmem-memcached
-```
-
-Because we use a stateful set, the pod name is deterministic:
-```
+```console
+$ kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=pmem-memcached
 pod/pmem-memcached-0 condition met
 ```
 
-There is also a corresponding persistent volume:
-```sh
-kubectl get pvc
-```
+Because we use a stateful set, the pod name is deterministic.
 
-```
+There is also a corresponding persistent volume:
+```console
+$ kubectl get pvc
 NAME                                     STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS       AGE
 memcached-data-volume-pmem-memcached-0   Bound    pvc-bb2cde11-6aa2-46da-8521-9bc35c08426d   200Mi      RWO            pmem-csi-sc-ext4   5m45s
 ```
 
 First set a key using the same approach as before:
-
-```sh
-kubectl port-forward service/pmem-memcached 11211
-```
-
-```
+```console
+$ kubectl port-forward service/pmem-memcached 11211
 Forwarding from 127.0.0.1:11211 -> 11211
 Forwarding from [::1]:11211 -> 11211
 ```
 
-```sh
-telnet localhost 11211
-```
-
-```
+```console
+$ telnet localhost 11211
 Trying ::1...
 Connected to localhost.
 Escape character is '^]'.
@@ -281,35 +246,17 @@ Then scale down the number of memcached instances down to zero, then
 restart it. To avoid race conditions, it is important to wait for
 Kubernetes to catch up:
 
-```sh
-kubectl scale --replicas=0 statefulset/pmem-memcached
-```
-
-```
+```console
+$ kubectl scale --replicas=0 statefulset/pmem-memcached
 statefulset.apps/pmem-memcached scaled
-```
 
-```sh
-kubectl wait --for delete pod/pmem-memcached-0
-```
-
-```
+$ kubectl wait --for delete pod/pmem-memcached-0
 Error from server (NotFound): pods "pmem-memcached-0" not found
-```
 
-```sh
-kubectl scale --replicas=1 statefulset/pmem-memcached
-```
-
-```
+$ kubectl scale --replicas=1 statefulset/pmem-memcached
 statefulset.apps/pmem-memcached scaled
-```
 
-```sh
-kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=pmem-memcached
-```
-
-```
+$ kubectl wait --for=condition=Ready pods -l app.kubernetes.io/name=pmem-memcached
 pod/pmem-memcached-0 condition met
 ```
 
@@ -318,11 +265,8 @@ Restart the port forwarding now because it is tied to the previous pod.
 Without the persistent volume and the restartable cache, the memcached
 cache would be empty now. With `telnet` we can verify that this is not
 the case and that the key is still known:
-```sh
-telnet 127.0.0.1 11211
-```
-
-```
+```console
+$ telnet 127.0.0.1 11211
 Trying 127.0.0.1...
 Connected to 127.0.0.1.
 Escape character is '^]'.
@@ -347,11 +291,8 @@ Connection closed by foreign host.
 ```
 
 To clean up, terminate the `kubectl port-forward` command and delete the memcached deployment with:
-```sh
-kubectl delete --kustomize github.com/intel/pmem-csi/deploy/kustomize/memcached/persistent
-```
-
-```
+```console
+$ kubectl delete --kustomize github.com/intel/pmem-csi/deploy/kustomize/memcached/persistent
 service "pmem-memcached" deleted
 statefulset.apps "pmem-memcached" deleted
 ```
@@ -360,10 +301,7 @@ Beware that at the moment, the volumes need to be removed manually
 after removing the stateful set. A [request to automate
 that](https://github.com/kubernetes/kubernetes/issues/55045) is open.
 
-```sh
-kubectl delete pvc -l app.kubernetes.io/name=pmem-memcached
-```
-
-```
+```console
+$ kubectl delete pvc -l app.kubernetes.io/name=pmem-memcached
 persistentvolumeclaim "memcached-data-volume-pmem-memcached-0" deleted
 ```
