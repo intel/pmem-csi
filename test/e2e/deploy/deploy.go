@@ -80,8 +80,11 @@ func WaitForOperator(c *Cluster, namespace string) (operator *v1.Pod) {
 func WaitForPMEMDriver(c *Cluster, namespace string) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
+	info := time.NewTicker(time.Minute)
+	defer info.Stop()
 	deadline, cancel := context.WithTimeout(context.Background(), framework.TestContext.SystemDaemonsetStartupTimeout)
 	defer cancel()
+	framework.Logf("Starting to wait for PMEM-CSI driver.")
 
 	tlsConfig := tls.Config{
 		// We could load ca.pem with pmemgrpc.LoadClientTLS, but as we are not connecting to it
@@ -96,13 +99,8 @@ func WaitForPMEMDriver(c *Cluster, namespace string) {
 		Transport: &tr,
 	}
 
-	ready := func() (err error) {
-		defer func() {
-			if err != nil {
-				framework.Logf("wait for PMEM-CSI: %v", err)
-			}
-		}()
-
+	var lastError error
+	check := func() error {
 		// The controller service must be defined.
 		port, err := c.GetServicePort("pmem-csi-metrics", "default")
 		if err != nil {
@@ -158,6 +156,13 @@ func WaitForPMEMDriver(c *Cluster, namespace string) {
 
 		return nil
 	}
+	ready := func() error {
+		lastError = check()
+		if lastError == nil {
+			framework.Logf("PMEM-CSI driver is ready.")
+		}
+		return lastError
+	}
 
 	if ready() == nil {
 		return
@@ -169,7 +174,9 @@ func WaitForPMEMDriver(c *Cluster, namespace string) {
 				return
 			}
 		case <-deadline.Done():
-			framework.Failf("giving up waiting for PMEM-CSI to start up, check the previous warnings and log output")
+			framework.Failf("Giving up waiting for PMEM-CSI to start up, check the previous warnings and log output.")
+		case <-info.C:
+			framework.Logf("Still waiting for PMEM-CSI driver, last error: %v", lastError)
 		}
 	}
 }
@@ -182,7 +189,6 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 	deadline, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
 
 	framework.Logf("deleting the %s PMEM-CSI deployment", deploymentName)
 	for _, h := range uninstallHooks {
