@@ -249,6 +249,8 @@ spec:
         volumeMounts:
         - mountPath: /csi
           name: plugin-socket-dir
+      securityContext:
+        runAsNonRoot: true
       serviceAccountName: pmem-csi-controller
       volumes:
       - emptyDir: null
@@ -311,6 +313,7 @@ spec:
         name: pmem-driver
         securityContext:
           privileged: true
+          runAsUser: 0
         terminationMessagePath: /tmp/termination-log
         volumeMounts:
         - mountPath: /var/lib/kubelet/plugins/kubernetes.io/csi
@@ -353,6 +356,7 @@ spec:
         name: pmem-ns-init
         securityContext:
           privileged: true
+          runAsUser: 0
         terminationMessagePath: /tmp/pmem-ns-init-termination-log
         volumeMounts:
         - mountPath: /sys
@@ -368,6 +372,7 @@ spec:
         name: pmem-vgm
         securityContext:
           privileged: true
+          runAsUser: 0
         terminationMessagePath: /tmp/pmem-vgm-termination-log
       nodeSelector:
         storage: pmem

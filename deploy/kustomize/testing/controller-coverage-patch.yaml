@@ -14,3 +14,24 @@
     hostPath:
       path: /var/lib/pmem-csi-coverage
       type: DirectoryOrCreate
+# driver in controller mode runs as non-root user
+# which cannot have enough permissions to access
+# coverage-dir(/var/lib/pmem-csi-coverage)
+# Change the ownership of this folder to "pmem-csi:pmem-csi"
+# so that driver could write coverage reports.
+# NOTE: The assumption is that the user,group exist on the VM host with id 1000 
+- op: add
+  path: /spec/template/spec/initContainers
+  value:
+  - name: coverage-init
+    imagePullPolicy: Always
+    image: intel/pmem-csi-driver:canary
+    command: ["chown", "-R", "pmem-csi:pmem-csi", "/var/lib/pmem-csi-coverage"]
+    securityContext:
+      privileged: true
+      runAsUser: 0
+    volumeMounts:
+    - mountPath: /var/lib/pmem-csi-coverage
+      name: coverage-dir
+- op: remove
+  path: /spec/template/spec/securityContext/runAsNonRoot

@@ -46,6 +46,8 @@ spec:
         app: pmem-csi-controller
         pmem-csi.intel.com/webhook: ignore
     spec:
+      securityContext:
+        runAsNonRoot: true
       serviceAccountName: pmem-csi-controller
       affinity:
         nodeAffinity:
@@ -159,6 +161,7 @@ spec:
         terminationMessagePath: /tmp/termination-log
         securityContext:
           privileged: true
+          runAsUser: 0
         env:
         - name: KUBE_NODE_NAME
           valueFrom:

@@ -142,6 +142,7 @@ func (l local) testDaxInPod(
 		containerName = "dax-container"
 	)
 	privileged := volumeMode == v1.PersistentVolumeBlock
+	root := int64(0)
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "dax-volume-test",
@@ -152,6 +153,8 @@ func (l local) testDaxInPod(
 				{
 					SecurityContext: &v1.SecurityContext{
 						Privileged: &privileged,
+						RunAsUser:  &root,
+						RunAsGroup: &root,
 					},
 					Name:    containerName,
 					Image:   os.Getenv("PMEM_CSI_IMAGE"),
