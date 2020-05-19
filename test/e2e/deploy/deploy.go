@@ -554,6 +554,10 @@ func EnsureDeployment(deploymentName string) *Deployment {
 
 	ginkgo.BeforeEach(func() {
 		ginkgo.By(fmt.Sprintf("preparing for test %q", ginkgo.CurrentGinkgoTestDescription().FullTestText))
+		if deploymentName != "lvm-production" {
+			framework.Failf("fake error for deployment %q", deploymentName)
+		}
+
 		c, err := NewCluster(f.ClientSet, f.DynamicClient)
 
 		// Remember list of volumes before test, using out-of-band host commands (i.e. not CSI API).
