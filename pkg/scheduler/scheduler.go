@@ -7,10 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package scheduler
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -104,11 +102,9 @@ func (s *scheduler) status(w http.ResponseWriter, r *http.Request) {
 // filter handles the JSON decoding+encoding.
 func (s *scheduler) filter(w http.ResponseWriter, r *http.Request) {
 	// From https://github.com/Huang-Wei/sample-scheduler-extender/blob/047fdd5ae8b1a6d7fdc0e6d20ce4d70a1d6e7178/routers.go#L19-L39
-	var buf bytes.Buffer
-	body := io.TeeReader(r.Body, &buf)
 	var args schedulerapi.ExtenderArgs
 	var result *schedulerapi.ExtenderFilterResult
-	err := json.NewDecoder(body).Decode(&args)
+	err := json.NewDecoder(r.Body).Decode(&args)
 	if err == nil {
 		result, err = s.doFilter(args)
 	}
