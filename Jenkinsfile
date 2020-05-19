@@ -248,10 +248,12 @@ pipeline {
 
         stage('testing 1.18') {
             options {
-                timeout(time: 240, unit: "MINUTES")
+                timeout(time: 20, unit: "MINUTES")
             }
             steps {
-                TestInVM("fedora", "", "1.18", "Top.Level..[[:alpha:]]*-production[[:space:]]")
+                withEnv(['TEST_E2E_ARGS=-ginkgo.timeout=10m']) {
+                    TestInVM("fedora", "", "1.18", "Top.Level..[[:alpha:]]*-production[[:space:]]")
+                }
             }
         }
 
