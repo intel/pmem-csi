@@ -122,12 +122,12 @@ const (
 	DefaultDriverImage = defaultDriverImageName + ":" + defaultDriverImageTag
 
 	defaultProvisionerImageName = "quay.io/k8scsi/csi-provisioner"
-	defaultProvisionerImageTag  = "v1.2.1"
+	defaultProvisionerImageTag  = "v1.6.0"
 	// DefaultProvisionerImage default external provisioner image to use
 	DefaultProvisionerImage = defaultProvisionerImageName + ":" + defaultProvisionerImageTag
 
 	defaultRegistrarImageName = "quay.io/k8scsi/csi-node-driver-registrar"
-	defaultRegistrarImageTag  = "v1.1.0"
+	defaultRegistrarImageTag  = "v1.2.0"
 	// DefaultRegistrarImage default node driver registrar image to use
 	DefaultRegistrarImage = defaultRegistrarImageName + ":" + defaultRegistrarImageTag
 
