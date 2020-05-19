@@ -142,7 +142,7 @@ run_tests: $(RUN_TEST_DEPS)
 	$(RUN_TESTS)
 
 # E2E tests which are known to be unsuitable (space or @ separated list of regular expressions).
-TEST_E2E_SKIP =
+TEST_E2E_SKIP ?=
 TEST_E2E_SKIP_ALL = $(TEST_E2E_SKIP)
 
 # The test's check whether a driver supports multiple nodes is incomplete and does
@@ -176,7 +176,7 @@ TEST_E2E_SKIP_1.15 += Testpattern:.Ephemeral-volume Testpattern:.inline.ephemera
 TEST_E2E_SKIP_ALL += $(TEST_E2E_SKIP_$(shell cat _work/$(CLUSTER)/kubernetes.version))
 
 # E2E tests which are to be executed (space separated list of regular expressions, default is all that aren't skipped).
-TEST_E2E_FOCUS =
+TEST_E2E_FOCUS ?=
 
 foobar:
 	echo TEST_E2E_SKIP_$(shell cat _work/$(CLUSTER)/kubernetes.version)
@@ -185,10 +185,10 @@ foobar:
 
 # E2E Junit output directory (default empty = none). junit_<ginkgo node>.xml files will be written there,
 # i.e. usually just junit_01.xml.
-TEST_E2E_REPORT_DIR=
+TEST_E2E_REPORT_DIR ?=
 
 # Additional e2e.test arguments, like -ginkgo.failFast.
-TEST_E2E_ARGS =
+TEST_E2E_ARGS ?=
 
 empty:=
 space:= $(empty) $(empty)
