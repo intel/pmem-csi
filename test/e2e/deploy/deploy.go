@@ -339,6 +339,14 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 			}
 		}
 
+		if list, err := c.cs.CoreV1().Endpoints("").List(context.Background(), filter); !failure(err) {
+			for _, object := range list.Items {
+				del(object.ObjectMeta, object, func() error {
+					return c.cs.CoreV1().Endpoints(object.Namespace).Delete(context.Background(), object.Name, metav1.DeleteOptions{})
+				})
+			}
+		}
+
 		if list, err := c.cs.CoreV1().ServiceAccounts("").List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, object, func() error {
