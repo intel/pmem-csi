@@ -79,6 +79,14 @@ func NewScheduler(
 }
 
 func (s *scheduler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet, http.MethodPost:
+		// Both are treated the same below.
+	default:
+		http.Error(w, r.Method+" not supported", http.StatusMethodNotAllowed)
+		return
+	}
+
 	switch r.URL.Path {
 	case "/filter":
 		s.filter(w, r)
