@@ -418,9 +418,11 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 		}
 	}
 
-	if err := os.Remove(targetPath); err != nil {
+	err = os.Remove(targetPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, status.Error(codes.Internal, "unexpected error while removing target path: "+err.Error())
 	}
+	klog.V(5).Infof("NodeUnpublishVolume: volume id:%s targetpath:%s has been removed with error: %v", req.VolumeId, targetPath, err)
 
 	if p.GetPersistency() == parameters.PersistencyEphemeral {
 		if _, err := ns.cs.DeleteVolume(ctx, &csi.DeleteVolumeRequest{VolumeId: vol.ID}); err != nil {
