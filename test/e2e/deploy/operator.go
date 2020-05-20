@@ -115,57 +115,6 @@ func DeleteDeploymentCR(f *framework.Framework, name string) {
 			return true
 		}
 		LogError(err, "delete deployment error: %v, will retry...", err)
-		// On Kubernetes 1.18, we have seen test failures
-		// because the CR and it's services weren't getting
-		// deleted. The reason were the endpoints which were
-		// owned by the services: somehow they had no
-		// deletionTimestamp and also weren't
-		// garbage-collected for extended periods of time (>5
-		// min, potentially longer), but prevented deleting
-		// the services due to foreground deletion.
-		//
-		// As a quick hack, we delete the services ourselves. For this
-		// we need to find all services which are owned by the
-		// deployment.
-		dep, err := f.DynamicClient.Resource(DeploymentResource).Get(context.Background(), name, metav1.GetOptions{})
-		if err != nil {
-			return false
-		}
-		services, err := f.ClientSet.CoreV1().Services("").List(context.Background(), metav1.ListOptions{})
-		if err != nil {
-			return false
-		}
-		for _, service := range services.Items {
-			owned := false
-			for _, owner := range service.OwnerReferences {
-				if owner.UID == dep.GetUID() {
-					owned = true
-					break
-				}
-			}
-			if owned {
-				// Before we can delete the services, we have to remove the "foregroundDeletion" finalizer.
-				for i, finalizer := range service.Finalizers {
-					if finalizer == "foregroundDeletion" {
-						service.Finalizers = append(service.Finalizers[:i], service.Finalizers[i+1:]...)
-						_, err := f.ClientSet.CoreV1().Services(service.Namespace).Update(context.Background(), &service, metav1.UpdateOptions{})
-						framework.Logf("Remove deployment service %s/%s finalizer: %v", service.Namespace, service.Name, err)
-						break
-					}
-				}
-
-				// Now deleted the service.
-				if err := f.ClientSet.CoreV1().Services(service.Namespace).Delete(context.Background(), service.Name, metav1.DeleteOptions{}); err == nil {
-					framework.Logf("Deleted deployment service %s/%s", service.Namespace, service.Name)
-				}
-
-				// Just to be thorough, we also delete the corresponding endpoint, if there still is one.
-				// It has the same name as the service.
-				if err := f.ClientSet.CoreV1().Endpoints(service.Namespace).Delete(context.Background(), service.Name, metav1.DeleteOptions{}); err == nil {
-					framework.Logf("Deleted deployment endpoint %s/%s", service.Namespace, service.Name)
-				}
-			}
-		}
 		return false
 	}, "3m", "1s").Should(gomega.BeTrue(), "delete deployment %q", name)
 	framework.Logf("Deleted deployment %q", name)

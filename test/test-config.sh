@@ -88,10 +88,6 @@ fi
 # (https://github.com/kubernetes/kubernetes/issues/70082).
 : ${TEST_ETCD_VOLUME:=}
 
-# Kubernetes feature gates to enable/disable
-# featurename=true,feature=false
-: ${TEST_FEATURE_GATES:=CSINodeInfo=true,CSIDriverRegistry=true,CSIBlockVolume=true,CSIInlineVolume=true}
-
 # Device mode that test/setup-deployment.sh is using.
 # Allowed values: lvm, direct
 # This string is used as part of deployment file name.
@@ -140,6 +136,11 @@ fi
 # using Clear Linux as OS because with Clear Linux we have
 # to use the Kubernetes version that ships with it.
 : ${TEST_KUBERNETES_VERSION:=1.18}
+
+# Kubernetes feature gates to enable/disable.
+# EndpointSlice is disabled because of https://github.com/kubernetes/kubernetes/issues/91287
+: ${TEST_FEATURE_GATES:=CSINodeInfo=true,CSIDriverRegistry=true,CSIBlockVolume=true,CSIInlineVolume=true\
+$(case ${TEST_KUBERNETES_VERSION} in 1.1[0-5]) ;; *) echo ',EndpointSlice=false';; esac)}
 
 # If non-empty, the version of Kata Containers which is to be installed
 # in the Kubernetes cluster. Installation is done with
