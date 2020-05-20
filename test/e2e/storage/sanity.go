@@ -169,7 +169,13 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			}
 		}
 		mkdir := func(path string) (string, error) {
-			return execOnTestNode("mktemp", "-d", path), nil
+			path = execOnTestNode("mktemp", "-d", path)
+			// Ensure that the path that we created
+			// survives a sudden power loss (as during the
+			// restart tests below), otherwise rmdir will
+			// fail when it's gone.
+			execOnTestNode("sync", "-f", path)
+			return path, nil
 		}
 		rmdir := func(path string) error {
 			execOnTestNode("rmdir", path)
@@ -294,7 +300,9 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			_, err := ncc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
 			framework.ExpectNoError(err, "Failed to list volumes after reboot")
 
-			// No failure, is already unpublished.
+			// No failure expected although rebooting already unmounted the volume.
+			// We still need to remove the target path, if it has survived
+			// the hard power off.
 			v.unpublish(vol, nodeID)
 
 			// Publish for the second time.
