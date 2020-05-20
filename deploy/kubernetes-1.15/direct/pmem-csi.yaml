@@ -195,6 +195,16 @@ spec:
         pmem-csi.intel.com/deployment: direct-production
         pmem-csi.intel.com/webhook: ignore
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: pmem-csi.intel.com/controller
+                operator: NotIn
+                values:
+                - "no"
+                - "false"
       containers:
       - command:
         - /usr/local/bin/pmem-csi-driver

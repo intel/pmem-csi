@@ -27,6 +27,7 @@ func LoadObjects(kubernetes version.Version, deviceMode api.DeviceMode) ([]unstr
 }
 
 var pmemImage = regexp.MustCompile(`image: intel/pmem-csi-driver(-test)?:\w+`)
+var nameRegex = regexp.MustCompile(`(name|app|secretName|serviceName|serviceAccountName): pmem-csi`)
 
 // LoadAndCustomizeObjects reads all objects stored in a pmem-csi.yaml reference file
 // and updates them on-the-fly according to the deployment spec, namespace and name.
@@ -37,8 +38,8 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 	// our deployments. But because we controll the input, we can do some
 	// things like renaming with a simple text search/replace.
 	patchYAML := func(yaml *[]byte) {
-		// This renames objects in "name:", "app:", "secretName:".
-		*yaml = bytes.ReplaceAll(*yaml, []byte(": pmem-csi"), []byte(": "+name))
+		// This renames the objects.
+		*yaml = nameRegex.ReplaceAll(*yaml, []byte("$1: "+name))
 
 		// Update the driver name inside the state dir.
 		*yaml = bytes.ReplaceAll(*yaml, []byte("path: /var/lib/pmem-csi.intel.com"), []byte("path: /var/lib/"+name))
