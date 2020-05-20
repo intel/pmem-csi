@@ -88,9 +88,9 @@ fi
 # (https://github.com/kubernetes/kubernetes/issues/70082).
 : ${TEST_ETCD_VOLUME:=}
 
-# Kubernetes feature gates to enable/disable
-# featurename=true,feature=false
-: ${TEST_FEATURE_GATES:=CSINodeInfo=true,CSIDriverRegistry=true,CSIBlockVolume=true,CSIInlineVolume=true}
+# Kubernetes feature gates to enable/disable.
+# EndpointSlice is disabled because of https://github.com/kubernetes/kubernetes/issues/91287
+: ${TEST_FEATURE_GATES:=CSINodeInfo=true,CSIDriverRegistry=true,CSIBlockVolume=true,CSIInlineVolume=true,EndpointSlice=false}
 
 # Device mode that test/setup-deployment.sh is using.
 # Allowed values: lvm, direct
