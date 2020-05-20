@@ -14,7 +14,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.3 // indirect
 	github.com/imdario/mergo v0.3.8 // indirect
 	github.com/kubernetes-csi/csi-lib-utils v0.6.1
-	github.com/kubernetes-csi/csi-test/v3 v3.0.0
+	github.com/kubernetes-csi/csi-test/v3 v3.1.0
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.8.1
 	github.com/operator-framework/operator-sdk v0.13.0

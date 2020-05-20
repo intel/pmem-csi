@@ -150,6 +150,9 @@ TEST_E2E_SKIP_ALL = $(TEST_E2E_SKIP)
 # https://github.com/kubernetes/kubernetes/blob/25ffbe633810609743944edd42d164cd7990071c/test/e2e/storage/testsuites/provisioning.go#L175-L181
 TEST_E2E_SKIP_ALL += should.access.volume.from.different.nodes
 
+# Test is flawed and will become optional soon (probably csi-test 3.2.0): https://github.com/kubernetes-csi/csi-test/pull/258
+TEST_E2E_SKIP_ALL += NodeUnpublishVolume.*should.fail.when.the.volume.is.missing
+
 # This is a test for behavior of kubelet which Kubernetes <= 1.15 doesn't pass.
 TEST_E2E_SKIP_1.14 += volumeMode.should.not.mount.*map.unused.volumes.in.a.pod
 TEST_E2E_SKIP_1.15 += volumeMode.should.not.mount.*map.unused.volumes.in.a.pod
