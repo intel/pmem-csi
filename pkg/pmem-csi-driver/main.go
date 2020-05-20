@@ -14,6 +14,7 @@ import (
 
 	"k8s.io/klog"
 
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	"github.com/intel/pmem-csi/pkg/k8sutil"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 )
@@ -21,7 +22,7 @@ import (
 var (
 	config = Config{
 		Mode:          Controller,
-		DeviceManager: LVM,
+		DeviceManager: api.DeviceModeLVM,
 	}
 	showVersion = flag.Bool("version", false, "Show release version and exit")
 	version     = "unknown" // Set version during build time

@@ -8,6 +8,7 @@ package v1alpha1
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -19,6 +20,24 @@ import (
 
 // DeviceMode type decleration for allowed driver device managers
 type DeviceMode string
+
+// Set sets the value
+func (mode *DeviceMode) Set(value string) error {
+	switch value {
+	case string(DeviceModeLVM), string(DeviceModeDirect):
+		*mode = DeviceMode(value)
+	case "ndctl":
+		// For backwards-compatibility.
+		*mode = DeviceModeDirect
+	default:
+		return errors.New("invalid device manager mode")
+	}
+	return nil
+}
+
+func (mode *DeviceMode) String() string {
+	return string(*mode)
+}
 
 const (
 	// DeviceModeLVM represents 'lvm' device manager

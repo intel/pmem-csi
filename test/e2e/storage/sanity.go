@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	"github.com/kubernetes-csi/csi-test/v3/pkg/sanity"
 	sanityutils "github.com/kubernetes-csi/csi-test/v3/utils"
 	"google.golang.org/grpc"
@@ -51,7 +52,6 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
 	testutils "k8s.io/kubernetes/test/utils"
 
-	"github.com/intel/pmem-csi/pkg/pmem-csi-driver"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 
 	. "github.com/onsi/ginkgo"
@@ -453,7 +453,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			sanityVolumes := *numSanityVolumes
 			if sanityVolumes == 0 {
 				switch d.Mode {
-				case pmemcsidriver.Direct:
+				case api.DeviceModeDirect:
 					// The minimum volume size in direct mode is 2GB, which makes
 					// testing a lot slower than in LVM mode. Therefore we create less
 					// volumes.

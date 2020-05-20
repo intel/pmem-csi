@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
@@ -62,37 +63,11 @@ func (mode *DriverMode) String() string {
 	return string(*mode)
 }
 
-type DeviceMode string
-
-func (mode *DeviceMode) Set(value string) error {
-	switch value {
-	case string(LVM), string(Direct):
-		*mode = DeviceMode(value)
-	case "ndctl":
-		// For backwards-compatibility.
-		*mode = Direct
-	default:
-		// The flag package will add the value to the final output, no need to do it here.
-		return errors.New("invalid device manager mode")
-	}
-	return nil
-}
-
-func (mode *DeviceMode) String() string {
-	return string(*mode)
-}
-
 const (
 	//Controller definition for controller driver mode
 	Controller DriverMode = "controller"
 	//Node definition for noder driver mode
 	Node DriverMode = "node"
-
-	// LVM manages PMEM through LVM.
-	LVM DeviceMode = "lvm"
-
-	// Direct manages PMEM through libndctl.
-	Direct DeviceMode = "direct"
 )
 
 var (
@@ -142,7 +117,7 @@ type Config struct {
 	//ControllerEndpoint exported node controller endpoint
 	ControllerEndpoint string
 	//DeviceManager device manager to use
-	DeviceManager DeviceMode
+	DeviceManager api.DeviceMode
 	//Directory where to persist the node driver state
 	StateBasePath string
 	//Version driver release version
@@ -514,11 +489,11 @@ func register(ctx context.Context, conn *grpc.ClientConn, req *registry.Register
 	return nil
 }
 
-func newDeviceManager(dmType DeviceMode) (pmdmanager.PmemDeviceManager, error) {
+func newDeviceManager(dmType api.DeviceMode) (pmdmanager.PmemDeviceManager, error) {
 	switch dmType {
-	case LVM:
+	case api.DeviceModeLVM:
 		return pmdmanager.NewPmemDeviceManagerLVM()
-	case Direct:
+	case api.DeviceModeDirect:
 		return pmdmanager.NewPmemDeviceManagerNdctl()
 	}
 	return nil, fmt.Errorf("Unsupported device manager type '%s'", dmType)

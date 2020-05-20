@@ -13,7 +13,7 @@ import (
 	"os/exec"
 	"strings"
 
-	pmemcsidriver "github.com/intel/pmem-csi/pkg/pmem-csi-driver"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 
 	"github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -24,12 +24,12 @@ func GetHostVolumes(d *Deployment) map[string][]string {
 	var cmd string
 	var hdr string
 	switch d.Mode {
-	case pmemcsidriver.LVM:
+	case api.DeviceModeLVM:
 		// lvs adds many space (0x20) chars at end, we could squeeze
 		// repetitions using tr here, but TrimSpace() below strips those away
 		cmd = "sudo lvs --foreign --noheadings"
 		hdr = "LVM Volumes"
-	case pmemcsidriver.Direct:
+	case api.DeviceModeDirect:
 		// ndctl produces multiline block. We want one line per namespace.
 		// Pick uuid, mode, size for comparison. Note that sorting changes the order so lines
 		// are not grouped by volume, but keeping volume order would need more complex parsing
