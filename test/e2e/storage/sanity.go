@@ -652,6 +652,9 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 				readyNodes, err := e2enode.GetReadySchedulableNodes(f.ClientSet)
 				framework.ExpectNoError(err, "get schedulable nodes")
 				for _, node := range readyNodes.Items {
+					if node.Labels["storage"] != "pmem" {
+						continue
+					}
 					expectedTopology = append(expectedTopology, &csi.Topology{
 						Segments: map[string]string{
 							"pmem-csi.intel.com/node": node.Name,

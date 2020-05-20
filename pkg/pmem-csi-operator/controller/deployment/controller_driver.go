@@ -616,6 +616,36 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 						d.getControllerContainer(),
 						d.getProvisionerContainer(),
 					},
+					Affinity: &corev1.Affinity{
+						NodeAffinity: &corev1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+								NodeSelectorTerms: []corev1.NodeSelectorTerm{
+									{
+										MatchExpressions: []corev1.NodeSelectorRequirement{
+											// By default, the controller will run anywhere in the cluster.
+											// If that isn't desired, the "pmem-csi.intel.com/controller" label
+											// can be set to "no" or "false" for a node to prevent the controller
+											// from running there.
+											//
+											// This is used during testing as a workaround for a particular issue
+											// on Clear Linux where network configuration randomly fails such that
+											// the driver which runs on the same node as the controller cannot
+											// connect to the controller (https://github.com/intel/pmem-csi/issues/555).
+											//
+											// It may also be useful for other purposes, in particular for deployment
+											// through the operator: it has the same rule and currently no other API for
+											// setting affinity.
+											{
+												Key:      "pmem-csi.intel.com/controller",
+												Operator: corev1.NodeSelectorOpNotIn,
+												Values:   []string{"no", "false"},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
 					Volumes: []corev1.Volume{
 						{
 							Name: "plugin-socket-dir",
