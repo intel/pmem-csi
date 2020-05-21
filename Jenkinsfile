@@ -387,6 +387,8 @@ String RunInBuilder() {
 */
 String SourceRepo() {
     // Content of CHANGE_FORK varies, see https://issues.jenkins-ci.org/browse/JENKINS-58450.
+    (! env.CHANGE_FORK) ?
+        "github.com/intel/pmem-csi" :
     env.CHANGE_FORK.matches('.*/.*') ?
         env.CHANGE_FORK :
         env.CHANGE_FORK + '/pmem-csi'
