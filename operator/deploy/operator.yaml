@@ -1,0 +1,155 @@
+###
+# TODOs:
+#  1) At somepoint this file should move to REPO_ROOT/deploy/
+###
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pmem-csi-operator
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  creationTimestamp: null
+  name: pmem-csi-operator
+  namespace: default
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - services
+  - services/finalizers
+  - serviceaccounts
+  - endpoints
+  - events
+  - secrets
+  - pods
+  verbs:
+  - '*'
+- apiGroups:
+  - apps
+  resources:
+  - daemonsets
+  - statefulsets
+  verbs:
+  - '*'
+- apiGroups:
+  - apps
+  resourceNames:
+  - pmem-csi-operator
+  resources:
+  - deployments/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - roles
+  - rolebindings
+  verbs:
+  - '*'
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pmem-csi-operator
+rules:
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - clusterroles
+  - clusterrolebindings
+  verbs:
+  - '*'
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - csidrivers
+  verbs:
+  - '*'
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - get
+  - create
+  - delete
+- apiGroups:
+  - pmem-csi.intel.com
+  resources:
+  - deployments
+  - deployments/status
+  verbs:
+  - '*'
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: pmem-csi-operator
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: pmem-csi-operator
+roleRef:
+  kind: Role
+  name: pmem-csi-operator
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pmem-csi-operator
+subjects:
+- kind: ServiceAccount
+  name: pmem-csi-operator
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pmem-csi-operator
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pmem-csi-operator
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: pmem-csi-operator
+  template:
+    metadata:
+      labels:
+        name: pmem-csi-operator
+        app: pmem-csi-operator
+        pmem-csi.intel.com/webhook: ignore
+    spec:
+      serviceAccountName: pmem-csi-operator
+      containers:
+        - name: pmem-csi-operator
+          image: intel/pmem-csi-driver:canary
+          command:
+          - /usr/local/bin/pmem-csi-operator
+          imagePullPolicy: Always
+          env:
+            - name: WATCH_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              # This should match to the operator container name
+              value: "pmem-csi-operator"

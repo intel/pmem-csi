@@ -131,7 +131,7 @@ sshtovm () {
             )
             die "timeout accessing ${IP} through ssh"
         fi
-        if ! echo "$out" | grep -q "connect to host ${IP}"; then
+        if ! echo "$out" | grep -q -e "connect to host ${IP}" -e "Permission denied, please try again" -e "Received disconnect from ${IP} .*: Too many authentication failures"; then
             # Some other error, probably in the command itself. Give up.
             echo "$out"
             return 1

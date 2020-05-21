@@ -14,6 +14,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	e2essh "k8s.io/kubernetes/test/e2e/framework/ssh"
 
@@ -23,11 +24,13 @@ import (
 type Cluster struct {
 	nodeIPs []string
 	cs      kubernetes.Interface
+	dc      dynamic.Interface
 }
 
-func NewCluster(cs kubernetes.Interface) (*Cluster, error) {
+func NewCluster(cs kubernetes.Interface, dc dynamic.Interface) (*Cluster, error) {
 	cluster := &Cluster{
 		cs: cs,
+		dc: dc,
 	}
 
 	hosts, err := e2essh.NodeSSHHosts(cs)
@@ -42,6 +45,10 @@ func NewCluster(cs kubernetes.Interface) (*Cluster, error) {
 		cluster.nodeIPs = append(cluster.nodeIPs, host)
 	}
 	return cluster, nil
+}
+
+func (c *Cluster) ClientSet() kubernetes.Interface {
+	return c.cs
 }
 
 // NumNodes returns the total number of nodes in the cluster.
@@ -118,4 +125,8 @@ func (c *Cluster) WaitForDaemonSet(setName string) *appsv1.DaemonSet {
 		return err == nil
 	}, "3m").Should(BeTrue(), "%s DaemonSet running", setName)
 	return set
+}
+
+func (c *Cluster) GetStatefulSet(setName, namespace string) (*appsv1.StatefulSet, error) {
+	return c.cs.AppsV1().StatefulSets(namespace).Get(context.Background(), setName, metav1.GetOptions{})
 }

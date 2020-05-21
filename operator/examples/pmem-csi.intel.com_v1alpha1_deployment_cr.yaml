@@ -1,0 +1,15 @@
+apiVersion: pmem-csi.intel.com/v1alpha1
+kind: Deployment
+metadata:
+  name: example-deployment
+spec:
+  pmemPercentage: 50
+  controllerResources:
+      requests:
+        cpu: "200m"
+        memory: "100Mi"
+  nodeResources:
+      requests:
+        cpu: "200m"
+        memory: "100Mi"
+

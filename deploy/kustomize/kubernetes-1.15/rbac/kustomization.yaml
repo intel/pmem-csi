@@ -1,7 +1,7 @@
 namePrefix: pmem-csi-
 
-# We have to use local files, see https://github.com/kubernetes-sigs/kustomize/issues/970.
-# The content of these files must match the image versions in the parent kustomize.yaml.
+# A copy because https://github.com/kubernetes-sigs/kustomize/pull/2167 is not in any
+# release yet and we remove the unused service account.
 resources:
 - external-provisioner-rbac.yaml
 

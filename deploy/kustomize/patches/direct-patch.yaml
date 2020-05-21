@@ -1,7 +1,7 @@
 # Select direct mode. The PMEM-CSI driver must be in container #0.
 - op: add
   path: /spec/template/spec/containers/0/command/1
-  value: "-deviceManager=ndctl"
+  value: "-deviceManager=direct"
 
 # Direct mode needs /dev and /sys.
 - op: add

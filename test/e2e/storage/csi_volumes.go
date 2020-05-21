@@ -20,31 +20,25 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 
 	"github.com/intel/pmem-csi/test/e2e/deploy"
+	"github.com/intel/pmem-csi/test/e2e/driver"
 	"github.com/intel/pmem-csi/test/e2e/ephemeral"
 	"github.com/intel/pmem-csi/test/e2e/storage/dax"
 	"github.com/intel/pmem-csi/test/e2e/storage/scheduler"
 
 	v1 "k8s.io/api/core/v1"
-	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/framework/podlogs"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
-	e2evolume "k8s.io/kubernetes/test/e2e/framework/volume"
-	"k8s.io/kubernetes/test/e2e/storage/testpatterns"
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
-	"k8s.io/kubernetes/test/e2e/storage/utils"
 
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 )
 
 var (
@@ -53,44 +47,9 @@ var (
 )
 
 var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
-	// List of testDrivers to be executed in below loop
-	var csiTestDrivers = []func() testsuites.TestDriver{
-		// pmem-csi
-		func() testsuites.TestDriver {
-			return &manifestDriver{
-				driverInfo: testsuites.DriverInfo{
-					Name:        d.Name + "-pmem-csi",
-					MaxFileSize: testpatterns.FileSizeMedium,
-					SupportedFsType: sets.NewString(
-						"", "ext4", "xfs",
-					),
-					Capabilities: map[testsuites.Capability]bool{
-						testsuites.CapPersistence: true,
-						testsuites.CapFsGroup:     true,
-						testsuites.CapExec:        true,
-						testsuites.CapBlock:       true,
-					},
-					SupportedSizeRange: e2evolume.SizeRange{
-						// There is test in VolumeIO suite creating 102 MB of content
-						// so we use 110 MB as minimum size to fit that with some margin.
-						// TODO: fix that upstream test to have a suitable minimum size
-						//
-						// Without VolumeIO suite, 16Mi would be enough as smallest xfs system size.
-						// Ref: http://man7.org/linux/man-pages/man8/mkfs.xfs.8.html
-						Min: "110Mi",
-					},
-				},
-				scManifest: map[string]string{
-					"":     "deploy/common/pmem-storageclass-ext4.yaml",
-					"ext4": "deploy/common/pmem-storageclass-ext4.yaml",
-					"xfs":  "deploy/common/pmem-storageclass-xfs.yaml",
-				},
-				csiDriverName: "pmem-csi.intel.com",
-			}
-		},
-	}
+	csiTestDriver := driver.New(d.Name, "pmem-csi.intel.com", nil, nil)
 
-	// List of testSuites to be executed in below loop
+	// List of testSuites to be added below.
 	var csiTestSuites = []func() testsuites.TestSuite{
 		// TODO: investigate how useful these tests are and enable them.
 		// testsuites.InitMultiVolumeTestSuite,
@@ -108,12 +67,7 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 		csiTestSuites = append(csiTestSuites, testsuites.InitEphemeralTestSuite)
 	}
 
-	for _, initDriver := range csiTestDrivers {
-		curDriver := initDriver()
-		Context(testsuites.GetDriverNameWithFeatureTags(curDriver), func() {
-			testsuites.DefineTestSuite(curDriver, csiTestSuites)
-		})
-	}
+	testsuites.DefineTestSuite(csiTestDriver, csiTestSuites)
 
 	Context("late binding", func() {
 		var (
@@ -201,139 +155,18 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 		})
 	})
 
-	// Also run some limited tests with Kata Containers.
-	kataDriver := &manifestDriver{
-		driverInfo: testsuites.DriverInfo{
-			Name:        d.Name + "-pmem-csi-kata",
-			MaxFileSize: testpatterns.FileSizeMedium,
-			SupportedFsType: sets.NewString(
-				"xfs",
-				"ext4",
-			),
-			Capabilities: map[testsuites.Capability]bool{
-				testsuites.CapPersistence: true,
-				testsuites.CapFsGroup:     true,
-				testsuites.CapExec:        true,
-				testsuites.CapBlock:       true,
-			},
-			SupportedSizeRange: e2evolume.SizeRange{
-				// There is test in VolumeIO suite creating 102 MB of content
-				// so we use 110 MB as minimum size to fit that with some margin.
-				// TODO: fix that upstream test to have a suitable minimum size
-				//
-				// Without VolumeIO suite, 16Mi would be enough as smallest xfs system size.
-				// Ref: http://man7.org/linux/man-pages/man8/mkfs.xfs.8.html
-				Min: "110Mi",
-			},
-		},
-		scManifest: map[string]string{
+	// Also run some limited tests with Kata Containers, using different
+	// storage classes than usual.
+	kataDriver := driver.New(d.Name+"-pmem-csi-kata", "pmem-csi.intel.com",
+		[]string{"xfs", "ext4"},
+		map[string]string{
 			"ext4": "deploy/common/pmem-storageclass-ext4-kata.yaml",
 			"xfs":  "deploy/common/pmem-storageclass-xfs-kata.yaml",
 		},
-		csiDriverName: "pmem-csi.intel.com",
-	}
+	)
 	Context("Kata Containers", func() {
 		testsuites.DefineTestSuite(kataDriver, []func() testsuites.TestSuite{
 			dax.InitDaxTestSuite,
 		})
 	})
 })
-
-type manifestDriver struct {
-	driverInfo    testsuites.DriverInfo
-	csiDriverName string
-	patchOptions  utils.PatchCSIOptions
-	manifests     []string
-	scManifest    map[string]string
-	cleanup       func()
-}
-
-var _ testsuites.TestDriver = &manifestDriver{}
-var _ testsuites.DynamicPVTestDriver = &manifestDriver{}
-var _ testsuites.EphemeralTestDriver = &manifestDriver{}
-
-func (m *manifestDriver) GetDriverInfo() *testsuites.DriverInfo {
-	return &m.driverInfo
-}
-
-func (m *manifestDriver) SkipUnsupportedTest(pattern testpatterns.TestPattern) {
-	if !m.driverInfo.SupportedFsType.Has(pattern.FsType) {
-		skipper.Skipf("fsType %q not supported", pattern.FsType)
-	}
-}
-
-func (m *manifestDriver) GetDynamicProvisionStorageClass(config *testsuites.PerTestConfig, fsType string) *storagev1.StorageClass {
-	f := config.Framework
-
-	scManifest, ok := m.scManifest[fsType]
-	Expect(ok).To(BeTrue(), "Unsupported filesystem type %s", fsType)
-
-	items, err := utils.LoadFromManifests(scManifest)
-	Expect(err).NotTo(HaveOccurred())
-	Expect(len(items)).To(Equal(1), "exactly one item from %s", scManifest)
-
-	err = utils.PatchItems(f, items...)
-	Expect(err).NotTo(HaveOccurred())
-	err = utils.PatchCSIDeployment(f, m.finalPatchOptions(f), items[0])
-
-	sc, ok := items[0].(*storagev1.StorageClass)
-	Expect(ok).To(BeTrue(), "storage class from %s", scManifest)
-	return sc
-}
-
-func (m *manifestDriver) PrepareTest(f *framework.Framework) (*testsuites.PerTestConfig, func()) {
-	// If the driver depends on Kata Containers, first make sure
-	// that we have it on at least one node.
-	if strings.HasSuffix(m.driverInfo.Name, "-kata") {
-		nodes, err := f.ClientSet.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{
-			LabelSelector: "katacontainers.io/kata-runtime=true",
-		})
-		framework.ExpectNoError(err, "list nodes")
-		if len(nodes.Items) == 0 {
-			skipper.Skipf("no nodes found with Kata Container runtime")
-		}
-	}
-
-	By(fmt.Sprintf("deploying %s driver", m.driverInfo.Name))
-	config := &testsuites.PerTestConfig{
-		Driver:    m,
-		Prefix:    "pmem",
-		Framework: f,
-	}
-	cleanup, err := utils.CreateFromManifests(f, func(item interface{}) error {
-		return utils.PatchCSIDeployment(f, m.finalPatchOptions(f), item)
-	},
-		m.manifests...,
-	)
-	framework.ExpectNoError(err, "deploying driver %s", m.driverInfo.Name)
-	return config, func() {
-		By(fmt.Sprintf("uninstalling %s driver", m.driverInfo.Name))
-		cleanup()
-	}
-}
-
-func (m *manifestDriver) finalPatchOptions(f *framework.Framework) utils.PatchCSIOptions {
-	o := m.patchOptions
-	// Unique name not available yet when configuring the driver.
-	if strings.HasSuffix(o.NewDriverName, "-") {
-		o.NewDriverName += f.UniqueName
-	}
-	return o
-}
-
-func (m *manifestDriver) GetVolume(config *testsuites.PerTestConfig, volumeNumber int) (map[string]string, bool, bool) {
-	attributes := map[string]string{"size": m.driverInfo.SupportedSizeRange.Min}
-	shared := false
-	readOnly := false
-	if strings.HasSuffix(m.driverInfo.Name, "-kata") {
-		attributes["kataContainers"] = "true"
-	}
-
-	return attributes, shared, readOnly
-}
-
-func (m *manifestDriver) GetCSIDriverName(config *testsuites.PerTestConfig) string {
-	// Return real driver name.
-	// We can't use m.driverInfo.Name as its not the real driver name
-	return m.csiDriverName
-}

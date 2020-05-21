@@ -57,6 +57,8 @@ apiVersion: v1
 kind: Secret
 metadata:
     name: pmem-csi-registry-secrets
+    labels:
+        pmem-csi.intel.com/deployment: ${TEST_DEVICEMODE}-${TEST_DEPLOYMENTMODE}
 type: kubernetes.io/tls
 data:
     ca.crt: ${CA}
@@ -66,7 +68,9 @@ data:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: pmem-csi-node-secrets
+    name: pmem-csi-node-secrets
+    labels:
+        pmem-csi.intel.com/deployment: ${TEST_DEVICEMODE}-${TEST_DEPLOYMENTMODE}
 type: Opaque
 data:
     ca.crt: ${CA}
@@ -113,34 +117,12 @@ patchesJson6902:
       version: v1
       kind: StatefulSet
       name: pmem-csi-controller
-    path: controller-patch.yaml
+    path: scheduler-patch.yaml
 EOF
-                ${SSH} "cat >'$tmpdir/my-deployment/controller-patch.yaml'" <<EOF
+                ${SSH} "cat >'$tmpdir/my-deployment/scheduler-patch.yaml'" <<EOF
 - op: add
   path: /spec/template/spec/containers/0/command/-
   value: "--schedulerListen=:8000" # Exposed to kube-scheduler via the pmem-csi-scheduler service.
-- op: add
-  path: /spec/template/spec/affinity
-  value:
-    nodeAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        nodeSelectorTerms:
-        - matchExpressions:
-          # Do *not* run controller on worker nodes with PMEM. This is
-          # a workaround for a particular issue on Clear Linux where network
-          # configuration randomly fails such that the driver which runs on the same
-          # node as the controller cannot connect to the controller
-          # (https://github.com/intel/pmem-csi/issues/555).
-          - key: storage
-            operator: NotIn
-            values:
-            - pmem
-- op: add
-  path: /spec/template/spec/tolerations
-  value:
-    - key: "node-role.kubernetes.io/master"
-      operator: "Exists"
-      effect: "NoSchedule"
 EOF
                 if [ "${TEST_DEVICEMODE}" = "lvm" ]; then
                     # Test these options and kustomization by injecting some non-default values.
@@ -164,6 +146,8 @@ EOF
             scheduler)
                 # Change port number via JSON patch.
                 ${SSH} "cat >>'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
+commonLabels:
+  pmem-csi.intel.com/deployment: ${TEST_DEVICEMODE}-${TEST_DEPLOYMENTMODE}
 patchesJson6902:
   - target:
       version: v1
@@ -179,6 +163,8 @@ EOF
                 ;;
             webhook)
                 ${SSH} "cat >>'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
+commonLabels:
+  pmem-csi.intel.com/deployment: ${TEST_DEVICEMODE}-${TEST_DEPLOYMENTMODE}
 patchesJson6902:
   - target:
       group: admissionregistration.k8s.io

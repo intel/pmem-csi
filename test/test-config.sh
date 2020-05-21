@@ -88,9 +88,9 @@ fi
 # (https://github.com/kubernetes/kubernetes/issues/70082).
 : ${TEST_ETCD_VOLUME:=}
 
-# Kubernetes feature gates to enable/disable
-# featurename=true,feature=false
-: ${TEST_FEATURE_GATES:=CSINodeInfo=true,CSIDriverRegistry=true,CSIBlockVolume=true,CSIInlineVolume=true}
+# Kubernetes feature gates to enable/disable.
+# EndpointSlice is disabled because of https://github.com/kubernetes/kubernetes/issues/91287
+: ${TEST_FEATURE_GATES:=CSINodeInfo=true,CSIDriverRegistry=true,CSIBlockVolume=true,CSIInlineVolume=true,EndpointSlice=false}
 
 # Device mode that test/setup-deployment.sh is using.
 # Allowed values: lvm, direct
@@ -100,6 +100,14 @@ fi
 # Which deployment test/setup-deployment.sh is using.
 # Allowed values: testing (default), production
 : ${TEST_DEPLOYMENTMODE:=testing}
+
+# Namespace used by test/start-operator.sh for the operator
+# itself.
+: ${TEST_OPERATOR_NAMESPACE:=default}
+
+# A value for the pmem-csi.intel.com/deployment label that is
+# set for all objects created by test/start-operator.sh.
+: ${TEST_OPERATOR_DEPLOYMENT:=operator}
 
 # TLS certificates installed by test/setup-deployment.sh.
 : ${TEST_CA:=_work/pmem-ca/ca.pem}

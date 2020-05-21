@@ -26,6 +26,11 @@ test: test_vendor
 test_vendor:
 	hack/verify-vendor.sh
 
+# Verify that generated code is up-to-date.
+.PHONY: test_generated
+test: test_generated
+test_generated:
+	hack/verify-generated.sh
 
 # This ensures that we know about all components that are needed at
 # runtime on a production system. Those must be scrutinized more
@@ -116,6 +121,8 @@ RUNTIME_DEPS += sed \
 	-e 's;sigs.k8s.io/controller-runtime;kubernetes-sigs/controller-runtime,https://github.com/kubernetes-sigs/controller-runtime;' \
 	-e 's;sigs.k8s.io/yaml;kubernetes-sigs/yaml,https://github.com/kubernetes-sigs/yaml;' \
 	| cat |
+# - ensure that we have three columns
+RUNTIME_DEPS += sed -e 's;^\([^,]*\),\([^,]*\)$$;\1,\2,;' |
 
 # Ignore duplicates.
 RUNTIME_DEPS += LC_ALL=C LANG=C sort -u
@@ -128,7 +135,7 @@ RUNTIME_DEPS += LC_ALL=C LANG=C sort -u
 .PHONY: run_tests
 test: run_tests
 RUN_TESTS = TEST_WORK=$(abspath _work) \
-	$(TEST_CMD) $(filter-out %/pmem-device-manager,$(TEST_PKGS))
+	$(TEST_CMD) -timeout 0 $(filter-out %/pmem-device-manager,$(TEST_PKGS))
 RUN_TEST_DEPS = _work/pmem-ca/.ca-stamp _work/evil-ca/.ca-stamp check-go-version-$(GO_BINARY)
 
 run_tests: $(RUN_TEST_DEPS)
@@ -142,6 +149,9 @@ TEST_E2E_SKIP_ALL = $(TEST_E2E_SKIP)
 # not work for the topology-based single-node access in PMEM-CSI:
 # https://github.com/kubernetes/kubernetes/blob/25ffbe633810609743944edd42d164cd7990071c/test/e2e/storage/testsuites/provisioning.go#L175-L181
 TEST_E2E_SKIP_ALL += should.access.volume.from.different.nodes
+
+# Test is flawed and will become optional soon (probably csi-test 3.2.0): https://github.com/kubernetes-csi/csi-test/pull/258
+TEST_E2E_SKIP_ALL += NodeUnpublishVolume.*should.fail.when.the.volume.is.missing
 
 # This is a test for behavior of kubelet which Kubernetes <= 1.15 doesn't pass.
 TEST_E2E_SKIP_1.14 += volumeMode.should.not.mount.*map.unused.volumes.in.a.pod
