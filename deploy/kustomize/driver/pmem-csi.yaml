@@ -73,7 +73,7 @@ spec:
       containers:
       - name: pmem-driver
         image: intel/pmem-csi-driver:canary
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         command: [
                  "/usr/local/bin/pmem-csi-driver",
                  "-v=3",
@@ -106,8 +106,8 @@ spec:
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
       - name: external-provisioner
-        imagePullPolicy: Always
         image: quay.io/k8scsi/csi-provisioner:v1.X.Y
+        imagePullPolicy: IfNotPresent
         args: [ "-v=3", "--csi-address=/csi/csi-controller.sock", "--feature-gates=Topology=true", "--strict-topology=true", "--timeout=5m" ]
         volumeMounts:
         - name: plugin-socket-dir
@@ -138,8 +138,8 @@ spec:
         storage: pmem
       containers:
       - name: pmem-driver
-        imagePullPolicy: Always
         image: intel/pmem-csi-driver:canary
+        imagePullPolicy: IfNotPresent
         command: [
                   "/usr/local/bin/pmem-csi-driver",
                   "-v=3",
@@ -193,8 +193,8 @@ spec:
           # that mounted fs.
           mountPropagation: Bidirectional
       - name: driver-registrar
-        imagePullPolicy: Always
         image: quay.io/k8scsi/csi-node-driver-registrar:v1.X.Y
+        imagePullPolicy: IfNotPresent
         args: [
             "-v=3",
             "--kubelet-registration-path=/var/lib/$(PMEM_CSI_DRIVER_NAME)/csi.sock",

@@ -53,7 +53,7 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 			[]byte("tcp://"+name))
 
 		*yaml = bytes.ReplaceAll(*yaml,
-			[]byte("imagePullPolicy: Always"),
+			[]byte("imagePullPolicy: IfNotPresent"),
 			[]byte("imagePullPolicy: "+deployment.Spec.PullPolicy))
 
 		*yaml = bytes.ReplaceAll(*yaml,

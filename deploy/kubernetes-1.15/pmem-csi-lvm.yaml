@@ -229,7 +229,7 @@ spec:
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
         image: intel/pmem-csi-driver:canary
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         name: pmem-driver
         terminationMessagePath: /tmp/termination-log
         volumeMounts:
@@ -244,7 +244,7 @@ spec:
         - --strict-topology=true
         - --timeout=5m
         image: quay.io/k8scsi/csi-provisioner:v1.6.0
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         name: external-provisioner
         volumeMounts:
         - mountPath: /csi
@@ -307,7 +307,7 @@ spec:
         - name: TERMINATION_LOG_PATH
           value: /tmp/termination-log
         image: intel/pmem-csi-driver:canary
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         name: pmem-driver
         securityContext:
           privileged: true
@@ -334,7 +334,7 @@ spec:
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
         image: quay.io/k8scsi/csi-node-driver-registrar:v1.2.0
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         name: driver-registrar
         volumeMounts:
         - mountPath: /pmem-csi
@@ -349,7 +349,7 @@ spec:
         - name: TERMINATION_LOG_PATH
           value: /tmp/pmem-ns-init-termination-log
         image: intel/pmem-csi-driver:canary
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         name: pmem-ns-init
         securityContext:
           privileged: true
@@ -364,7 +364,7 @@ spec:
         - name: TERMINATION_LOG_PATH
           value: /tmp/pmem-vgm-termination-log
         image: intel/pmem-csi-driver:canary
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         name: pmem-vgm
         securityContext:
           privileged: true

@@ -102,6 +102,10 @@ for deploy in ${DEPLOY[@]}; do
         if [ -f "$path/pmem-csi.yaml" ]; then
             # Replace registry. This is easier with sed than kustomize...
             ${SSH} sed -i -e "s^intel/pmem^${TEST_PMEM_REGISTRY}/pmem^g" "$tmpdir/$path/pmem-csi.yaml"
+            # Same for image pull policy.
+            ${SSH} <<EOF
+sed -i -e "s^imagePullPolicy:.IfNotPresent^imagePullPolicy: ${TEST_IMAGE_PULL_POLICY}^g" "$tmpdir/$path/pmem-csi.yaml"
+EOF
         fi
         ${SSH} mkdir "$tmpdir/my-deployment"
         ${SSH} "cat >'$tmpdir/my-deployment/kustomization.yaml'" <<EOF

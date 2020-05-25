@@ -97,6 +97,10 @@ fi
 # Allowed values: testing (default), production
 : ${TEST_DEPLOYMENTMODE:=testing}
 
+# Which image pull policy test/setup-deployment.sh is using.
+# Allowed values: IfNotPresent, Always, Never
+: ${TEST_IMAGE_PULL_POLICY:=IfNotPresent}
+
 # Namespace used by test/start-operator.sh for the operator
 # itself.
 : ${TEST_OPERATOR_NAMESPACE:=default}

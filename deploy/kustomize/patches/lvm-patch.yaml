@@ -8,8 +8,8 @@
   path: /spec/template/spec/initContainers
   value:
   - name: pmem-ns-init
-    imagePullPolicy: Always
     image: intel/pmem-csi-driver:canary
+    imagePullPolicy: IfNotPresent
     command: ["/usr/local/bin/pmem-ns-init", "-v=3"]
     env:
       - name: TERMINATION_LOG_PATH
@@ -21,8 +21,8 @@
     - name: sys-dir
       mountPath: /sys
   - name: pmem-vgm
-    imagePullPolicy: Always
     image: intel/pmem-csi-driver:canary
+    imagePullPolicy: IfNotPresent
     command: ["/usr/local/bin/pmem-vgm", "-v=3"]
     env:
       - name: TERMINATION_LOG_PATH

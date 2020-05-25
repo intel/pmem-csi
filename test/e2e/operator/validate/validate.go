@@ -247,9 +247,11 @@ func parseDefaultSpecValues() map[string]interface{} {
       containers:
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
+        imagePullPolicy: IfNotPresent
       initContainers:
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
+        imagePullPolicy: IfNotPresent
       volumes:
         secret:
           defaultMode: 420`
