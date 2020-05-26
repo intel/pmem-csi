@@ -26,8 +26,8 @@
     imagePullPolicy: IfNotPresent
     command: ["/usr/local/bin/pmem-vgm", "-v=3"]
     env:
-      - name: TERMINATION_LOG_PATH
-        value: /tmp/pmem-vgm-termination-log
+    - name: TERMINATION_LOG_PATH
+      value: /tmp/pmem-vgm-termination-log
     terminationMessagePath: /tmp/pmem-vgm-termination-log
     securityContext:
       privileged: true

@@ -231,12 +231,16 @@ spec:
         image: intel/pmem-csi-driver:canary
         imagePullPolicy: IfNotPresent
         name: pmem-driver
+        securityContext:
+          readOnlyRootFilesystem: true
         terminationMessagePath: /tmp/termination-log
         volumeMounts:
         - mountPath: /certs
           name: registry-cert
         - mountPath: /csi
           name: plugin-socket-dir
+        - mountPath: /tmp
+          name: tmp-dir
       - args:
         - -v=3
         - --csi-address=/csi/csi-controller.sock
@@ -246,6 +250,8 @@ spec:
         image: quay.io/k8scsi/csi-provisioner:v1.6.0
         imagePullPolicy: IfNotPresent
         name: external-provisioner
+        securityContext:
+          readOnlyRootFilesystem: true
         volumeMounts:
         - mountPath: /csi
           name: plugin-socket-dir
@@ -259,6 +265,8 @@ spec:
       - name: registry-cert
         secret:
           secretName: pmem-csi-registry-secrets
+      - emptyDir: {}
+        name: tmp-dir
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -340,6 +348,8 @@ spec:
         image: quay.io/k8scsi/csi-node-driver-registrar:v1.2.0
         imagePullPolicy: IfNotPresent
         name: driver-registrar
+        securityContext:
+          readOnlyRootFilesystem: true
         volumeMounts:
         - mountPath: /pmem-csi
           name: pmem-state-dir

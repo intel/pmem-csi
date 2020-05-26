@@ -668,6 +668,12 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 								},
 							},
 						},
+						{
+							Name: "tmp-dir",
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
+							},
+						},
 					},
 				},
 			},
@@ -821,6 +827,7 @@ func (d *PmemCSIDriver) getNodeDriverCommand() []string {
 }
 
 func (d *PmemCSIDriver) getControllerContainer() corev1.Container {
+	true := true
 	return corev1.Container{
 		Name:            "pmem-driver",
 		Image:           d.Spec.Image,
@@ -854,9 +861,16 @@ func (d *PmemCSIDriver) getControllerContainer() corev1.Container {
 				Name:      "plugin-socket-dir",
 				MountPath: "/csi",
 			},
+			{
+				Name:      "tmp-dir",
+				MountPath: "/tmp",
+			},
 		},
 		Resources:              *d.Spec.ControllerResources,
 		TerminationMessagePath: "/tmp/termination-log",
+		SecurityContext: &corev1.SecurityContext{
+			ReadOnlyRootFilesystem: &true,
+		},
 	}
 }
 
@@ -943,6 +957,7 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 }
 
 func (d *PmemCSIDriver) getProvisionerContainer() corev1.Container {
+	true := true
 	return corev1.Container{
 		Name:            "external-provisioner",
 		Image:           d.Spec.ProvisionerImage,
@@ -961,12 +976,15 @@ func (d *PmemCSIDriver) getProvisionerContainer() corev1.Container {
 			},
 		},
 		Resources: *d.Spec.ControllerResources,
+		SecurityContext: &corev1.SecurityContext{
+			ReadOnlyRootFilesystem: &true,
+		},
 	}
 }
 
 func (d *PmemCSIDriver) getNamespaceInitContainer() corev1.Container {
-	true := true
 	root := int64(0)
+	true := true
 	return corev1.Container{
 		Name:            "pmem-ns-init",
 		Image:           d.Spec.Image,
@@ -990,17 +1008,17 @@ func (d *PmemCSIDriver) getNamespaceInitContainer() corev1.Container {
 		},
 		Resources: *d.Spec.NodeResources,
 		SecurityContext: &corev1.SecurityContext{
-			Privileged: &true,
 			// Node driver must run as root user
-			RunAsUser: &root,
+			RunAsUser:  &root,
+			Privileged: &true,
 		},
 		TerminationMessagePath: "/tmp/pmem-ns-init-termination-log",
 	}
 }
 
 func (d *PmemCSIDriver) getVolumeGroupInitContainer() corev1.Container {
-	true := true
 	root := int64(0)
+	true := true
 	return corev1.Container{
 		Name:            "pmem-vgm",
 		Image:           d.Spec.Image,
@@ -1017,15 +1035,16 @@ func (d *PmemCSIDriver) getVolumeGroupInitContainer() corev1.Container {
 		},
 		Resources: *d.Spec.NodeResources,
 		SecurityContext: &corev1.SecurityContext{
-			Privileged: &true,
 			// Node driver must run as root user
-			RunAsUser: &root,
+			RunAsUser:  &root,
+			Privileged: &true,
 		},
 		TerminationMessagePath: "/tmp/pmem-vgm-termination-log",
 	}
 }
 
 func (d *PmemCSIDriver) getNodeRegistrarContainer() corev1.Container {
+	true := true
 	return corev1.Container{
 		Name:            "driver-registrar",
 		Image:           d.Spec.NodeRegistrarImage,
@@ -1034,6 +1053,9 @@ func (d *PmemCSIDriver) getNodeRegistrarContainer() corev1.Container {
 			fmt.Sprintf("-v=%d", d.Spec.LogLevel),
 			"--kubelet-registration-path=/var/lib/$(PMEM_CSI_DRIVER_NAME)/csi.sock",
 			"--csi-address=/pmem-csi/csi.sock",
+		},
+		SecurityContext: &corev1.SecurityContext{
+			ReadOnlyRootFilesystem: &true,
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
