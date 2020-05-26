@@ -12,7 +12,7 @@ import (
 	"time"
 
 	pmemcsiv1alpha1 "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
-	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,7 +27,7 @@ func EnsureCRDInstalled(config *rest.Config) error {
 	}
 	crd := GetDeploymentCRD()
 
-	if _, err := aeClientset.ApiextensionsV1().CustomResourceDefinitions().Create(context.Background(), crd, metav1.CreateOptions{}); err != nil {
+	if _, err := aeClientset.ApiextensionsV1beta1().CustomResourceDefinitions().Create(context.Background(), crd, metav1.CreateOptions{}); err != nil {
 		if errors.IsAlreadyExists(err) {
 			return nil
 		}
@@ -38,7 +38,7 @@ func EnsureCRDInstalled(config *rest.Config) error {
 		retryDelay := 10 * time.Second
 
 		for retryCount > 0 {
-			_, err := aeClientset.ApiextensionsV1().CustomResourceDefinitions().Get(context.Background(),
+			_, err := aeClientset.ApiextensionsV1beta1().CustomResourceDefinitions().Get(context.Background(),
 				"deployments.pmem-csi.intel.com",
 				metav1.GetOptions{
 					TypeMeta: metav1.TypeMeta{
@@ -77,7 +77,7 @@ func DeleteCRD(config *rest.Config) error {
 		},
 	}
 
-	if err := aeClientset.ApiextensionsV1().CustomResourceDefinitions().Delete(context.Background(), "deployments.pmem-csi.intel.com", delOptions); err != nil {
+	if err := aeClientset.ApiextensionsV1beta1().CustomResourceDefinitions().Delete(context.Background(), "deployments.pmem-csi.intel.com", delOptions); err != nil {
 		if errors.IsNotFound(err) {
 			return nil
 		}
@@ -89,7 +89,7 @@ func DeleteCRD(config *rest.Config) error {
 func GetDeploymentCRD() *apiextensions.CustomResourceDefinition {
 	return &apiextensions.CustomResourceDefinition{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apiextensions.k8s.io/v1",
+			APIVersion: "apiextensions.k8s.io/v1beta1",
 			Kind:       "CustomResourceDefinition",
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -102,13 +102,10 @@ func GetDeploymentCRD() *apiextensions.CustomResourceDefinition {
 					Name:    "v1alpha1",
 					Served:  true,
 					Storage: true,
-					Subresources: &apiextensions.CustomResourceSubresources{
-						Status: &apiextensions.CustomResourceSubresourceStatus{},
-					},
-					Schema: &apiextensions.CustomResourceValidation{
-						OpenAPIV3Schema: pmemcsiv1alpha1.GetDeploymentCRDSchema(),
-					},
 				},
+			},
+			Subresources: &apiextensions.CustomResourceSubresources{
+				Status: &apiextensions.CustomResourceSubresourceStatus{},
 			},
 
 			Names: apiextensions.CustomResourceDefinitionNames{
@@ -117,8 +114,12 @@ func GetDeploymentCRD() *apiextensions.CustomResourceDefinition {
 				Kind:     "Deployment",
 				ListKind: "DeploymentList",
 			},
+
 			// PMEM-CSI Deployment is a cluster scoped resource
 			Scope: apiextensions.ClusterScoped,
+			Validation: &apiextensions.CustomResourceValidation{
+				OpenAPIV3Schema: pmemcsiv1alpha1.GetDeploymentCRDSchema(),
+			},
 		},
 	}
 }
