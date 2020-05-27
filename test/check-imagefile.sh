@@ -113,7 +113,7 @@ start_vm () {
 }
 
 sshtovm () {
-    echo "Running $@ on VM."
+    echo "Running $@ on VM." >&2
     while true; do
         if out=$(ssh $SSH_ARGS ${CLOUD_USER}@${IP} "$@" 2>&1); then
             # Success!
@@ -131,7 +131,7 @@ sshtovm () {
             )
             die "timeout accessing ${IP} through ssh"
         fi
-        if ! echo "$out" | grep -q "connect to host ${IP}"; then
+        if ! echo "$out" | grep -q -e "connect to host ${IP}" -e "Permission denied, please try again" -e "Received disconnect from ${IP} .*: Too many authentication failures"; then
             # Some other error, probably in the command itself. Give up.
             echo "$out"
             return 1
@@ -147,9 +147,9 @@ test_nvdimm () {
         sshtovm sudo dmesg
         die "cannot mount /dev/pmem0 with -odax"
     fi
-    result="fstype=$(ssh $SSH_ARGS ${CLOUD_USER}@${IP} stat --file-system -c %T /mnt)"
-    result+=" partition_size=$(($(ssh $SSH_ARGS ${CLOUD_USER}@${IP} cat /sys/class/block/pmem0/size) * 512))"
-    result+=" block_size=$(ssh $SSH_ARGS ${CLOUD_USER}@${IP} stat --file-system -c %s /mnt)"
+    result="fstype=$(sshtovm stat --file-system -c %T /mnt)"
+    result+=" partition_size=$(($(sshtovm cat /sys/class/block/pmem0/size) * 512))"
+    result+=" block_size=$(sshtovm stat --file-system -c %s /mnt)"
 }
 
 create_image

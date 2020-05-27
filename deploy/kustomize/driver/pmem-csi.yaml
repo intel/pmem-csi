@@ -47,10 +47,33 @@ spec:
         pmem-csi.intel.com/webhook: ignore
     spec:
       serviceAccountName: pmem-csi-controller
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              # By default, the controller will run anywhere in the cluster.
+              # If that isn't desired, the "pmem-csi.intel.com/controller" label
+              # can be set to "no" or "false" for a node to prevent the controller
+              # from running there.
+              #
+              # This is used during testing as a workaround for a particular issue
+              # on Clear Linux where network configuration randomly fails such that
+              # the driver which runs on the same node as the controller cannot
+              # connect to the controller (https://github.com/intel/pmem-csi/issues/555).
+              #
+              # It may also be useful for other purposes, in particular for deployment
+              # through the operator: it has the same rule and currently no other API for
+              # setting affinity.
+              - key: pmem-csi.intel.com/controller
+                operator: NotIn
+                values:
+                - "no"
+                - "false"
       containers:
       - name: pmem-driver
         image: intel/pmem-csi-driver:canary
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         command: [
                  "/usr/local/bin/pmem-csi-driver",
                  "-v=3",
@@ -83,8 +106,8 @@ spec:
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
       - name: external-provisioner
-        imagePullPolicy: Always
         image: quay.io/k8scsi/csi-provisioner:v1.X.Y
+        imagePullPolicy: IfNotPresent
         args: [ "-v=3", "--csi-address=/csi/csi-controller.sock", "--feature-gates=Topology=true", "--strict-topology=true", "--timeout=5m" ]
         volumeMounts:
         - name: plugin-socket-dir
@@ -115,8 +138,8 @@ spec:
         storage: pmem
       containers:
       - name: pmem-driver
-        imagePullPolicy: Always
         image: intel/pmem-csi-driver:canary
+        imagePullPolicy: IfNotPresent
         command: [
                   "/usr/local/bin/pmem-csi-driver",
                   "-v=3",
@@ -170,8 +193,8 @@ spec:
           # that mounted fs.
           mountPropagation: Bidirectional
       - name: driver-registrar
-        imagePullPolicy: Always
         image: quay.io/k8scsi/csi-node-driver-registrar:v1.X.Y
+        imagePullPolicy: IfNotPresent
         args: [
             "-v=3",
             "--kubelet-registration-path=/var/lib/$(PMEM_CSI_DRIVER_NAME)/csi.sock",

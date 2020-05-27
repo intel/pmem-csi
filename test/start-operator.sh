@@ -18,7 +18,7 @@ echo "Deploying '${deploy}'..."
 
 if [ -f "$deploy" ]; then
   tmpdir=$(${SSH} mktemp -d)
-  trap '${SSH} "echo cleaning up temp folder: $tmpdir; rm -rf $tmpdir"' SIGTERM SIGINT EXIT
+  trap '${SSH} "rm -rf $tmpdir"' SIGTERM SIGINT EXIT
 
   ${SSH} "cat > '$tmpdir/operator.yaml'" <<EOF
 $(cat "${deploy}")

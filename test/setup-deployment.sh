@@ -102,6 +102,10 @@ for deploy in ${DEPLOY[@]}; do
         if [ -f "$path/pmem-csi.yaml" ]; then
             # Replace registry. This is easier with sed than kustomize...
             ${SSH} sed -i -e "s^intel/pmem^${TEST_PMEM_REGISTRY}/pmem^g" "$tmpdir/$path/pmem-csi.yaml"
+            # Same for image pull policy.
+            ${SSH} <<EOF
+sed -i -e "s^imagePullPolicy:.IfNotPresent^imagePullPolicy: ${TEST_IMAGE_PULL_POLICY}^g" "$tmpdir/$path/pmem-csi.yaml"
+EOF
         fi
         ${SSH} mkdir "$tmpdir/my-deployment"
         ${SSH} "cat >'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
@@ -117,34 +121,12 @@ patchesJson6902:
       version: v1
       kind: StatefulSet
       name: pmem-csi-controller
-    path: controller-patch.yaml
+    path: scheduler-patch.yaml
 EOF
-                ${SSH} "cat >'$tmpdir/my-deployment/controller-patch.yaml'" <<EOF
+                ${SSH} "cat >'$tmpdir/my-deployment/scheduler-patch.yaml'" <<EOF
 - op: add
   path: /spec/template/spec/containers/0/command/-
   value: "--schedulerListen=:8000" # Exposed to kube-scheduler via the pmem-csi-scheduler service.
-- op: add
-  path: /spec/template/spec/affinity
-  value:
-    nodeAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        nodeSelectorTerms:
-        - matchExpressions:
-          # Do *not* run controller on worker nodes with PMEM. This is
-          # a workaround for a particular issue on Clear Linux where network
-          # configuration randomly fails such that the driver which runs on the same
-          # node as the controller cannot connect to the controller
-          # (https://github.com/intel/pmem-csi/issues/555).
-          - key: storage
-            operator: NotIn
-            values:
-            - pmem
-- op: add
-  path: /spec/template/spec/tolerations
-  value:
-    - key: "node-role.kubernetes.io/master"
-      operator: "Exists"
-      effect: "NoSchedule"
 EOF
                 if [ "${TEST_DEVICEMODE}" = "lvm" ]; then
                     # Test these options and kustomization by injecting some non-default values.
