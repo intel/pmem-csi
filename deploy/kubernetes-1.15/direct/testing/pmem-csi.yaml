@@ -279,6 +279,23 @@ spec:
         volumeMounts:
         - mountPath: /csi
           name: plugin-socket-dir
+      initContainers:
+      - command:
+        - chown
+        - -R
+        - pmem-csi:pmem-csi
+        - /var/lib/pmem-csi-coverage
+        image: intel/pmem-csi-driver-test:canary
+        imagePullPolicy: Always
+        name: coverage-init
+        securityContext:
+          privileged: true
+          runAsUser: 0
+        volumeMounts:
+        - mountPath: /var/lib/pmem-csi-coverage
+          name: coverage-dir
+      securityContext:
+        runAsUser: 1000
       serviceAccountName: pmem-csi-controller
       volumes:
       - emptyDir: null
@@ -348,6 +365,7 @@ spec:
         name: pmem-driver
         securityContext:
           privileged: true
+          runAsUser: 0
         terminationMessagePath: /tmp/termination-log
         volumeMounts:
         - mountPath: /var/lib/kubelet/plugins/kubernetes.io/csi

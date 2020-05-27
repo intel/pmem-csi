@@ -57,6 +57,7 @@ var _ = deploy.DescribeForAll("TLS", func(d *deploy.Deployment) {
 
 func checkTLS(f *framework.Framework, server string) {
 	containerName := "nmap"
+	root := int64(0)
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      containerName,
@@ -69,6 +70,11 @@ func checkTLS(f *framework.Framework, server string) {
 					Image:   os.Getenv("PMEM_CSI_IMAGE"),
 					Command: []string{"sleep", "1000000"},
 				},
+			},
+			// Needs to have root privileges to run nmap
+			SecurityContext: &v1.PodSecurityContext{
+				RunAsUser:  &root,
+				RunAsGroup: &root,
 			},
 			RestartPolicy: v1.RestartPolicyNever,
 		},
