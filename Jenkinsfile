@@ -73,28 +73,8 @@ pipeline {
             }
 
             steps {
-                sh 'docker version'
-                sh 'git version'
-                sh 'free || true'
-                sh 'command -v top >/dev/null 2>&1 || \
-                    if command -v apt-get >/dev/null 2>&1; then \
-                        sudo apt-get install procps; \
-                    else \
-                        sudo dnf -y install procps; \
-                    fi'
-                sh 'head -n 30 /proc/cpuinfo; echo ...; tail -n 30 /proc/cpuinfo'
-                sh "git remote set-url origin git@github.com:intel/pmem-csi.git"
-                sh "git config user.name 'Intel Kubernetes CI/CD Bot'"
-                sh "git config user.email 'k8s-bot@intel.com'"
+                SetupHost()
 
-                // Create a tmpfs for use as backing store for a large file that will be passed
-                // into QEMU for storing the etcd database.
-                sh "mkdir -p '${env.TEST_ETCD_TMPFS}'"
-                sh "sudo mount -osize=${env.TEST_ETCD_VOLUME_SIZE} -t tmpfs none '${env.TEST_ETCD_TMPFS}'"
-                sh "sudo truncate --size=${env.TEST_ETCD_VOLUME_SIZE} '${env.TEST_ETCD_VOLUME}'"
-
-                // known_hosts entry created and verified as described in https://serverfault.com/questions/856194/securely-add-a-host-e-g-github-to-the-ssh-known-hosts-file
-                sh "mkdir -p ~/.ssh && echo 'github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==' >>~/.ssh/known_hosts && chmod -R go-rxw ~/.ssh"
                 withDockerRegistry([ credentialsId: "${env.DOCKER_REGISTRY}", url: "https://${REGISTRY_NAME}" ]) {
                     script {
                         // Despite its name, GIT_LOCAL_BRANCH contains the tag name when building a tag.
@@ -132,54 +112,8 @@ pipeline {
                     }
                     sh "env; echo Building BUILD_IMAGE=${env.BUILD_IMAGE} for BUILD_TARGET=${env.BUILD_TARGET}, CHANGE_ID=${env.CHANGE_ID}, CACHEBUST=${env.CACHEBUST}."
                     sh "docker build --cache-from ${env.BUILD_IMAGE} --label cachebust=${env.CACHEBUST} --target build --build-arg CACHEBUST=${env.CACHEBUST} -t ${env.BUILD_IMAGE} ."
-                    // Create a running container (https://stackoverflow.com/a/38308399). We keep it running
-                    // and just "docker exec" commands in it. withDockerRegistry creates the DOCKER_CONFIG directory
-                    // and deletes it when done, so we have to make a copy for later use inside the container.
-                    withDockerRegistry([ credentialsId: "${env.DOCKER_REGISTRY}", url: "https://${REGISTRY_NAME}" ]) {
-                        sh "mkdir -p _work"
-                        sh "cp -a $DOCKER_CONFIG _work/docker-config"
-                        sh "docker create --name=${env.BUILD_CONTAINER} \
-                                   --volume /var/run/docker.sock:/var/run/docker.sock \
-                                   --volume /usr/bin/docker:/usr/bin/docker \
-                                   --volume ${WORKSPACE}/..:${WORKSPACE}/.. \
-                                   ${env.BUILD_IMAGE} \
-                                   sleep infinity"
-                    }
-                    sh "docker start ${env.BUILD_CONTAINER} && \
-                        timeout=0; \
-                        while [ \$(docker inspect --format '{{.State.Status}}' ${env.BUILD_CONTAINER}) != running ]; do \
-                            docker ps; \
-                            if [ \$timeout -ge 60 ]; then \
-                               docker inspect ${env.BUILD_CONTAINER}; \
-                               echo 'ERROR: ${env.BUILD_CONTAINER} container still not running'; \
-                               exit 1; \
-                            fi; \
-                            sleep 10; \
-                            timeout=\$((timeout + 10)); \
-                       done"
 
-                    // Install additional tools:
-                    // - ssh client for govm
-                    // - python3 for Sphinx (i.e. make html)
-                    // - parted, xfsprogs, os-cloudguest-aws (contains mkfs.ext4) for ImageFile test
-                    sh "docker exec ${env.BUILD_CONTAINER} swupd bundle-add openssh-client python3-basic parted xfsprogs os-cloudguest-aws"
-
-                    // Now commit those changes to ensure that the result of "swupd bundle add" gets cached.
-                    sh "docker commit ${env.BUILD_CONTAINER} ${env.BUILD_IMAGE}"
-
-                    // Make /usr/local/bin writable for all users. Used to install kubectl.
-                    sh "docker exec ${env.BUILD_CONTAINER} sh -c 'mkdir -p /usr/local/bin && chmod a+wx /usr/local/bin'"
-
-                    // Some tools expect a user entry for the jenkins user (like govm?)
-                    sh "echo jenkins:x:`id -u`:0:Jenkins:${WORKSPACE}/..:/bin/bash | docker exec -i ${env.BUILD_CONTAINER} tee --append /etc/passwd >/dev/null"
-                    sh "echo 'jenkins:*:0:0:99999:0:::' | docker exec -i ${env.BUILD_CONTAINER} tee --append /etc/shadow >/dev/null"
-
-                    // Verify that docker works in the updated image.
-                    sh "${RunInBuilder()} ${env.BUILD_CONTAINER} docker ps"
-
-                    // Run a per-test registry on the build host.  This is where we
-                    // will push images for use by the cluster during testing.
-                    sh "docker run -d -p 5000:5000 --restart=always --name registry registry:2"
+                    PrepareEnv()
                 }
             }
         }
@@ -241,46 +175,80 @@ pipeline {
             }
         }
 
+        // In order to enable running on additional Jenkins workers in parallel, we
+        // need to save and stash the images, then (if needed for a new worker) restore
+        // the build environment.
+        //
+        // lz4 is used because compression with gzip slowed down creating the archive too much.
+        //
+        // Alternatively, we could transmit images through the shared registry, but then would
+        // need to solve assigning a per-job tag and garbage collection of those images.
+        stage('Stash images') {
+            steps {
+                sh "imageversion=\$(${RunInBuilder()} ${env.BUILD_CONTAINER} make print-image-version) && \
+                    docker save localhost:5000/pmem-csi-driver:\$imageversion \
+                                localhost:5000/pmem-csi-driver-test:\$imageversion \
+                                ${env.BUILD_IMAGE} | \
+                           lz4 > _work/images.tar.lz4 && \
+                    ls -l -h _work/images.tar.lz4"
+                stash includes: '_work/images.tar.lz4', name: 'images'
+            }
+        }
+
         // Some stages are skipped entirely when testing PRs, the
         // others skip certain tests in that case:
         // - production deployment is only tested on Clear Linux
         //   and testing deployment only on Fedora
+        stage('Testing') {
+            parallel {
+                // This runs most tests and thus gets to use the initial worker immediately.
+                stage('1.18') {
+                    options {
+                        timeout(time: 240, unit: "MINUTES")
+                    }
+                    steps {
+                        TestInVM("", "fedora", "", "1.18", "Top.Level..[[:alpha:]]*-production[[:space:]]")
+                    }
+                }
 
-        stage('testing 1.18') {
-            options {
-                timeout(time: 240, unit: "MINUTES")
-            }
-            steps {
-                TestInVM("fedora", "", "1.18", "Top.Level..[[:alpha:]]*-production[[:space:]]")
-            }
-        }
+                // All others set up their own worker.
+                stage('1.16') {
+                    when { not { changeRequest() } }
+                    options {
+                        timeout(time: 240, unit: "MINUTES")
+                    }
+                    agent {
+                        label "pmem-csi"
+                    }
+                    steps {
+                        TestInVM("fedora-1.16", "fedora", "", "1.16", "")
+                    }
+                }
 
-        stage('testing 1.16') {
-            when { not { changeRequest() } }
-            options {
-                timeout(time: 240, unit: "MINUTES")
-            }
-            steps {
-                TestInVM("fedora", "", "1.16", "")
-            }
-        }
+                stage('1.15') {
+                    when { not { changeRequest() } }
+                    options {
+                        timeout(time: 240, unit: "MINUTES")
+                    }
+                    agent {
+                        label "pmem-csi"
+                    }
+                    steps {
+                        TestInVM("fedora-1.15", "fedora", "", "1.15", "")
+                    }
+                }
 
-        stage('testing 1.15') {
-            when { not { changeRequest() } }
-            options {
-                timeout(time: 240, unit: "MINUTES")
-            }
-            steps {
-                TestInVM("fedora", "", "1.15", "")
-            }
-        }
-
-        stage('Clear Linux') {
-            options {
-                timeout(time: 240, unit: "MINUTES")
-            }
-            steps {
-                TestInVM("clear", "${env.CLEAR_LINUX_VERSION_1_17}", "",  "Top.Level..[[:alpha:]]*-testing[[:space:]]")
+                stage('Clear Linux, 1.17') {
+                    options {
+                        timeout(time: 240, unit: "MINUTES")
+                    }
+                    agent {
+                        label "pmem-csi"
+                    }
+                    steps {
+                        TestInVM("clear-1.17", "clear", "${env.CLEAR_LINUX_VERSION_1_17}", "",  "Top.Level..[[:alpha:]]*-testing[[:space:]]")
+                    }
+                }
             }
         }
 
@@ -343,12 +311,6 @@ git push origin HEAD:master
             }
         }
     }
-
-    post {
-        always {
-            junit 'build/reports/**/*.xml'
-        }
-    }
 }
 
 /*
@@ -394,7 +356,118 @@ String SourceRepo() {
         env.CHANGE_FORK + '/pmem-csi'
 }
 
-void TestInVM(distro, distroVersion, kubernetesVersion, skipIfPR) {
+/*
+ Dump and/or change the configuration of the host on which the agent runs.
+*/
+void SetupHost() {
+     sh '''
+         hostname
+         docker version
+         git version
+         free
+         command -v top >/dev/null 2>&1 ||
+            if command -v apt-get >/dev/null 2>&1; then
+                sudo apt-get install procps
+            else
+                sudo dnf -y install procps
+            fi
+         head -n 30 /proc/cpuinfo; echo ...; tail -n 30 /proc/cpuinfo
+         git remote set-url origin git@github.com:intel/pmem-csi.git
+         git config user.name 'Intel Kubernetes CI/CD Bot'
+         git config user.email 'k8s-bot@intel.com'
+    '''
+
+    // known_hosts entry created and verified as described in https://serverfault.com/questions/856194/securely-add-a-host-e-g-github-to-the-ssh-known-hosts-file
+    sh "mkdir -p ~/.ssh && echo 'github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==' >>~/.ssh/known_hosts && chmod -R go-rxw ~/.ssh"
+}
+
+/*
+ Set up build container and Docker registry.
+ Must be called after the build image is ready.
+*/
+void PrepareEnv() {
+    // Create a tmpfs for use as backing store for a large file that will be passed
+    // into QEMU for storing the etcd database.
+    sh """
+        mkdir -p '${env.TEST_ETCD_TMPFS}'
+        sudo mount -osize=${env.TEST_ETCD_VOLUME_SIZE} -t tmpfs none '${env.TEST_ETCD_TMPFS}'
+        sudo truncate --size=${env.TEST_ETCD_VOLUME_SIZE} '${env.TEST_ETCD_VOLUME}'
+    """
+
+    // Create a running container (https://stackoverflow.com/a/38308399). We keep it running
+    // and just "docker exec" commands in it. withDockerRegistry creates the DOCKER_CONFIG directory
+    // and deletes it when done, so we have to make a copy for later use inside the container.
+    withDockerRegistry([ credentialsId: "${env.DOCKER_REGISTRY}", url: "https://${REGISTRY_NAME}" ]) {
+        sh "mkdir -p _work"
+        sh "cp -a $DOCKER_CONFIG _work/docker-config"
+        sh "docker create --name=${env.BUILD_CONTAINER} \
+                   --volume /var/run/docker.sock:/var/run/docker.sock \
+                   --volume /usr/bin/docker:/usr/bin/docker \
+                   --volume ${WORKSPACE}/..:${WORKSPACE}/.. \
+                   ${env.BUILD_IMAGE} \
+                   sleep infinity"
+    }
+    sh "docker start ${env.BUILD_CONTAINER} && \
+        timeout=0; \
+        while [ \$(docker inspect --format '{{.State.Status}}' ${env.BUILD_CONTAINER}) != running ]; do \
+            docker ps; \
+            if [ \$timeout -ge 60 ]; then \
+               docker inspect ${env.BUILD_CONTAINER}; \
+               echo 'ERROR: ${env.BUILD_CONTAINER} container still not running'; \
+               exit 1; \
+            fi; \
+            sleep 10; \
+            timeout=\$((timeout + 10)); \
+       done"
+
+    // Install additional tools:
+    // - ssh client for govm
+    // - python3 for Sphinx (i.e. make html)
+    // - parted, xfsprogs, os-cloudguest-aws (contains mkfs.ext4) for ImageFile test
+    sh "docker exec ${env.BUILD_CONTAINER} swupd bundle-add openssh-client python3-basic parted xfsprogs os-cloudguest-aws"
+
+    // Now commit those changes to ensure that the result of "swupd bundle add" gets cached.
+    sh "docker commit ${env.BUILD_CONTAINER} ${env.BUILD_IMAGE}"
+
+    // Make /usr/local/bin writable for all users. Used to install kubectl.
+    sh "docker exec ${env.BUILD_CONTAINER} sh -c 'mkdir -p /usr/local/bin && chmod a+wx /usr/local/bin'"
+
+    // Some tools expect a user entry for the jenkins user (like govm?)
+    sh "echo jenkins:x:`id -u`:0:Jenkins:${WORKSPACE}/..:/bin/bash | docker exec -i ${env.BUILD_CONTAINER} tee --append /etc/passwd >/dev/null"
+    sh "echo 'jenkins:*:0:0:99999:0:::' | docker exec -i ${env.BUILD_CONTAINER} tee --append /etc/shadow >/dev/null"
+
+    // Verify that docker works in the updated image.
+    sh "${RunInBuilder()} ${env.BUILD_CONTAINER} docker ps"
+
+    // Run a per-test registry on the build host.  This is where we
+    // will push images for use by the cluster during testing.
+    sh "docker run -d -p 5000:5000 --restart=always --name registry registry:2"
+}
+
+/*
+ Must be called on additional agents to replicate the environment on the main agent.
+*/
+void RestoreEnv() {
+     SetupHost()
+
+    // Get images, ready for use and/or pushing to localhost:5000.
+    unstash 'images'
+    sh 'lz4cat _work/images.tar.lz4 | docker load'
+
+    // Set up build container and registry.
+    PrepareEnv()
+
+    // Now populate the registry like we did on the master node.
+    sh "imageversion=\$(${RunInBuilder()} ${env.BUILD_CONTAINER} make print-image-version) && \
+        for suffix in '' '-test'; do \
+            docker push localhost:5000/pmem-csi-driver\$suffix:\$imageversion; \
+        done"
+}
+
+void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
+    if (worker) {
+        RestoreEnv()
+    }
     try {
         /*
         We have to run "make start" in the current directory
@@ -501,5 +574,6 @@ void TestInVM(distro, distroVersion, kubernetesVersion, skipIfPR) {
                     diff $i build/reports/$testrun.xml || true
                fi
            done'''
+        junit 'build/reports/**/*.xml'
     }
 }
