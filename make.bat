@@ -32,8 +32,8 @@ goto end
 
 :html
 %SPHINXBUILD% -M %1 %SOURCEDIR% %BUILDDIR% %SPHINXOPTS%
-python.exe .\fix-refs.py
-copy index.html %BUILDDIR%\html\index.html
+copy docs\html\index.html %BUILDDIR%\html\index.html
+copy docs\js\copybutton.js %BUILDDIR%\html\_static\copybutton.js
 goto end
 
 :help

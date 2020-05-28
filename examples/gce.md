@@ -39,9 +39,9 @@ and check out the source code with `repo sync`.
 
 Before proceeding, apply the following patch:
 
-```sh
-cd src/overlays
-patch -p1 <<EOF
+```ShellSession
+$ cd src/overlays
+$ patch -p1 <<EOF
 commit 148e1095ba56fcf626d184fd2c427bd192e53a28
 Author: Patrick Ohly <patrick.ohly@intel.com>
 Date:   Fri Aug 2 10:46:30 2019 +0200
@@ -269,7 +269,7 @@ kubectl create -f https://raw.githubusercontent.com/intel/pmem-csi/v0.5.0/deploy
 It is expected that `my-csi-app-2` will never start because the COS
 kernel lacks support for xfs. But `my-csi-app-1` comes up:
 
-```sh
+```console
 $ kubectl get pv
 NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                       STORAGECLASS       REASON   AGE
 pvc-0c2ebc68-cd77-4c08-9fbb-f8a5d33440b9   4Gi        RWO            Delete           Bound    default/pmem-csi-pvc-ext4   pmem-csi-sc-ext4            2m52s
