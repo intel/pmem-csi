@@ -522,8 +522,9 @@ func TestScheduler(t *testing.T) {
 		requestBody, err := json.Marshal(args)
 		require.NoError(t, err, "marshal request")
 		request := &http.Request{
-			URL:  &url.URL{Path: "/filter"},
-			Body: ioutil.NopCloser(bytes.NewReader(requestBody)),
+			URL:    &url.URL{Path: "/filter"},
+			Body:   ioutil.NopCloser(bytes.NewReader(requestBody)),
+			Method: http.MethodGet,
 		}
 		r := &response{}
 		testEnv.scheduler.ServeHTTP(r, request)
