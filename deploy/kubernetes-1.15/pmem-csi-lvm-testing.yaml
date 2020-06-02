@@ -249,12 +249,16 @@ spec:
         image: intel/pmem-csi-driver-test:canary
         imagePullPolicy: IfNotPresent
         name: pmem-driver
+        securityContext:
+          readOnlyRootFilesystem: true
         terminationMessagePath: /tmp/termination-log
         volumeMounts:
         - mountPath: /certs
           name: registry-cert
         - mountPath: /csi
           name: plugin-socket-dir
+        - mountPath: /tmp
+          name: tmp-dir
         - mountPath: /var/lib/pmem-csi-coverage
           name: coverage-dir
       - args:
@@ -267,6 +271,8 @@ spec:
         image: quay.io/k8scsi/csi-provisioner:v1.6.0
         imagePullPolicy: IfNotPresent
         name: external-provisioner
+        securityContext:
+          readOnlyRootFilesystem: true
         volumeMounts:
         - mountPath: /csi
           name: plugin-socket-dir
@@ -303,6 +309,8 @@ spec:
       - name: registry-cert
         secret:
           secretName: pmem-csi-registry-secrets
+      - emptyDir: {}
+        name: tmp-dir
       - hostPath:
           path: /var/lib/pmem-csi-coverage
           type: DirectoryOrCreate
@@ -394,6 +402,8 @@ spec:
         image: quay.io/k8scsi/csi-node-driver-registrar:v1.2.0
         imagePullPolicy: IfNotPresent
         name: driver-registrar
+        securityContext:
+          readOnlyRootFilesystem: true
         volumeMounts:
         - mountPath: /pmem-csi
           name: pmem-state-dir

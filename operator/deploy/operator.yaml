@@ -141,6 +141,8 @@ spec:
           imagePullPolicy: IfNotPresent
           command:
           - /usr/local/bin/pmem-csi-operator
+          securityContext:
+            readOnlyRootFilesystem: true
           env:
             - name: WATCH_NAMESPACE
               valueFrom:
@@ -153,3 +155,9 @@ spec:
             - name: OPERATOR_NAME
               # This should match to the operator container name
               value: "pmem-csi-operator"
+          volumeMounts:
+          - name: tmp
+            mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
