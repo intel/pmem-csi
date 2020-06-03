@@ -320,7 +320,9 @@ func stopOperator(c *deploy.Cluster, d *deploy.Deployment) error {
 	framework.Logf("Ensure the operator pod got deleted.")
 
 	Eventually(func() bool {
-		_, err := c.GetAppInstance("pmem-csi-operator", "", d.Namespace)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		_, err := c.GetAppInstance(ctx, "pmem-csi-operator", "", d.Namespace)
 		deploy.LogError(err, "get operator error: %v, will retry...", err)
 		return err != nil && strings.HasPrefix(err.Error(), "no app")
 	}, "3m", "1s").Should(BeTrue(), "delete operator pod")

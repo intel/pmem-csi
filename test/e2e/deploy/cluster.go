@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -68,8 +69,8 @@ func (c *Cluster) NodeServiceAddress(node int, port int) string {
 }
 
 // GetServicePort looks up the node port of a service.
-func (c *Cluster) GetServicePort(serviceName, namespace string) (int, error) {
-	service, err := c.cs.CoreV1().Services(namespace).Get(context.Background(), serviceName, metav1.GetOptions{})
+func (c *Cluster) GetServicePort(ctx context.Context, serviceName, namespace string) (int, error) {
+	service, err := c.cs.CoreV1().Services(namespace).Get(ctx, serviceName, metav1.GetOptions{})
 	if err != nil {
 		return 0, err
 	}
@@ -81,7 +82,9 @@ func (c *Cluster) WaitForServicePort(serviceName, namespace string) int {
 	var port int
 	Eventually(func() bool {
 		var err error
-		port, err = c.GetServicePort(serviceName, namespace)
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		port, err = c.GetServicePort(ctx, serviceName, namespace)
 		return err == nil && port != 0
 	}, "3m").Should(BeTrue(), "%s service running", serviceName)
 	return port
@@ -89,8 +92,8 @@ func (c *Cluster) WaitForServicePort(serviceName, namespace string) int {
 
 // GetAppInstance looks for a pod with a certain app label and a specific host or pod IP.
 // The IP may also be empty.
-func (c *Cluster) GetAppInstance(app, ip, namespace string) (*v1.Pod, error) {
-	pods, err := c.cs.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{})
+func (c *Cluster) GetAppInstance(ctx context.Context, app, ip, namespace string) (*v1.Pod, error) {
+	pods, err := c.cs.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -107,26 +110,30 @@ func (c *Cluster) WaitForAppInstance(app, ip, namespace string) *v1.Pod {
 	var pod *v1.Pod
 	Eventually(func() bool {
 		var err error
-		pod, err = c.GetAppInstance(app, ip, namespace)
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		pod, err = c.GetAppInstance(ctx, app, ip, namespace)
 		return err == nil
 	}, "3m").Should(BeTrue(), "%s app running on host %s", app, ip)
 	return pod
 }
 
-func (c *Cluster) GetDaemonSet(setName, namespace string) (*appsv1.DaemonSet, error) {
-	return c.cs.AppsV1().DaemonSets(namespace).Get(context.Background(), setName, metav1.GetOptions{})
+func (c *Cluster) GetDaemonSet(ctx context.Context, setName, namespace string) (*appsv1.DaemonSet, error) {
+	return c.cs.AppsV1().DaemonSets(namespace).Get(ctx, setName, metav1.GetOptions{})
 }
 
-func (c *Cluster) WaitForDaemonSet(setName string) *appsv1.DaemonSet {
+func (c *Cluster) WaitForDaemonSet(setName, namespace string) *appsv1.DaemonSet {
 	var set *appsv1.DaemonSet
 	Eventually(func() bool {
 		var err error
-		set, err = c.cs.AppsV1().DaemonSets("default").Get(context.Background(), setName, metav1.GetOptions{})
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		set, err = c.GetDaemonSet(ctx, setName, namespace)
 		return err == nil
 	}, "3m").Should(BeTrue(), "%s DaemonSet running", setName)
 	return set
 }
 
-func (c *Cluster) GetStatefulSet(setName, namespace string) (*appsv1.StatefulSet, error) {
-	return c.cs.AppsV1().StatefulSets(namespace).Get(context.Background(), setName, metav1.GetOptions{})
+func (c *Cluster) GetStatefulSet(ctx context.Context, setName, namespace string) (*appsv1.StatefulSet, error) {
+	return c.cs.AppsV1().StatefulSets(namespace).Get(ctx, setName, metav1.GetOptions{})
 }
