@@ -28,7 +28,7 @@ EOF
      ${SSH} sed -ie "s^intel/pmem^${TEST_PMEM_REGISTRY}/pmem^g" "$tmpdir/operator.yaml"
   fi
   ${SSH} <<EOF
-sed -ie "s^imagePullPolicy:.IfNotPresent^imagePullPolicy: ${TEST_IMAGE_PULL_POLICY}^g" "$tmpdir/operator.yaml"
+sed -i -e "s^imagePullPolicy:.IfNotPresent^imagePullPolicy: ${TEST_IMAGE_PULL_POLICY}^g" -e 's/namespace: default/namespace: $TEST_OPERATOR_NAMESPACE/' "$tmpdir/operator.yaml"
 EOF
   ${SSH} "cat >'$tmpdir/kustomization.yaml'" <<EOF
 resources:

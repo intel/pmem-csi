@@ -97,7 +97,7 @@ func WaitForPMEMDriver(c *Cluster, name, namespace string) (metricsURL string) {
 		defer cancel()
 
 		// The controller service must be defined.
-		port, err := c.GetServicePort(deadline, name+"-metrics", "default")
+		port, err := c.GetServicePort(deadline, name+"-metrics", namespace)
 		if err != nil {
 			return err
 		}
@@ -523,7 +523,7 @@ var allDeployments = []string{
 	"direct-production",
 	"operator",
 	"operator-lvm-production",
-	"operator-direct-production",
+	"operator-direct-production", // Uses kube-system, to ensure that deployment in a namespace also works.
 }
 var deploymentRE = regexp.MustCompile(`^(operator)?-?(\w*)?-?(testing|production)?$`)
 
@@ -532,6 +532,9 @@ func Parse(deploymentName string) (*Deployment, error) {
 	deployment := &Deployment{
 		Name:      deploymentName,
 		Namespace: "default",
+	}
+	if deploymentName == "operator-direct-production" {
+		deployment.Namespace = "kube-system"
 	}
 
 	matches := deploymentRE.FindStringSubmatch(deploymentName)
@@ -598,6 +601,7 @@ func EnsureDeployment(deploymentName string) *Deployment {
 			cmd := exec.Command("test/start-operator.sh")
 			cmd.Dir = os.Getenv("REPO_ROOT")
 			cmd.Env = append(os.Environ(),
+				"TEST_OPERATOR_NAMESPACE="+deployment.Namespace,
 				"TEST_OPERATOR_DEPLOYMENT="+deployment.Name)
 			cmd.Stdout = ginkgo.GinkgoWriter
 			cmd.Stderr = ginkgo.GinkgoWriter
