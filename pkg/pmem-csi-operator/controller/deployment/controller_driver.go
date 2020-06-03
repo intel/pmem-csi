@@ -361,7 +361,7 @@ func (d *PmemCSIDriver) getCSIDriver() *storagev1beta1.CSIDriver {
 			Kind:       "CSIDriver",
 			APIVersion: "storage.k8s.io/v1beta1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name, true),
+		ObjectMeta: d.getObjectMeta(d.GetName(), true),
 		Spec: storagev1beta1.CSIDriverSpec{
 			AttachRequired: &attachRequired,
 			PodInfoOnMount: &podInfoOnMount,
@@ -385,7 +385,7 @@ func (d *PmemCSIDriver) getSecret(cn string, ca, encodedKey, encodedCert []byte)
 			Kind:       "Secret",
 			APIVersion: "v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name+"-"+cn, false),
+		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-"+cn, false),
 		Type:       corev1.SecretTypeTLS,
 		Data: map[string][]byte{
 			// Same names as in the example secrets and in the v1 API.
@@ -402,7 +402,7 @@ func (d *PmemCSIDriver) getControllerService() *corev1.Service {
 			Kind:       "Service",
 			APIVersion: "v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name+"-controller", false),
+		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-controller", false),
 		Spec: corev1.ServiceSpec{
 			Type: corev1.ServiceTypeClusterIP,
 			Ports: []corev1.ServicePort{
@@ -414,7 +414,7 @@ func (d *PmemCSIDriver) getControllerService() *corev1.Service {
 				},
 			},
 			Selector: map[string]string{
-				"app": d.Name + "-controller",
+				"app": d.GetHyphenedName() + "-controller",
 			},
 		},
 	}
@@ -426,7 +426,7 @@ func (d *PmemCSIDriver) getMetricsService() *corev1.Service {
 			Kind:       "Service",
 			APIVersion: "v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name+"-metrics", false),
+		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-metrics", false),
 		Spec: corev1.ServiceSpec{
 			Type: corev1.ServiceTypeNodePort,
 			Ports: []corev1.ServicePort{
@@ -438,7 +438,7 @@ func (d *PmemCSIDriver) getMetricsService() *corev1.Service {
 				},
 			},
 			Selector: map[string]string{
-				"app": d.Name + "-controller",
+				"app": d.GetHyphenedName() + "-controller",
 			},
 		},
 	}
@@ -450,7 +450,7 @@ func (d *PmemCSIDriver) getControllerServiceAccount() *corev1.ServiceAccount {
 			Kind:       "ServiceAccount",
 			APIVersion: "v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name+"-controller", false),
+		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-controller", false),
 	}
 }
 
@@ -460,7 +460,7 @@ func (d *PmemCSIDriver) getControllerProvisionerRole() *rbacv1.Role {
 			Kind:       "Role",
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name+"-external-provisioner-cfg", false),
+		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-external-provisioner-cfg", false),
 		Rules: []rbacv1.PolicyRule{
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
@@ -486,18 +486,18 @@ func (d *PmemCSIDriver) getControllerProvisionerRoleBinding() *rbacv1.RoleBindin
 			Kind:       "RoleBinding",
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name+"-csi-provisioner-role-cfg", false),
+		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-csi-provisioner-role-cfg", false),
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      d.Name + "-controller",
+				Name:      d.GetHyphenedName() + "-controller",
 				Namespace: d.namespace,
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "Role",
-			Name:     d.Name + "-external-provisioner-cfg",
+			Name:     d.GetHyphenedName() + "-external-provisioner-cfg",
 		},
 	}
 }
@@ -508,7 +508,7 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRole() *rbacv1.ClusterRol
 			Kind:       "ClusterRole",
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name+"-external-provisioner-runner", true),
+		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-external-provisioner-runner", true),
 		Rules: []rbacv1.PolicyRule{
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
@@ -569,18 +569,18 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRoleBinding() *rbacv1.Clu
 			Kind:       "ClusterRoleBinding",
 			APIVersion: "rbac.authorization.k8s.io/v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name+"-csi-provisioner-role", true),
+		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-csi-provisioner-role", true),
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      d.Name + "-controller",
+				Name:      d.GetHyphenedName() + "-controller",
 				Namespace: d.namespace,
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     d.Name + "-external-provisioner-runner",
+			Name:     d.GetHyphenedName() + "-external-provisioner-runner",
 		},
 	}
 }
@@ -594,21 +594,21 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 			Kind:       "StatefulSet",
 			APIVersion: "apps/v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name+"-controller", false),
+		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-controller", false),
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app": d.Name + "-controller",
+					"app": d.GetHyphenedName() + "-controller",
 				},
 			},
-			ServiceName: d.Name + "-controller",
+			ServiceName: d.GetHyphenedName() + "-controller",
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: joinMaps(
 						d.Spec.Labels,
 						map[string]string{
-							"app":                        d.Name + "-controller",
+							"app":                        d.GetHyphenedName() + "-controller",
 							"pmem-csi.intel.com/webhook": "ignore",
 						}),
 				},
@@ -618,7 +618,7 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 						RunAsNonRoot: &true,
 						RunAsUser:    &pmemcsiUser,
 					},
-					ServiceAccountName: d.Name + "-controller",
+					ServiceAccountName: d.GetHyphenedName() + "-controller",
 					Containers: []corev1.Container{
 						d.getControllerContainer(),
 						d.getProvisionerContainer(),
@@ -664,7 +664,7 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 							Name: "registry-cert",
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: d.Name + "-registry-secrets",
+									SecretName: d.GetHyphenedName() + "-registry-secrets",
 								},
 							},
 						},
@@ -690,11 +690,11 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 			Kind:       "DaemonSet",
 			APIVersion: "apps/v1",
 		},
-		ObjectMeta: d.getObjectMeta(d.Name+"-node", false),
+		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-node", false),
 		Spec: appsv1.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app": d.Name + "-node",
+					"app": d.GetHyphenedName() + "-node",
 				},
 			},
 			Template: corev1.PodTemplateSpec{
@@ -702,7 +702,7 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 					Labels: joinMaps(
 						d.Spec.Labels,
 						map[string]string{
-							"app":                        d.Name + "-node",
+							"app":                        d.GetHyphenedName() + "-node",
 							"pmem-csi.intel.com/webhook": "ignore",
 						}),
 				},
@@ -744,7 +744,7 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 							Name: "node-cert",
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: d.Name + "-node-secrets",
+									SecretName: d.GetHyphenedName() + "-node-secrets",
 								},
 							},
 						},
@@ -752,7 +752,7 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 							Name: "pmem-state-dir",
 							VolumeSource: corev1.VolumeSource{
 								HostPath: &corev1.HostPathVolumeSource{
-									Path: "/var/lib/" + d.Name,
+									Path: "/var/lib/" + d.GetName(),
 									Type: &directoryOrCreate,
 								},
 							},
@@ -817,7 +817,7 @@ func (d *PmemCSIDriver) getNodeDriverCommand() []string {
 		"-nodeid=$(KUBE_NODE_NAME)",
 		fmt.Sprintf("-controllerEndpoint=tcp://$(KUBE_POD_IP):%d", nodeControllerPort),
 		// User controller service name(== deployment name) as registry endpoint.
-		fmt.Sprintf("-registryEndpoint=tcp://%s-controller:%d", d.Name, controllerServicePort),
+		fmt.Sprintf("-registryEndpoint=tcp://%s-controller:%d", d.GetHyphenedName(), controllerServicePort),
 		"-caFile=/certs/ca.crt",
 		"-certFile=/certs/tls.crt",
 		"-keyFile=/certs/tls.key",
@@ -849,7 +849,7 @@ func (d *PmemCSIDriver) getControllerContainer() corev1.Container {
 			},
 			{
 				Name:  "PMEM_CSI_DRIVER_NAME",
-				Value: d.Name,
+				Value: d.GetName(),
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
@@ -904,7 +904,7 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 			},
 			{
 				Name:  "PMEM_CSI_DRIVER_NAME",
-				Value: d.Name,
+				Value: d.GetName(),
 			},
 			{
 				Name:  "TERMINATION_LOG_PATH",
@@ -1066,7 +1066,7 @@ func (d *PmemCSIDriver) getNodeRegistrarContainer() corev1.Container {
 		Env: []corev1.EnvVar{
 			{
 				Name:  "PMEM_CSI_DRIVER_NAME",
-				Value: d.Name,
+				Value: d.GetName(),
 			},
 		},
 		Resources: *d.Spec.NodeResources,

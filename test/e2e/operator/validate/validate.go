@@ -87,7 +87,7 @@ func DriverDeployment(client client.Client, k8sver version.Version, namespace st
 		return err
 	}
 
-	expectedObjects, err := deployments.LoadAndCustomizeObjects(k8sver, deployment.Spec.DeviceMode, deployment.Name, namespace, deployment)
+	expectedObjects, err := deployments.LoadAndCustomizeObjects(k8sver, deployment.Spec.DeviceMode, namespace, deployment)
 	if err != nil {
 		return fmt.Errorf("customize expected objects: %v", err)
 	}
@@ -101,13 +101,13 @@ func DriverDeployment(client client.Client, k8sver version.Version, namespace st
 				// content of secrets, which aren't
 				// part of the reference objects.
 				switch actual.GetName() {
-				case deployment.Name + "-registry-secrets":
+				case deployment.GetHyphenedName() + "-registry-secrets":
 					diffs = append(diffs, compareSecrets(actual,
 						deployment.Spec.CACert,
 						deployment.Spec.RegistryPrivateKey,
 						deployment.Spec.RegistryCert)...)
 					continue
-				case deployment.Name + "-node-secrets":
+				case deployment.GetHyphenedName() + "-node-secrets":
 					diffs = append(diffs, compareSecrets(actual,
 						deployment.Spec.CACert,
 						deployment.Spec.NodeControllerPrivateKey,
@@ -156,8 +156,8 @@ func DriverDeployment(client client.Client, k8sver version.Version, namespace st
 	}
 	for _, expected := range append(expectedObjects,
 		// Content doesn't matter, we just want to be sure they exist.
-		createObject(gvk, deployment.Name+"-registry-secrets", namespace),
-		createObject(gvk, deployment.Name+"-node-secrets", namespace)) {
+		createObject(gvk, deployment.GetHyphenedName()+"-registry-secrets", namespace),
+		createObject(gvk, deployment.GetHyphenedName()+"-node-secrets", namespace)) {
 		if findObject(objects, expected) == nil {
 			diffs = append(diffs, fmt.Sprintf("expected object was not deployed: %v", prettyPrintObjectID(expected)))
 		}

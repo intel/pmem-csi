@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
@@ -358,6 +359,14 @@ func (d *Deployment) Compare(other *Deployment) map[DeploymentChange]struct{} {
 	}
 
 	return changes
+}
+
+// GetHyphenedName returns the name of the deployment with dots replaced by hyphens.
+// Most objects created for the deployment will use hyphens in the name, sometimes
+// with an additional suffix like -controller, but others must use the original
+// name (like the CSIDriver object).
+func (d *Deployment) GetHyphenedName() string {
+	return strings.ReplaceAll(d.GetName(), ".", "-")
 }
 
 func GetDeploymentCRDSchema() *apiextensions.JSONSchemaProps {
