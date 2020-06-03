@@ -114,7 +114,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 		config.Address = cluster.NodeServiceAddress(1, socatPort)
 		// The cluster controller service can be reached via
 		// any node, what matters is the service port.
-		port, err := cluster.GetServicePort("pmem-csi-controller-testing", d.Namespace)
+		port, err := cluster.GetServicePort(context.Background(), "pmem-csi-controller-testing", d.Namespace)
 		framework.ExpectNoError(err, "find controller test service")
 		config.ControllerAddress = cluster.NodeServiceAddress(0, port)
 		framework.Logf("sanity: using controller %s and node %s", config.ControllerAddress, config.Address)

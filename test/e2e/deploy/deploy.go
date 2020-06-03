@@ -27,7 +27,6 @@ import (
 	pmemcsidriver "github.com/intel/pmem-csi/pkg/pmem-csi-driver"
 
 	"github.com/onsi/ginkgo"
-	"github.com/onsi/gomega"
 )
 
 const (
@@ -57,20 +56,13 @@ func AddUninstallHook(h UninstallHook) {
 
 // WaitForOperator ensures that the PMEM-CSI operator is ready for use, which is
 // currently defined as the operator pod in Running phase.
-func WaitForOperator(c *Cluster, namespace string) (operator *v1.Pod) {
+func WaitForOperator(c *Cluster, namespace string) *v1.Pod {
 	// TODO(avalluri): At later point of time we should add readiness support
 	// for the operator. Then we can query directly the operator if its ready.
 	// As intrem solution we are just checking Pod.Status.
-	gomega.Eventually(func() bool {
-		pod, err := c.GetAppInstance("pmem-csi-operator", "", namespace)
-		if err == nil && pod.Status.Phase == v1.PodRunning {
-			operator = pod
-			return true
-		}
-		return false
-	}, "5m", "2s").Should(gomega.BeTrue(), "operator not running in namespace %s", namespace)
+	operator := c.WaitForAppInstance("pmem-csi-operator", "", namespace)
 	ginkgo.By("Operator is ready!")
-	return
+	return operator
 }
 
 // WaitForPMEMDriver ensures that the PMEM-CSI driver is ready for use, which is
@@ -84,7 +76,7 @@ func WaitForPMEMDriver(c *Cluster, namespace string) {
 	defer info.Stop()
 	deadline, cancel := context.WithTimeout(context.Background(), framework.TestContext.SystemDaemonsetStartupTimeout)
 	defer cancel()
-	framework.Logf("Starting to wait for PMEM-CSI driver.")
+	framework.Logf("Waiting for PMEM-CSI driver.")
 
 	tlsConfig := tls.Config{
 		// We could load ca.pem with pmemgrpc.LoadClientTLS, but as we are not connecting to it
@@ -95,20 +87,28 @@ func WaitForPMEMDriver(c *Cluster, namespace string) {
 		TLSClientConfig: &tlsConfig,
 	}
 	defer tr.CloseIdleConnections()
-	client := &http.Client{
-		Transport: &tr,
-	}
 
 	var lastError error
+	var version string
 	check := func() error {
+		// Do not linger too long here, we rather want to
+		// abort and print the error instead of getting stuck.
+		const timeout = 100 * time.Millisecond
+		deadline, cancel := context.WithTimeout(deadline, timeout)
+		defer cancel()
+
 		// The controller service must be defined.
-		port, err := c.GetServicePort("pmem-csi-metrics", "default")
+		port, err := c.GetServicePort(deadline, "pmem-csi-metrics", "default")
 		if err != nil {
 			return err
 		}
 
 		// We can connect to it and get metrics data.
 		url := fmt.Sprintf("https://%s:%d/metrics", c.NodeIP(0), port)
+		client := &http.Client{
+			Transport: &tr,
+			Timeout:   timeout,
+		}
 		resp, err := client.Get(url)
 		if err != nil {
 			return fmt.Errorf("get controller metrics: %v", err)
@@ -139,7 +139,7 @@ func WaitForPMEMDriver(c *Cluster, namespace string) {
 		if *label.Name != "version" {
 			return fmt.Errorf("expected build_info to contain a version label, got: %s", *label.Name)
 		}
-		framework.Logf("PMEM-CSI version: %s", *label.Value)
+		version = *label.Value
 
 		pmemNodes, ok := metrics["pmem_nodes"]
 		if !ok {
@@ -159,7 +159,7 @@ func WaitForPMEMDriver(c *Cluster, namespace string) {
 	ready := func() error {
 		lastError = check()
 		if lastError == nil {
-			framework.Logf("PMEM-CSI driver is ready.")
+			framework.Logf("Done with waiting, PMEM-CSI driver %s is ready.", version)
 		}
 		return lastError
 	}
@@ -173,10 +173,10 @@ func WaitForPMEMDriver(c *Cluster, namespace string) {
 			if ready() == nil {
 				return
 			}
-		case <-deadline.Done():
-			framework.Failf("Giving up waiting for PMEM-CSI to start up, check the previous warnings and log output.")
 		case <-info.C:
 			framework.Logf("Still waiting for PMEM-CSI driver, last error: %v", lastError)
+		case <-deadline.Done():
+			framework.Failf("Giving up waiting for PMEM-CSI to start up, check the previous warnings and log output. Last error: %v", lastError)
 		}
 	}
 }

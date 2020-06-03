@@ -139,8 +139,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			deployment = deploy.CreateDeploymentCR(f, deployment)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 
-			operatorPod, err := findOperatorPod(c, d)
-			Expect(err).ShouldNot(HaveOccurred(), "find operator deployment")
+			operatorPod := deploy.WaitForOperator(c, d.Namespace)
 
 			// operator image should be the driver image
 			deployment.Spec.Image = operatorPod.Spec.Containers[0].Image
@@ -291,12 +290,6 @@ func validateDeploymentFailure(f *framework.Framework, name string) {
 	}, "3m", "5s").Should(BeTrue(), "deployment %q not running", name)
 }
 
-// findOperatorPod checks whether there is a PMEM-CSI operator
-// installation in the cluster and returns the found operator pod.
-func findOperatorPod(c *deploy.Cluster, d *deploy.Deployment) (*corev1.Pod, error) {
-	return deploy.WaitForOperator(c, d.Namespace), nil
-}
-
 // stopOperator ensures operator deployment replica counter == 0 and the
 // operator pod gets deleted
 func stopOperator(c *deploy.Cluster, d *deploy.Deployment) error {
@@ -320,7 +313,9 @@ func stopOperator(c *deploy.Cluster, d *deploy.Deployment) error {
 	framework.Logf("Ensure the operator pod got deleted.")
 
 	Eventually(func() bool {
-		_, err := c.GetAppInstance("pmem-csi-operator", "", d.Namespace)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		_, err := c.GetAppInstance(ctx, "pmem-csi-operator", "", d.Namespace)
 		deploy.LogError(err, "get operator error: %v, will retry...", err)
 		return err != nil && strings.HasPrefix(err.Error(), "no app")
 	}, "3m", "1s").Should(BeTrue(), "delete operator pod")
