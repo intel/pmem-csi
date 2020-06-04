@@ -69,7 +69,7 @@ func WaitForOperator(c *Cluster, namespace string) *v1.Pod {
 // defined as:
 // - controller service is up and running
 // - all nodes have registered
-func WaitForPMEMDriver(c *Cluster, name, namespace string) {
+func WaitForPMEMDriver(c *Cluster, name, namespace string) (metricsURL string) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	info := time.NewTicker(time.Minute)
@@ -104,17 +104,17 @@ func WaitForPMEMDriver(c *Cluster, name, namespace string) {
 		}
 
 		// We can connect to it and get metrics data.
-		url := fmt.Sprintf("https://%s:%d/metrics", c.NodeIP(0), port)
+		metricsURL = fmt.Sprintf("https://%s:%d/metrics", c.NodeIP(0), port)
 		client := &http.Client{
 			Transport: &tr,
 			Timeout:   timeout,
 		}
-		resp, err := client.Get(url)
+		resp, err := client.Get(metricsURL)
 		if err != nil {
 			return fmt.Errorf("get controller metrics: %v", err)
 		}
 		if resp.StatusCode != 200 {
-			return fmt.Errorf("HTTP GET %s failed: %d", url, resp.StatusCode)
+			return fmt.Errorf("HTTP GET %s failed: %d", metricsURL, resp.StatusCode)
 		}
 
 		// Parse and check number of connected nodes. Dump the
