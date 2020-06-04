@@ -8,6 +8,7 @@ package scheduler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -141,6 +142,11 @@ func (s *scheduler) filter(w http.ResponseWriter, r *http.Request) {
 func (s *scheduler) doFilter(args schedulerapi.ExtenderArgs) (*schedulerapi.ExtenderFilterResult, error) {
 	var filteredNodes []v1.Node
 	failedNodes := make(schedulerapi.FailedNodesMap)
+	if args.Pod == nil ||
+		args.Pod.Name == "" ||
+		args.Nodes == nil {
+		return nil, errors.New("incomplete parameters")
+	}
 
 	log := s.log.WithValues("pod", args.Pod.Name)
 	log.V(5).Info("node filter request", "potential nodes", nodeNames(args.Nodes.Items))
