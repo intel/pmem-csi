@@ -341,14 +341,14 @@ spec:
         - -deviceManager=direct
         - -v=3
         - -mode=node
-        - -endpoint=unix:///pmem-csi/csi.sock
+        - -endpoint=unix:///var/lib/$(PMEM_CSI_DRIVER_NAME)/csi.sock
         - -nodeid=$(KUBE_NODE_NAME)
         - -controllerEndpoint=tcp://$(KUBE_POD_IP):10001
         - -registryEndpoint=tcp://pmem-csi-controller:10000
         - -caFile=/certs/ca.crt
         - -certFile=/certs/tls.crt
         - -keyFile=/certs/tls.key
-        - -statePath=/pmem-csi
+        - -statePath=/var/lib/$(PMEM_CSI_DRIVER_NAME)
         - -drivername=$(PMEM_CSI_DRIVER_NAME)
         - -v=5
         - -testEndpoint
@@ -388,7 +388,7 @@ spec:
           name: dev-dir
         - mountPath: /sys
           name: sys-dir
-        - mountPath: /pmem-csi
+        - mountPath: /var/lib/pmem-csi.intel.com
           mountPropagation: Bidirectional
           name: pmem-state-dir
         - mountPath: /var/lib/pmem-csi-coverage

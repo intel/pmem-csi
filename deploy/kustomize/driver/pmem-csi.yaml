@@ -156,14 +156,14 @@ spec:
                   "/usr/local/bin/pmem-csi-driver",
                   "-v=3",
                   "-mode=node",
-                  "-endpoint=unix:///pmem-csi/csi.sock",
+                  "-endpoint=unix:///var/lib/$(PMEM_CSI_DRIVER_NAME)/csi.sock",
                   "-nodeid=$(KUBE_NODE_NAME)",
                   "-controllerEndpoint=tcp://$(KUBE_POD_IP):10001",
                   "-registryEndpoint=tcp://pmem-csi-controller:10000",
                   "-caFile=/certs/ca.crt",
                   "-certFile=/certs/tls.crt",
                   "-keyFile=/certs/tls.key",
-                  "-statePath=/pmem-csi",
+                  "-statePath=/var/lib/$(PMEM_CSI_DRIVER_NAME)",
                   "-drivername=$(PMEM_CSI_DRIVER_NAME)",
               ]
         # Passing /dev to container may cause container creation error because
@@ -201,7 +201,11 @@ spec:
         - name: sys-dir
           mountPath: /sys
         - name: pmem-state-dir
-          mountPath: /pmem-csi
+          # This must be the same path as on the host, otherwise
+          # Kata Containers cannot find the file that gets attached
+          # to a loop device because the name is the same inside
+          # and outside the container.
+          mountPath: /var/lib/pmem-csi.intel.com
           # Needed for Kata Containers: we mount the PMEM volume inside our
           # state dir and want that to be visible also on the host, because
           # the host will need access to the image file that we create inside
