@@ -69,7 +69,7 @@ func WaitForOperator(c *Cluster, namespace string) *v1.Pod {
 // defined as:
 // - controller service is up and running
 // - all nodes have registered
-func WaitForPMEMDriver(c *Cluster, namespace string) {
+func WaitForPMEMDriver(c *Cluster, name, namespace string) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	info := time.NewTicker(time.Minute)
@@ -98,7 +98,7 @@ func WaitForPMEMDriver(c *Cluster, namespace string) {
 		defer cancel()
 
 		// The controller service must be defined.
-		port, err := c.GetServicePort(deadline, "pmem-csi-metrics", "default")
+		port, err := c.GetServicePort(deadline, name+"-metrics", "default")
 		if err != nil {
 			return err
 		}
@@ -145,6 +145,7 @@ func WaitForPMEMDriver(c *Cluster, namespace string) {
 		if !ok {
 			return fmt.Errorf("expected pmem_nodes not found in metrics: %v", metrics)
 		}
+
 		if len(pmemNodes.Metric) != 1 {
 			return fmt.Errorf("expected pmem_nodes to have one metric, got: %v", pmemNodes.Metric)
 		}
@@ -581,7 +582,7 @@ func EnsureDeployment(deploymentName string) *Deployment {
 				framework.Logf("reusing existing %s PMEM-CSI components", deployment.Name)
 				// Do some sanity checks on the running deployment before the test.
 				if deployment.HasDriver {
-					WaitForPMEMDriver(c, deployment.Namespace)
+					WaitForPMEMDriver(c, "pmem-csi", deployment.Namespace)
 				}
 				if deployment.HasOperator {
 					WaitForOperator(c, deployment.Namespace)
@@ -628,7 +629,7 @@ func EnsureDeployment(deploymentName string) *Deployment {
 			// We check for a running driver the same way at the moment, by directly
 			// looking at the driver state. Long-term we want the operator to do that
 			// checking itself.
-			WaitForPMEMDriver(c, deployment.Namespace)
+			WaitForPMEMDriver(c, "pmem-csi", deployment.Namespace)
 		}
 
 		for _, h := range installHooks {
