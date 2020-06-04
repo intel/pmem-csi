@@ -134,7 +134,9 @@ sshtovm () {
             ) >&2
             die "ERROR: timeout accessing ${IP} through ssh, not ready after $secs seconds. See debug output above."
         fi
-        if ! echo "$out" | grep -q -e "connect to host ${IP}" -e "Permission denied, please try again" -e "Received disconnect from ${IP} .*: Too many authentication failures"; then
+        # On Clear Linux, sometimes we get a non-zero exit code but no output. Also retry in that case.
+        if [ "$out" ] &&
+               ! echo "$out" | grep -q -e "connect to host ${IP}" -e "Permission denied, please try again" -e "Received disconnect from ${IP} .*: Too many authentication failures"; then
             # Some other error, probably in the command itself. Give up.
             echo "$out"
             return 1
