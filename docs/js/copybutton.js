@@ -1,4 +1,9 @@
 // introduces special behavior for ShellSession
+// see //MODIFICATION section below for details
+// Based on release: 0.2.11 - https://github.com/executablebooks/sphinx-copybutton/releases/tag/v0.2.11 
+// original installed from: https://pypi.org/project/sphinx-copybutton/
+// original license(MIT): https://github.com/executablebooks/sphinx-copybutton/blob/68f14248d53b70440ae22ae88675e2249028c649/LICENSE
+// original source code: https://github.com/executablebooks/sphinx-copybutton/blob/68f14248d53b70440ae22ae88675e2249028c649/sphinx_copybutton/_static/copybutton.js_t
 
 // Localization support
 const messages = {
@@ -71,11 +76,13 @@ var copyTargetText = (trigger) => {
   var onlyCopyPromptLines = true; // Inserted from config
   var removePrompts = true; // Inserted from config
 
+  //MODIFICATION: Special Handling of ShellSession which ignores setting of "true" for onlyCopyPromptLines
   grandParent = target.parentElement.parentElement;
   blockType = grandParent.classList;
   if (blockType[0].includes("ShellSession")) {
     onlyCopyPromptLines = false;
   }
+  //END MODIFICATION
 
   // Text content line filtering based on prompts (if a prompt text is given)
   if (copybuttonPromptText.length > 0) {
