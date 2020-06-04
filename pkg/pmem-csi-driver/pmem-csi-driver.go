@@ -317,6 +317,13 @@ func (pmemd *pmemDriver) Run() error {
 		// Here we want to shut down cleanly, i.e. let running
 		// gRPC calls complete.
 		klog.V(3).Infof("Caught signal %s, terminating.", sig)
+		if pmemd.cfg.Mode == Node {
+			klog.V(3).Info("Unregistering node...")
+			if err := pmemd.unregisterNodeController(); err != nil {
+				klog.V(4).Infof("Failed to node unregister: %v", err)
+			}
+		}
+
 	case <-ctx.Done():
 		// The scheduler HTTP server must have failed (to start).
 		// We quit in that case.
@@ -352,6 +359,21 @@ func (pmemd *pmemDriver) registerNodeController() error {
 	go waitAndWatchConnection(conn, req)
 
 	return nil
+}
+
+func (pmemd *pmemDriver) unregisterNodeController() error {
+	req := &registry.UnregisterControllerRequest{
+		NodeId: pmemd.cfg.NodeID,
+	}
+	conn, err := pmemgrpc.Connect(pmemd.cfg.RegistryEndpoint, pmemd.clientTLSConfig)
+	if err != nil {
+		return err
+	}
+
+	client := registry.NewRegistryClient(conn)
+	_, err = client.UnregisterController(context.Background(), req)
+
+	return err
 }
 
 // startScheduler starts the scheduler extender if it is enabled. It
