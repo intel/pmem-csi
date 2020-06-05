@@ -931,6 +931,10 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 				MountPath: "/dev",
 			},
 			{
+				Name:      "sys-dir",
+				MountPath: "/sys",
+			},
+			{
 				Name:             "pmem-state-dir",
 				MountPath:        "/pmem-csi",
 				MountPropagation: &bidirectional,
@@ -943,14 +947,6 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 			RunAsUser: &root,
 		},
 		TerminationMessagePath: "/tmp/termination-log",
-	}
-
-	// Driver in 'direct' mode requires /sys mounting
-	if d.Spec.DeviceMode == api.DeviceModeDirect {
-		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
-			Name:      "sys-dir",
-			MountPath: "/sys",
-		})
 	}
 
 	return c

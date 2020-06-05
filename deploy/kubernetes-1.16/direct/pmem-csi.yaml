@@ -335,11 +335,11 @@ spec:
           name: node-cert
         - mountPath: /dev
           name: dev-dir
+        - mountPath: /sys
+          name: sys-dir
         - mountPath: /pmem-csi
           mountPropagation: Bidirectional
           name: pmem-state-dir
-        - mountPath: /sys
-          name: sys-dir
       - args:
         - -v=3
         - --kubelet-registration-path=/var/lib/$(PMEM_CSI_DRIVER_NAME)/csi.sock
