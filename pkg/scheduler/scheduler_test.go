@@ -675,3 +675,90 @@ func TestMutatePod(t *testing.T) {
 		})
 	}
 }
+
+func TestInputValidation(t *testing.T) {
+	t.Parallel()
+	type scenarioType struct {
+		path           string
+		method         string
+		body           string
+		expectedStatus int
+		expectedResult string
+	}
+	scenarios := map[string]scenarioType{
+		"status ok": {
+			expectedStatus: http.StatusOK,
+		},
+		"invalid path": {
+			path:           "/no-such-path",
+			expectedStatus: http.StatusNotFound,
+		},
+		"invalid method": {
+			method:         http.MethodPatch,
+			expectedStatus: http.StatusMethodNotAllowed,
+		},
+		"filter ok": {
+			path:           "/filter",
+			body:           `{"pod": { "metadata":{"name":"test-pod"}}, "nodes": {}}`,
+			expectedStatus: http.StatusOK,
+		},
+		"missing pod": {
+			path:           "/filter",
+			body:           `{"nodes": {}}`,
+			expectedStatus: http.StatusOK,
+			expectedResult: "incomplete parameters",
+		},
+		"missing nodes": {
+			path:           "/filter",
+			body:           `{"pod": { "metadata":{"name":"test-pod"}}}`,
+			expectedStatus: http.StatusOK,
+			expectedResult: "incomplete parameters",
+		},
+	}
+
+	run := func(t *testing.T, scenario scenarioType) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		// Setup
+		testEnv := newTestEnv(t, clusterCapacity{}, ctx.Done())
+
+		// Prepare request.
+		requestBody := []byte(scenario.body)
+		request := &http.Request{
+			URL:    &url.URL{Path: "/status"},
+			Body:   ioutil.NopCloser(bytes.NewReader(requestBody)),
+			Method: http.MethodGet,
+			Header: http.Header{},
+		}
+		request.Header.Add("Content-Type", "application/json")
+		if scenario.method != "" {
+			request.Method = scenario.method
+		}
+		if scenario.path != "" {
+			request.URL = &url.URL{Path: scenario.path}
+		}
+
+		// Now handle it.
+		r := &response{}
+		testEnv.scheduler.ServeHTTP(r, request)
+
+		// Check response.
+		require.Equal(t, scenario.expectedStatus, r.statusCode)
+		switch scenario.path {
+		case "/filter":
+			var result schedulerapi.ExtenderFilterResult
+			err := json.Unmarshal(r.body, &result)
+			require.NoError(t, err, "unmarshal filter response")
+			assert.Equal(t, scenario.expectedResult, result.Error)
+		}
+	}
+
+	for name, scenario := range scenarios {
+		scenario := scenario
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			run(t, scenario)
+		})
+	}
+}

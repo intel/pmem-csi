@@ -396,6 +396,22 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			Expect(resp.AvailableCapacity).To(Equal(nodeCapacity), "capacity mismatch")
 		})
 
+		It("excessive message sizes should be rejected", func() {
+			req := &csi.GetCapacityRequest{
+				AccessibleTopology: &csi.Topology{
+					Segments: map[string]string{},
+				},
+			}
+			for i := 0; i < 100000; i++ {
+				req.AccessibleTopology.Segments[fmt.Sprintf("pmem-csi.intel.com/node%d", i)] = nodeID
+			}
+			_, err := cc.GetCapacity(context.Background(), req)
+			Expect(err).ShouldNot(BeNil(), "unexpected success for too large request")
+			status, ok := status.FromError(err)
+			Expect(ok).Should(BeTrue(), "expected status in error, got: %v", err)
+			Expect(status.Message()).Should(ContainSubstring("grpc: received message larger than max"))
+		})
+
 		It("delete volume should fail with appropriate error", func() {
 			v.namePrefix = "delete-volume"
 
