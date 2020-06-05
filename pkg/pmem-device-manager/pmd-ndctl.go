@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	"k8s.io/klog"
 	"k8s.io/utils/mount"
@@ -46,6 +47,10 @@ func NewPmemDeviceManagerNdctl() (PmemDeviceManager, error) {
 		}
 	}
 	return nil, fmt.Errorf("FATAL: /sys mount entry not present")
+}
+
+func (pmem *pmemNdctl) GetMode() api.DeviceMode {
+	return api.DeviceModeDirect
 }
 
 func (pmem *pmemNdctl) GetCapacity() (uint64, error) {

@@ -3,6 +3,8 @@ package pmdmanager
 import (
 	"errors"
 	"os"
+
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 )
 
 var (
@@ -40,6 +42,9 @@ type PmemDeviceInfo struct {
 
 //PmemDeviceManager interface to manage the PMEM block devices
 type PmemDeviceManager interface {
+	// GetName returns current device manager's operation mode
+	GetMode() api.DeviceMode
+
 	// GetCapacity returns the available maximum capacity that can be assigned to a Device/Volume
 	GetCapacity() (uint64, error)
 

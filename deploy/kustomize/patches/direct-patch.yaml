@@ -3,16 +3,3 @@
   path: /spec/template/spec/containers/0/command/1
   value: "-deviceManager=direct"
 
-# Direct mode needs /dev and /sys.
-- op: add
-  path: /spec/template/spec/containers/0/volumeMounts/-
-  value:
-    name: sys-dir
-    mountPath: /sys
-- op: add
-  path: /spec/template/spec/volumes/-
-  value:
-    name: sys-dir
-    hostPath:
-      path: /sys
-      type: DirectoryOrCreate

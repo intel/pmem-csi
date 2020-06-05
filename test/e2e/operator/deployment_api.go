@@ -8,6 +8,8 @@ package operator
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -19,10 +21,13 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/operator/validate"
 
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/test/e2e/framework"
+	e2epv "k8s.io/kubernetes/test/e2e/framework/pv"
 	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 
 	. "github.com/onsi/ginkgo"
@@ -86,12 +91,12 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 	})
 
 	validateDriver := func(deployment api.Deployment, what ...interface{}) {
-		framework.Logf("waiting for expectecd driver deployment %s", deployment.Name)
+		framework.Logf("waiting for expected driver deployment %s", deployment.Name)
 		if what == nil {
 			what = []interface{}{"validate driver"}
 		}
 		framework.ExpectNoErrorWithOffset(1, validate.DriverDeploymentEventually(ctx, client, k8sver, d.Namespace, deployment), what...)
-		framework.Logf("got expectecd driver deployment %s", deployment.Name)
+		framework.Logf("got expected driver deployment %s", deployment.Name)
 	}
 
 	Context("deployment", func() {
@@ -224,6 +229,136 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		})
 	})
 
+	Context("switch device mode", func() {
+		postSwitchFuncs := map[string]func(from, to api.DeviceMode, depName string, pvc *corev1.PersistentVolumeClaim){
+			"delete volume": func(from, to api.DeviceMode, depName string, pvc *corev1.PersistentVolumeClaim) {
+				// Delete Volume created in `from` device mode
+				deletePVC(f, pvc.Namespace, pvc.Name)
+			},
+			"use volume": func(from, to api.DeviceMode, depName string, pvc *corev1.PersistentVolumeClaim) {
+				// Switch back to original device mode
+				switchDeploymentMode(c, f, depName, from)
+
+				// Now try using the volume
+				app := &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "switch-mode-app",
+						Namespace: corev1.NamespaceDefault,
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:            "test-driver",
+								Image:           os.Getenv("PMEM_CSI_IMAGE"),
+								ImagePullPolicy: corev1.PullIfNotPresent,
+								Command:         []string{"sleep", "180"},
+							},
+						},
+						Volumes: []corev1.Volume{
+							{
+								Name: "pmem-volume",
+								VolumeSource: corev1.VolumeSource{
+									PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+										ClaimName: pvc.Name,
+									},
+								},
+							},
+						},
+					},
+				}
+
+				By(fmt.Sprintf("Starting application pod '%s'", app.Name))
+				Eventually(func() error {
+					_, err := f.ClientSet.CoreV1().Pods(app.Namespace).Create(context.Background(), app, metav1.CreateOptions{})
+					deploy.LogError(err, "create pod %q error: %v, will retry...", app.Name, err)
+					return err
+				}, "3m", "1s").ShouldNot(HaveOccurred(), "create pod %q", app.Name)
+
+				defer func() {
+					By(fmt.Sprintf("Stopping application pod '%s'", app.Name))
+					Eventually(func() error {
+						err := f.ClientSet.CoreV1().Pods(app.Namespace).Delete(context.Background(), app.Name, metav1.DeleteOptions{})
+						if err != nil && errors.IsNotFound(err) {
+							return nil
+						}
+						deploy.LogError(err, "delete pod %q error: %v, will retry...", app.Name, err)
+						return err
+					}, "3m", "1s").ShouldNot(HaveOccurred(), "delete pod %q", app.Name)
+				}()
+
+				By(fmt.Sprintf("Ensure application pod '%s' is running", app.Name))
+				Eventually(func() error {
+					pod, err := f.ClientSet.CoreV1().Pods(app.Namespace).Get(context.Background(), app.Name, metav1.GetOptions{})
+					if err != nil {
+						return err
+					}
+					if pod.Status.Phase != corev1.PodRunning {
+						return fmt.Errorf("%s: status %v", pod.Name, pod.Status.Phase)
+					}
+					return nil
+				}, "3m", "1s").ShouldNot(HaveOccurred(), "pod read %q", app.Name)
+			},
+		}
+
+		defineSwitchModeTests := func(ctx string, from, to api.DeviceMode) {
+			for name, postSwitch := range postSwitchFuncs {
+				Context(ctx, func() {
+					name := name
+					postSwitch := postSwitch
+					It(name, func() {
+						driverName := ctx + "-" + strings.Replace(name, " ", "-", -1)
+						deployment := api.Deployment{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: driverName,
+							},
+							Spec: api.DeploymentSpec{
+								DeviceMode:     from,
+								PMEMPercentage: 50,
+							},
+						}
+
+						deployment = deploy.CreateDeploymentCR(f, deployment)
+						defer deploy.DeleteDeploymentCR(f, deployment.Name)
+						deploy.WaitForPMEMDriver(c, deployment.Name, corev1.NamespaceDefault)
+						validateDriver(deployment)
+
+						// NOTE(avalluri): As the current operator does not support deploying
+						// the driver in 'testing' mode, we cannot directely access CSI
+						// interface of it. Hence, using SC/PVC for creating volumes.
+						//
+						// Once we add "-testing" support we could simplify the code
+						// by using controller's CSI interface to create/delete/publish
+						// the test volume.
+
+						sc := createStorageClass(f, "switch-mode-sc", driverName)
+						defer deleteStorageClass(f, sc.Name)
+
+						pvc := createPVC(f, corev1.NamespaceDefault, "switch-mode-pvc", sc.Name)
+						defer deletePVC(f, pvc.Namespace, pvc.Name)
+
+						// Wait till a volume get provisioned for this claim
+						err := e2epv.WaitForPersistentVolumeClaimPhase(v1.ClaimBound, f.ClientSet, pvc.Namespace, pvc.Name, framework.Poll, framework.ClaimProvisionTimeout)
+						Expect(err).NotTo(HaveOccurred(), "Persistent volume claim bound failure")
+
+						pvc, err = f.ClientSet.CoreV1().PersistentVolumeClaims(pvc.Namespace).Get(context.Background(), pvc.Name, metav1.GetOptions{})
+						Expect(err).NotTo(HaveOccurred(), "failed to get updated volume claim: %q", pvc.Name)
+						framework.Logf("PVC '%s', Volume Ref: %s", pvc.Name, pvc.Spec.VolumeName)
+
+						// Switch device mode
+						deployment = switchDeploymentMode(c, f, deployment.Name, to)
+
+						postSwitch(from, to, driverName, pvc)
+
+						deletePVC(f, pvc.Namespace, pvc.Name)
+					})
+				})
+			}
+		}
+
+		defineSwitchModeTests("lvm-to-direct", api.DeviceModeLVM, api.DeviceModeDirect)
+		defineSwitchModeTests("direct-to-lvm", api.DeviceModeDirect, api.DeviceModeLVM)
+	})
+
 	Context("updating", func() {
 		for _, testcase := range testcases.UpdateTests() {
 			testcase := testcase
@@ -347,7 +482,149 @@ func startOperator(c *deploy.Cluster, d *deploy.Deployment) {
 		return false
 	}, "3m", "1s").Should(BeTrue(), "increase operator deployment replicas to 1")
 
-	framework.Logf("Ensure operator pod is eady.")
+	framework.Logf("Ensure operator pod is ready.")
 	deploy.WaitForOperator(c, d.Namespace)
 	framework.Logf("Operator is restored!")
+}
+
+func switchDeploymentMode(c *deploy.Cluster, f *framework.Framework, depName string, mode api.DeviceMode) api.Deployment {
+	podNames := []string{}
+
+	for i := 1; i < c.NumNodes(); i++ {
+		Eventually(func() error {
+			pod, err := c.GetAppInstance(context.Background(), depName+"-node", c.NodeIP(i), corev1.NamespaceDefault)
+			if err != nil {
+				return err
+			}
+			podNames = append(podNames, pod.Name)
+			return nil
+		}, "3m", "1s").ShouldNot(HaveOccurred(), "Get daemonset pods")
+	}
+	By(fmt.Sprintf("Switching driver mode to '%s'", mode))
+	deployment := deploy.GetDeploymentCR(f, depName)
+	deployment.Spec.DeviceMode = mode
+	deployment = deploy.UpdateDeploymentCR(f, deployment)
+
+	// Wait till all the existing daemonset pods restarted
+	for _, pod := range podNames {
+		Eventually(func() bool {
+			_, err := f.ClientSet.CoreV1().Pods(corev1.NamespaceDefault).Get(context.Background(), pod, metav1.GetOptions{})
+			if err != nil && errors.IsNotFound(err) {
+				return true
+			}
+			deploy.LogError(err, "Failed to fetch daemon set: %v", err)
+			return false
+		}, "3m", "1s").Should(BeTrue(), "Pod restart '%s'", pod)
+	}
+
+	deploy.WaitForPMEMDriver(c, depName, corev1.NamespaceDefault)
+
+	return deployment
+}
+
+func createStorageClass(f *framework.Framework, name, provisioner string) *storagev1.StorageClass {
+	reclaim := corev1.PersistentVolumeReclaimDelete
+	immediate := storagev1.VolumeBindingImmediate
+
+	// Create storage class
+	sc := &storagev1.StorageClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Provisioner:       provisioner,
+		ReclaimPolicy:     &reclaim,
+		VolumeBindingMode: &immediate,
+		Parameters: map[string]string{
+			"eraseafter": "false",
+		},
+	}
+
+	EventuallyWithOffset(1, func() error {
+		_, err := f.ClientSet.StorageV1().StorageClasses().Create(context.Background(), sc, metav1.CreateOptions{})
+		if err == nil || errors.IsAlreadyExists(err) {
+			return nil
+		}
+		deploy.LogError(err, "create storage class error: %v, will retry...", err)
+		return err
+	}, "3m", "1s").ShouldNot(HaveOccurred(), "create storage class %q", sc.Name)
+	framework.Logf("Created storage class %q", sc.Name)
+
+	return sc
+}
+
+func deleteStorageClass(f *framework.Framework, name string) {
+	EventuallyWithOffset(1, func() error {
+		framework.Logf("deleting storage class %q", name)
+		err := f.ClientSet.StorageV1().StorageClasses().Delete(context.Background(), name, metav1.DeleteOptions{})
+		if err != nil && errors.IsNotFound(err) {
+			return nil
+		}
+		deploy.LogError(err, "delete storage class error: %v, will retry...", err)
+		return err
+	}, "3m", "1s").ShouldNot(HaveOccurred(), "delete storage class %q", name)
+}
+
+func createPVC(f *framework.Framework, namespace, name, storageClassName string) *corev1.PersistentVolumeClaim {
+	// Create a volume
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "switch-mode-pvc",
+			Namespace: namespace,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			StorageClassName: &storageClassName,
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteOnce,
+			},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse("2Gi"),
+				},
+			},
+		},
+	}
+	EventuallyWithOffset(1, func() error {
+		_, err := f.ClientSet.CoreV1().PersistentVolumeClaims(pvc.Namespace).Create(context.Background(), pvc, metav1.CreateOptions{})
+		deploy.LogError(err, "create pvc %q error: %v, will retry...", pvc.Name, err)
+		return err
+	}, "3m", "1s").ShouldNot(HaveOccurred(), "create pvc %q", pvc.Name)
+	framework.Logf("Created pvc %q", pvc.Name)
+
+	return pvc
+}
+
+func deletePVC(f *framework.Framework, namespace, name string) {
+	framework.Logf("Deleting PVC %q", name)
+	pvc, err := f.ClientSet.CoreV1().PersistentVolumeClaims(namespace).Get(context.Background(), name, metav1.GetOptions{})
+	if err != nil {
+		ExpectWithOffset(1, errors.IsNotFound(err)).Should(BeTrue(), "Get PVC '%s'", name)
+	}
+
+	pvName := pvc.Spec.VolumeName
+	framework.Logf("Pv %q bound for PVC %q", pvName, name)
+
+	EventuallyWithOffset(1, func() error {
+		err := f.ClientSet.CoreV1().PersistentVolumeClaims(namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+		if err != nil && errors.IsNotFound(err) {
+			return nil
+		}
+		deploy.LogError(err, "delete pvc error: %v, will retry...", err)
+		return err
+	}, "3m", "1s").ShouldNot(HaveOccurred(), "delete pvc %q", name)
+	framework.Logf("PVC deleted %q", name)
+
+	if pvName == "" {
+		return
+	}
+	// Wait till the underlined volume get deleted
+	// as we use the reclaim policy delete
+	framework.Logf("Waiting for PV %q get deleted", pvName)
+	EventuallyWithOffset(1, func() bool {
+		_, err := f.ClientSet.CoreV1().PersistentVolumes().Get(context.Background(), pvName, metav1.GetOptions{})
+		deploy.LogError(err, "Get PV '%s' error: %v, will retry...", pvName, err)
+		if err != nil && errors.IsNotFound(err) {
+			return true
+		}
+		return false
+	}, "3m", "1s").Should(BeTrue(), "Get PV '%s'", pvName)
 }

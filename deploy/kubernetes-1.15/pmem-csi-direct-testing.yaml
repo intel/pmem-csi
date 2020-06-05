@@ -386,11 +386,11 @@ spec:
           name: node-cert
         - mountPath: /dev
           name: dev-dir
+        - mountPath: /sys
+          name: sys-dir
         - mountPath: /pmem-csi
           mountPropagation: Bidirectional
           name: pmem-state-dir
-        - mountPath: /sys
-          name: sys-dir
         - mountPath: /var/lib/pmem-csi-coverage
           name: coverage-dir
       - args:

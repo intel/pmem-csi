@@ -121,11 +121,15 @@ func DeleteDeploymentCR(f *framework.Framework, name string) {
 }
 
 func UpdateDeploymentCR(f *framework.Framework, dep api.Deployment) api.Deployment {
-	in := DeploymentToUnstructured(&dep)
 	var out *unstructured.Unstructured
 
 	gomega.Eventually(func() error {
 		var err error
+		in, err := f.DynamicClient.Resource(DeploymentResource).Get(context.Background(), dep.Name, metav1.GetOptions{})
+		d := DeploymentFromUnstructured(in)
+		d.Spec = dep.Spec
+		in = DeploymentToUnstructured(d)
+
 		out, err = f.DynamicClient.Resource(DeploymentResource).Update(context.Background(), in, metav1.UpdateOptions{})
 		LogError(err, "update deployment error: %v, will retry...", err)
 		return err

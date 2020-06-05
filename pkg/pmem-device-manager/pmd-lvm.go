@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
@@ -59,6 +60,10 @@ func NewPmemDeviceManagerLVM() (PmemDeviceManager, error) {
 	ctx.Free()
 
 	return NewPmemDeviceManagerLVMForVGs(volumeGroups)
+}
+
+func (pmem *pmemLvm) GetMode() api.DeviceMode {
+	return api.DeviceModeLVM
 }
 
 func NewPmemDeviceManagerLVMForVGs(volumeGroups []string) (PmemDeviceManager, error) {

@@ -198,6 +198,8 @@ spec:
           mountPath: /certs
         - name : dev-dir
           mountPath: /dev
+        - name: sys-dir
+          mountPath: /sys
         - name: pmem-state-dir
           mountPath: /pmem-csi
           # Needed for Kata Containers: we mount the PMEM volume inside our
@@ -248,5 +250,9 @@ spec:
         - name: dev-dir
           hostPath:
             path: /dev
+            type: DirectoryOrCreate
+        - name: sys-dir
+          hostPath:
+            path: /sys
             type: DirectoryOrCreate
 

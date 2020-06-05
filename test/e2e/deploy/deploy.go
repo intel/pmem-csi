@@ -24,7 +24,6 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
-	pmemcsidriver "github.com/intel/pmem-csi/pkg/pmem-csi-driver"
 
 	"github.com/onsi/ginkgo"
 )
@@ -421,7 +420,7 @@ type Deployment struct {
 	HasOperator bool
 
 	// Mode is the driver mode of the deployment.
-	Mode pmemcsidriver.DeviceMode
+	Mode api.DeviceMode
 
 	// Namespace where the namespaced objects of the deployment
 	// were created.

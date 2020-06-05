@@ -32,12 +32,3 @@
     securityContext:
       privileged: true
       runAsUser: 0
-
-# /sys explicit mount added to get around read-only mount
-- op: add
-  path: /spec/template/spec/volumes/-
-  value:
-    name: sys-dir
-    hostPath:
-      path: /sys
-      type: DirectoryOrCreate
