@@ -197,8 +197,8 @@ pipeline {
 
         // Some stages are skipped entirely when testing PRs, the
         // others skip certain tests in that case:
-        // - production deployment is only tested on Clear Linux
-        //   and testing deployment only on Fedora
+        // - production deployment is only tested with Kubernetes 1.15
+        //   and testing deployment only with Kubernetes 1.18
         stage('Testing') {
             parallel {
                 // This runs most tests and thus gets to use the initial worker immediately.
@@ -212,6 +212,18 @@ pipeline {
                 }
 
                 // All others set up their own worker.
+                stage('1.17') {
+                    when { not { changeRequest() } }
+                    options {
+                        timeout(time: 240, unit: "MINUTES")
+                    }
+                    agent {
+                        label "pmem-csi"
+                    }
+                    steps {
+                        TestInVM("fedora-1.17", "fedora", "", "1.17", "")
+                    }
+                }
                 stage('1.16') {
                     when { not { changeRequest() } }
                     options {
@@ -224,9 +236,7 @@ pipeline {
                         TestInVM("fedora-1.16", "fedora", "", "1.16", "")
                     }
                 }
-
                 stage('1.15') {
-                    when { not { changeRequest() } }
                     options {
                         timeout(time: 240, unit: "MINUTES")
                     }
@@ -234,21 +244,24 @@ pipeline {
                         label "pmem-csi"
                     }
                     steps {
-                        TestInVM("fedora-1.15", "fedora", "", "1.15", "")
+                        TestInVM("fedora-1.15", "fedora", "", "1.15", "Top.Level..[[:alpha:]]*-testing[[:space:]]")
                     }
                 }
 
-                stage('Clear Linux, 1.17') {
-                    options {
-                        timeout(time: 240, unit: "MINUTES")
-                    }
-                    agent {
-                        label "pmem-csi"
-                    }
-                    steps {
-                        TestInVM("clear-1.17", "clear", "${env.CLEAR_LINUX_VERSION_1_17}", "",  "Top.Level..[[:alpha:]]*-testing[[:space:]]")
-                    }
-                }
+                // Disabled because of stability issues:
+                // - https://github.com/clearlinux/distribution/issues/2007
+                // - https://github.com/clearlinux/distribution/issues/1980
+                // stage('Clear Linux, 1.17') {
+                //     options {
+                //         timeout(time: 240, unit: "MINUTES")
+                //     }
+                //     agent {
+                //         label "pmem-csi"
+                //     }
+                //     steps {
+                //         TestInVM("clear-1.17", "clear", "${env.CLEAR_LINUX_VERSION_1_17}", "",  "Top.Level..[[:alpha:]]*-testing[[:space:]]")
+                //     }
+                // }
             }
         }
 
