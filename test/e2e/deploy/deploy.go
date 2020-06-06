@@ -570,7 +570,10 @@ func EnsureDeployment(deploymentName string) *Deployment {
 	var prevVol map[string][]string
 
 	ginkgo.BeforeEach(func() {
-		ginkgo.By(fmt.Sprintf("preparing for test %q", ginkgo.CurrentGinkgoTestDescription().FullTestText))
+		ginkgo.By(fmt.Sprintf("preparing for test %q in namespace %s",
+			ginkgo.CurrentGinkgoTestDescription().FullTestText,
+			deployment.Namespace,
+		))
 		c, err := NewCluster(f.ClientSet, f.DynamicClient)
 
 		// Remember list of volumes before test, using out-of-band host commands (i.e. not CSI API).
@@ -641,6 +644,16 @@ func EnsureDeployment(deploymentName string) *Deployment {
 	})
 
 	ginkgo.AfterEach(func() {
+		state := "success"
+		if ginkgo.CurrentGinkgoTestDescription().Failed {
+			state = "failure"
+		}
+		ginkgo.By(fmt.Sprintf("checking for test %q in namespace %s, test %s",
+			ginkgo.CurrentGinkgoTestDescription().FullTestText,
+			deployment.Namespace,
+			state,
+		))
+
 		// Check list of volumes after test to detect left-overs
 		CheckForLeftoverVolumes(deployment, prevVol)
 
