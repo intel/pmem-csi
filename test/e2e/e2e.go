@@ -100,10 +100,10 @@ var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 		framework.Failf("Error waiting for all pods to be running and ready: %v", err)
 	}
 
-	// PMEM-CSI will be installed, either in the default namespace or kube-system.
-	// We want to see what the pods are doing while the test runs. This
+	// PMEM-CSI needs to be installed already in the cluster, running in the default
+	// namespace. We want to see what the pods are doing while the test runs. This
 	// isn't perfect because we will get a dump also of log output from before the
-	// E2E test run, but it is better than nothing.
+	// E2E test run, but better than nothing.
 	ctx := context.Background()
 	to := podlogs.LogOutput{
 		StatusWriter: ginkgo.GinkgoWriter,
@@ -111,8 +111,6 @@ var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 	}
 	podlogs.CopyAllLogs(ctx, c, "default", to)
 	podlogs.WatchPods(ctx, c, "default", ginkgo.GinkgoWriter)
-	podlogs.CopyAllLogs(ctx, c, "kube-system", to)
-	podlogs.WatchPods(ctx, c, "kube-system", ginkgo.GinkgoWriter)
 
 	dc := c.DiscoveryClient
 
