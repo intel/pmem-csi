@@ -99,7 +99,7 @@ func WaitForPMEMDriver(c *Cluster, name, namespace string) (metricsURL string) {
 		// The controller service must be defined.
 		port, err := c.GetServicePort(deadline, name+"-metrics", namespace)
 		if err != nil {
-			return err
+			return fmt.Errorf("get port for service %s-metrics in namespace %s: %v", name, namespace, err)
 		}
 
 		// We can connect to it and get metrics data.
