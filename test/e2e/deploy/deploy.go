@@ -169,14 +169,14 @@ func WaitForPMEMDriver(c *Cluster, name, namespace string) (metricsURL string) {
 	}
 	for {
 		select {
-		case <-ticker.C:
-			if ready() == nil {
-				return
-			}
 		case <-info.C:
 			framework.Logf("Still waiting for PMEM-CSI driver, last error: %v", lastError)
 		case <-deadline.Done():
 			framework.Failf("Giving up waiting for PMEM-CSI to start up, check the previous warnings and log output. Last error: %v", lastError)
+		case <-ticker.C:
+			if ready() == nil {
+				return
+			}
 		}
 	}
 }
