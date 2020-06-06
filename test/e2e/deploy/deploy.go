@@ -92,7 +92,7 @@ func WaitForPMEMDriver(c *Cluster, name, namespace string) (metricsURL string) {
 	check := func() error {
 		// Do not linger too long here, we rather want to
 		// abort and print the error instead of getting stuck.
-		const timeout = 100 * time.Millisecond
+		const timeout = time.Second
 		deadline, cancel := context.WithTimeout(deadline, timeout)
 		defer cancel()
 
