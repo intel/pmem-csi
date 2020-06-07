@@ -32,17 +32,18 @@ var nameRegex = regexp.MustCompile(`(name|app|secretName|serviceName|serviceAcco
 // LoadAndCustomizeObjects reads all objects stored in a pmem-csi.yaml reference file
 // and updates them on-the-fly according to the deployment spec, namespace and name.
 func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMode,
-	name, namespace string, deployment api.Deployment) ([]unstructured.Unstructured, error) {
+	namespace string, deployment api.Deployment) ([]unstructured.Unstructured, error) {
 
 	// Conceptually this function is similar to calling "kustomize" for
 	// our deployments. But because we controll the input, we can do some
 	// things like renaming with a simple text search/replace.
 	patchYAML := func(yaml *[]byte) {
-		// This renames the objects.
-		*yaml = nameRegex.ReplaceAll(*yaml, []byte("$1: "+name))
+		// This renames the objects. A hyphen is used instead of a dot,
+		// except for CSIDriver which needs the exact name.
+		*yaml = nameRegex.ReplaceAll(*yaml, []byte("$1: "+deployment.GetHyphenedName()))
 
 		// Update the driver name inside the state dir.
-		*yaml = bytes.ReplaceAll(*yaml, []byte("path: /var/lib/pmem-csi.intel.com"), []byte("path: /var/lib/"+name))
+		*yaml = bytes.ReplaceAll(*yaml, []byte("path: /var/lib/pmem-csi.intel.com"), []byte("path: /var/lib/"+deployment.Name))
 
 		// This assumes that all namespaced objects actually have "namespace: default".
 		*yaml = bytes.ReplaceAll(*yaml, []byte("namespace: default"), []byte("namespace: "+namespace))
@@ -50,7 +51,7 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 		// Also rename the prefix inside the registry endpoint.
 		*yaml = bytes.ReplaceAll(*yaml,
 			[]byte("tcp://pmem-csi"),
-			[]byte("tcp://"+name))
+			[]byte("tcp://"+deployment.GetHyphenedName()))
 
 		*yaml = bytes.ReplaceAll(*yaml,
 			[]byte("imagePullPolicy: IfNotPresent"),
@@ -74,7 +75,7 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 
 		switch obj.GetKind() {
 		case "CSIDriver":
-			obj.SetName(deployment.Name)
+			obj.SetName(deployment.GetName())
 		case "StatefulSet":
 			if err := patchPodTemplate(obj, deployment, deployment.Spec.ControllerResources); err != nil {
 				// TODO: avoid panic
@@ -164,7 +165,7 @@ func patchPodTemplate(obj *unstructured.Unstructured, deployment api.Deployment,
 			for _, entry := range env {
 				entry := entry.(map[string]interface{})
 				if entry["name"].(string) == "PMEM_CSI_DRIVER_NAME" {
-					entry["value"] = deployment.Name
+					entry["value"] = deployment.GetName()
 					break
 				}
 			}

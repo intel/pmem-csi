@@ -200,6 +200,14 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			validateDriver(deployment1 /* TODO 2 */, "validate driver #2")
 		})
 
+		It("shall support dots in the name", func() {
+			deployment1 := getDeployment("test.deployment.example.org")
+
+			deployment1 = deploy.CreateDeploymentCR(f, deployment1)
+			defer deploy.DeleteDeploymentCR(f, deployment1.Name)
+			validateDriver(deployment1, "validate driver")
+		})
+
 		It("shall be able to use custom CA certificates", func() {
 			deployment := getDeployment("test-deployment-with-certificates")
 			testcases.SetTLSOrDie(&deployment.Spec)

@@ -92,14 +92,14 @@ func WaitForPMEMDriver(c *Cluster, name, namespace string) (metricsURL string) {
 	check := func() error {
 		// Do not linger too long here, we rather want to
 		// abort and print the error instead of getting stuck.
-		const timeout = 100 * time.Millisecond
+		const timeout = time.Second
 		deadline, cancel := context.WithTimeout(deadline, timeout)
 		defer cancel()
 
 		// The controller service must be defined.
-		port, err := c.GetServicePort(deadline, name+"-metrics", "default")
+		port, err := c.GetServicePort(deadline, name+"-metrics", namespace)
 		if err != nil {
-			return err
+			return fmt.Errorf("get port for service %s-metrics in namespace %s: %v", name, namespace, err)
 		}
 
 		// We can connect to it and get metrics data.
@@ -169,14 +169,14 @@ func WaitForPMEMDriver(c *Cluster, name, namespace string) (metricsURL string) {
 	}
 	for {
 		select {
-		case <-ticker.C:
-			if ready() == nil {
-				return
-			}
 		case <-info.C:
 			framework.Logf("Still waiting for PMEM-CSI driver, last error: %v", lastError)
 		case <-deadline.Done():
 			framework.Failf("Giving up waiting for PMEM-CSI to start up, check the previous warnings and log output. Last error: %v", lastError)
+		case <-ticker.C:
+			if ready() == nil {
+				return
+			}
 		}
 	}
 }
@@ -523,7 +523,7 @@ var allDeployments = []string{
 	"direct-production",
 	"operator",
 	"operator-lvm-production",
-	"operator-direct-production",
+	"operator-direct-production", // Uses kube-system, to ensure that deployment in a namespace also works.
 }
 var deploymentRE = regexp.MustCompile(`^(operator)?-?(\w*)?-?(testing|production)?$`)
 
@@ -532,6 +532,9 @@ func Parse(deploymentName string) (*Deployment, error) {
 	deployment := &Deployment{
 		Name:      deploymentName,
 		Namespace: "default",
+	}
+	if deploymentName == "operator-direct-production" {
+		deployment.Namespace = "kube-system"
 	}
 
 	matches := deploymentRE.FindStringSubmatch(deploymentName)
@@ -567,7 +570,10 @@ func EnsureDeployment(deploymentName string) *Deployment {
 	var prevVol map[string][]string
 
 	ginkgo.BeforeEach(func() {
-		ginkgo.By(fmt.Sprintf("preparing for test %q", ginkgo.CurrentGinkgoTestDescription().FullTestText))
+		ginkgo.By(fmt.Sprintf("preparing for test %q in namespace %s",
+			ginkgo.CurrentGinkgoTestDescription().FullTestText,
+			deployment.Namespace,
+		))
 		c, err := NewCluster(f.ClientSet, f.DynamicClient)
 
 		// Remember list of volumes before test, using out-of-band host commands (i.e. not CSI API).
@@ -598,6 +604,7 @@ func EnsureDeployment(deploymentName string) *Deployment {
 			cmd := exec.Command("test/start-operator.sh")
 			cmd.Dir = os.Getenv("REPO_ROOT")
 			cmd.Env = append(os.Environ(),
+				"TEST_OPERATOR_NAMESPACE="+deployment.Namespace,
 				"TEST_OPERATOR_DEPLOYMENT="+deployment.Name)
 			cmd.Stdout = ginkgo.GinkgoWriter
 			cmd.Stderr = ginkgo.GinkgoWriter
@@ -637,6 +644,16 @@ func EnsureDeployment(deploymentName string) *Deployment {
 	})
 
 	ginkgo.AfterEach(func() {
+		state := "success"
+		if ginkgo.CurrentGinkgoTestDescription().Failed {
+			state = "failure"
+		}
+		ginkgo.By(fmt.Sprintf("checking for test %q in namespace %s, test %s",
+			ginkgo.CurrentGinkgoTestDescription().FullTestText,
+			deployment.Namespace,
+			state,
+		))
+
 		// Check list of volumes after test to detect left-overs
 		CheckForLeftoverVolumes(deployment, prevVol)
 
