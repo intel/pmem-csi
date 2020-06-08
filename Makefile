@@ -181,12 +181,14 @@ KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-cache.yaml
 KUSTOMIZATION_deploy/common/pmem-storageclass-cache.yaml = deploy/kustomize/storageclass-cache
 KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-late-binding.yaml
 KUSTOMIZATION_deploy/common/pmem-storageclass-late-binding.yaml = deploy/kustomize/storageclass-late-binding
+KUSTOMIZE_OUTPUT += deploy/operator/pmem-csi-operator.yaml
+KUSTOMIZATION_deploy/operator/pmem-csi-operator.yaml = deploy/kustomize/operator
 kustomize: _work/go-bindata clean_kustomize_output $(KUSTOMIZE_OUTPUT)
 	$< -o deploy/bindata_generated.go -pkg deploy deploy/kubernetes-*/*/pmem-csi.yaml
 
 $(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
 	$< build --load_restrictor none $(KUSTOMIZATION_$@) >$@
-	if echo "$@" | grep -q '/pmem-csi-'; then \
+	if echo "$@" | grep '/pmem-csi-' | grep -qv '\-operator'; then \
 		dir=$$(echo "$@" | tr - / | sed -e 's;kubernetes/;kubernetes-;' -e 's/.yaml//' -e 's;/pmem/csi/;/;') && \
 		mkdir -p $$dir && \
 		cp $@ $$dir/pmem-csi.yaml && \
