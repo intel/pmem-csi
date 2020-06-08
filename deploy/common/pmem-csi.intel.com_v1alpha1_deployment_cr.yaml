@@ -1,7 +1,7 @@
 apiVersion: pmem-csi.intel.com/v1alpha1
 kind: Deployment
 metadata:
-  name: example-deployment
+  name: pmem-csi.intel.com
 spec:
   pmemPercentage: 50
   controllerResources:
