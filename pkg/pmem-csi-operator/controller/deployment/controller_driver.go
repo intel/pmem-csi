@@ -813,7 +813,7 @@ func (d *PmemCSIDriver) getNodeDriverCommand() []string {
 		fmt.Sprintf("-deviceManager=%s", d.Spec.DeviceMode),
 		fmt.Sprintf("-v=%d", d.Spec.LogLevel),
 		"-mode=node",
-		"-endpoint=unix:///pmem-csi/csi.sock",
+		"-endpoint=unix:///var/lib/$(PMEM_CSI_DRIVER_NAME)/csi.sock",
 		"-nodeid=$(KUBE_NODE_NAME)",
 		fmt.Sprintf("-controllerEndpoint=tcp://$(KUBE_POD_IP):%d", nodeControllerPort),
 		// User controller service name(== deployment name) as registry endpoint.
@@ -821,7 +821,7 @@ func (d *PmemCSIDriver) getNodeDriverCommand() []string {
 		"-caFile=/certs/ca.crt",
 		"-certFile=/certs/tls.crt",
 		"-keyFile=/certs/tls.key",
-		"-statePath=/pmem-csi",
+		"-statePath=/var/lib/$(PMEM_CSI_DRIVER_NAME)",
 		"-drivername=$(PMEM_CSI_DRIVER_NAME)",
 	}
 }
@@ -936,7 +936,7 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 			},
 			{
 				Name:             "pmem-state-dir",
-				MountPath:        "/pmem-csi",
+				MountPath:        "/var/lib/" + d.GetName(),
 				MountPropagation: &bidirectional,
 			},
 		},

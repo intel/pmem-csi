@@ -11,7 +11,7 @@ REPO_DIRECTORY="${REPO_DIRECTORY:-$(dirname $(dirname $(readlink -f $0)))}"
 CLUSTER_DIRECTORY="${CLUSTER_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
 SSH="${CLUSTER_DIRECTORY}/ssh.0"
 KUBECTL="${SSH} kubectl" # Always use the kubectl installed in the cluster.
-VERSION="${TEST_KATA_CONTAINERS_VERSION:-1.11.0-rc0}"
+VERSION="${TEST_KATA_CONTAINERS_VERSION:-1.11.0}"
 
 curl --location --fail --silent \
      https://github.com/kata-containers/packaging/raw/${VERSION}/kata-deploy/kata-rbac/base/kata-rbac.yaml |
