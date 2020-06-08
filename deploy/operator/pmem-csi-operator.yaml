@@ -1,7 +1,3 @@
-###
-# TODOs:
-#  1) At somepoint this file should move to REPO_ROOT/deploy/
-###
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -91,31 +87,32 @@ rules:
   verbs:
   - '*'
 ---
-kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
 metadata:
   name: pmem-csi-operator
   namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pmem-csi-operator
 subjects:
 - kind: ServiceAccount
   name: pmem-csi-operator
-roleRef:
-  kind: Role
-  name: pmem-csi-operator
-  apiGroup: rbac.authorization.k8s.io
+  namespace: default
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: pmem-csi-operator
-subjects:
-- kind: ServiceAccount
-  name: pmem-csi-operator
-  namespace: default
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: pmem-csi-operator
+subjects:
+- kind: ServiceAccount
+  name: pmem-csi-operator
+  namespace: default
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -130,34 +127,33 @@ spec:
   template:
     metadata:
       labels:
-        name: pmem-csi-operator
         app: pmem-csi-operator
+        name: pmem-csi-operator
         pmem-csi.intel.com/webhook: ignore
     spec:
-      serviceAccountName: pmem-csi-operator
       containers:
-        - name: pmem-csi-operator
-          image: intel/pmem-csi-driver:canary
-          imagePullPolicy: IfNotPresent
-          command:
-          - /usr/local/bin/pmem-csi-operator
-          securityContext:
-            readOnlyRootFilesystem: true
-          env:
-            - name: WATCH_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: OPERATOR_NAME
-              # This should match to the operator container name
-              value: "pmem-csi-operator"
-          volumeMounts:
-          - name: tmp
-            mountPath: /tmp
+      - command:
+        - /usr/local/bin/pmem-csi-operator
+        env:
+        - name: WATCH_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: OPERATOR_NAME
+          value: pmem-csi-operator
+        image: intel/pmem-csi-driver:canary
+        imagePullPolicy: IfNotPresent
+        name: pmem-csi-operator
+        securityContext:
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+      serviceAccountName: pmem-csi-operator
       volumes:
-      - name: tmp
-        emptyDir: {}
+      - emptyDir: {}
+        name: tmp

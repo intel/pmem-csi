@@ -9,11 +9,11 @@ source "${TEST_CONFIG:-${TEST_DIRECTORY}/test-config.sh}"
 CLUSTER=${CLUSTER:-pmem-govm}
 REPO_DIRECTORY="${REPO_DIRECTORY:-$(dirname "${TEST_DIRECTORY}")}"
 CLUSTER_DIRECTORY="${CLUSTER_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
-DEPLOYMENT_DIRECTORY="${REPO_DIRECTORY}/operator/deploy"
+DEPLOYMENT_DIRECTORY="${REPO_DIRECTORY}/deploy/operator"
 SSH="${CLUSTER_DIRECTORY}/ssh.0"
 KUBECTL="${SSH} kubectl" # Always use the kubectl installed in the cluster.
 
-deploy="${DEPLOYMENT_DIRECTORY}/operator.yaml"
+deploy="${DEPLOYMENT_DIRECTORY}/pmem-csi-operator.yaml"
 echo "Deploying '${deploy}'..."
 
 if [ -f "$deploy" ]; then
@@ -57,7 +57,7 @@ EOF
 
   cat <<EOF
 PMEM-CSI operator is running. To try out deploying the pmem-csi driver:
-    cat operator/examples/pmem-csi.intel.com_v1alpha1_deployment_cr.yaml | ${KUBECTL} create -f -
+    cat deploy/common/pmem-csi.intel.com_v1alpha1_deployment_cr.yaml | ${KUBECTL} create -f -
 EOF
 else
   echo >&2 "'${deploy}' not a yaml file"
