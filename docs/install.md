@@ -207,7 +207,7 @@ of [deploy/kustomize](/deploy/kustomize)`-<kubernetes version>` can be used as b
 for `kubectl kustomize`. For example:
 
    - Change namespace:
-     ```
+     ``` ShellSession
      $ mkdir -p my-pmem-csi-deployment
      $ cat >my-pmem-csi-deployment/kustomization.yaml <<EOF
      namespace: pmem-csi
@@ -220,7 +220,7 @@ for `kubectl kustomize`. For example:
 
    - Configure how much PMEM is used by PMEM-CSI for LVM
      (see [Namespace modes in LVM device mode](design.md#namespace-modes-in-lvm-device-mode)):
-     ```
+     ``` ShellSession
      $ mkdir -p my-pmem-csi-deployment
      $ cat >my-pmem-csi-deployment/kustomization.yaml <<EOF
      bases:
