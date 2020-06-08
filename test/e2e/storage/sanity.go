@@ -312,6 +312,41 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			v.remove(vol, name)
 		})
 
+		It("can publish volume after a node driver restart", func() {
+			restartPod := ""
+			v.namePrefix = "mount-volume"
+
+			pods, err := WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,
+				labels.Set{"app": "pmem-csi-node"}.AsSelector(), cluster.NumNodes()-1, time.Minute)
+			framework.ExpectNoError(err, "All node drivers are not ready")
+
+			name, vol := v.create(22*1024*1024, nodeID)
+			defer v.remove(vol, name)
+
+			nodeID := v.publish(name, vol)
+			defer v.unpublish(vol, nodeID)
+
+			for _, p := range pods.Items {
+				if p.Spec.NodeName == nodeID {
+					restartPod = p.Name
+				}
+			}
+
+			// delete driver on node
+			err = e2epod.DeletePodWithWaitByName(f.ClientSet, d.Namespace, restartPod)
+			Expect(err).ShouldNot(HaveOccurred(), "Failed to stop driver pod %s", restartPod)
+
+			// Wait till the driver pod get restarted
+			err = e2epod.WaitForPodsReady(f.ClientSet, d.Namespace, restartPod, time.Now().Minute())
+			framework.ExpectNoError(err, "Node driver '%s' pod is not ready", restartPod)
+
+			_, err = ncc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+			framework.ExpectNoError(err, "Failed to list volumes after reboot")
+
+			// Try republish
+			v.publish(name, vol)
+		})
+
 		It("capacity is restored after controller restart", func() {
 			By("Fetching pmem-csi-controller pod name")
 			pods, err := WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,

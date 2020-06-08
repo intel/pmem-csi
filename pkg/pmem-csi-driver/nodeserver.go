@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -57,7 +56,6 @@ type nodeServer struct {
 	cs       *nodeControllerServer
 	// Driver deployed to provision only ephemeral volumes(only for Kubernetes v1.15)
 	mounter mount.Interface
-	volInfo map[string]volumeInfo
 
 	// A directory for additional mount points.
 	mountDirectory string
@@ -79,7 +77,6 @@ func NewNodeServer(cs *nodeControllerServer, mountDirectory string) *nodeServer 
 		},
 		cs:             cs,
 		mounter:        mount.New(""),
-		volInfo:        map[string]volumeInfo{},
 		mountDirectory: mountDirectory,
 	}
 }
@@ -196,11 +193,6 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		mountFlags = append(mountFlags, "ro")
 	}
 
-	// After mountFlags additions are complete: sort mountFlags slice and join to
-	// become a single string, as this is what we use to compare against existing
-	sort.Strings(mountFlags)
-	joinedMountFlags := strings.Join(mountFlags[:], ",")
-
 	rawBlock := false
 	switch req.VolumeCapability.GetAccessType().(type) {
 	case *csi.VolumeCapability_Block:
@@ -224,22 +216,22 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 			//    VolumeCapability/fsType (if present in request) must match used fsType.
 			// 3) Readonly MUST match
 			// If there is mismatch of any of above, we return ALREADY_EXISTS error.
-			existingFsType, err := determineFilesystemType(device.Path)
+			mpList, err := ns.mounter.List()
 			if err != nil {
-				return nil, err
+				return nil, status.Errorf(codes.Internal, "Failed to fetch existing mount details while checking %q: %v", targetPath, err)
 			}
-			klog.V(5).Infof("NodePublishVolume[%s]: existing: RO:%v TargetPath:%v, mountFlags:[%s] fsType:%s",
-				req.VolumeId, ns.volInfo[req.VolumeId].readOnly, ns.volInfo[req.VolumeId].targetPath, ns.volInfo[req.VolumeId].mountFlags, existingFsType)
-			if readOnly == ns.volInfo[req.VolumeId].readOnly &&
-				targetPath == ns.volInfo[req.VolumeId].targetPath &&
-				ns.volInfo[req.VolumeId].mountFlags == joinedMountFlags &&
-				(fsType == "" || fsType == existingFsType) {
-				klog.V(5).Infof("NodePublishVolume[%s]: paremeters match existing, return OK", req.VolumeId)
-				return &csi.NodePublishVolumeResponse{}, nil
-			} else {
-				klog.V(5).Infof("NodePublishVolume[%s]: paremeters do not match existing, return ALREADY_EXISTS", req.VolumeId)
-				return nil, status.Error(codes.AlreadyExists, "Volume published but is incompatible")
+			for i := len(mpList) - 1; i >= 0; i-- {
+				if mpList[i].Path == targetPath {
+					klog.V(5).Infof("NodePublishVolume[%s]: Existing mountFlags:'%s', fsTyp: '%s'", req.VolumeId, mpList[i].Opts, mpList[i].Type)
+					if (fsType == "" || mpList[i].Type == fsType) && findMountFlags(mountFlags, mpList[i].Opts) {
+						klog.V(5).Infof("NodePublishVolume[%s]: parameters match existing, return OK", req.VolumeId)
+						return &csi.NodePublishVolumeResponse{}, nil
+					}
+					break
+				}
 			}
+			klog.V(5).Infof("NodePublishVolume[%s]: parameters do not match existing volume, return ALREADY_EXISTS", req.VolumeId)
+			return nil, status.Error(codes.AlreadyExists, "Volume published but is incompatible")
 		}
 	}
 
@@ -272,7 +264,6 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 
 	if !volumeParameters.GetKataContainers() {
 		// A normal volume, return early.
-		ns.volInfo[req.VolumeId] = volumeInfo{readOnly: readOnly, targetPath: targetPath, mountFlags: joinedMountFlags}
 		return &csi.NodePublishVolumeResponse{}, nil
 	}
 
@@ -333,7 +324,6 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	ns.volInfo[req.VolumeId] = volumeInfo{readOnly: readOnly, targetPath: targetPath, mountFlags: joinedMountFlags}
 	return &csi.NodePublishVolumeResponse{}, nil
 }
 
@@ -429,7 +419,6 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 			return nil, status.Error(codes.Internal, fmt.Sprintf("Failed to delete ephemeral volume %s: %s", req.VolumeId, err.Error()))
 		}
 	}
-	delete(ns.volInfo, req.VolumeId)
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
@@ -610,7 +599,7 @@ func (ns *nodeServer) createEphemeralDevice(ctx context.Context, req *csi.NodePu
 
 	// Create filesystem
 	if err := ns.provisionDevice(device, req.GetVolumeCapability().GetMount().GetFsType()); err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("ephmeral inline volume: failed to create filesystem: %v", err))
+		return nil, status.Error(codes.Internal, fmt.Sprintf("ephemeral inline volume: failed to create filesystem: %v", err))
 	}
 
 	return device, nil
@@ -666,7 +655,7 @@ func (ns *nodeServer) mount(sourcePath, targetPath string, mountOptions []string
 
 	// Create target path, using a file for raw block bind mounts
 	// or a directory for filesystems. Might already exist from a
-	// previous call or because Kubernetes erronously created it
+	// previous call or because Kubernetes erroneously created it
 	// for us.
 	if rawBlock {
 		f, err := os.OpenFile(targetPath, os.O_CREATE, os.FileMode(0644))
@@ -725,7 +714,7 @@ func determineFilesystemType(devicePath string) (string, error) {
 		return "", fmt.Errorf("no device information for %s", devicePath)
 	}
 
-	// exptected output format from blkid:
+	// expected output format from blkid:
 	// devicepath: UUID="<uuid>" TYPE="<filesystem type>"
 	attrs := strings.Split(string(output), ":")
 	if len(attrs) != 2 {
@@ -755,4 +744,28 @@ func ensureDirectory(mounter mount.Interface, dir string) (bool, error) {
 	}
 
 	return false, nil
+}
+
+// findMountFlags finds existence of all flags in findIn array
+func findMountFlags(flags []string, findIn []string) bool {
+	for _, f := range flags {
+		// bind mounts are not visible in mount options
+		// so ignore the flag
+		if f == "bind" {
+			continue
+		}
+		found := false
+		for _, fIn := range findIn {
+			if f == fIn {
+				found = true
+				break
+			}
+		}
+		if !found {
+			klog.V(5).Infof("Mount flag '%s' not found in %v", f, findIn)
+			return false
+		}
+	}
+
+	return true
 }
