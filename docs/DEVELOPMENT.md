@@ -341,15 +341,15 @@ pkg/pmem-registry/pmem-registry.pb.go is generated from pkg/pmem-registry/pmem-r
 
 protoc comes from package _protobuf-compiler_ on Ubuntu 18.04
 - get protobuf for Go:
-```sh
+``` console
 $ git clone https://github.com/golang/protobuf.git && cd protobuf
 $ make # installs needed binary in $GOPATH/bin/protoc-gen-go
 ```
 
 - generate by running in \~/go/src/github.com/intel/pmem-csi/pkg/pmem-registry:
 
-```sh
-protoc --plugin=protoc-gen-go=$GOPATH/bin/protoc-gen-go --go_out=plugins=grpc:./ pmem-registry.proto
+``` console
+$ protoc --plugin=protoc-gen-go=$GOPATH/bin/protoc-gen-go --go_out=plugins=grpc:./ pmem-registry.proto
 ```
 
 ### Table of Contents in README and DEVELOPMENT
@@ -357,7 +357,7 @@ protoc --plugin=protoc-gen-go=$GOPATH/bin/protoc-gen-go --go_out=plugins=grpc:./
 Table of Contents can be generated using multiple methods.
 - One possibility is to use [pandoc](https://pandoc.org/)
 
-```sh
+``` console
 $ pandoc -s -t markdown_github --toc README.md -o /tmp/temp.md
 ```
 
@@ -379,8 +379,8 @@ theme.
 
 Building the documentation requires Python 3.x and venv.
 
-```bash
-make vhtml
+``` console
+$ make vhtml
 ```
 
 ### Edit

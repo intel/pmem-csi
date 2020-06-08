@@ -4,6 +4,20 @@ from docutils import nodes
 from os.path import isdir, isfile, join, basename, dirname
 from os import makedirs, getenv
 from shutil import copyfile
+#support for modified code block
+from pygments.lexers.shell import BashSessionLexer
+from sphinx.highlighting import lexers
+
+#############
+#
+# Add a special lexer to add a class to console lexer
+#
+#############
+
+class copyAllConsole (BashSessionLexer):
+    name = 'ShellSession'
+
+lexers['ShellSession'] = copyAllConsole(startinLine=True)
 
 ##############################################################################
 #

@@ -109,7 +109,7 @@ the default `pmem-govm` cluster name via the `CLUSTER` env variable.
 For example, this invocation sets up a cluster using the non-default
 Fedora distro:
 
-``` sh
+``` 
 TEST_DISTRO=fedora CLUSTER=fedora-govm make start
 ```
 
@@ -128,7 +128,7 @@ can be used to run individual tests and to control additional aspects
 of the test run. For example, to run just the E2E provisioning test
 (create PVC, write data in one pod, read it in another) in verbose mode:
 
-``` sh
+``` console
 $ KUBECONFIG=$(pwd)/_work/pmem-govm/kube.config REPO_ROOT=$(pwd) ginkgo -v -focus=pmem-csi.*should.provision.storage.with.defaults ./test/e2e/
 Nov 26 11:21:28.805: INFO: The --provider flag is not set.  Treating as a conformance test.  Some tests may not be run.
 Running Suite: PMEM E2E suite
@@ -150,7 +150,7 @@ Test Suite Passed
 
 It is also possible to run just the sanity tests until one of them fails:
 
-``` sh
+``` console
 $ REPO_ROOT=`pwd` ginkgo '-focus=sanity' -failFast ./test/e2e/
 ...
 ```

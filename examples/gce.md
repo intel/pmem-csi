@@ -22,8 +22,8 @@ Of the existing machine images, `debian-9` is known to support
 PMEM. When booting up that image on a suitable machine configuration,
 a `/dev/pmem0` device is created:
 
-```sh
-gcloud alpha compute instances create pmem-debian-9 --machine-type n1-highmem-96-aep  --local-nvdimm size=1600 --zone us-central1-f
+``` console
+$ gcloud alpha compute instances create pmem-debian-9 --machine-type n1-highmem-96-aep  --local-nvdimm size=1600 --zone us-central1-f
 ```
 
 ### Preparing the machine image
@@ -39,9 +39,9 @@ and check out the source code with `repo sync`.
 
 Before proceeding, apply the following patch:
 
-```sh
-cd src/overlays
-patch -p1 <<EOF
+``` ShellSession
+$ cd src/overlays
+$ patch -p1 <<EOF
 commit 148e1095ba56fcf626d184fd2c427bd192e53a28
 Author: Patrick Ohly <patrick.ohly@intel.com>
 Date:   Fri Aug 2 10:46:30 2019 +0200
@@ -145,8 +145,8 @@ That test image allows root access with "test0000" as password, which
 can be used to verify that PMEM support is active by booting the image
 under QEMU:
 
-```sh
-qemu-system-x86_64 -enable-kvm -machine accel=kvm,usb=off  -nographic \
+``` ShellSession
+$ qemu-system-x86_64 -enable-kvm -machine accel=kvm,usb=off  -nographic \
                    -net nic,model=virtio -net user,hostfwd=tcp:127.0.0.1:9223-:22 \
                    -hda ./src/build/images/lakitu/latest/chromiumos_test_image.bin \
                    -m 2G,slots=2,maxmem=34G -smp 4 -machine pc,accel=kvm,nvdimm=on \
@@ -163,17 +163,17 @@ from it](https://cloud.google.com/container-optimized-os/docs/how-to/building-fr
 
 A modified version of the Kubernetes scripts are required. Get those with:
 
-```sh
-git clone --branch gce-node-nvdimm https://github.com/pohly/kubernetes.git
+``` ShellSession
+$ git clone --branch gce-node-nvdimm https://github.com/pohly/kubernetes.git
 ```
 
 These scripts are normally packaged as part of a release. To call them
 from that branch, one has to download one additional file:
 
-```sh
-cd kubernetes
-mkdir server
-curl -L https://dl.k8s.io/v1.15.1/kubernetes.tar.gz | tar -zxf - -O kubernetes/server/kubernetes-manifests.tar.gz  >server/kubernetes-manifests.tar.gz
+``` ShellSession
+$ cd kubernetes
+$ mkdir server
+$ curl -L https://dl.k8s.io/v1.15.1/kubernetes.tar.gz | tar -zxf - -O kubernetes/server/kubernetes-manifests.tar.gz  >server/kubernetes-manifests.tar.gz
 ```
 
 Then create a cluster with one master and three worker nodes:
@@ -218,13 +218,13 @@ for i in $( seq 0 $(($NUM_NODES - 1)) ); do kubectl label node kubernetes-minion
 Then certificates need to be created. This currently works best with
 scripts from the pmem-csi repo:
 
-```sh
-git clone --branch release-0.5 https://github.com/intel/pmem-csi
-cd pmem-csi
-curl -L https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 -o _work/bin/cfssl --create-dirs
-curl -L https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64 -o _work/bin/cfssljson --create-dirs
-chmod a+x _work/bin/cfssl _work/bin/cfssljson
-PATH="$PATH:$PWD/_work/bin" ./test/setup-ca-kubernetes.sh
+``` console
+$ git clone --branch release-0.5 https://github.com/intel/pmem-csi
+$ cd pmem-csi
+$ curl -L https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 -o _work/bin/cfssl --create-dirs
+$ curl -L https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64 -o _work/bin/cfssljson --create-dirs
+$ chmod a+x _work/bin/cfssl _work/bin/cfssljson
+$ PATH="$PATH:$PWD/_work/bin" ./test/setup-ca-kubernetes.sh
 ```
 
 As in QEMU, the GCE VMs come up with the entire PMEM already set up
@@ -252,24 +252,24 @@ done
 
 With the nodes set up like that, we can proceed to deploy PMEM-CSI:
 
-```sh
-kubectl create -f https://raw.githubusercontent.com/intel/pmem-csi/v0.5.0/deploy/kubernetes-1.14/pmem-csi-lvm.yaml
-kubectl create -f https://raw.githubusercontent.com/intel/pmem-csi/v0.5.0/deploy/common/pmem-storageclass-ext4.yaml
-kubectl create -f https://raw.githubusercontent.com/intel/pmem-csi/v0.5.0/deploy/common/pmem-storageclass-xfs.yaml
+``` console
+$ kubectl create -f https://raw.githubusercontent.com/intel/pmem-csi/v0.5.0/deploy/kubernetes-1.14/pmem-csi-lvm.yaml
+$ kubectl create -f https://raw.githubusercontent.com/intel/pmem-csi/v0.5.0/deploy/common/pmem-storageclass-ext4.yaml
+$ kubectl create -f https://raw.githubusercontent.com/intel/pmem-csi/v0.5.0/deploy/common/pmem-storageclass-xfs.yaml
 ```
 
 ### Testing PMEM-CSI
 
 This brings up the example apps, one using `ext4`, the other `xfs`:
-```sh
-kubectl create -f https://raw.githubusercontent.com/intel/pmem-csi/v0.5.0/deploy/common/pmem-pvc.yaml
-kubectl create -f https://raw.githubusercontent.com/intel/pmem-csi/v0.5.0/deploy/common/pmem-app.yaml
+``` console
+$ kubectl create -f https://raw.githubusercontent.com/intel/pmem-csi/v0.5.0/deploy/common/pmem-pvc.yaml
+$ kubectl create -f https://raw.githubusercontent.com/intel/pmem-csi/v0.5.0/deploy/common/pmem-app.yaml
 ```
 
 It is expected that `my-csi-app-2` will never start because the COS
 kernel lacks support for xfs. But `my-csi-app-1` comes up:
 
-```sh
+``` console
 $ kubectl get pv
 NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                       STORAGECLASS       REASON   AGE
 pvc-0c2ebc68-cd77-4c08-9fbb-f8a5d33440b9   4Gi        RWO            Delete           Bound    default/pmem-csi-pvc-ext4   pmem-csi-sc-ext4            2m52s
@@ -299,13 +299,13 @@ longer necessary.
 
 It is possible to define an instance template that uses the alpha machines:
 
-```sh
-gcloud alpha compute instance-templates create kubernetes-minion-template --machine-type n1-highmem-96-aep --local-nvdimm size=1600 --region us-central1
+``` console
+$ gcloud alpha compute instance-templates create kubernetes-minion-template --machine-type n1-highmem-96-aep --local-nvdimm size=1600 --region us-central1
 ```
 
 But then using that template fails (regardless whether `alpha` is used or not):
 
-```sh
+``` console
 $ gcloud alpha compute instance-groups managed create kubernetes-minion-group --zone us-central1-b --base-instance-name kubernetes-minion-group --size 3 --template kubernetes-minion-template
 ERROR: (gcloud.alpha.compute.instance-groups.managed.create) Could not fetch resource:
  - Internal error. Please try again or contact Google Support. (Code: '58F5F51C192A0.A2E8610.8D038E81')
@@ -353,8 +353,8 @@ The COS image does not have `ndctl`. The following `DaemonSet` instead
 runs commands inside the `pmem-csi-driver` image. This is an
 alternative to running inside Docker.
 
-```sh
-kubectl create -f - <<EOF
+``` ShellSession
+$ kubectl create -f - <<EOF
 apiVersion: apps/v1beta2
 kind: DaemonSet
 metadata:
@@ -398,7 +398,7 @@ EOF
 
 The expected result is that the pods keep running, so the output can be checked:
 
-```sh
+``` console
 $ kubectl get pods -o wide
 NAME                  READY   STATUS    RESTARTS   AGE   IP           NODE                       NOMINATED NODE   READINESS GATES
 pmem-csi-init-5dswq   1/1     Running   0          12m   10.64.1.16   kubernetes-minion-node-0   <none>           <none>

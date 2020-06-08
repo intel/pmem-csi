@@ -46,8 +46,8 @@ One region per each NVDIMM is created in non-interleaved configuration.
 In such a configuration, a PMEM-CSI volume cannot be larger than one NVDIMM.
 
 Example of creating regions without interleaving, using all NVDIMMs:
-```sh
-# ipmctl create -goal PersistentMemoryType=AppDirectNotInterleaved
+``` console
+$ ipmctl create -goal PersistentMemoryType=AppDirectNotInterleaved
 ```
 
 Alternatively, multiple NVDIMMs can be combined to form an interleaved set.
@@ -56,8 +56,8 @@ for improved read/write performance and allowing one region (also, PMEM-CSI volu
 to be larger than single NVDIMM.
 
 Example of creating regions in interleaved mode, using all NVDIMMs:
-```sh
-# ipmctl create -goal PersistentMemoryType=AppDirect
+``` console
+$ ipmctl create -goal PersistentMemoryType=AppDirect
 ```
 
 When running inside virtual machines, each virtual machine typically
@@ -66,8 +66,8 @@ the virtual machine. Instead, that region must be made available for
 use with PMEM-CSI because when the virtual machine comes up for the
 first time, the entire region is already allocated for use as a single
 block device:
-``` sh
-# ndctl list -RN
+``` console
+$ ndctl list -RN
 {
   "regions":[
     {
@@ -89,20 +89,20 @@ block device:
     }
   ]
 }
-# ls -l /dev/pmem*
+$ ls -l /dev/pmem*
 brw-rw---- 1 root disk 259, 0 Jun  4 16:41 /dev/pmem0
 ```
 
 Labels must be initialized in such a region, which must be performed
 once after the first boot:
-``` sh
-# ndctl disable-region region0
+``` console
+$ ndctl disable-region region0
 disabled 1 region
-# ndctl init-labels nmem0
+$ ndctl init-labels nmem0
 initialized 1 nmem
-# ndctl enable-region region0
+$ ndctl enable-region region0
 enabled 1 region
-# ndctl list -RN
+$ ndctl list -RN
 [
   {
     "dev":"region0",
@@ -114,7 +114,7 @@ enabled 1 region
     "persistence_domain":"unknown"
   }
 ]
-# ls -l /dev/pmem*
+$ ls -l /dev/pmem*
 ls: cannot access '/dev/pmem*': No such file or directory
 ```
 
@@ -127,8 +127,8 @@ built anywhere in the filesystem. Pre-built container images are available and t
 users don't need to build from source, but they will still need some additional files.
 To get the source code, use:
 
-```
-git clone https://github.com/intel/pmem-csi
+``` console
+$ git clone https://github.com/intel/pmem-csi
 ```
 
 ### Run PMEM-CSI on Kubernetes
@@ -146,8 +146,8 @@ on the Kubernetes version.
 
 - **Label the cluster nodes that provide persistent memory device(s)**
 
-```sh
-    $ kubectl label node <your node> storage=pmem
+``` console
+$ kubectl label node <your node> storage=pmem
 ```
 
 - **Set up certificates**
@@ -162,16 +162,16 @@ These are the steps for manual set-up of certificates:
 
 - Download cfssl tools
 
-```sh
-   $ curl -L https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 -o _work/bin/cfssl --create-dirs
-   $ curl -L https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64 -o _work/bin/cfssljson --create-dirs
-   $ chmod a+x _work/bin/cfssl _work/bin/cfssljson
+``` console
+$ curl -L https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 -o _work/bin/cfssl --create-dirs
+$ curl -L https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64 -o _work/bin/cfssljson --create-dirs
+$ chmod a+x _work/bin/cfssl _work/bin/cfssljson
 ```
 
 - Run certificates set-up script
 
-```sh
-   $ KUBCONFIG="<<your cluster kubeconfig path>> PATH="$PATH:$PWD/_work/bin" ./test/setup-ca-kubernetes.sh
+``` console
+$ KUBCONFIG="<<your cluster kubeconfig path>> PATH="$PATH:$PWD/_work/bin" ./test/setup-ca-kubernetes.sh
 ```
 
 - **Deploy the driver to Kubernetes**
@@ -191,8 +191,8 @@ For each Kubernetes version, four different deployment variants are provided:
 
 For example, to deploy for production with LVM device mode onto Kubernetes 1.17, use:
 
-```sh
-    $ kubectl create -f deploy/kubernetes-1.17/pmem-csi-lvm.yaml
+``` console
+$ kubectl create -f deploy/kubernetes-1.17/pmem-csi-lvm.yaml
 ```
 
 The PMEM-CSI [scheduler extender](design.md#scheduler-extender) and
@@ -207,7 +207,7 @@ of [deploy/kustomize](/deploy/kustomize)`-<kubernetes version>` can be used as b
 for `kubectl kustomize`. For example:
 
    - Change namespace:
-     ```
+     ``` ShellSession
      $ mkdir -p my-pmem-csi-deployment
      $ cat >my-pmem-csi-deployment/kustomization.yaml <<EOF
      namespace: pmem-csi
@@ -220,7 +220,7 @@ for `kubectl kustomize`. For example:
 
    - Configure how much PMEM is used by PMEM-CSI for LVM
      (see [Namespace modes in LVM device mode](design.md#namespace-modes-in-lvm-device-mode)):
-     ```
+     ``` ShellSession
      $ mkdir -p my-pmem-csi-deployment
      $ cat >my-pmem-csi-deployment/kustomization.yaml <<EOF
      bases:
@@ -244,23 +244,23 @@ for `kubectl kustomize`. For example:
 
 - **Wait until all pods reach 'Running' status**
 
-```sh
-    $ kubectl get pods
-    NAME                    READY   STATUS    RESTARTS   AGE
-    pmem-csi-node-8kmxf     2/2     Running   0          3m15s
-    pmem-csi-node-bvx7m     2/2     Running   0          3m15s
-    pmem-csi-controller-0   2/2     Running   0          3m15s
-    pmem-csi-node-fbmpg     2/2     Running   0          3m15s
+``` console
+$ kubectl get pods
+NAME                    READY   STATUS    RESTARTS   AGE
+pmem-csi-node-8kmxf     2/2     Running   0          3m15s
+pmem-csi-node-bvx7m     2/2     Running   0          3m15s
+pmem-csi-controller-0   2/2     Running   0          3m15s
+pmem-csi-node-fbmpg     2/2     Running   0          3m15s
 ```
 
 - **Verify that the node labels have been configured correctly**
 
-```sh
-    $ kubectl get nodes --show-labels
+``` console
+$ kubectl get nodes --show-labels
 ```
 
 The command output must indicate that every node with PMEM has these two labels:
-```
+``` console
 pmem-csi.intel.com/node=<NODE-NAME>,storage=pmem
 ```
 
@@ -271,30 +271,30 @@ and that the driver's log output doesn't contain errors.
 
 - **Define two storage classes using the driver**
 
-```sh
-    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-storageclass-ext4.yaml
-    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-storageclass-xfs.yaml
+``` console
+$ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-storageclass-ext4.yaml
+$ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-storageclass-xfs.yaml
 ```
 
 - **Provision two pmem-csi volumes**
 
-```sh
-    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-pvc.yaml
+``` console
+$ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-pvc.yaml
 ```
 
 - **Verify two Persistent Volume Claims have 'Bound' status**
 
-```sh
-    $ kubectl get pvc
-    NAME                STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS       AGE
-    pmem-csi-pvc-ext4   Bound    pvc-f70f7b36-6b36-11e9-bf09-deadbeef0100   4Gi        RWO            pmem-csi-sc-ext4   16s
-    pmem-csi-pvc-xfs    Bound    pvc-f7101fd2-6b36-11e9-bf09-deadbeef0100   4Gi        RWO            pmem-csi-sc-xfs    16s
+``` console
+$ kubectl get pvc
+NAME                STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS       AGE
+pmem-csi-pvc-ext4   Bound    pvc-f70f7b36-6b36-11e9-bf09-deadbeef0100   4Gi        RWO            pmem-csi-sc-ext4   16s
+pmem-csi-pvc-xfs    Bound    pvc-f7101fd2-6b36-11e9-bf09-deadbeef0100   4Gi        RWO            pmem-csi-sc-xfs    16s
 ```
 
 - **Start two applications requesting one provisioned volume each**
 
-```sh
-    $ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-app.yaml
+``` console
+$ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-app.yaml
 ```
 
 These applications use **storage: pmem** in the <i>nodeSelector</i>
@@ -303,30 +303,32 @@ one with ext4-format and another with xfs-format file system.
 
 - **Verify two application pods reach 'Running' status**
 
-```sh
-    $ kubectl get po my-csi-app-1 my-csi-app-2
-    NAME           READY   STATUS    RESTARTS   AGE
-    my-csi-app-1   1/1     Running   0          6m5s
-    NAME           READY   STATUS    RESTARTS   AGE
-    my-csi-app-2   1/1     Running   0          6m1s
+``` console
+$ kubectl get po my-csi-app-1 my-csi-app-2
+NAME           READY   STATUS    RESTARTS   AGE
+my-csi-app-1   1/1     Running   0          6m5s
+NAME           READY   STATUS    RESTARTS   AGE
+my-csi-app-2   1/1     Running   0          6m1s
 ```
 
 - **Check that applications have a pmem volume mounted with added dax option**
 
-```sh
-    $ kubectl exec my-csi-app-1 -- df /data
-    Filesystem           1K-blocks      Used Available Use% Mounted on
-    /dev/ndbus0region0fsdax/5ccaa889-551d-11e9-a584-928299ac4b17
-                           4062912     16376   3820440   0% /data
-    $ kubectl exec my-csi-app-2 -- df /data
-    Filesystem           1K-blocks      Used Available Use% Mounted on
-    /dev/ndbus0region0fsdax/5cc9b19e-551d-11e9-a584-928299ac4b17
-                           4184064     37264   4146800   1% /data
+``` console
+$ kubectl exec my-csi-app-1 -- df /data
+Filesystem           1K-blocks      Used Available Use% Mounted on
+/dev/ndbus0region0fsdax/5ccaa889-551d-11e9-a584-928299ac4b17
+                       4062912     16376   3820440   0% /data
 
-    $ kubectl exec my-csi-app-1 -- mount |grep /data
-    /dev/ndbus0region0fsdax/5ccaa889-551d-11e9-a584-928299ac4b17 on /data type ext4 (rw,relatime,dax)
-    $ kubectl exec my-csi-app-2 -- mount |grep /data
-    /dev/ndbus0region0fsdax/5cc9b19e-551d-11e9-a584-928299ac4b17 on /data type xfs (rw,relatime,attr2,dax,inode64,noquota)
+$ kubectl exec my-csi-app-2 -- df /data
+Filesystem           1K-blocks      Used Available Use% Mounted on
+/dev/ndbus0region0fsdax/5cc9b19e-551d-11e9-a584-928299ac4b17
+                       4184064     37264   4146800   1% /data
+
+$ kubectl exec my-csi-app-1 -- mount |grep /data
+/dev/ndbus0region0fsdax/5ccaa889-551d-11e9-a584-928299ac4b17 on /data type ext4 (rw,relatime,dax)
+
+$ kubectl exec my-csi-app-2 -- mount |grep /data
+/dev/ndbus0region0fsdax/5cc9b19e-551d-11e9-a584-928299ac4b17 on /data type xfs (rw,relatime,attr2,dax,inode64,noquota)
 ```
 
 #### Expose persistent and cache volumes to applications
@@ -421,7 +423,7 @@ in the pod meta data. In both cases, the value has to be large enough
 for all PMEM volumes used by the pod, otherwise pod creation will fail
 with an error similar to this:
 
-```
+``` console
 Error: container create failed: QMP command failed: not enough space, currently 0x8000000 in use of total space for memory devices 0x3c100000
 ```
 
@@ -493,10 +495,10 @@ current directory contains the `deploy` directory from the PMEM-CSI
 repository. It is also possible to reference the base via a
 [URL](https://github.com/kubernetes-sigs/kustomize/blob/master/examples/remoteBuild.md).
 
-``` sh
-mkdir my-pmem-csi-deployment
+``` ShellSession
+$ mkdir my-pmem-csi-deployment
 
-cat >my-pmem-csi-deployment/kustomization.yaml <<EOF
+$ cat >my-pmem-csi-deployment/kustomization.yaml <<EOF
 bases:
   - ../deploy/kubernetes-1.16/lvm
 patchesJson6902:
@@ -508,13 +510,13 @@ patchesJson6902:
     path: scheduler-patch.yaml
 EOF
 
-cat >my-pmem-csi-deployment/scheduler-patch.yaml <<EOF
+$ cat >my-pmem-csi-deployment/scheduler-patch.yaml <<EOF
 - op: add
   path: /spec/template/spec/containers/0/command/-
   value: "--schedulerListen=:8000"
 EOF
 
-kubectl create --kustomize my-pmem-csi-deployment
+$ kubectl create --kustomize my-pmem-csi-deployment
 ```
 
 To enable the PMEM-CSI scheduler extender, a configuration file and an
@@ -541,10 +543,10 @@ fixed node port like 32000 on all nodes. Then
 `https://127.0.0.1:32000` needs to be used as `urlPrefix`. Here's how
 the service can be created with that node port:
 
-``` sh
-mkdir my-scheduler
+``` ShellSession
+$ mkdir my-scheduler
 
-cat >my-scheduler/kustomization.yaml <<EOF
+$ cat >my-scheduler/kustomization.yaml <<EOF
 bases:
   - ../deploy/kustomize/scheduler
 patchesJson6902:
@@ -555,13 +557,13 @@ patchesJson6902:
     path: node-port-patch.yaml
 EOF
 
-cat >my-scheduler/node-port-patch.yaml <<EOF
+$ cat >my-scheduler/node-port-patch.yaml <<EOF
 - op: add
   path: /spec/ports/0/nodePort
   value: 32000
 EOF
 
-kubectl create --kustomize my-scheduler
+$ kubectl create --kustomize my-scheduler
 ```
 
 How to (re)configure `kube-scheduler` depends on the cluster. With
@@ -574,11 +576,11 @@ bind-mounting the root certificate that was used to sign the certificate used
 by the scheduler extender into the location where the Go
 runtime will find it:
 
-``` sh
-sudo mkdir -p /var/lib/scheduler/
-sudo cp _work/pmem-ca/ca.pem /var/lib/scheduler/ca.crt
+``` ShellSession
+$ sudo mkdir -p /var/lib/scheduler/
+$ sudo cp _work/pmem-ca/ca.pem /var/lib/scheduler/ca.crt
 
-sudo sh -c 'cat >/var/lib/scheduler/scheduler-policy.cfg' <<EOF
+$ sudo sh -c 'cat >/var/lib/scheduler/scheduler-policy.cfg' <<EOF
 {
   "kind" : "Policy",
   "apiVersion" : "v1",
@@ -598,7 +600,7 @@ sudo sh -c 'cat >/var/lib/scheduler/scheduler-policy.cfg' <<EOF
 }
 EOF
 
-cat >kubeadm.config <<EOF
+$ cat >kubeadm.config <<EOF
 apiVersion: kubeadm.k8s.io/v1beta1
 kind: ClusterConfiguration
 scheduler:
@@ -615,7 +617,7 @@ scheduler:
     config: /var/lib/scheduler/scheduler-config.yaml
 EOF
 
-kubeadm init --config=kubeadm.config
+$ kubeadm init --config=kubeadm.config
 ```
 
 It is possible to stop here without enabling the pod admission webhook.
@@ -625,8 +627,8 @@ First of all, it is recommended to exclude all system pods from
 passing through the web hook. This ensures that they can still be
 created even when PMEM-CSI is down:
 
-``` sh
-kubectl label ns kube-system pmem-csi.intel.com/webhook=ignore
+``` console
+$ kubectl label ns kube-system pmem-csi.intel.com/webhook=ignore
 ```
 
 This special label is configured in [the provided web hook
@@ -635,10 +637,10 @@ definition](/deploy/kustomize/webhook/webhook.yaml). On Kubernetes >=
 adding that label. The CA gets configured explicitly, which is
 supported for webhooks.
 
-``` sh
-mkdir my-webhook
+``` ShellSession
+$ mkdir my-webhook
 
-cat >my-webhook/kustomization.yaml <<EOF
+$ cat >my-webhook/kustomization.yaml <<EOF
 bases:
   - ../deploy/kustomize/webhook
 patchesJson6902:
@@ -650,13 +652,13 @@ patchesJson6902:
     path: webhook-patch.yaml
 EOF
 
-cat >my-webhook/webhook-patch.yaml <<EOF
+$ cat >my-webhook/webhook-patch.yaml <<EOF
 - op: replace
   path: /webhooks/0/clientConfig/caBundle
   value: $(base64 -w 0 _work/pmem-ca/ca.pem)
 EOF
 
-kubectl create --kustomize my-webhook
+$ kubectl create --kustomize my-webhook
 ```
 <!-- FILL TEMPLATE:
 
