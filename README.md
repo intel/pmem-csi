@@ -49,6 +49,12 @@ officially by upstream anymore.
 <sup>2</sup> Lacks support for ephemeral inline volumes.
 Not supported officially by upstream anymore.
 
+## Demo
+
+Click the image to watch the animated demo on asciinema.org:
+
+[![asciicast](https://asciinema.org/a/4M5PSwbYkaXs0dPHYUIVbakqB.png)](https://asciinema.org/a/4M5PSwbYkaXs0dPHYUIVbakqB)
+
 ## Content
 
 - [PMEM-CSI for Kubernetes](#pmem-csi-for-kubernetes)
