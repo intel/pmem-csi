@@ -42,14 +42,6 @@ volumes are not passed in as PMEM, but Kata Containers [can be
 installed](https://github.com/kata-containers/packaging/tree/master/kata-deploy#kubernetes-quick-start)
 and used for applications that are not using PMEM.
 
-The `clear-cloud` image is downloaded automatically. By default,
-four different virtual machines are prepared. Each image is pre-configured
-with its own hostname and with network.
-
-The images will contain the latest
-[Clear Linux OS](https://clearlinux.org/) and have the Kubernetes
-version supported by Clear Linux installed.
-
 PMEM-CSI images must have been created and published in some Docker
 registry, as described earlier in [build PMEM-CSI](DEVELOPMENT.md#build-pmem-csi).
 In addition, that registry must be accessible from inside the
@@ -75,7 +67,10 @@ Use `make stop` to stop and remove the virtual machines.
 
 `make restart` can be used to cleanly reboot all virtual
 machines. This is useful during development after a `make push-images`
-to ensure that the cluster runs those rebuilt images.
+to ensure that the cluster runs those rebuilt images. However, for
+that to work the image pull policy has to be changed from the default
+"if not present" to "always" by setting the `TEST_IMAGE_PULL_POLICY`
+environment variable to `Always`.
 
 ## Running commands on test cluster nodes over ssh
 
@@ -106,11 +101,11 @@ permanently by creating a file like `test/test-config.d/my-config.sh`.
 Multiple different clusters can be brought up in parallel by changing
 the default `pmem-govm` cluster name via the `CLUSTER` env variable.
 
-For example, this invocation sets up a cluster using the non-default
-Fedora distro:
+For example, this invocation sets up a cluster using an older release
+of Kubernetes:
 
 ``` 
-TEST_DISTRO=fedora CLUSTER=fedora-govm make start
+TEST_KUBERNETES_VERSION=1.17 CLUSTER=kubernetes-1.17 make start
 ```
 
 See additional details in [test/test-config.d](/test/test-config.d).

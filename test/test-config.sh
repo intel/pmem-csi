@@ -15,7 +15,7 @@ if [ -d test/test-config.d ]; then
 fi
 
 # The operating system to install inside the nodes.
-: ${TEST_DISTRO:=clear}
+: ${TEST_DISTRO:=fedora}
 
 # Choose the version of the operating system that gets installed. Valid
 # values depend on the OS.
