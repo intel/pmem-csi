@@ -54,7 +54,7 @@ function deploy_using_olm() {
   # Update docker registry
   # NOTE: Also updating image version to 'canary' for tests
   if [ "${TEST_PMEM_REGISTRY}" != "" ]; then
-    sed -i -e "s^intel/pmem-csi-driver:v${VERSION}^${TEST_PMEM_REGISTRY}/pmem-csi-driver:canary^g" ${CSV_FILE}
+    sed -i -e "s^intel/pmem-csi-driver:v${VERSION}^${TEST_PMEM_REGISTRY}/pmem-csi-driver:v0.8.0^g" ${CSV_FILE}
   fi
   if [ "${TEST_IMAGE_PULL_POLICY}" != "" ]; then
     sed -i -e "s^imagePullPolicy:.IfNotPresent^imagePullPolicy: ${TEST_IMAGE_PULL_POLICY}^g" ${CSV_FILE}

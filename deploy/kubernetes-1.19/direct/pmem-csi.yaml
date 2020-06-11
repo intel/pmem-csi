@@ -258,7 +258,7 @@ spec:
           value: pmem-csi.intel.com
         - name: GODEBUG
           value: x509ignoreCN=0
-        image: intel/pmem-csi-driver:canary
+        image: intel/pmem-csi-driver:v0.8.0
         imagePullPolicy: IfNotPresent
         name: pmem-driver
         ports:
@@ -360,7 +360,7 @@ spec:
           value: /tmp/termination-log
         - name: GODEBUG
           value: x509ignoreCN=0
-        image: intel/pmem-csi-driver:canary
+        image: intel/pmem-csi-driver:v0.8.0
         imagePullPolicy: IfNotPresent
         name: pmem-driver
         ports:
