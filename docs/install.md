@@ -166,7 +166,7 @@ from a trusted certificate authority.
 - **Install the PMEM-CSI operator**
 
 ``` console
-$ kubectl create -f https://github.com/intel/pmem-csi/raw/devel/deploy/operator/pmem-csi-operator.yaml
+$ kubectl create -f https://github.com/intel/pmem-csi/raw/release-0.7/deploy/operator/pmem-csi-operator.yaml
 ```
 
 - **Create a custom resource**
