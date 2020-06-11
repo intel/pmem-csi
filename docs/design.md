@@ -11,6 +11,7 @@
     - [Security](#security)
     - [Volume Persistency](#volume-persistency)
     - [Capacity-aware pod scheduling](#capacity-aware-pod-scheduling)
+    - [PMEM-CSI operator](#pmem-csi-operator)
         
 ## Architecture and Operation
 
@@ -431,3 +432,16 @@ that don't use PMEM-CSI at all.
 Users must take care to create PVCs first, then the pods if they want
 to use the webhook. In practice, that is often already done because it
 is more natural, so it is not a big limitation.
+
+## PMEM-CSI Operator
+
+PMEM-CSI operator facilitates deploying and managing the [PMEM-CSI driver](https://github.com/intel/pmem-csi)
+on a Kubernetes cluster. This operator is based on the CoreOS [operator-sdk](https://github.com/operator-framework/operator-sdk)
+tools and APIs.
+
+The driver deployment is controlled by a cluster-scoped [custom resource](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/)
+named [`Deployment`](./install.md#pmem-csi-deployment-crd) in the
+`pmem-csi.intel.com/v1alpha1` API group. The operator runs inside the cluster
+and listens for deployment changes. It makes sure that the required Kubernetes
+objects are created for a driver deployment.
+Refer to [Deployment CRD](./install.md#deployment) for details.
