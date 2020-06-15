@@ -278,7 +278,7 @@ $ chmod a+x _work/bin/cfssl _work/bin/cfssljson
 - Run certificates set-up script
 
 ``` console
-$ KUBCONFIG="<<your cluster kubeconfig path>> PATH="$PATH:$PWD/_work/bin" ./test/setup-ca-kubernetes.sh
+$ KUBCONFIG="<<your cluster kubeconfig path>>" PATH="$PATH:$PWD/_work/bin" ./test/setup-ca-kubernetes.sh
 ```
 
 - **Deploy the driver to Kubernetes**
