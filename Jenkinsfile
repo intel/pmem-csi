@@ -135,6 +135,9 @@ pipeline {
                         error("Creating a new release failed.")
                     }
                 }
+                // We must ensure that the workers use the same modified source code.
+                // This relies on create-new-release.sh producing just a single commit.
+                sh "git format-patch -n1 >_work/release.patch"
             }
         }
 
@@ -192,6 +195,7 @@ pipeline {
                            lz4 > _work/images.tar.lz4 && \
                     ls -l -h _work/images.tar.lz4"
                 stash includes: '_work/images.tar.lz4', name: 'images'
+                stash includes: '_work/release.patch', name: 'release', allowEmpty: true
             }
         }
 
@@ -466,6 +470,11 @@ void RestoreEnv() {
     // Get images, ready for use and/or pushing to localhost:5000.
     unstash 'images'
     sh 'lz4cat _work/images.tar.lz4 | docker load'
+
+    // In case of a release update, also apply the same source code patch.
+    // Does not exist during normal PR testing.
+    unstash 'release'
+    sh 'if [ -f _work/release.patch ]; then git am _work/release.patch; fi'
 
     // Set up build container and registry.
     PrepareEnv()
