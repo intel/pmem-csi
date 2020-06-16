@@ -9,6 +9,7 @@ import (
 
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
+	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 )
 
@@ -52,7 +53,7 @@ func prepareVolumeGroups(ctx *ndctl.Context) {
 		klog.V(5).Infof("CheckVG: Bus: %v", bus.DeviceName())
 		for _, r := range bus.ActiveRegions() {
 			klog.V(5).Infof("Region: %v", r.DeviceName())
-			vgName := pmemcommon.VgName(bus, r)
+			vgName := pmdmanager.VgName(bus, r)
 			if err := createVolumesForRegion(r, vgName); err != nil {
 				klog.Errorf("Failed volumegroup creation: %s", err.Error())
 			}

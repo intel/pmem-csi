@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/intel/pmem-csi/pkg/ndctl"
 	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 	"golang.org/x/sys/unix"
 	"k8s.io/klog"
@@ -79,4 +80,12 @@ func waitDeviceAppears(dev *PmemDeviceInfo) error {
 		time.Sleep(retryStatTimeout)
 	}
 	return fmt.Errorf("%s: %w", dev.Path, ErrDeviceNotReady)
+}
+
+func VgName(bus *ndctl.Bus, region *ndctl.Region) string {
+	// Hard-coded string to indicate all namespaces are in "FSDAX" mode.
+	nsmode := "fsdax"
+	// This is present to avoid API break: names used to indicate nsmode
+	// before the sector-mode support was dropped.
+	return bus.DeviceName() + region.DeviceName() + nsmode
 }
