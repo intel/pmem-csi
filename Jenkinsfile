@@ -137,7 +137,7 @@ pipeline {
                 }
                 // We must ensure that the workers use the same modified source code.
                 // This relies on create-new-release.sh producing just a single commit.
-                sh "git format-patch -n1 >_work/release.patch"
+                sh "git format-patch -n1 --stdout >_work/release.patch"
             }
         }
 
