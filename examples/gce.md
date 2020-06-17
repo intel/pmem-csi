@@ -329,7 +329,7 @@ https://github.com/intel/pmem-csi/issues/321 is open regarding that.
 
 ### Avoid manual LVM and ndctl commands
 
-`pmem-vgm` already contains code for this, it just doesn't work on GCE
+`pmem-csi-driver` already contains code for this, it just doesn't work on GCE
 because it ignores the existing `/dev/pmem0`. We should simplify the
 work of the admin and support configuring in Kubernetes how PMEM is to
 be used, then have PMEM-CSI do the necessary initialization. This

@@ -61,7 +61,7 @@ func runTests(mode string) {
 
 			dm, err = NewPmemDeviceManagerLVMForVGs([]string{vg.name})
 		} else {
-			dm, err = NewPmemDeviceManagerNdctl()
+			dm, err = NewPmemDeviceManagerNdctl(100)
 			if err != nil && strings.Contains(err.Error(), "/sys mounted read-only") {
 				Skip("/sys mounted read-only, cannot test direct mode")
 			}

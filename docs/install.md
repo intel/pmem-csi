@@ -341,10 +341,10 @@ for `kubectl kustomize`. For example:
          path: lvm-parameters-patch.yaml
      EOF
      $ cat >my-pmem-csi-deployment/lvm-parameters-patch.yaml <<EOF
-     # pmem-ns-init is in the init container #0. Append arguments at the end.
+     # pmem-driver is in the container #0. Append arguments at the end.
      - op: add
-       path: /spec/template/spec/initContainers/0/args/-
-       value: "--useforfsdax=90"
+       path: /spec/template/spec/containers/0/args/-
+       value: "-pmemPercentage=90"
      EOF
      $ kubectl create --kustomize my-pmem-csi-deployment
      ```

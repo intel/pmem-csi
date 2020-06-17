@@ -27,9 +27,3 @@ patchesJson6902:
     name: pmem-csi-node
   path: ../testing/args-two-containers-patch.yaml
 
-- target:
-    group: apps
-    version: v1
-    kind: DaemonSet
-    name: pmem-csi-node
-  path: ../testing/args-two-initcontainers-patch.yaml

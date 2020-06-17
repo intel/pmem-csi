@@ -302,6 +302,7 @@ spec:
         - -keyFile=/certs/tls.key
         - -statePath=/var/lib/$(PMEM_CSI_DRIVER_NAME)
         - -drivername=$(PMEM_CSI_DRIVER_NAME)
+        - -pmemPercentage=100
         env:
         - name: KUBE_NODE_NAME
           valueFrom:

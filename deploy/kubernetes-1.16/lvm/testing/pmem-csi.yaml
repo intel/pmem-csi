@@ -350,6 +350,7 @@ spec:
         - -keyFile=/certs/tls.key
         - -statePath=/var/lib/$(PMEM_CSI_DRIVER_NAME)
         - -drivername=$(PMEM_CSI_DRIVER_NAME)
+        - -pmemPercentage=100
         - -v=5
         - -testEndpoint
         - -coverprofile=/var/lib/pmem-csi-coverage/pmem-csi-driver-node-*.out
@@ -411,45 +412,6 @@ spec:
           name: pmem-state-dir
         - mountPath: /registration
           name: registration-dir
-      initContainers:
-      - command:
-        - /usr/local/bin/pmem-ns-init
-        - -v=3
-        - -v=5
-        - -coverprofile=/var/lib/pmem-csi-coverage/pmem-ns-init-*.out
-        env:
-        - name: TERMINATION_LOG_PATH
-          value: /tmp/pmem-ns-init-termination-log
-        image: intel/pmem-csi-driver-test:canary
-        imagePullPolicy: IfNotPresent
-        name: pmem-ns-init
-        securityContext:
-          privileged: true
-          runAsUser: 0
-        terminationMessagePath: /tmp/pmem-ns-init-termination-log
-        volumeMounts:
-        - mountPath: /sys
-          name: sys-dir
-        - mountPath: /var/lib/pmem-csi-coverage
-          name: coverage-dir
-      - command:
-        - /usr/local/bin/pmem-vgm
-        - -v=3
-        - -v=5
-        - -coverprofile=/var/lib/pmem-csi-coverage/pmem-vgm-*.out
-        env:
-        - name: TERMINATION_LOG_PATH
-          value: /tmp/pmem-vgm-termination-log
-        image: intel/pmem-csi-driver-test:canary
-        imagePullPolicy: IfNotPresent
-        name: pmem-vgm
-        securityContext:
-          privileged: true
-          runAsUser: 0
-        terminationMessagePath: /tmp/pmem-vgm-termination-log
-        volumeMounts:
-        - mountPath: /var/lib/pmem-csi-coverage
-          name: coverage-dir
       nodeSelector:
         storage: pmem
       volumes:

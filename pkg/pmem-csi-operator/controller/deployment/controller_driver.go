@@ -781,13 +781,6 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 		},
 	}
 
-	if d.Spec.DeviceMode == api.DeviceModeLVM {
-		ds.Spec.Template.Spec.InitContainers = []corev1.Container{
-			d.getNamespaceInitContainer(),
-			d.getVolumeGroupInitContainer(),
-		}
-	}
-
 	return ds
 }
 
@@ -823,6 +816,7 @@ func (d *PmemCSIDriver) getNodeDriverCommand() []string {
 		"-keyFile=/certs/tls.key",
 		"-statePath=/var/lib/$(PMEM_CSI_DRIVER_NAME)",
 		"-drivername=$(PMEM_CSI_DRIVER_NAME)",
+		fmt.Sprintf("-pmemPercentage=%d", d.Spec.PMEMPercentage),
 	}
 }
 
@@ -975,67 +969,6 @@ func (d *PmemCSIDriver) getProvisionerContainer() corev1.Container {
 		SecurityContext: &corev1.SecurityContext{
 			ReadOnlyRootFilesystem: &true,
 		},
-	}
-}
-
-func (d *PmemCSIDriver) getNamespaceInitContainer() corev1.Container {
-	root := int64(0)
-	true := true
-	return corev1.Container{
-		Name:            "pmem-ns-init",
-		Image:           d.Spec.Image,
-		ImagePullPolicy: d.Spec.PullPolicy,
-		Command: []string{
-			"/usr/local/bin/pmem-ns-init",
-			fmt.Sprintf("-v=%d", d.Spec.LogLevel),
-			fmt.Sprintf("--useforfsdax=%d", d.Spec.PMEMPercentage),
-		},
-		Env: []corev1.EnvVar{
-			{
-				Name:  "TERMINATION_LOG_PATH",
-				Value: "/tmp/pmem-ns-init-termination-log",
-			},
-		},
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      "sys-dir",
-				MountPath: "/sys",
-			},
-		},
-		Resources: *d.Spec.NodeResources,
-		SecurityContext: &corev1.SecurityContext{
-			// Node driver must run as root user
-			RunAsUser:  &root,
-			Privileged: &true,
-		},
-		TerminationMessagePath: "/tmp/pmem-ns-init-termination-log",
-	}
-}
-
-func (d *PmemCSIDriver) getVolumeGroupInitContainer() corev1.Container {
-	root := int64(0)
-	true := true
-	return corev1.Container{
-		Name:            "pmem-vgm",
-		Image:           d.Spec.Image,
-		ImagePullPolicy: d.Spec.PullPolicy,
-		Command: []string{
-			"/usr/local/bin/pmem-vgm",
-			fmt.Sprintf("-v=%d", d.Spec.LogLevel),
-		},
-		Env: []corev1.EnvVar{
-			{
-				Name:  "TERMINATION_LOG_PATH",
-				Value: "/tmp/pmem-vgm-termination-log",
-			},
-		},
-		Resources: *d.Spec.NodeResources,
-		SecurityContext: &corev1.SecurityContext{
-			// Node driver must run as root user
-			RunAsUser:  &root,
-			Privileged: &true,
-		},
-		TerminationMessagePath: "/tmp/pmem-vgm-termination-log",
 	}
 }
 

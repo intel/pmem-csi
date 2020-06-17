@@ -89,7 +89,7 @@ func NewNodeControllerServer(nodeID string, dm pmdmanager.PmemDeviceManager, sm 
 
 			found := false
 			if v.GetDeviceMode() != dm.GetMode() {
-				dm, err := newDeviceManager(v.GetDeviceMode())
+				dm, err := newDeviceManager(v.GetDeviceMode(), 0)
 				if err != nil {
 					klog.Warningf("Failed to initialize device manager for state volume '%s'(volume mode: '%s'): %v", id, v.GetDeviceMode(), err)
 					continue
@@ -309,7 +309,7 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 
 	dm := cs.dm
 	if dm.GetMode() != p.GetDeviceMode() {
-		dm, err = newDeviceManager(p.GetDeviceMode())
+		dm, err = newDeviceManager(p.GetDeviceMode(), 0)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to initialize device manager for volume(ID %q, mode: %s): %v", req.VolumeId, p.GetDeviceMode(), err)
 		}
