@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 	"time"
 
 	pmemcsiv1alpha1 "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
@@ -98,7 +99,7 @@ func NewReconcileDeployment(client client.Client, opts pmemcontroller.Controller
 		if err != nil {
 			return nil, fmt.Errorf("failed to find the operator image: %v", err)
 		}
-		opts.DriverImage = image
+		opts.DriverImage = strings.Replace(image, "-operator", "-driver", 1)
 	}
 	klog.Infof("Using '%s' as default driver image.", opts.DriverImage)
 

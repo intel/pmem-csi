@@ -38,7 +38,7 @@ export HTTP_PROXY HTTPS_PROXY NO_PROXY
 
 REGISTRY_NAME?=$(shell . test/test-config.sh && echo $${TEST_BUILD_PMEM_REGISTRY})
 IMAGE_VERSION?=canary
-IMAGE_TAG=$(REGISTRY_NAME)/pmem-csi-driver$*:$(IMAGE_VERSION)
+IMAGE_TAG=$(REGISTRY_NAME)/pmem-csi-$*:$(IMAGE_VERSION)
 # Pass proxy config via --build-arg only if these are set,
 # enabling proxy config other way, like ~/.docker/config.json
 BUILD_ARGS?=
@@ -91,14 +91,17 @@ BUILD_IMAGE_ID?=$(shell date +%Y-%m-%d)
 # Build and publish images for production or testing (i.e. with test binaries).
 # Pushing images also automatically rebuilds the image first. This can be disabled
 # with `make push-images PUSH_IMAGE_DEP=`.
-build-images: build-image build-test-image
-push-images: push-image push-test-image
-build-image build-test-image: build%-image: populate-vendor-dir
-	docker build --pull --build-arg CACHEBUST=$(BUILD_IMAGE_ID) --build-arg GOFLAGS=-mod=vendor --build-arg BIN_SUFFIX=$(findstring -test,$*) $(BUILD_ARGS) -t $(IMAGE_TAG) -f ./Dockerfile . --label revision=$(VERSION)
-PUSH_IMAGE_DEP = build%-image
+build-images: build-driver-image build-operator-image build-driver-test-image build-operator-test-image
+push-images: push-driver-image push-driver-test-image push-operator-image push-operator-test-image
+build-driver-image build-operator-image build-driver-test-image build-operator-test-image: build-%-image: populate-vendor-dir
+	docker build --pull --build-arg CACHEBUST=$(BUILD_IMAGE_ID) --build-arg GOFLAGS=-mod=vendor \
+           --build-arg BIN_SUFFIX=$(findstring -test,$*) \
+           --build-arg IMAGE_NAME=$(subst -test,,$*) \
+           $(BUILD_ARGS) -t $(IMAGE_TAG) -f ./Dockerfile . --label revision=$(VERSION)
+PUSH_IMAGE_DEP = build-%-image
 # "docker push" has been seen to fail temporarily with "error creating overlay mount to /var/lib/docker/overlay2/xxx/merged: device or resource busy".
 # Here we simply try three times before giving up.
-push-image push-test-image: push%-image: $(PUSH_IMAGE_DEP)
+push-driver-image push-driver-test-image push-operator-image push-operator-test-image: push-%-image: $(PUSH_IMAGE_DEP)
 	@ i=0; while true; do \
 		if (set -x; docker push $(IMAGE_TAG)); then \
 			exit 0; \

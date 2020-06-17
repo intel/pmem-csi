@@ -147,7 +147,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			operatorPod := deploy.WaitForOperator(c, d.Namespace)
 
 			// operator image should be the driver image
-			deployment.Spec.Image = operatorPod.Spec.Containers[0].Image
+			deployment.Spec.Image = strings.Replace(operatorPod.Spec.Containers[0].Image, "-operator", "-driver", 1)
 			validateDriver(deployment)
 		})
 
