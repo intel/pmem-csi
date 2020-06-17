@@ -295,7 +295,8 @@ func (pmemd *pmemDriver) Run() error {
 		if pmemd.cfg.Mode == Node {
 			klog.V(3).Info("Unregistering node...")
 			if err := pmemd.unregisterNodeController(); err != nil {
-				klog.V(4).Infof("Failed to node unregister: %v", err)
+				klog.Errorf("Failed to unregister node: %v", err)
+				return err
 			}
 		}
 
@@ -319,7 +320,7 @@ func (pmemd *pmemDriver) registerNodeController() error {
 		if err == nil {
 			break
 		}
-		klog.V(4).Infof("Failed to connect registry server: %s, retrying after %v seconds...", err.Error(), retryTimeout.Seconds())
+		klog.Warningf("Failed to connect registry server: %s, retrying after %v seconds...", err.Error(), retryTimeout.Seconds())
 		time.Sleep(retryTimeout)
 	}
 
@@ -478,7 +479,7 @@ func register(ctx context.Context, conn *grpc.ClientConn, req *registry.Register
 			if s, ok := status.FromError(err); ok && s.Code() == codes.InvalidArgument {
 				return fmt.Errorf("Registration failed: %s", s.Message())
 			}
-			klog.V(5).Infof("Failed to register: %s, retrying after %v seconds...", err.Error(), retryTimeout.Seconds())
+			klog.Warningf("Failed to register: %s, retrying after %v seconds...", err.Error(), retryTimeout.Seconds())
 			time.Sleep(retryTimeout)
 		} else {
 			break
