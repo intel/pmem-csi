@@ -41,12 +41,6 @@ gpgkey=https://download.docker.com/linux/centos/gpg
 EOF
     packages+=" docker-ce-3:19.03.5-3.el7"
 
-    # Install according to https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
-    modprobe br_netfilter
-    echo 1 >/proc/sys/net/bridge/bridge-nf-call-iptables
-    setenforce 0
-    sed -i --follow-symlinks 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux
-
     cat <<EOF > /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes
@@ -100,32 +94,112 @@ if $INIT_KUBERNETES; then
     # We create /opt/cni/bin containing symlinks for every binary:
     mkdir -p /opt/cni/bin
     for i in /usr/libexec/cni/*; do
-        ln -s $i /opt/cni/bin/
+        if ! [ -e /opt/cni/bin/$(basename $i) ]; then
+            ln -s $i /opt/cni/bin/
+        fi
+    done
+
+    # For containerd, but may also be needed for other CRIs.
+    # According to https://kubernetes.io/docs/setup/production-environment/container-runtimes/#prerequisites-1
+    cat >/etc/modules-load.d/containerd.conf <<EOF
+overlay
+br_netfilter
+EOF
+
+    modprobe overlay
+    modprobe br_netfilter
+
+    cat >/etc/sysctl.d/99-kubernetes-cri.conf <<EOF
+net.bridge.bridge-nf-call-iptables  = 1
+net.ipv4.ip_forward                 = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+EOF
+    sysctl --system
+
+    # Proxy settings for the different container runtimes are injected into
+    # their environment.
+    for cri in crio docker containerd; do
+        mkdir /etc/systemd/system/$cri.service.d
+        cat >/etc/systemd/system/$cri.service.d/proxy.conf <<EOF
+[Service]
+Environment="HTTP_PROXY=${HTTP_PROXY}" "HTTPS_PROXY=${HTTPS_PROXY}" "NO_PROXY=${NO_PROXY}"
+EOF
     done
 
     # Testing may involve a Docker registry running on the build host (see
     # TEST_LOCAL_REGISTRY and TEST_PMEM_REGISTRY). We need to trust that
-    # registry, otherwise Docker will fail to pull images from it.
+    # registry, otherwise the container runtime will fail to pull images from it.
+
+    mkdir -p /etc/containers
+    cat >/etc/containers/registries.conf <<EOF
+[registries.insecure]
+registries = [ $(echo $INSECURE_REGISTRIES | sed 's|^|"|g;s| |", "|g;s|$|"|') ]
+EOF
+
+    # The same for Docker.
     mkdir -p /etc/docker
     cat >/etc/docker/daemon.json <<EOF
 { "insecure-registries": [ $(echo $INSECURE_REGISTRIES | sed 's|^|"|g;s| |", "|g;s|$|"|') ] }
 EOF
 
-    # Proxy settings for Docker.
-    mkdir -p /etc/systemd/system/docker.service.d/
-    cat >/etc/systemd/system/docker.service.d/proxy.conf <<EOF
+    # And for containerd.
+    mkdir -p /etc/containerd
+    containerd config default >/etc/containerd/config.toml
+    sed -i -e 's/systemd_cgroup = false/systemd_cgroup = true/' /etc/containerd/config.toml
+    for registry in $INSECURE_REGISTRIES; do
+        sed -i -e '/\[plugins.cri.registry.mirrors\]/a \        [plugins.cri.registry.mirrors."'$registry'"]\n          endpoint = ["http://'$registry'"]' /etc/containerd/config.toml
+    done
+
+    containerd_daemon=
+    mkdir -p /etc/systemd/system/kubelet.service.d/
+    case $TEST_CRI in
+        docker)
+	    cri_daemon=docker
+	    # Choose Docker by disabling the use of CRI-O in KUBELET_EXTRA_ARGS.
+	    cat >/etc/systemd/system/kubelet.service.d/10-kubeadm.conf <<EOF
 [Service]
-Environment="HTTP_PROXY=$HTTP_PROXY" "HTTPS_PROXY=$HTTPS_PROXY" "NO_PROXY=$NO_PROXY"
+Environment="KUBELET_EXTRA_ARGS="
 EOF
+
+            # Docker depends on containerd, in some Clear Linux
+            # releases. Here we assume that it does when it got
+            # installed together with Docker and then add the same
+            # runtime dependency as for kubelet -> Docker
+            # (https://github.com/clearlinux/distribution/issues/1004).
+            if [ -f /usr/lib/systemd/system/containerd.service ]; then
+                containerd_daemon=containerd
+                mkdir -p /etc/systemd/system/docker.service.d/
+                cat >/etc/systemd/system/docker.service.d/10-containerd.conf <<EOF
+[Unit]
+After=containerd.service
+EOF
+            fi
+	    ;;
+        containerd)
+            cri_daemon=containerd
+            ;;
+        crio)
+	    cri_daemon=cri-o
+	    ;;
+        *)
+	    echo "ERROR: unsupported TEST_CRI=$TEST_CRI"
+	    exit 1
+	    ;;
+    esac
 
     # kubelet must start after the container runtime that it depends on.
-    mkdir -p /etc/systemd/system/kubelet.service.d
     cat >/etc/systemd/system/kubelet.service.d/10-cri.conf <<EOF
 [Unit]
-After=docker.service
+After=$cri_daemon.service
 EOF
 
-    update-alternatives --set iptables /usr/sbin/iptables-legacy
+    # Reconfiguration done, start daemons. Starting kubelet must wait until kubeadm has created
+    # the necessary config files.
     systemctl daemon-reload
-    systemctl enable --now docker kubelet
+    systemctl restart $cri_daemon $containerd_daemon || (
+        systemctl status $cri_daemon $containerd_daemon || true
+        journalctl -xe || true
+        false
+    )
+    systemctl enable $cri_daemon $containerd_daemon kubelet
 fi
