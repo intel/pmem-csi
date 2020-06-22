@@ -40,13 +40,28 @@ type PmemDeviceInfo struct {
 	Size uint64
 }
 
+// Capacity contains information about PMEM. All sizes count bytes.
+type Capacity struct {
+	// MaxVolumeSize is the size of the largest volume that
+	// currently can be created, considering alignment and
+	// fragmentation.
+	MaxVolumeSize uint64
+	// Available is the sum of all PMEM that could be used for
+	// volumes.
+	Available uint64
+	// Managed is all PMEM that is managed by the driver.
+	Managed uint64
+	// Total is all PMEM found by the driver.
+	Total uint64
+}
+
 //PmemDeviceManager interface to manage the PMEM block devices
 type PmemDeviceManager interface {
 	// GetName returns current device manager's operation mode
 	GetMode() api.DeviceMode
 
-	// GetCapacity returns the available maximum capacity that can be assigned to a Device/Volume
-	GetCapacity() (uint64, error)
+	// GetCapacity returns information about local capacity.
+	GetCapacity() (Capacity, error)
 
 	// CreateDevice creates a new block device with give name, size and namespace mode
 	// Possible errors: ErrNotEnoughSpace, ErrInvalid, ErrDeviceExists

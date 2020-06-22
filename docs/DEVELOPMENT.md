@@ -59,7 +59,7 @@ The normal Go style guide applies. It is enforced by `make test`, which calls `g
 
 ### Input validation
 
-In all cases, input comes from a trusted source because network
+In most cases, input comes from a trusted source because network
 communication is protected by mutual TLS and the `kubectl` binaries
 runs with the same privileges as the user invoking it.
 
@@ -73,6 +73,8 @@ Nonetheless, input needs to be validated to catch mistakes:
   (https://godoc.org/google.golang.org/grpc#MaxRecvMsgSize) and
   refuses to send messages that are larger
   (https://godoc.org/google.golang.org/grpc#MaxSendMsgSize)
+- webhook and metrics SDK code does input validation before
+  invoking PMEM-CSI
 
 ## Release management
 
@@ -170,8 +172,15 @@ GetCapacity, GetCapabilities, GetPluginInfo, GetPluginCapabilities.
 Network ports are opened as configured in manifest files:
 
 - registry endpoint: typical port value 10000, used for PMEM-CSI internal communication
-- controller endpoint: typical port value 10001, used for serving CSI API
+- controller endpoint: typical port value 10001, used by the nodes for
+  providing the serving CSI API to the PMEM-CSI controller
+- metrics endpoint: typical port values 10010 (PMEM-CSI) and 10011 (external-provisioner)
 - webhook endpoint: disabled by default, port chosen when [enabling the scheduler extensions](../README.md#enable-scheduler-extensions)
+
+Except for the metrics and webhook endpoint, all ports are protected
+via mutual TLS. The metrics endpoint and webhook are supposed to be
+easily usable and expose no confidential data, therefore TLS is not
+used.
 
 
 ### Local sockets

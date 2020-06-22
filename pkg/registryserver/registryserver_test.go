@@ -53,7 +53,7 @@ var _ = Describe("pmem registry", func() {
 	BeforeEach(func() {
 		var err error
 
-		registryServer = registryserver.New(nil)
+		registryServer = registryserver.New(nil, "pmem-csi.intel.com")
 
 		caFile := os.ExpandEnv("${TEST_WORK}/pmem-ca/ca.pem")
 		certFile := os.ExpandEnv("${TEST_WORK}/pmem-ca/pmem-registry.pem")
@@ -62,7 +62,7 @@ var _ = Describe("pmem registry", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		nbServer = grpcserver.NewNonBlockingGRPCServer()
-		err = nbServer.Start(registryServerEndpoint, tlsConfig, registryServer)
+		err = nbServer.Start(registryServerEndpoint, tlsConfig, nil, registryServer)
 		Expect(err).NotTo(HaveOccurred())
 		_, err = os.Stat(registryServerSocketFile)
 		Expect(err).NotTo(HaveOccurred())

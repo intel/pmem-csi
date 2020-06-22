@@ -84,7 +84,6 @@ spec:
                  "-mode=controller",
                  "-endpoint=unix:///csi/csi-controller.sock",
                  "-registryEndpoint=tcp://0.0.0.0:10000",
-                 "-metricsListen=:10010",
                  "-nodeid=$(KUBE_NODE_NAME)",
                  "-caFile=/certs/ca.crt",
                  "-certFile=/certs/tls.crt",
@@ -116,7 +115,12 @@ spec:
       - name: external-provisioner
         image: quay.io/k8scsi/csi-provisioner:v1.X.Y
         imagePullPolicy: IfNotPresent
-        args: [ "-v=3", "--csi-address=/csi/csi-controller.sock", "--feature-gates=Topology=true", "--strict-topology=true", "--timeout=5m" ]
+        args:
+        - -v=3
+        - --csi-address=/csi/csi-controller.sock
+        - --feature-gates=Topology=true
+        - --strict-topology=true
+        - --timeout=5m
         securityContext:
           readOnlyRootFilesystem: true
         volumeMounts:

@@ -1,7 +1,7 @@
-# Turns generic Kubernetes 1.16 deployment into deployment for LVM mode.
+# Turns the base deployment with metrics support into a deployment for LVM mode.
 
 bases:
-- ../kubernetes-base/
+- ../kubernetes-with-metrics
 
 commonLabels:
   pmem-csi.intel.com/deployment: lvm-production

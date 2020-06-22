@@ -1,0 +1,19 @@
+# Enables metrics support in the base deployment.
+
+bases:
+- ../kubernetes-no-metrics
+
+patchesJson6902:
+- target:
+    group: apps
+    version: v1
+    kind: DaemonSet
+    name: pmem-csi-node
+  path: ../patches/metrics-node.yaml
+
+- target:
+    group: apps
+    version: v1
+    kind: StatefulSet
+    name: pmem-csi-controller
+  path: ../patches/metrics-controller.yaml

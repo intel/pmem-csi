@@ -13,6 +13,7 @@
     - [Ephemeral inline volumes](#ephemeral-inline-volumes)
     - [Raw block volumes](#raw-block-volumes)
     - [Enable scheduler extensions](#enable-scheduler-extensions)
+    - [Metrics support](#metrics-support)
 - [PMEM-CSI Deployment CRD](#pmem-csi-deployment-crd)
 - [Filing issues and contributing](#filing-issues-and-contributing)
 
@@ -795,7 +796,6 @@ EOF
 
 $ kubectl create --kustomize my-webhook
 ```
-
 ### Storage capacity tracking
 
 [Kubernetes
@@ -826,6 +826,161 @@ INFO: deploying from /nvme/gopath/src/github.com/intel/pmem-csi/deploy/kubernete
 ...
 ```
 
+### Metrics support
+
+Metrics support is controlled by command line options of the PMEM-CSI
+driver binary and of the CSI sidecars. Annotations and named container
+ports make it possible to discover these data scraping endpoints. The
+[metrics kustomize
+base](/deploy/kustomize/kubernetes-with-metrics/kustomization.yaml)
+adds all of that to the pre-generated deployment files. The operator
+also enables the metrics support.
+
+Access to metrics data is not restricted (no TLS, no client
+authorization) because the metrics data is not considered confidential
+and access control would just make client configuration unnecessarily
+complex.
+
+#### Metrics data
+
+PMEM-CSI exposes metrics data about the Go runtime, Prometheus, CSI
+method calls, and PMEM-CSI:
+
+Name | Type | Explanation
+-----|------|------------
+`build_info` | gauge | A metric with a constant '1' value labeled by version.
+`csi_[sidecar\|plugin]_operations_seconds` | histogram | gRPC call duration and error code, for sidecar to driver (aka plugin) communication.
+`go_*` | | [Go runtime information](https://github.com/prometheus/client_golang/blob/master/prometheus/go_collector.go)
+`pmem_amount_available` | gauge | Remaining amount of PMEM on the host that can be used for new volumes.
+`pmem_amount_managed` | gauge | Amount of PMEM on the host that is managed by PMEM-CSI.
+`pmem_amount_max_volume_size` | gauge | The size of the largest PMEM volume that can be created.
+`pmem_amount_total` | gauge | Total amount of PMEM on the host.
+`pmem_csi_[controller\|node]_operations_seconds` | histogram | gRPC call duration and error code, for the PMEM-CSI internal controller to node communication. The `node` label identifies the node.
+`pmem_nodes` | gauge | The number of PMEM-CSI nodes registered in the controller.
+`process_*` | | [Process information](https://github.com/prometheus/client_golang/blob/master/prometheus/process_collector.go)
+`promhttp_metric_handler_requests_in_flight` | gauge | Current number of scrapes being served.
+`promhttp_metric_handler_requests_total` | counter | Total number of scrapes by HTTP status code.
+
+This list is tentative and may still change as long as metrics support
+is alpha. To see all available data, query a container. Different
+containers provide different data. For example, the controller
+provides:
+
+``` ShellSession
+$ kubectl port-forward pmem-csi-controller-0 10010
+Forwarding from 127.0.0.1:10010 -> 10010
+Forwarding from [::1]:10010 -> 10010
+```
+
+And in another shell:
+
+``` ShellSession
+$ curl --silent http://localhost:10010/metrics | grep '# '
+# HELP build_info A metric with a constant '1' value labeled by version.
+# TYPE build_info gauge
+...
+# HELP csi_plugin_operations_seconds [ALPHA] Container Storage Interface operation duration with gRPC error code status total
+# TYPE csi_plugin_operations_seconds histogram
+...
+# HELP pmem_csi_controller_operations_seconds [ALPHA] Container Storage Interface operation duration with gRPC error code status total
+# TYPE pmem_csi_controller_operations_seconds histogram
+...
+```
+
+
+#### Prometheus example
+
+An [extension of the scrape config](/deploy/prometheus.yaml) is
+necessary for [Prometheus](https://prometheus.io/). When deploying
+[Prometheus via Helm](https://hub.helm.sh/charts/stable/prometheus),
+that file can be added to the default configuration with the `-f`
+parameter. The following example works for the [QEMU-based
+cluster](autotest.md#qemu-and-kubernetes) and Helm v3.1.2. In a real
+production deployment, some kind of persistent storage should be
+provided. The [URL](/deploy/prometheus.yaml) can be used instead of
+the file name, too.
+
+
+``` ShellSession
+$ helm install prometheus stable/prometheus \
+     --set alertmanager.persistentVolume.enabled=false,server.persistentVolume.enabled=false \
+     -f deploy/prometheus.yaml
+NAME: prometheus
+LAST DEPLOYED: Tue Aug 18 18:04:27 2020
+NAMESPACE: default
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+NOTES:
+The Prometheus server can be accessed via port 80 on the following DNS name from within your cluster:
+prometheus-server.default.svc.cluster.local
+
+
+Get the Prometheus server URL by running these commands in the same shell:
+  export POD_NAME=$(kubectl get pods --namespace default -l "app=prometheus,component=server" -o jsonpath="{.items[0].metadata.name}")
+  kubectl --namespace default port-forward $POD_NAME 9090
+#################################################################################
+######   WARNING: Persistence is disabled!!! You will lose your data when   #####
+######            the Server pod is terminated.                             #####
+#################################################################################
+
+...
+```
+
+After running this `kubectl port-forward` command, it is possible to
+access the [Prometheus web
+interface](https://prometheus.io/docs/prometheus/latest/getting_started/#using-the-expression-browser)
+and run some queries there. Here are some examples for the QEMU test
+cluster with two volumes created on node `pmem-csi-pmem-govm-worker2`.
+
+Available PMEM as percentage:
+```
+pmem_amount_available / pmem_amount_managed
+```
+
+Result variable | Value | Tags
+----------------|-------|-----
+| none | 0.7332986065893997 | instance = 10.42.0.1:10010 |
+|  | | job = pmem-csi-containers |
+|  | | kubernetes_namespace = default |
+|  | | kubernetes_pod_container_name = pmem-driver |
+|  | | kubernetes_pod_name = pmem-csi-node-dfkrw |
+|  | | kubernetes_pod_node_name = pmem-csi-pmem-govm-worker2 |
+|  | | node = pmem-csi-pmem-govm-worker2 |
+|  | 1 | instance = 10.36.0.1:10010 |
+|  | | job = pmem-csi-containers |
+|  | | kubernetes_namespace = default |
+|  | | kubernetes_pod_container_name = pmem-driver |
+|  | | kubernetes_pod_name = pmem-csi-node-z5vnp |
+|  | | kubernetes_pod_node_name pmem-csi-pmem-govm-worker3 |
+|  | | node = pmem-csi-pmem-govm-worker3 |
+|  | 1 | instance = 10.44.0.1:10010 |
+|  | | job = pmem-csi-containers |
+|  | | kubernetes_namespace = default |
+|  | | kubernetes_pod_container_name = pmem-driver |
+|  | | kubernetes_pod_name = pmem-csi-node-zzmsd |
+|  | | kubernetes_pod_node_name = pmem-csi-pmem-govm-worker1 |
+|  | | node = pmem-csi-pmem-govm-worker1 |
+
+
+Number of `CreateVolume` calls in nodes:
+```
+pmem_csi_node_operations_seconds_count{method_name="/csi.v1.Controller/CreateVolume"}
+```
+
+Result variable | Value | Tags
+----------------|-------|------
+| `pmem_csi_node_operations_seconds_count` | 2 | driver_name = pmem-csi.intel.com |
+| | | grpc_status_code = OK |
+| | | instance = 10.42.0.1:10010 |
+| | | job = pmem-csi-containers |
+| | | kubernetes_namespace = default |
+| | | kubernetes_pod_container_name = pmem-driver |
+| | | kubernetes_pod_name = pmem-csi-node-dfkrw |
+| | | kubernetes_pod_node_name = pmem-csi-pmem-govm-worker2 |
+| | | method_name = /csi.v1.Controller/CreateVolume |
+| | | node = pmem-csi-pmem-govm-worker2 |
+
 ## PMEM-CSI Deployment CRD
 
 `Deployment` is a cluster-scoped Kubernetes resource in the
@@ -853,7 +1008,7 @@ The current API for PMEM-CSI `Deployment` resources is:
 
 ### Deployment
 
-|Field | type | Description |
+|Field | Type | Description |
 |---|---|---|
 | apiVersion | string  | `pmem-csi.intel.com/v1alpha1`|
 | kind | string | `Deployment`|
@@ -862,7 +1017,7 @@ The current API for PMEM-CSI `Deployment` resources is:
 
 #### DeploymentSpec
 
-|Field | type | Description | Default Value |
+|Field | Type | Description | Default Value |
 |---|---|---|---|
 | image | string | PMEM-CSI docker image name used for the deployment | the same image as the operator<sup>1</sup> |
 | provisionerImage | string | [CSI provisioner](https://kubernetes-csi.github.io/docs/external-provisioner.html) docker image name | latest [external provisioner](https://kubernetes-csi.github.io/docs/external-provisioner.html) stable release image<sup>2</sup> |
@@ -905,7 +1060,7 @@ Deployment is in it's lifecycle.
 
 The possible `phase` values and their meaning are as below:
 
-| value | meaning |
+| Value | Meaning |
 |---|---|
 | empty string | A new deployment. |
 | Initializing | All the direct sub-resources of the `Deployment` are created, but some indirect ones (like pods controlled by a daemon set) may still be missing. |

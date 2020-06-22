@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/intel/pmem-csi/pkg/pmem-grpc"
+	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 	"google.golang.org/grpc"
 	"k8s.io/klog"
 )
@@ -32,11 +33,11 @@ func NewNonBlockingGRPCServer() *NonBlockingGRPCServer {
 	return &NonBlockingGRPCServer{}
 }
 
-func (s *NonBlockingGRPCServer) Start(endpoint string, tlsConfig *tls.Config, services ...Service) error {
+func (s *NonBlockingGRPCServer) Start(endpoint string, tlsConfig *tls.Config, csiMetricsManager metrics.CSIMetricsManager, services ...Service) error {
 	if endpoint == "" {
 		return fmt.Errorf("endpoint cannot be empty")
 	}
-	rpcServer, l, err := pmemgrpc.NewServer(endpoint, tlsConfig)
+	rpcServer, l, err := pmemgrpc.NewServer(endpoint, tlsConfig, csiMetricsManager)
 	if err != nil {
 		return nil
 	}

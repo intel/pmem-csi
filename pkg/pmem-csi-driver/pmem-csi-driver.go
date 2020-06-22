@@ -28,6 +28,7 @@ import (
 	pmemstate "github.com/intel/pmem-csi/pkg/pmem-state"
 	"github.com/intel/pmem-csi/pkg/registryserver"
 	"github.com/intel/pmem-csi/pkg/scheduler"
+	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -63,6 +64,8 @@ func (mode *DriverMode) String() string {
 	return string(*mode)
 }
 
+// The mode strings are part of the metrics API (-> csi_controller,
+// csi_node as subsystem), do not change them!
 const (
 	//Controller definition for controller driver mode
 	Controller DriverMode = "controller"
@@ -82,6 +85,27 @@ var (
 			Help: "A metric with a constant '1' value labeled by version.",
 		},
 		[]string{"version"},
+	)
+
+	pmemMaxDesc = prometheus.NewDesc(
+		"pmem_amount_max_volume_size",
+		"The size of the largest PMEM volume that can be created.",
+		nil, nil,
+	)
+	pmemAvailableDesc = prometheus.NewDesc(
+		"pmem_amount_available",
+		"Remaining amount of PMEM on the host that can be used for new volumes.",
+		nil, nil,
+	)
+	pmemManagedDesc = prometheus.NewDesc(
+		"pmem_amount_managed",
+		"Amount of PMEM on the host that is managed by PMEM-CSI.",
+		nil, nil,
+	)
+	pmemTotalDesc = prometheus.NewDesc(
+		"pmem_amount_total",
+		"Total amount of PMEM on the host.",
+		nil, nil,
 	)
 )
 
@@ -138,7 +162,49 @@ type csiDriver struct {
 	cfg             Config
 	serverTLSConfig *tls.Config
 	clientTLSConfig *tls.Config
+	gatherers       prometheus.Gatherers
 }
+
+// deviceManagerCollector is a wrapper around a PMEM device manager which
+// takes GetCapacity values and turns them into metrics data.
+type deviceManagerCollector struct {
+	pmdmanager.PmemDeviceManager
+}
+
+// Describe implements prometheus.Collector.Describe.
+func (dm deviceManagerCollector) Describe(ch chan<- *prometheus.Desc) {
+	prometheus.DescribeByCollect(dm, ch)
+}
+
+// Collect implements prometheus.Collector.Collect.
+func (dm deviceManagerCollector) Collect(ch chan<- prometheus.Metric) {
+	capacity, err := dm.GetCapacity()
+	if err != nil {
+		return
+	}
+	ch <- prometheus.MustNewConstMetric(
+		pmemMaxDesc,
+		prometheus.GaugeValue,
+		float64(capacity.MaxVolumeSize),
+	)
+	ch <- prometheus.MustNewConstMetric(
+		pmemAvailableDesc,
+		prometheus.GaugeValue,
+		float64(capacity.Available),
+	)
+	ch <- prometheus.MustNewConstMetric(
+		pmemManagedDesc,
+		prometheus.GaugeValue,
+		float64(capacity.Managed),
+	)
+	ch <- prometheus.MustNewConstMetric(
+		pmemTotalDesc,
+		prometheus.GaugeValue,
+		float64(capacity.Total),
+	)
+}
+
+var _ prometheus.Collector = deviceManagerCollector{}
 
 func GetCSIDriver(cfg Config) (*csiDriver, error) {
 	validModes := map[DriverMode]struct{}{
@@ -152,18 +218,29 @@ func GetCSIDriver(cfg Config) (*csiDriver, error) {
 	if _, ok := validModes[cfg.Mode]; !ok {
 		return nil, fmt.Errorf("Invalid driver mode: %s", string(cfg.Mode))
 	}
-	if cfg.DriverName == "" || cfg.NodeID == "" || cfg.Endpoint == "" {
-		return nil, fmt.Errorf("One of mandatory(Drivername Node id or Endpoint) configuration option missing")
+	if cfg.DriverName == "" {
+		return nil, errors.New("driver name configuration option missing")
 	}
-	if cfg.RegistryEndpoint == "" {
-		cfg.RegistryEndpoint = cfg.Endpoint
+	if cfg.Endpoint == "" {
+		return nil, errors.New("CSI endpoint configuration option missing")
 	}
-	if cfg.ControllerEndpoint == "" {
-		cfg.ControllerEndpoint = cfg.Endpoint
+	if cfg.Mode == Node && cfg.NodeID == "" {
+		return nil, errors.New("node ID configuration option missing")
 	}
-
+	if cfg.Mode == Controller && cfg.RegistryEndpoint == "" {
+		return nil, errors.New("registry endpoint configuration option missing")
+	}
+	if cfg.Mode == Node && cfg.ControllerEndpoint == "" {
+		return nil, errors.New("internal controller endpoint configuration option missing")
+	}
 	if cfg.Mode == Node && cfg.StateBasePath == "" {
 		cfg.StateBasePath = "/var/lib/" + cfg.DriverName
+	}
+	if cfg.Endpoint == cfg.RegistryEndpoint {
+		return nil, fmt.Errorf("CSI and registry endpoints must be different, both are: %q", cfg.Endpoint)
+	}
+	if cfg.Endpoint == cfg.ControllerEndpoint {
+		return nil, fmt.Errorf("CSI and internal control endpoints must be different, both are: %q", cfg.Endpoint)
 	}
 
 	peerName := "pmem-registry"
@@ -203,6 +280,14 @@ func GetCSIDriver(cfg Config) (*csiDriver, error) {
 		cfg:             cfg,
 		serverTLSConfig: serverConfig,
 		clientTLSConfig: clientConfig,
+		// We use the default Prometheus registry here in addition to
+		// any custom CSIMetricsManager.  Therefore we also return all
+		// data that is registered globally, including (but not
+		// limited to!) our own metrics data. For example, some Go
+		// runtime information
+		// (https://povilasv.me/prometheus-go-metrics/) are included,
+		// which may be useful.
+		gatherers: prometheus.Gatherers{prometheus.DefaultGatherer},
 	}, nil
 }
 
@@ -222,34 +307,29 @@ func (csid *csiDriver) Run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if csid.cfg.Mode == Controller {
-		rs := registryserver.New(csid.clientTLSConfig)
+	// On the csi.sock endpoint we gather statistics for incoming
+	// CSI method calls like any other CSI driver.
+	cmm := metrics.NewCSIMetricsManagerForPlugin(csid.cfg.DriverName)
+	csid.gatherers = append(csid.gatherers, cmm.GetRegistry())
+
+	switch csid.cfg.Mode {
+	case Controller:
+		rs := registryserver.New(csid.clientTLSConfig, csid.cfg.DriverName)
+		csid.gatherers = append(csid.gatherers, rs.GetMetricsGatherer())
 		cs := NewMasterControllerServer(rs)
 
-		if csid.cfg.Endpoint != csid.cfg.RegistryEndpoint {
-			if err := s.Start(csid.cfg.Endpoint, nil, ids, cs); err != nil {
-				return err
-			}
-			if err := s.Start(csid.cfg.RegistryEndpoint, csid.serverTLSConfig, rs); err != nil {
-				return err
-			}
-		} else {
-			if err := s.Start(csid.cfg.Endpoint, csid.serverTLSConfig, ids, cs, rs); err != nil {
-				return err
-			}
+		if err := s.Start(csid.cfg.Endpoint, nil, cmm, ids, cs); err != nil {
+			return err
+		}
+		if err := s.Start(csid.cfg.RegistryEndpoint, csid.serverTLSConfig, nil /* no metrics gathering for registry at the moment */, rs); err != nil {
+			return err
 		}
 
 		// Also run scheduler extender?
 		if _, err := csid.startScheduler(ctx, cancel, rs); err != nil {
 			return err
 		}
-		// And metrics server?
-		addr, err := csid.startMetrics(ctx, cancel)
-		if err != nil {
-			return err
-		}
-		klog.V(2).Infof("Prometheus endpoint started at https://%s%s", addr, csid.cfg.metricsPath)
-	} else if csid.cfg.Mode == Node {
+	case Node:
 		dm, err := newDeviceManager(csid.cfg.DeviceManager, csid.cfg.PmemPercentage)
 		if err != nil {
 			return err
@@ -261,30 +341,46 @@ func (csid *csiDriver) Run() error {
 		cs := NewNodeControllerServer(csid.cfg.NodeID, dm, sm)
 		ns := NewNodeServer(cs, filepath.Clean(csid.cfg.StateBasePath)+"/mount")
 
-		if csid.cfg.Endpoint != csid.cfg.ControllerEndpoint {
-			if err := s.Start(csid.cfg.ControllerEndpoint, csid.serverTLSConfig, cs); err != nil {
-				return err
-			}
-			if err := csid.registerNodeController(); err != nil {
-				return err
-			}
-			services := []grpcserver.Service{ids, ns}
-			if csid.cfg.TestEndpoint {
-				services = append(services, cs)
-			}
-			if err := s.Start(csid.cfg.Endpoint, nil, services...); err != nil {
-				return err
-			}
-		} else {
-			if err := s.Start(csid.cfg.Endpoint, nil, ids, cs, ns); err != nil {
-				return err
-			}
-			if err := csid.registerNodeController(); err != nil {
-				return err
-			}
+		// Internal CSI calls are tracked on the server side
+		// with a custom "pmem_csi_node" subsystem. The
+		// corresponding client calls use "pmem_csi_controller" with
+		// a tag that identifies the node that is being called.
+		cmmInternal := metrics.NewCSIMetricsManagerWithOptions(csid.cfg.DriverName,
+			metrics.WithSubsystem("pmem_csi_node"),
+			// Always add the instance label to allow correlating with
+			// the controller calls.
+			metrics.WithLabels(map[string]string{registryserver.NodeLabel: csid.cfg.NodeID}),
+		)
+		csid.gatherers = append(csid.gatherers, cmmInternal.GetRegistry())
+		if err := s.Start(csid.cfg.ControllerEndpoint, csid.serverTLSConfig, cmmInternal, cs); err != nil {
+			return err
 		}
-	} else {
+		if err := csid.registerNodeController(); err != nil {
+			return err
+		}
+		services := []grpcserver.Service{ids, ns}
+		if csid.cfg.TestEndpoint {
+			services = append(services, cs)
+		}
+		if err := s.Start(csid.cfg.Endpoint, nil, cmm, services...); err != nil {
+			return err
+		}
+
+		// Also collect metrics data via the device manager.
+		prometheus.WrapRegistererWith(prometheus.Labels{registryserver.NodeLabel: csid.cfg.NodeID}, prometheus.DefaultRegisterer).MustRegister(
+			deviceManagerCollector{dm},
+		)
+	default:
 		return fmt.Errorf("Unsupported device mode '%v", csid.cfg.Mode)
+	}
+
+	// And metrics server?
+	if csid.cfg.metricsListen != "" {
+		addr, err := csid.startMetrics(ctx, cancel)
+		if err != nil {
+			return err
+		}
+		klog.V(2).Infof("Prometheus endpoint started at http://%s%s", addr, csid.cfg.metricsPath)
 	}
 
 	c := make(chan os.Signal, 1)
@@ -385,33 +481,34 @@ func (csid *csiDriver) startScheduler(ctx context.Context, cancel func(), rs *re
 			return "", fmt.Errorf("failed to sync informer for type %v", t)
 		}
 	}
-	return csid.startHTTPSServer(ctx, cancel, csid.cfg.schedulerListen, sched)
+	return csid.startHTTPSServer(ctx, cancel, csid.cfg.schedulerListen, sched, true /* TLS */)
 }
 
 // startMetrics starts the HTTPS server for the Prometheus endpoint, if one is configured.
 // Error handling is the same as for startScheduler.
 func (csid *csiDriver) startMetrics(ctx context.Context, cancel func()) (string, error) {
-	if csid.cfg.metricsListen == "" {
-		return "", nil
-	}
-
-	// We use the default Prometheus handler here and thus return all data that
-	// is registered globally, including (but not limited to!) our own metrics
-	// data. For example, some Go runtime information (https://povilasv.me/prometheus-go-metrics/)
-	// are included, which may be useful.
 	mux := http.NewServeMux()
-	mux.Handle(csid.cfg.metricsPath, promhttp.Handler())
-	return csid.startHTTPSServer(ctx, cancel, csid.cfg.metricsListen, mux)
+	mux.Handle(csid.cfg.metricsPath,
+		promhttp.InstrumentMetricHandler(
+			prometheus.DefaultRegisterer,
+			promhttp.HandlerFor(csid.gatherers, promhttp.HandlerOpts{}),
+		),
+	)
+	return csid.startHTTPSServer(ctx, cancel, csid.cfg.metricsListen, mux, false /* no TLS */)
 }
 
 // startHTTPSServer contains the common logic for starting and
 // stopping an HTTPS server.  Returns an error or the address that can
 // be used in Dial("tcp") to reach the server (useful for testing when
 // "listen" does not include a port).
-func (csid *csiDriver) startHTTPSServer(ctx context.Context, cancel func(), listen string, handler http.Handler) (string, error) {
-	config, err := pmemgrpc.LoadServerTLS(csid.cfg.CAFile, csid.cfg.CertFile, csid.cfg.KeyFile, "")
-	if err != nil {
-		return "", fmt.Errorf("initialize HTTPS config: %v", err)
+func (csid *csiDriver) startHTTPSServer(ctx context.Context, cancel func(), listen string, handler http.Handler, useTLS bool) (string, error) {
+	var config *tls.Config
+	if useTLS {
+		c, err := pmemgrpc.LoadServerTLS(csid.cfg.CAFile, csid.cfg.CertFile, csid.cfg.KeyFile, "")
+		if err != nil {
+			return "", fmt.Errorf("initialize HTTPS config: %v", err)
+		}
+		config = c
 	}
 	server := http.Server{
 		Addr: listen,
@@ -429,9 +526,14 @@ func (csid *csiDriver) startHTTPSServer(ctx context.Context, cancel func(), list
 	go func() {
 		defer tcpListener.Close()
 
-		err := server.ServeTLS(listener, csid.cfg.CertFile, csid.cfg.KeyFile)
+		var err error
+		if useTLS {
+			err = server.ServeTLS(listener, csid.cfg.CertFile, csid.cfg.KeyFile)
+		} else {
+			err = server.Serve(listener)
+		}
 		if err != http.ErrServerClosed {
-			klog.Errorf("%s HTTPS server error: %v", listen, err)
+			klog.Errorf("%s HTTP(S) server error: %v", listen, err)
 		}
 		// Also stop main thread.
 		cancel()

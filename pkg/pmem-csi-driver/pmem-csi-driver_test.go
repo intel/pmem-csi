@@ -15,7 +15,6 @@ import (
 	"os"
 	"testing"
 
-	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -51,16 +50,17 @@ build_info{version="foo-bar-test"} 1
 		t.Run(n, func(t *testing.T) {
 			path := "/metrics2"
 			pmemd, err := GetCSIDriver(Config{
-				Mode:          Controller,
-				DriverName:    "pmem-csi",
-				NodeID:        "testnode",
-				Endpoint:      "unused",
-				Version:       "foo-bar-test",
-				CAFile:        caFile,
-				CertFile:      certFile,
-				KeyFile:       keyFile,
-				metricsPath:   path,
-				metricsListen: "127.0.0.1:", // port allocated dynamically
+				Mode:             Controller,
+				DriverName:       "pmem-csi",
+				NodeID:           "testnode",
+				Endpoint:         "unused",
+				RegistryEndpoint: "unused2",
+				Version:          "foo-bar-test",
+				CAFile:           caFile,
+				CertFile:         certFile,
+				KeyFile:          keyFile,
+				metricsPath:      path,
+				metricsListen:    "127.0.0.1:", // port allocated dynamically
 			})
 			require.NoError(t, err, "get PMEM-CSI driver")
 
@@ -69,18 +69,12 @@ build_info{version="foo-bar-test"} 1
 			addr, err := pmemd.startMetrics(ctx, cancel)
 			require.NoError(t, err, "start server")
 
-			// Anonymous client: it makes requests without identifying itself.
-			tlsConfig, err := pmemgrpc.LoadClientTLS(caFile, "", "", "")
-			require.NoError(t, err, "load client TLS")
-
-			tr := &http.Transport{
-				TLSClientConfig: tlsConfig,
-			}
+			tr := &http.Transport{}
 			defer tr.CloseIdleConnections()
 			client := &http.Client{
 				Transport: tr,
 			}
-			url := fmt.Sprintf("https://%s%s%s", addr, path, c.path)
+			url := fmt.Sprintf("http://%s%s%s", addr, path, c.path)
 			resp, err := client.Get(url)
 			checkResponse(t, &c.response, resp, err, n)
 		})

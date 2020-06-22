@@ -7,14 +7,19 @@ SPDX-License-Identifier: Apache-2.0
 package gotests
 
 import (
+	"bytes"
+	"context"
 	"crypto/tls"
 	"fmt"
-	"k8s.io/kubernetes/test/e2e/framework"
 	"net/http"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/kubernetes/test/e2e/framework"
 
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 )
@@ -50,7 +55,86 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 
 	It("works", func() {
 		// WaitForPMEMDriver already verified that "version"
-		// is returned. More tests could be added here.
+		// is returned and that "pmem_nodes" is correct.
+		// Here we check metrics support of each pod (= annotations +
+		// metrics endpoint).
+		pods, err := f.ClientSet.CoreV1().Pods(d.Namespace).List(context.Background(), metav1.ListOptions{})
+		framework.ExpectNoError(err, "list pods")
+
+		// We cannot connect to the node port directly from
+		// outside of the cluster. Instead of setting up
+		// port-forwarding, we rely on having socat in the
+		// "testing" deployment. We just need to find one of
+		// those pods...
+		socatPods, err := f.ClientSet.CoreV1().Pods(d.Namespace).List(context.Background(), metav1.ListOptions{
+			LabelSelector: "app in ( pmem-csi-node-testing )",
+		})
+		framework.ExpectNoError(err, "list socat pods")
+		Expect(pods.Items).NotTo(BeEmpty(), "at least one socat pod should be running")
+		socatPod := socatPods.Items[0]
+
+		numPods := 0
+		for _, pod := range pods.Items {
+			if pod.Annotations["pmem-csi.intel.com/scrape"] != "containers" {
+				continue
+			}
+			numPods++
+
+			numPorts := 0
+			for _, container := range pod.Spec.Containers {
+				for _, port := range container.Ports {
+					if port.Name == "metrics" {
+						numPorts++
+
+						ip := pod.Status.PodIP
+						portNum := port.ContainerPort
+						// We use HTTP 1.0 to prevent the server from sending the response in chunks.
+						// That way we don't need to decode the response...
+						request := fmt.Sprintf(`GET /metrics HTTP/1.0
+Host: %s:%d
+User-Agent: e2e/1.0
+Accept: */*
+
+`, ip, portNum)
+						options := framework.ExecOptions{
+							Command: []string{
+								"socat",
+								"STDIO",
+								fmt.Sprintf("TCP:%s:%d", ip, portNum),
+							},
+							Namespace:     socatPod.Namespace,
+							PodName:       socatPod.Name,
+							Stdin:         bytes.NewBufferString(request),
+							CaptureStdout: true,
+							CaptureStderr: true,
+						}
+						stdout, stderr, err := f.ExecWithOptions(options)
+						framework.ExpectNoError(err, "command failed in namespace %s, pod %s:\nstderr:\n%s\nstdout:%s\n",
+							socatPod.Namespace, socatPod.Name, stderr, stdout)
+						name := pod.Name + "/" + container.Name
+						if strings.HasPrefix(container.Name, "pmem") {
+							Expect(stdout).To(ContainSubstring("go_threads "), name)
+							Expect(stdout).To(ContainSubstring("process_open_fds "), name)
+							Expect(stdout).To(ContainSubstring("csi_plugin_operations_seconds "), name)
+							if strings.HasPrefix(pod.Name, "pmem-csi-controller") {
+								Expect(stdout).To(ContainSubstring("pmem_nodes "), name)
+								Expect(stdout).To(ContainSubstring("pmem_csi_controller_operations_seconds "), name)
+							} else {
+								Expect(stdout).To(ContainSubstring("pmem_amount_available "), name)
+								Expect(stdout).To(ContainSubstring("pmem_amount_managed "), name)
+								Expect(stdout).To(ContainSubstring("pmem_amount_max_volume_size "), name)
+								Expect(stdout).To(ContainSubstring("pmem_amount_total "), name)
+								Expect(stdout).To(ContainSubstring("pmem_csi_node_operations_seconds "), name)
+							}
+						} else {
+							Expect(stdout).To(ContainSubstring("csi_sidecar_operations_seconds "), name)
+						}
+					}
+				}
+			}
+			Expect(numPorts).NotTo(Equal(0), "at least one container should have a 'metrics' port")
+		}
+		Expect(numPods).NotTo(Equal(0), "at least one pod should have a 'pmem-csi.intel.com/scrape: containers' annotation")
 	})
 
 	It("rejects large headers", func() {

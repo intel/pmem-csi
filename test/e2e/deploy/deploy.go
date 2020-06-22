@@ -106,7 +106,7 @@ func WaitForPMEMDriver(c *Cluster, name, namespace string) (metricsURL string) {
 		}
 
 		// We can connect to it and get metrics data.
-		metricsURL = fmt.Sprintf("https://%s:%d/metrics", c.NodeIP(0), port)
+		metricsURL = fmt.Sprintf("http://%s:%d/metrics", c.NodeIP(0), port)
 		client := &http.Client{
 			Transport: &tr,
 			Timeout:   timeout,
