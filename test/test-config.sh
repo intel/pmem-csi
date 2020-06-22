@@ -27,7 +27,7 @@ fi
 #
 # cri-o is the default on Clear Linux because that is supported better
 # and Docker elsewhere because we can install it easily.
-: ${TEST_CRI:=$(case ${TEST_DISTRO} in clear) echo crio;; *) echo docker;; esac)}
+: ${TEST_CRI:=$(case ${TEST_DISTRO} in clear) echo crio;; *) echo containerd;; esac)}
 
 # A local registry running on the build host, aka localhost:5000.
 # In order to reach it from inside the virtual cluster, we need

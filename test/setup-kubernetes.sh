@@ -120,6 +120,13 @@ sudo sh -c 'cat >/var/lib/scheduler/scheduler-policy.cfg' <<EOF
 }
 EOF
 
+# We always use systemd. Auto-detected for Docker, but not for other
+# CRIs
+# (https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/#configure-cgroup-driver-used-by-kubelet-on-control-plane-node).
+kubeadm_config_kubelet="$kubeadm_config_kubelet
+cgroupDriver: systemd
+"
+
 kubeadm_config_kubelet="$kubeadm_config_kubelet
 featureGates:
 $(list_gates)"

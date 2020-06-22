@@ -179,16 +179,6 @@ EOF
             ln -s $i /opt/cni/bin/
         done
 
-        # Switch to systemd cgroup driver (https://kubernetes.io/docs/setup/production-environment/container-runtimes/#cgroup-drivers):
-        # "Changing the settings such that your container runtime and kubelet use systemd as the cgroup driver stabilized the system."
-        # It's already the default in cri-o in recent Clear Linux. Docker and containerd might need further work.
-        #
-        # Not sure which file is used on Clear Linux, simply set both.
-        for config in /etc/default/kubelet /etc/sysconfig/kubelet; do
-            mkdir -p $(dirname $config)
-            echo 'KUBELET_EXTRA_ARGS=--cgroup-driver=systemd' >$config
-        done
-
         # Reconfiguration done, start daemons. Starting kubelet must wait until kubeadm has created
         # the necessary config files.
         systemctl daemon-reload
