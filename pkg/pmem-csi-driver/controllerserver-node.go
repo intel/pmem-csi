@@ -42,7 +42,7 @@ type nodeControllerServer struct {
 }
 
 var _ csi.ControllerServer = &nodeControllerServer{}
-var _ grpcserver.PmemService = &nodeControllerServer{}
+var _ grpcserver.Service = &nodeControllerServer{}
 
 var nodeVolumeMutex = keymutex.NewHashed(-1)
 
@@ -173,7 +173,7 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 
 	topology = append(topology, &csi.Topology{
 		Segments: map[string]string{
-			PmemDriverTopologyKey: cs.nodeID,
+			DriverTopologyKey: cs.nodeID,
 		},
 	})
 

@@ -62,7 +62,7 @@ type nodeServer struct {
 }
 
 var _ csi.NodeServer = &nodeServer{}
-var _ grpcserver.PmemService = &nodeServer{}
+var _ grpcserver.Service = &nodeServer{}
 
 func NewNodeServer(cs *nodeControllerServer, mountDirectory string) *nodeServer {
 	return &nodeServer{
@@ -90,7 +90,7 @@ func (ns *nodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoReque
 		NodeId: ns.cs.nodeID,
 		AccessibleTopology: &csi.Topology{
 			Segments: map[string]string{
-				PmemDriverTopologyKey: ns.cs.nodeID,
+				DriverTopologyKey: ns.cs.nodeID,
 			},
 		},
 	}, nil

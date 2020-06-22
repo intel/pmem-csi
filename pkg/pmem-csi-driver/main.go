@@ -78,7 +78,7 @@ func Main() int {
 	}
 
 	config.Version = version
-	driver, err := GetPMEMDriver(config)
+	driver, err := GetCSIDriver(config)
 	if err != nil {
 		pmemcommon.ExitError("failed to initialize driver", err)
 		return 1
