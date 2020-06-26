@@ -72,7 +72,7 @@ const (
 
 var (
 	//PmemDriverTopologyKey key to use for topology constraint
-	PmemDriverTopologyKey = ""
+	DriverTopologyKey = ""
 
 	// Mirrored after https://github.com/kubernetes/component-base/blob/dae26a37dccb958eac96bc9dedcecf0eb0690f0f/metrics/version.go#L21-L37
 	// just with less information.
@@ -132,13 +132,13 @@ type Config struct {
 	metricsPath   string
 }
 
-type pmemDriver struct {
+type csiDriver struct {
 	cfg             Config
 	serverTLSConfig *tls.Config
 	clientTLSConfig *tls.Config
 }
 
-func GetPMEMDriver(cfg Config) (*pmemDriver, error) {
+func GetCSIDriver(cfg Config) (*csiDriver, error) {
 	validModes := map[DriverMode]struct{}{
 		Controller: struct{}{},
 		Node:       struct{}{},
@@ -191,22 +191,22 @@ func GetPMEMDriver(cfg Config) (*pmemDriver, error) {
 		}
 	}
 
-	PmemDriverTopologyKey = cfg.DriverName + "/node"
+	DriverTopologyKey = cfg.DriverName + "/node"
 
-	// Should GetPMEMDriver get called more than once per process,
+	// Should GetCSIDriver get called more than once per process,
 	// all of them will record their version.
 	buildInfo.With(prometheus.Labels{"version": cfg.Version}).Set(1)
 
-	return &pmemDriver{
+	return &csiDriver{
 		cfg:             cfg,
 		serverTLSConfig: serverConfig,
 		clientTLSConfig: clientConfig,
 	}, nil
 }
 
-func (pmemd *pmemDriver) Run() error {
+func (csid *csiDriver) Run() error {
 	// Create GRPC servers
-	ids, err := NewIdentityServer(pmemd.cfg.DriverName, pmemd.cfg.Version)
+	ids, err := NewIdentityServer(csid.cfg.DriverName, csid.cfg.Version)
 	if err != nil {
 		return err
 	}
@@ -220,69 +220,69 @@ func (pmemd *pmemDriver) Run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if pmemd.cfg.Mode == Controller {
-		rs := registryserver.New(pmemd.clientTLSConfig)
+	if csid.cfg.Mode == Controller {
+		rs := registryserver.New(csid.clientTLSConfig)
 		cs := NewMasterControllerServer(rs)
 
-		if pmemd.cfg.Endpoint != pmemd.cfg.RegistryEndpoint {
-			if err := s.Start(pmemd.cfg.Endpoint, nil, ids, cs); err != nil {
+		if csid.cfg.Endpoint != csid.cfg.RegistryEndpoint {
+			if err := s.Start(csid.cfg.Endpoint, nil, ids, cs); err != nil {
 				return err
 			}
-			if err := s.Start(pmemd.cfg.RegistryEndpoint, pmemd.serverTLSConfig, rs); err != nil {
+			if err := s.Start(csid.cfg.RegistryEndpoint, csid.serverTLSConfig, rs); err != nil {
 				return err
 			}
 		} else {
-			if err := s.Start(pmemd.cfg.Endpoint, pmemd.serverTLSConfig, ids, cs, rs); err != nil {
+			if err := s.Start(csid.cfg.Endpoint, csid.serverTLSConfig, ids, cs, rs); err != nil {
 				return err
 			}
 		}
 
 		// Also run scheduler extender?
-		if _, err := pmemd.startScheduler(ctx, cancel, rs); err != nil {
+		if _, err := csid.startScheduler(ctx, cancel, rs); err != nil {
 			return err
 		}
 		// And metrics server?
-		addr, err := pmemd.startMetrics(ctx, cancel)
+		addr, err := csid.startMetrics(ctx, cancel)
 		if err != nil {
 			return err
 		}
-		klog.V(2).Infof("Prometheus endpoint started at https://%s%s", addr, pmemd.cfg.metricsPath)
-	} else if pmemd.cfg.Mode == Node {
-		dm, err := newDeviceManager(pmemd.cfg.DeviceManager)
+		klog.V(2).Infof("Prometheus endpoint started at https://%s%s", addr, csid.cfg.metricsPath)
+	} else if csid.cfg.Mode == Node {
+		dm, err := newDeviceManager(csid.cfg.DeviceManager)
 		if err != nil {
 			return err
 		}
-		sm, err := pmemstate.NewFileState(pmemd.cfg.StateBasePath)
+		sm, err := pmemstate.NewFileState(csid.cfg.StateBasePath)
 		if err != nil {
 			return err
 		}
-		cs := NewNodeControllerServer(pmemd.cfg.NodeID, dm, sm)
-		ns := NewNodeServer(cs, filepath.Clean(pmemd.cfg.StateBasePath)+"/mount")
+		cs := NewNodeControllerServer(csid.cfg.NodeID, dm, sm)
+		ns := NewNodeServer(cs, filepath.Clean(csid.cfg.StateBasePath)+"/mount")
 
-		if pmemd.cfg.Endpoint != pmemd.cfg.ControllerEndpoint {
-			if err := s.Start(pmemd.cfg.ControllerEndpoint, pmemd.serverTLSConfig, cs); err != nil {
+		if csid.cfg.Endpoint != csid.cfg.ControllerEndpoint {
+			if err := s.Start(csid.cfg.ControllerEndpoint, csid.serverTLSConfig, cs); err != nil {
 				return err
 			}
-			if err := pmemd.registerNodeController(); err != nil {
+			if err := csid.registerNodeController(); err != nil {
 				return err
 			}
-			services := []grpcserver.PmemService{ids, ns}
-			if pmemd.cfg.TestEndpoint {
+			services := []grpcserver.Service{ids, ns}
+			if csid.cfg.TestEndpoint {
 				services = append(services, cs)
 			}
-			if err := s.Start(pmemd.cfg.Endpoint, nil, services...); err != nil {
+			if err := s.Start(csid.cfg.Endpoint, nil, services...); err != nil {
 				return err
 			}
 		} else {
-			if err := s.Start(pmemd.cfg.Endpoint, nil, ids, cs, ns); err != nil {
+			if err := s.Start(csid.cfg.Endpoint, nil, ids, cs, ns); err != nil {
 				return err
 			}
-			if err := pmemd.registerNodeController(); err != nil {
+			if err := csid.registerNodeController(); err != nil {
 				return err
 			}
 		}
 	} else {
-		return fmt.Errorf("Unsupported device mode '%v", pmemd.cfg.Mode)
+		return fmt.Errorf("Unsupported device mode '%v", csid.cfg.Mode)
 	}
 
 	c := make(chan os.Signal, 1)
@@ -292,9 +292,9 @@ func (pmemd *pmemDriver) Run() error {
 		// Here we want to shut down cleanly, i.e. let running
 		// gRPC calls complete.
 		klog.V(3).Infof("Caught signal %s, terminating.", sig)
-		if pmemd.cfg.Mode == Node {
+		if csid.cfg.Mode == Node {
 			klog.V(3).Info("Unregistering node...")
-			if err := pmemd.unregisterNodeController(); err != nil {
+			if err := csid.unregisterNodeController(); err != nil {
 				klog.Errorf("Failed to unregister node: %v", err)
 				return err
 			}
@@ -310,13 +310,13 @@ func (pmemd *pmemDriver) Run() error {
 	return nil
 }
 
-func (pmemd *pmemDriver) registerNodeController() error {
+func (csid *csiDriver) registerNodeController() error {
 	var err error
 	var conn *grpc.ClientConn
 
 	for {
-		klog.V(3).Infof("Connecting to registry server at: %s\n", pmemd.cfg.RegistryEndpoint)
-		conn, err = pmemgrpc.Connect(pmemd.cfg.RegistryEndpoint, pmemd.clientTLSConfig)
+		klog.V(3).Infof("Connecting to registry server at: %s\n", csid.cfg.RegistryEndpoint)
+		conn, err = pmemgrpc.Connect(csid.cfg.RegistryEndpoint, csid.clientTLSConfig)
 		if err == nil {
 			break
 		}
@@ -325,8 +325,8 @@ func (pmemd *pmemDriver) registerNodeController() error {
 	}
 
 	req := &registry.RegisterControllerRequest{
-		NodeId:   pmemd.cfg.NodeID,
-		Endpoint: pmemd.cfg.ControllerEndpoint,
+		NodeId:   csid.cfg.NodeID,
+		Endpoint: csid.cfg.ControllerEndpoint,
 	}
 
 	if err := register(context.Background(), conn, req); err != nil {
@@ -337,11 +337,11 @@ func (pmemd *pmemDriver) registerNodeController() error {
 	return nil
 }
 
-func (pmemd *pmemDriver) unregisterNodeController() error {
+func (csid *csiDriver) unregisterNodeController() error {
 	req := &registry.UnregisterControllerRequest{
-		NodeId: pmemd.cfg.NodeID,
+		NodeId: csid.cfg.NodeID,
 	}
-	conn, err := pmemgrpc.Connect(pmemd.cfg.RegistryEndpoint, pmemd.clientTLSConfig)
+	conn, err := pmemgrpc.Connect(csid.cfg.RegistryEndpoint, csid.clientTLSConfig)
 	if err != nil {
 		return err
 	}
@@ -356,19 +356,19 @@ func (pmemd *pmemDriver) unregisterNodeController() error {
 // logs errors and cancels the context when it runs into a problem,
 // either during the startup phase (blocking) or later at runtime (in
 // a go routine).
-func (pmemd *pmemDriver) startScheduler(ctx context.Context, cancel func(), rs *registryserver.RegistryServer) (string, error) {
-	if pmemd.cfg.schedulerListen == "" {
+func (csid *csiDriver) startScheduler(ctx context.Context, cancel func(), rs *registryserver.RegistryServer) (string, error) {
+	if csid.cfg.schedulerListen == "" {
 		return "", nil
 	}
 
 	resyncPeriod := 1 * time.Hour
-	factory := informers.NewSharedInformerFactory(pmemd.cfg.client, resyncPeriod)
+	factory := informers.NewSharedInformerFactory(csid.cfg.client, resyncPeriod)
 	pvcLister := factory.Core().V1().PersistentVolumeClaims().Lister()
 	scLister := factory.Storage().V1().StorageClasses().Lister()
 	sched, err := scheduler.NewScheduler(
-		pmemd.cfg.DriverName,
+		csid.cfg.DriverName,
 		scheduler.CapacityViaRegistry(rs),
-		pmemd.cfg.client,
+		csid.cfg.client,
 		pvcLister,
 		scLister,
 	)
@@ -383,13 +383,13 @@ func (pmemd *pmemDriver) startScheduler(ctx context.Context, cancel func(), rs *
 			return "", fmt.Errorf("failed to sync informer for type %v", t)
 		}
 	}
-	return pmemd.startHTTPSServer(ctx, cancel, pmemd.cfg.schedulerListen, sched)
+	return csid.startHTTPSServer(ctx, cancel, csid.cfg.schedulerListen, sched)
 }
 
 // startMetrics starts the HTTPS server for the Prometheus endpoint, if one is configured.
 // Error handling is the same as for startScheduler.
-func (pmemd *pmemDriver) startMetrics(ctx context.Context, cancel func()) (string, error) {
-	if pmemd.cfg.metricsListen == "" {
+func (csid *csiDriver) startMetrics(ctx context.Context, cancel func()) (string, error) {
+	if csid.cfg.metricsListen == "" {
 		return "", nil
 	}
 
@@ -398,16 +398,16 @@ func (pmemd *pmemDriver) startMetrics(ctx context.Context, cancel func()) (strin
 	// data. For example, some Go runtime information (https://povilasv.me/prometheus-go-metrics/)
 	// are included, which may be useful.
 	mux := http.NewServeMux()
-	mux.Handle(pmemd.cfg.metricsPath, promhttp.Handler())
-	return pmemd.startHTTPSServer(ctx, cancel, pmemd.cfg.metricsListen, mux)
+	mux.Handle(csid.cfg.metricsPath, promhttp.Handler())
+	return csid.startHTTPSServer(ctx, cancel, csid.cfg.metricsListen, mux)
 }
 
 // startHTTPSServer contains the common logic for starting and
 // stopping an HTTPS server.  Returns an error or the address that can
 // be used in Dial("tcp") to reach the server (useful for testing when
 // "listen" does not include a port).
-func (pmemd *pmemDriver) startHTTPSServer(ctx context.Context, cancel func(), listen string, handler http.Handler) (string, error) {
-	config, err := pmemgrpc.LoadServerTLS(pmemd.cfg.CAFile, pmemd.cfg.CertFile, pmemd.cfg.KeyFile, "")
+func (csid *csiDriver) startHTTPSServer(ctx context.Context, cancel func(), listen string, handler http.Handler) (string, error) {
+	config, err := pmemgrpc.LoadServerTLS(csid.cfg.CAFile, csid.cfg.CertFile, csid.cfg.KeyFile, "")
 	if err != nil {
 		return "", fmt.Errorf("initialize HTTPS config: %v", err)
 	}
@@ -427,7 +427,7 @@ func (pmemd *pmemDriver) startHTTPSServer(ctx context.Context, cancel func(), li
 	go func() {
 		defer tcpListener.Close()
 
-		err := server.ServeTLS(listener, pmemd.cfg.CertFile, pmemd.cfg.KeyFile)
+		err := server.ServeTLS(listener, csid.cfg.CertFile, csid.cfg.KeyFile)
 		if err != http.ErrServerClosed {
 			klog.Errorf("%s HTTPS server error: %v", listen, err)
 		}

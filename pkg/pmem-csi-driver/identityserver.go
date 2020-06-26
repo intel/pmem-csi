@@ -19,7 +19,7 @@ type identityServer struct {
 	pluginCaps []*csi.PluginCapability
 }
 
-var _ grpcserver.PmemService = &identityServer{}
+var _ grpcserver.Service = &identityServer{}
 
 func NewIdentityServer(name, version string) (*identityServer, error) {
 	return &identityServer{

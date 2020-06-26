@@ -37,7 +37,7 @@ const (
 	Deleted
 )
 
-type pmemVolume struct {
+type volume struct {
 	// VolumeID published to outside world
 	id string
 	// Name of volume
@@ -51,13 +51,13 @@ type pmemVolume struct {
 
 type masterController struct {
 	*DefaultControllerServer
-	rs          *registryserver.RegistryServer
-	pmemVolumes map[string]*pmemVolume //map of reqID:pmemVolume
-	mutex       sync.Mutex             // mutex for pmemVolumes
+	rs      *registryserver.RegistryServer
+	volumes map[string]*volume //map of reqID:Volume
+	mutex   sync.Mutex         // mutex for Volumes
 }
 
 var _ csi.ControllerServer = &masterController{}
-var _ grpcserver.PmemService = &masterController{}
+var _ grpcserver.Service = &masterController{}
 var _ registryserver.RegistryListener = &masterController{}
 var volumeMutex = keymutex.NewHashed(-1)
 
@@ -96,7 +96,7 @@ func NewMasterControllerServer(rs *registryserver.RegistryServer) *masterControl
 	cs := &masterController{
 		DefaultControllerServer: NewDefaultControllerServer(serverCaps),
 		rs:                      rs,
-		pmemVolumes:             map[string]*pmemVolume{},
+		volumes:                 map[string]*volume{},
 	}
 
 	rs.AddListener(cs)
@@ -133,11 +133,11 @@ func (cs *masterController) OnNodeAdded(ctx context.Context, node *registryserve
 		if v == nil { /* this shouldn't happen */
 			continue
 		}
-		if vol, ok := cs.pmemVolumes[v.VolumeId]; ok && vol != nil {
+		if vol, ok := cs.volumes[v.VolumeId]; ok && vol != nil {
 			// This is possibly Cache volume, so just add this node id.
 			vol.nodeIDs[node.NodeID] = Created
 		} else {
-			cs.pmemVolumes[v.VolumeId] = &pmemVolume{
+			cs.volumes[v.VolumeId] = &volume{
 				id:   v.VolumeId,
 				size: v.CapacityBytes,
 				name: v.VolumeContext["Name"],
@@ -155,7 +155,7 @@ func (cs *masterController) OnNodeDeleted(ctx context.Context, node *registryser
 }
 
 func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
-	var vol *pmemVolume
+	var vol *volume
 	chosenNodes := map[string]VolumeStatus{}
 
 	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
@@ -213,7 +213,7 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 			for node := range cs.rs.NodeClients() {
 				inTopology = append(inTopology, &csi.Topology{
 					Segments: map[string]string{
-						PmemDriverTopologyKey: node,
+						DriverTopologyKey: node,
 					},
 				})
 			}
@@ -230,7 +230,7 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 			if numVolumes == 0 {
 				break
 			}
-			node := top.Segments[PmemDriverTopologyKey]
+			node := top.Segments[DriverTopologyKey]
 			conn, err := cs.rs.ConnectToNodeController(node)
 			if err != nil {
 				klog.Warningf("failed to connect to %s: %s", node, err.Error())
@@ -255,7 +255,7 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 
 		klog.V(3).Infof("Chosen nodes: %v", chosenNodes)
 
-		vol = &pmemVolume{
+		vol = &volume{
 			id:      volumeID,
 			name:    req.Name,
 			size:    asked,
@@ -263,14 +263,14 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 		}
 		cs.mutex.Lock()
 		defer cs.mutex.Unlock()
-		cs.pmemVolumes[volumeID] = vol
+		cs.volumes[volumeID] = vol
 		klog.V(3).Infof("Controller CreateVolume: Record new volume as %v", *vol)
 	}
 
 	for node := range chosenNodes {
 		outTopology = append(outTopology, &csi.Topology{
 			Segments: map[string]string{
-				PmemDriverTopologyKey: node,
+				DriverTopologyKey: node,
 			},
 		})
 	}
@@ -320,7 +320,7 @@ func (cs *masterController) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 		}
 		cs.mutex.Lock()
 		defer cs.mutex.Unlock()
-		delete(cs.pmemVolumes, vol.id)
+		delete(cs.volumes, vol.id)
 		klog.V(4).Infof("Controller DeleteVolume: volume name:%s id:%s deleted", vol.name, vol.id)
 	} else {
 		klog.Warningf("Volume %s not created by this controller", req.GetVolumeId())
@@ -338,7 +338,7 @@ func (cs *masterController) ValidateVolumeCapabilities(ctx context.Context, req 
 	cs.mutex.Lock()
 	defer cs.mutex.Unlock()
 
-	_, found := cs.pmemVolumes[req.VolumeId]
+	_, found := cs.volumes[req.VolumeId]
 	if !found {
 		return nil, status.Error(codes.NotFound, "No volume found with id "+req.VolumeId)
 	}
@@ -378,8 +378,8 @@ func (cs *masterController) ListVolumes(ctx context.Context, req *csi.ListVolume
 	defer cs.mutex.Unlock()
 
 	// Copy from map into array for pagination.
-	vols := make([]*pmemVolume, 0, len(cs.pmemVolumes))
-	for _, vol := range cs.pmemVolumes {
+	vols := make([]*volume, 0, len(cs.volumes))
+	for _, vol := range cs.volumes {
 		vols = append(vols, vol)
 	}
 
@@ -455,7 +455,7 @@ func (cs *masterController) GetCapacity(ctx context.Context, req *csi.GetCapacit
 	}
 
 	if top := req.GetAccessibleTopology(); top != nil {
-		node, err := cs.rs.GetNodeController(top.Segments[PmemDriverTopologyKey])
+		node, err := cs.rs.GetNodeController(top.Segments[DriverTopologyKey])
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, err.Error())
 		}
@@ -497,21 +497,21 @@ func (cs *masterController) getNodeCapacity(ctx context.Context, node registryse
 	return resp.AvailableCapacity, nil
 }
 
-func (cs *masterController) getVolumeByID(volumeID string) *pmemVolume {
+func (cs *masterController) getVolumeByID(volumeID string) *volume {
 	cs.mutex.Lock()
 	defer cs.mutex.Unlock()
-	if pmemVol, ok := cs.pmemVolumes[volumeID]; ok {
-		return pmemVol
+	if vol, ok := cs.volumes[volumeID]; ok {
+		return vol
 	}
 	return nil
 }
 
-func (cs *masterController) getVolumeByName(Name string) *pmemVolume {
+func (cs *masterController) getVolumeByName(Name string) *volume {
 	cs.mutex.Lock()
 	defer cs.mutex.Unlock()
-	for _, pmemVol := range cs.pmemVolumes {
-		if pmemVol.name == Name {
-			return pmemVol
+	for _, vol := range cs.volumes {
+		if vol.name == Name {
+			return vol
 		}
 	}
 	return nil

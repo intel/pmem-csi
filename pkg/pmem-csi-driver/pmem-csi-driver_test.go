@@ -15,10 +15,9 @@ import (
 	"os"
 	"testing"
 
+	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/intel/pmem-csi/pkg/pmem-grpc"
 )
 
 var (
@@ -51,7 +50,7 @@ build_info{version="foo-bar-test"} 1
 	for n, c := range cases {
 		t.Run(n, func(t *testing.T) {
 			path := "/metrics2"
-			pmemd, err := GetPMEMDriver(Config{
+			pmemd, err := GetCSIDriver(Config{
 				Mode:          Controller,
 				DriverName:    "pmem-csi",
 				NodeID:        "testnode",
