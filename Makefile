@@ -127,8 +127,6 @@ clean:
 
 .PHONY: all build test clean $(CMDS) $(TEST_CMDS)
 
-include operator/operator.make
-
 # Add support for creating and booting a cluster under QEMU.
 # All of the commands operate on a cluster stored in _work/$(CLUSTER),
 # which defaults to _work/clear-govm. This can be changed with
@@ -146,6 +144,8 @@ _work/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz:
 _work/kustomize: _work/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz
 	tar xzf $< -C _work
 	touch $@
+
+include operator/operator.make
 
 # We generate deployment files with kustomize and include the output
 # in the git repo because not all users will have kustomize or it
