@@ -13,11 +13,12 @@ import (
 
 const (
 	// 1 GB align in ndctl creation request has proven to be reliable.
-	// Newer kernels may allow smaller alignment but we do not want to introduce kernel depenency.
+	// Newer kernels may allow smaller alignment but we do not want to introduce kernel dependency.
 	ndctlAlign uint64 = 1024 * 1024 * 1024
 )
 
 type pmemNdctl struct {
+	pmemPercentage uint
 }
 
 var _ PmemDeviceManager = &pmemNdctl{}
@@ -29,7 +30,11 @@ var _ PmemDeviceManager = &pmemNdctl{}
 var ndctlMutex = &sync.Mutex{}
 
 //NewPmemDeviceManagerNdctl Instantiates a new ndctl based pmem device manager
-func NewPmemDeviceManagerNdctl() (PmemDeviceManager, error) {
+// FIXME(avalluri): consider pmemPercentage while calculating available space
+func NewPmemDeviceManagerNdctl(pmemPercentage uint) (PmemDeviceManager, error) {
+	if pmemPercentage > 100 {
+		return nil, fmt.Errorf("invalid pmemPercentage '%d'. Value must be 0..100", pmemPercentage)
+	}
 	// Check is /sys writable. If not then there is no point starting
 	mounts, _ := mount.New("").List()
 	for _, mnt := range mounts {
@@ -38,7 +43,7 @@ func NewPmemDeviceManagerNdctl() (PmemDeviceManager, error) {
 			for _, opt := range mnt.Opts {
 				if opt == "rw" {
 					klog.V(4).Info("NewPmemDeviceManagerNdctl: /sys mounted read-write, good")
-					return &pmemNdctl{}, nil
+					return &pmemNdctl{pmemPercentage: pmemPercentage}, nil
 				} else if opt == "ro" {
 					return nil, fmt.Errorf("FATAL: /sys mounted read-only, can not operate")
 				}

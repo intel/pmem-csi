@@ -142,8 +142,8 @@ EOF
 EOF
                     ${SSH} "cat >'$tmpdir/my-deployment/lvm-parameters-patch.yaml'" <<EOF
 - op: add
-  path: /spec/template/spec/initContainers/0/command/-
-  value: "--useforfsdax=50"
+  path: /spec/template/spec/containers/0/command/-
+  value: "--pmemPercentage=50"
 EOF
                 fi
                 ;;

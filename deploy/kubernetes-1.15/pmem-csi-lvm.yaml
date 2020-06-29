@@ -302,6 +302,7 @@ spec:
         - -keyFile=/certs/tls.key
         - -statePath=/var/lib/$(PMEM_CSI_DRIVER_NAME)
         - -drivername=$(PMEM_CSI_DRIVER_NAME)
+        - -pmemPercentage=100
         env:
         - name: KUBE_NODE_NAME
           valueFrom:
@@ -357,36 +358,6 @@ spec:
           name: pmem-state-dir
         - mountPath: /registration
           name: registration-dir
-      initContainers:
-      - command:
-        - /usr/local/bin/pmem-ns-init
-        - -v=3
-        env:
-        - name: TERMINATION_LOG_PATH
-          value: /tmp/pmem-ns-init-termination-log
-        image: intel/pmem-csi-driver:canary
-        imagePullPolicy: IfNotPresent
-        name: pmem-ns-init
-        securityContext:
-          privileged: true
-          runAsUser: 0
-        terminationMessagePath: /tmp/pmem-ns-init-termination-log
-        volumeMounts:
-        - mountPath: /sys
-          name: sys-dir
-      - command:
-        - /usr/local/bin/pmem-vgm
-        - -v=3
-        env:
-        - name: TERMINATION_LOG_PATH
-          value: /tmp/pmem-vgm-termination-log
-        image: intel/pmem-csi-driver:canary
-        imagePullPolicy: IfNotPresent
-        name: pmem-vgm
-        securityContext:
-          privileged: true
-          runAsUser: 0
-        terminationMessagePath: /tmp/pmem-vgm-termination-log
       nodeSelector:
         storage: pmem
       volumes:

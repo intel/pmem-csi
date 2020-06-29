@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/intel/pmem-csi/deploy"
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
@@ -138,20 +139,6 @@ func patchPodTemplate(obj *unstructured.Unstructured, deployment api.Deployment,
 	}
 
 	containers := spec["containers"].([]interface{})
-	initContainers := spec["initContainers"]
-	if initContainers != nil {
-		initContainers := initContainers.([]interface{})
-		containers = append(containers, initContainers...)
-		for _, container := range initContainers {
-			container := container.(map[string]interface{})
-			if container["name"].(string) == "pmem-ns-init" {
-				cmd := container["command"].([]interface{})
-				cmd = append(cmd, fmt.Sprintf("--useforfsdax=%d", deployment.Spec.PMEMPercentage))
-				container["command"] = cmd
-				break
-			}
-		}
-	}
 	for _, container := range containers {
 		// Mimick the current operator behavior
 		// (https://github.com/intel/pmem-csi/issues/616) and apply
@@ -178,6 +165,15 @@ func patchPodTemplate(obj *unstructured.Unstructured, deployment api.Deployment,
 			image = deployment.Spec.ProvisionerImage
 		case "driver-registrar":
 			image = deployment.Spec.NodeRegistrarImage
+		case "pmem-driver":
+			cmd := container["command"].([]interface{})
+			for i := range cmd {
+				arg := cmd[i].(string)
+				if strings.HasPrefix(arg, "-pmemPercentage=") {
+					cmd[i] = fmt.Sprintf("-pmemPercentage=%d", deployment.Spec.PMEMPercentage)
+					break
+				}
+			}
 		}
 		if image != "" {
 			container["image"] = image

@@ -248,10 +248,6 @@ func parseDefaultSpecValues() map[string]interface{} {
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         imagePullPolicy: IfNotPresent
-      initContainers:
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
-        imagePullPolicy: IfNotPresent
       volumes:
         secret:
           defaultMode: 420`
@@ -350,14 +346,14 @@ func compareSpecRecursive(path string, defaults, expected, actual interface{}) (
 		// Gather and sort all keys before iterating over them to make
 		// the result deterministic.
 		keys := map[string]bool{}
-		for key, _ := range actualMap {
+		for key := range actualMap {
 			keys[key] = true
 		}
-		for key, _ := range expectedMap {
+		for key := range expectedMap {
 			keys[key] = true
 		}
 		var sortedKeys []string
-		for key, _ := range keys {
+		for key := range keys {
 			sortedKeys = append(sortedKeys, key)
 		}
 		sort.Strings(sortedKeys)

@@ -14,10 +14,6 @@
     - [Network ports](#network-ports)
     - [Local sockets](#local-sockets)
     - [Command line arguments](#command-line-arguments)
-    - [Common arguments](#common-arguments)
-    - [Specific arguments to pmem-ns-init](#specific-arguments-to-pmem-ns-init)
-    - [Specific arguments to pmem-vgm](#specific-arguments-to-pmem-vgm)
-    - [Specific arguments to pmem-csi-driver](#specific-arguments-to-pmem-csi-driver)
     - [Environment variables](#environment-variables)
     - [Logging](#logging)
 - [Switching device mode](#switching-device-mode)
@@ -189,13 +185,6 @@ Kubernetes CSI API used over local socket inside same host.
 
 ### Command line arguments
 
-Note that different set of programs is used in different
-device modes. Three stages: *pmem-ns-init*, *pmem-vgm*,
-*pmem-csi-driver* run in LVM device mode. Only *pmem-csi-driver* runs
-in direct device mode.
-
-### Common arguments
-
 argument name            | meaning                                           | type   | range
 -------------------------|---------------------------------------------------|--------|---
 -alsologtostderr         | log to standard error as well as files            |        |
@@ -207,25 +196,10 @@ argument name            | meaning                                           | t
 -stderrthreshold value   | logs at or above this threshold go to stderr (default 2) | |
 -v value                 | log level for V logs                              | int    |
 -vmodule value           | comma-separated list of pattern=N settings for file-filtered logging | string |
-
-### Specific arguments to pmem-ns-init
-
-argument name      | meaning                                                | type | range
--------------------|--------------------------------------------------------|------|---
--useforfsdax int   | Percentage of total to use in Fsdax mode (default 100) | int  | 0..100
-
-### Specific arguments to pmem-vgm
-
-NO SPECIFIC arguments
-
-### Specific arguments to pmem-csi-driver
-
-argument name        | meaning                                           | type | allowed | default
----------------------|---------------------------------------------------|------|---------|---
--caFile string       | Root CA certificate file to use for verifying connections | string | |
--certFile string     | SSL certificate file to use for authenticating client connections(RegistryServer/NodeControllerServer) | string | |
--clientCertFile string | Client SSL certificate file to use for authenticating peer connections | string | | certFile
--clientKeyFile string | Client private key associated to client certificate | string |              | keyFile
+-caFile string           | Root CA certificate file to use for verifying connections | string | |
+-certFile string         | SSL certificate file to use for authenticating client connections(RegistryServer/NodeControllerServer) | string | |
+-clientCertFile string   | Client SSL certificate file to use for authenticating peer connections | string | | certFile
+-clientKeyFile string    | Client private key associated to client certificate | string |              | keyFile
 -controllerEndpoint string | internal node controller endpoint              | string |              |
 -deviceManager string      | device mode to use. ndctl selects mode which is described as direct mode in documentation. | string | lvm or ndctl | lvm
 -drivername string         | name of the driver                             | string |              | pmem-csi
@@ -236,6 +210,7 @@ argument name        | meaning                                           | type 
 -registryEndpoint string   | endpoint to connect/listen registry server     | string |              |
 -statePath                 | Directory path where to persist the state of the driver running on a node | string | absolute directory path on node | /var/lib/<drivername>
 -schedulerListen           | listen address for scheduler extender and mutating webhook | [address string](https://golang.org/pkg/net/#Listen) | controller | empty (= disabled)
+-pmemPercentage value      | represents the percentage of space to be used by the driver in each PMEM region<br>(currently only supported by the driver in LVM mode) | int | 0-100
 
 ### Environment variables
 

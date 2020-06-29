@@ -41,6 +41,7 @@ func init() {
 	flag.StringVar(&config.KeyFile, "keyFile", "", "Private key file associated to certificate")
 	flag.StringVar(&config.ClientCertFile, "clientCertFile", "", "Client SSL certificate file to use for authenticating peer connections, defaults to 'certFile'")
 	flag.StringVar(&config.ClientKeyFile, "clientKeyFile", "", "Client private key associated to client certificate, defaults to 'keyFile'")
+	flag.UintVar(&config.PmemPercentage, "pmemPercentage", 100, "percentage of space to be used by the driver in each PMEM region")
 	/* Node mode options */
 	flag.StringVar(&config.ControllerEndpoint, "controllerEndpoint", "", "internal node controller endpoint")
 	flag.Var(&config.DeviceManager, "deviceManager", "device manager to use to manage pmem devices, supported types: 'lvm' or 'direct' (= 'ndctl')")

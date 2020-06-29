@@ -16,7 +16,7 @@
 GO_BINARY=go
 GO=GOOS=linux GO111MODULE=on $(GO_BINARY)
 IMPORT_PATH=github.com/intel/pmem-csi
-CMDS=pmem-csi-driver pmem-vgm pmem-ns-init pmem-csi-operator
+CMDS=pmem-csi-driver pmem-csi-operator
 TEST_CMDS=$(addsuffix -test,$(CMDS))
 SHELL=bash
 export PWD=$(shell pwd)

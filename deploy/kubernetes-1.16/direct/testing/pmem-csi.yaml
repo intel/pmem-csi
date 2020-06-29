@@ -350,6 +350,7 @@ spec:
         - -keyFile=/certs/tls.key
         - -statePath=/var/lib/$(PMEM_CSI_DRIVER_NAME)
         - -drivername=$(PMEM_CSI_DRIVER_NAME)
+        - -pmemPercentage=100
         - -v=5
         - -testEndpoint
         - -coverprofile=/var/lib/pmem-csi-coverage/pmem-csi-driver-node-*.out

@@ -165,6 +165,7 @@ spec:
                   "-keyFile=/certs/tls.key",
                   "-statePath=/var/lib/$(PMEM_CSI_DRIVER_NAME)",
                   "-drivername=$(PMEM_CSI_DRIVER_NAME)",
+                  "-pmemPercentage=100",
               ]
         # Passing /dev to container may cause container creation error because
         # termination-log is located on /dev/ by default, re-locate to /tmp

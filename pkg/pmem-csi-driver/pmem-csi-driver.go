@@ -122,6 +122,8 @@ type Config struct {
 	StateBasePath string
 	//Version driver release version
 	Version string
+	// PmemPercentage percentage of space to be used by the driver in each PMEM region
+	PmemPercentage uint
 
 	// parameters for Kubernetes scheduler extender
 	schedulerListen string
@@ -248,7 +250,7 @@ func (csid *csiDriver) Run() error {
 		}
 		klog.V(2).Infof("Prometheus endpoint started at https://%s%s", addr, csid.cfg.metricsPath)
 	} else if csid.cfg.Mode == Node {
-		dm, err := newDeviceManager(csid.cfg.DeviceManager)
+		dm, err := newDeviceManager(csid.cfg.DeviceManager, csid.cfg.PmemPercentage)
 		if err != nil {
 			return err
 		}
@@ -490,12 +492,12 @@ func register(ctx context.Context, conn *grpc.ClientConn, req *registry.Register
 	return nil
 }
 
-func newDeviceManager(dmType api.DeviceMode) (pmdmanager.PmemDeviceManager, error) {
+func newDeviceManager(dmType api.DeviceMode, pmemPercentage uint) (pmdmanager.PmemDeviceManager, error) {
 	switch dmType {
 	case api.DeviceModeLVM:
-		return pmdmanager.NewPmemDeviceManagerLVM()
+		return pmdmanager.NewPmemDeviceManagerLVM(pmemPercentage)
 	case api.DeviceModeDirect:
-		return pmdmanager.NewPmemDeviceManagerNdctl()
+		return pmdmanager.NewPmemDeviceManagerNdctl(pmemPercentage)
 	}
 	return nil, fmt.Errorf("Unsupported device manager type '%s'", dmType)
 }

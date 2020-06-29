@@ -24,7 +24,6 @@ There is a more detailed explanation in the following paragraphs.
 |Main advantage     |avoids free space fragmentation<sup>1</sup>   |simpler, somewhat faster, but free space may get fragmented<sup>1</sup>   |
 |What is served     |LVM logical volume     |pmem block device   |
 |Region affinity<sup>2</sup>    |yes: one LVM volume group is created per region, and a volume has to be in one volume group  |yes: namespace can belong to one region only  |
-|Startup            |two extra stages: pmem-ns-init (creates namespaces), vgm (creates volume groups)   |no extra steps at startup |
 |Namespace modes    |`fsdax` mode<sup>3</sup> namespaces pre-created as pools   |namespace in `fsdax` mode created directly, no need to pre-create pools   |
 |Limiting space usage | can leave part of device unused during pools creation  |no limits, creates namespaces on device until runs out of space  |
 | *Name* field in namespace | *Name* gets set to 'pmem-csi' to achieve own vs. foreign marking | *Name* gets set to VolumeID, without attempting own vs. foreign marking  |
@@ -67,34 +66,24 @@ group created per region, ensuring the region-affinity of served volumes.
 
 ![devicemode-lvm diagram](/docs/images/devicemodes/pmem-csi-lvm.png)
 
-The driver consists of three separate binaries that form two
-initialization stages and a third API-serving stage.
-
 During startup, the driver scans persistent memory for regions and
 namespaces, and tries to create more namespaces using all or part
-(selectable via option) of the remaining available space. This first
-stage is performed by a separate entity `pmem-ns-init`.
+(selectable via option) of the remaining available space. Later it 
+arranges physical volumes provided by namespaces into LVM volume groups.
 
-The second stage of initialization arranges physical volumes provided
-by namespaces into LVM volume groups. This is performed by a separate
-binary `pmem-vgm`.
-
-After two initialization stages, the third binary `pmem-csi-driver`
-starts serving CSI API requests.
-
-### Namespace modes in LVM device mode
+### [Namespace modes](https://docs.pmem.io/ndctl-user-guide/concepts/nvdimm-namespaces) in LVM device mode
 
 The PMEM-CSI driver pre-creates namespaces in `fsdax` mode forming
 the corresponding LVM volume group. The amount of space to be
-used is determined using the option `-useforfsdax` given to `pmem-ns-init`.
+used is determined using the option `-pmemPercentage` given to `pmem-csi-driver`.
 This options specifies an integer presenting limit as percentage.
-The default value is `useforfsdax=100`.
+The default value is `100`.
 
 ### Using limited amount of total space in LVM device mode
 
 The PMEM-CSI driver can leave space on devices for others, and
 recognize "own" namespaces. Leaving space for others can be achieved
-by specifying lower-than-100 value to `-useforfsdax` options 
+by specifying lower-than-100 value to `-pmemPercentage` option.
 The distinction "own" vs. "foreign" is
 implemented by setting the _Name_ field in namespace to a static
 string "pmem-csi" during namespace creation. When adding physical
@@ -113,10 +102,7 @@ device mapping layer. Direct mode also ensures the region-affinity of
 served volumes, because provisioned volume can belong to one region
 only.
 
-In Direct mode, the two preparation stages used in LVM mode, are not
-needed.
-
-### Namespace modes in direct device mode
+### [Namespace modes](https://docs.pmem.io/ndctl-user-guide/concepts/nvdimm-namespaces) in direct device mode
 
 The PMEM-CSI driver creates a namespace directly in the mode which is
 asked by volume creation request, thus bypassing the complexity of
