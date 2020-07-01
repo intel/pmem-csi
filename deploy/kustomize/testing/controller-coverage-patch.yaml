@@ -24,7 +24,7 @@
   value:
   - name: coverage-init
     imagePullPolicy: Always
-    image: intel/pmem-csi-driver:v0.7.5
+    image: intel/pmem-csi-driver:v0.7.6
     command: ["chown", "-R", "pmem-csi:pmem-csi", "/var/lib/pmem-csi-coverage"]
     securityContext:
       privileged: true
