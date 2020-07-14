@@ -11,12 +11,14 @@ import (
 	"strconv"
 	"strings"
 
+	"k8s.io/klog"
+
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 type Persistency string
-type Origin int
+type Origin string
 
 // Beware of API and backwards-compatibility breaking when changing these string constants!
 const (
@@ -44,15 +46,15 @@ const (
 	PersistencyEphemeral Persistency = "ephemeral" // only used internally
 
 	//CreateVolumeOrigin is for parameters from the storage class in controller CreateVolume.
-	CreateVolumeOrigin Origin = iota
+	CreateVolumeOrigin Origin = "CreateVolumeOrigin"
 	// CreateVolumeInternalOrigin is for the node CreateVolume parameters.
-	CreateVolumeInternalOrigin
+	CreateVolumeInternalOrigin = "CreateVolumeInternalOrigin"
 	// EphemeralVolumeOrigin represents parameters for an ephemeral volume in NodePublishVolume.
-	EphemeralVolumeOrigin
+	EphemeralVolumeOrigin = "EphemeralVolumeOrigin"
 	// PersistentVolumeOrigin represents parameters for a persistent volume in NodePublishVolume.
-	PersistentVolumeOrigin
+	PersistentVolumeOrigin = "PersistentVolumeOrigin"
 	// NodeVolumeOrigin is for the parameters stored in node volume list.
-	NodeVolumeOrigin
+	NodeVolumeOrigin = "NodeVolumeOrigin"
 )
 
 // valid is a whitelist of which parameters are valid in which context.
@@ -136,6 +138,7 @@ type VolumeContext map[string]string
 // error is returned for invalid keys and values and invalid
 // combinations of parameters.
 func Parse(origin Origin, stringmap map[string]string) (Volume, error) {
+	klog.V(5).Infof("%s: Parse: %v", origin, stringmap)
 	var result Volume
 	validKeys := valid[origin]
 	for key, value := range stringmap {
@@ -148,7 +151,7 @@ func Parse(origin Origin, stringmap map[string]string) (Volume, error) {
 			}
 		}
 		if !valid {
-			return result, fmt.Errorf("parameter %q invalid in this context", key)
+			return result, fmt.Errorf("%s: parameter %q invalid in this context", origin, key)
 		}
 
 		value := value // Ensure that we get a new instance in case that we take the address below.
@@ -165,7 +168,7 @@ func Parse(origin Origin, stringmap map[string]string) (Volume, error) {
 				result.Persistency = &p
 			case PersistencyEphemeral:
 				if origin != NodeVolumeOrigin {
-					return result, fmt.Errorf("parameter %q: value invalid in this context: %q", key, value)
+					return result, fmt.Errorf("%s: parameter %q: value invalid in this context: %q", origin, key, value)
 				}
 				result.Persistency = &p
 			case "none":
@@ -173,38 +176,38 @@ func Parse(origin Origin, stringmap map[string]string) (Volume, error) {
 				p := PersistencyNormal
 				result.Persistency = &p
 			default:
-				return result, fmt.Errorf("parameter %q: unknown value: %q", key, value)
+				return result, fmt.Errorf("%s: parameter %q: unknown value: %q", origin, key, value)
 			}
 		case CacheSize:
 			c, err := strconv.ParseUint(value, 10, 32)
 			if err != nil {
-				return result, fmt.Errorf("parameter %q: failed to parse %q as uint: %v", key, value, err)
+				return result, fmt.Errorf("%s: parameter %q: failed to parse %q as uint: %v", origin, key, value, err)
 			}
 			u := uint(c)
 			result.CacheSize = &u
 		case KataContainers:
 			b, err := strconv.ParseBool(value)
 			if err != nil {
-				return result, fmt.Errorf("parameter %q: failed to parse %q as boolean: %v", key, value, err)
+				return result, fmt.Errorf("%s: parameter %q: failed to parse %q as boolean: %v", origin, key, value, err)
 			}
 			result.KataContainers = &b
 		case Size:
 			quantity, err := resource.ParseQuantity(value)
 			if err != nil {
-				return result, fmt.Errorf("parameter %q: failed to parse %q as int64: %v", key, value, err)
+				return result, fmt.Errorf("%s: parameter %q: failed to parse %q as int64: %v", origin, key, value, err)
 			}
 			s := quantity.Value()
 			result.Size = &s
 		case EraseAfter:
 			b, err := strconv.ParseBool(value)
 			if err != nil {
-				return result, fmt.Errorf("parameter %q: failed to parse %q as boolean: %v", key, value, err)
+				return result, fmt.Errorf("%s: parameter %q: failed to parse %q as boolean: %v", origin, key, value, err)
 			}
 			result.EraseAfter = &b
 		case Ephemeral:
 			b, err := strconv.ParseBool(value)
 			if err != nil {
-				return result, fmt.Errorf("parameter %q: failed to parse %q as boolean: %v", key, value, err)
+				return result, fmt.Errorf("%s: parameter %q: failed to parse %q as boolean: %v", origin, key, value, err)
 			}
 			if b {
 				p := PersistencyEphemeral
@@ -213,23 +216,23 @@ func Parse(origin Origin, stringmap map[string]string) (Volume, error) {
 		case DeviceMode:
 			var mode api.DeviceMode
 			if err := mode.Set(value); err != nil {
-				return result, fmt.Errorf("parameter %q: failed to parse %q as DeviceMode: %v", key, value, err)
+				return result, fmt.Errorf("%s: parameter %q: failed to parse %q as DeviceMode: %v", origin, key, value, err)
 			}
 			result.DeviceMode = &mode
 		case ProvisionerID:
 		default:
 			if !strings.HasPrefix(key, PodInfoPrefix) {
-				return result, fmt.Errorf("unknown parameter: %q", key)
+				return result, fmt.Errorf("%s: unknown parameter: %q", origin, key)
 			}
 		}
 	}
 
 	// Some sanity checks.
 	if result.CacheSize != nil && result.GetPersistency() != PersistencyCache {
-		return result, fmt.Errorf("parameter %q: invalid for %q = %q", CacheSize, PersistencyModel, result.GetPersistency())
+		return result, fmt.Errorf("%s: parameter %q: invalid for %q = %q", origin, CacheSize, PersistencyModel, result.GetPersistency())
 	}
 	if origin == EphemeralVolumeOrigin && result.Size == nil {
-		return result, fmt.Errorf("required parameter %q not specified", Size)
+		return result, fmt.Errorf("%s: required parameter %q not specified", origin, Size)
 	}
 
 	return result, nil
