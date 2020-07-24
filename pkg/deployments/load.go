@@ -47,6 +47,11 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 		*yaml = bytes.ReplaceAll(*yaml, []byte("path: /var/lib/pmem-csi.intel.com"), []byte("path: /var/lib/"+deployment.Name))
 		*yaml = bytes.ReplaceAll(*yaml, []byte("mountPath: /var/lib/pmem-csi.intel.com"), []byte("mountPath: /var/lib/"+deployment.Name))
 
+		// Update kubelet path
+		if deployment.Spec.KubeletDir != api.DefaultKubeletDir {
+			*yaml = bytes.ReplaceAll(*yaml, []byte("/var/lib/kubelet"), []byte(deployment.Spec.KubeletDir))
+		}
+
 		// This assumes that all namespaced objects actually have "namespace: default".
 		*yaml = bytes.ReplaceAll(*yaml, []byte("namespace: default"), []byte("namespace: "+namespace))
 

@@ -844,6 +844,7 @@ The current API for PMEM-CSI `Deployment` resources is:
 | nodeSelector | string map | [Labels to use for selecting Nodes](../docs/install.md#run-pmem-csi-on-kubernetes) on which PMEM-CSI driver should run. | `{ "storage": "pmem" }`|
 | pmemPercentage | integer | Percentage of PMEM space to be used by the driver on each node. This is only valid for a driver deployed in `lvm` mode. This field can be modified, but by that time the old value may have been used already. Reducing the percentage is not supported. | 100 |
 | labels | string map | Additional labels for all objects created by the operator. Can be modified after the initial creation, but removed labels will not be removed from existing objects because the operator cannot know which labels it needs to remove and which it has to leave in place. |
+| kubeletDir | string | Kubelet's root directory path | /var/lib/kubelet |
 
 <sup>1</sup> To use the same container image as default driver image
 the operator pod must set with below environment variables with

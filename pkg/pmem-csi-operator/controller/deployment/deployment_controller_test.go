@@ -45,6 +45,7 @@ type pmemDeployment struct {
 	controllerCPU, controllerMemory                     string
 	nodeCPU, nodeMemory                                 string
 	caCert, regCert, regKey, ncCert, ncKey              []byte
+	kubeletDir                                          string
 }
 
 func getDeployment(d *pmemDeployment) *api.Deployment {
@@ -91,6 +92,9 @@ func getDeployment(d *pmemDeployment) *api.Deployment {
 	spec.RegistryPrivateKey = d.regKey
 	spec.NodeControllerCert = d.ncCert
 	spec.NodeControllerPrivateKey = d.ncKey
+	if d.kubeletDir != "" {
+		spec.KubeletDir = d.kubeletDir
+	}
 
 	return dep
 }
@@ -236,6 +240,7 @@ func TestDeploymentController(t *testing.T) {
 				controllerMemory: "300Mi",
 				nodeCPU:          "1000m",
 				nodeMemory:       "500Mi",
+				kubeletDir:       "/some/directory",
 			}
 
 			dep := getDeployment(d)

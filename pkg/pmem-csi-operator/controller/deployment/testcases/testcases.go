@@ -77,6 +77,9 @@ func UpdateTests() []UpdateTest {
 			}
 			d.Spec.Labels["foo"] = "bar"
 		},
+		"kubeletDir": func(d *api.Deployment) {
+			d.Spec.KubeletDir = "/foo/bar"
+		},
 	}
 
 	full := api.Deployment{
