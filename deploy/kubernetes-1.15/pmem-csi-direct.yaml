@@ -228,7 +228,7 @@ spec:
           value: /tmp/termination-log
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
-        image: intel/pmem-csi-driver:v0.7.13
+        image: intel/pmem-csi-driver:v0.7.14
         imagePullPolicy: IfNotPresent
         name: pmem-driver
         securityContext:
@@ -317,7 +317,7 @@ spec:
           value: pmem-csi.intel.com
         - name: TERMINATION_LOG_PATH
           value: /tmp/termination-log
-        image: intel/pmem-csi-driver:v0.7.13
+        image: intel/pmem-csi-driver:v0.7.14
         imagePullPolicy: IfNotPresent
         name: pmem-driver
         securityContext:
