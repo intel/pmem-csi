@@ -133,6 +133,15 @@ func init() {
 }
 
 const (
+	// EventReasonNew new driver deployment found
+	EventReasonNew = "NewDeployment"
+	// EventReasonRunning driver has been successfully deployed
+	EventReasonRunning = "Running"
+	// EventReasonFailed driver deployment failed, Event.Message holds detailed information
+	EventReasonFailed = "Failed"
+)
+
+const (
 	// DefaultLogLevel default logging level used for the driver
 	DefaultLogLevel = uint16(5)
 	// DefaultImagePullPolicy default image pull policy for all the images used by the deployment

@@ -17,12 +17,16 @@ import (
 	"github.com/intel/pmem-csi/pkg/k8sutil"
 	pmemcontroller "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
 	"github.com/intel/pmem-csi/pkg/version"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
+	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/klog"
+	"k8s.io/kubectl/pkg/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -70,9 +74,11 @@ var _ reconcile.Reconciler = &ReconcileDeployment{}
 
 // ReconcileDeployment reconciles a Deployment object
 type ReconcileDeployment struct {
-	client     client.Client
-	namespace  string
-	k8sVersion version.Version
+	client        client.Client
+	evBroadcaster record.EventBroadcaster
+	evRecorder    record.EventRecorder
+	namespace     string
+	k8sVersion    version.Version
 	// container image used for deploying the operator
 	containerImage string
 	// known deployments
@@ -102,8 +108,14 @@ func NewReconcileDeployment(client client.Client, opts pmemcontroller.Controller
 	}
 	klog.Infof("Using '%s' as default driver image.", opts.DriverImage)
 
+	evBroadcaster := record.NewBroadcaster()
+	evBroadcaster.StartRecordingToSink(&v1.EventSinkImpl{Interface: opts.EventsClient})
+	evRecorder := evBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: "pmem-csi-operator"})
+
 	return &ReconcileDeployment{
 		client:         client,
+		evBroadcaster:  evBroadcaster,
+		evRecorder:     evRecorder,
 		k8sVersion:     opts.K8sVersion,
 		namespace:      opts.Namespace,
 		containerImage: opts.DriverImage,
@@ -159,11 +171,6 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 	}()
 
-	if err := deployment.EnsureDefaults(r.containerImage); err != nil {
-		d.Deployment.Status.Phase = pmemcsiv1alpha1.DeploymentPhaseFailed
-		return reconcile.Result{}, err
-	}
-
 	requeue, err = d.Reconcile(r)
 
 	klog.Infof("Requeue: %t, error: %v", requeue, err)
@@ -182,6 +189,10 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 
 func (r *ReconcileDeployment) Namespace() string {
 	return r.namespace
+}
+
+func (r *ReconcileDeployment) EventBroadcaster() record.EventBroadcaster {
+	return r.evBroadcaster
 }
 
 //Get tries to retrives the Kubernetes objects

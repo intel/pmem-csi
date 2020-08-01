@@ -8,6 +8,7 @@ package controller
 
 import (
 	"github.com/intel/pmem-csi/pkg/version"
+	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
@@ -22,6 +23,8 @@ type ControllerOptions struct {
 	DriverImage string
 	// Config kubernetes config used
 	Config *rest.Config
+	// EventClient events client to use for recording events
+	EventsClient v1.EventInterface
 }
 
 // AddToManagerFuncs is a list of functions to add all Controllers to the Manager
