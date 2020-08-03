@@ -53,7 +53,7 @@ Not supported officially by upstream anymore.
 
 Click the image to watch the animated demo on asciinema.org:
 
-[![asciicast](https://asciinema.org/a/4M5PSwbYkaXs0dPHYUIVbakqB.png)](https://asciinema.org/a/4M5PSwbYkaXs0dPHYUIVbakqB)
+[![asciicast](https://asciinema.org/a/4M5PSwbYkaXs0dPHYUIVbakqB.svg)](https://asciinema.org/a/4M5PSwbYkaXs0dPHYUIVbakqB)
 
 ## Content
 
