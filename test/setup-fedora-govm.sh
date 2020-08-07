@@ -67,7 +67,9 @@ EOF
         1.15) packages+=" kubelet-1.15.11-0 kubeadm-1.15.11-0 kubectl-1.15.11-0";;
         1.16) packages+=" kubelet-1.16.9-0 kubeadm-1.16.9-0 kubectl-1.16.9-0";;
         1.17) packages+=" kubelet-1.17.5-0 kubeadm-1.17.5-0 kubectl-1.17.5-0";;
-        1.18) packages+=" kubelet-1.18.2-0 kubeadm-1.18.2-0 kubectl-1.18.2-0";;
+        # 1.19 isn't released yet. We use the systemd files from the 1.18 rpms and replace the
+        # binaries below.
+        1.18|1.19) packages+=" kubelet-1.18.2-0 kubeadm-1.18.2-0 kubectl-1.18.2-0";;
         *) echo >&2 "Kubernetes version ${TEST_KUBERNETES_VERSION} not supported, package list in $0 must be updated."; exit 1;;
     esac
     packages+=" --disableexcludes=kubernetes"
@@ -92,6 +94,14 @@ while ! dnf install -y $packages; do
 done
 
 if $INIT_KUBERNETES; then
+    case ${TEST_KUBERNETES_VERSION} in
+        1.19)
+            curl -L https://dl.k8s.io/v1.19.0-rc.4/kubernetes-server-linux-amd64.tar.gz | tar -zxvf - -C / kubernetes/server/bin/kubelet kubernetes/server/bin/kubeadm
+            ln -sf /kubernetes/server/bin/kubelet /usr/bin
+            ln -sf /kubernetes/server/bin/kubeadm /usr/bin
+            ;;
+    esac
+
     # Upstream kubelet looks in /opt/cni/bin, actual files are in
     # /usr/libexec/cni from
     # containernetworking-plugins-0.8.1-1.fc30.x86_64.
