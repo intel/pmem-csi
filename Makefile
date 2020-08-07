@@ -173,6 +173,14 @@ KUSTOMIZE_OUTPUT += deploy/kubernetes-1.16/pmem-csi-direct-testing.yaml
 KUSTOMIZATION_deploy/kubernetes-1.16/pmem-csi-direct-testing.yaml = deploy/kustomize/kubernetes-1.16-direct-testing
 KUSTOMIZE_OUTPUT += deploy/kubernetes-1.16/pmem-csi-lvm-testing.yaml
 KUSTOMIZATION_deploy/kubernetes-1.16/pmem-csi-lvm-testing.yaml = deploy/kustomize/kubernetes-1.16-lvm-testing
+KUSTOMIZE_OUTPUT += deploy/kubernetes-1.19/pmem-csi-direct.yaml
+KUSTOMIZATION_deploy/kubernetes-1.19/pmem-csi-direct.yaml = deploy/kustomize/kubernetes-1.19-direct
+KUSTOMIZE_OUTPUT += deploy/kubernetes-1.19/pmem-csi-lvm.yaml
+KUSTOMIZATION_deploy/kubernetes-1.19/pmem-csi-lvm.yaml = deploy/kustomize/kubernetes-1.19-lvm
+KUSTOMIZE_OUTPUT += deploy/kubernetes-1.19/pmem-csi-direct-testing.yaml
+KUSTOMIZATION_deploy/kubernetes-1.19/pmem-csi-direct-testing.yaml = deploy/kustomize/kubernetes-1.19-direct-coverage
+KUSTOMIZE_OUTPUT += deploy/kubernetes-1.19/pmem-csi-lvm-testing.yaml
+KUSTOMIZATION_deploy/kubernetes-1.19/pmem-csi-lvm-testing.yaml = deploy/kustomize/kubernetes-1.19-lvm-coverage
 KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-ext4.yaml
 KUSTOMIZATION_deploy/common/pmem-storageclass-ext4.yaml = deploy/kustomize/storageclass-ext4
 KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-xfs.yaml
@@ -187,6 +195,7 @@ kustomize: _work/go-bindata clean_kustomize_output $(KUSTOMIZE_OUTPUT)
 	$< -o deploy/bindata_generated.go -pkg deploy deploy/kubernetes-*/*/pmem-csi.yaml
 
 $(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
+	mkdir -p ${@D}
 	$< build --load_restrictor none $(KUSTOMIZATION_$@) >$@
 	if echo "$@" | grep '/pmem-csi-' | grep -qv '\-operator'; then \
 		dir=$$(echo "$@" | tr - / | sed -e 's;kubernetes/;kubernetes-;' -e 's/.yaml//' -e 's;/pmem/csi/;/;') && \

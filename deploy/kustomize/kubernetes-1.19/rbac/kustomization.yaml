@@ -1,0 +1,22 @@
+namePrefix: pmem-csi-
+
+# A copy because https://github.com/kubernetes-sigs/kustomize/pull/2167 is not in any
+# release yet and we remove the unused service account.
+resources:
+- external-provisioner-rbac.yaml
+
+# We use the upstream [Cluster]RoleBinding and just replace
+# the account name.
+patchesJson6902:
+- target:
+    group: rbac.authorization.k8s.io
+    version: v1
+    kind: ClusterRoleBinding
+    name: csi-provisioner-role
+  path: ../../patches/controller-role-patch.yaml
+- target:
+    group: rbac.authorization.k8s.io
+    version: v1
+    kind: RoleBinding
+    name: csi-provisioner-role-cfg
+  path: ../../patches/controller-role-patch.yaml

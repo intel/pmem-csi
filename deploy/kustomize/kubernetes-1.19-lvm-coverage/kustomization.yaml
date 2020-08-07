@@ -1,0 +1,31 @@
+bases:
+- ../kubernetes-1.19-lvm-testing/
+
+patchesJson6902:
+- target:
+    group: apps
+    version: v1
+    kind: StatefulSet
+    name: pmem-csi-controller
+  path: ../testing/controller-coverage-patch.yaml
+
+- target:
+    group: apps
+    version: v1
+    kind: DaemonSet
+    name: pmem-csi-node
+  path: ../testing/node-coverage-patch.yaml
+- target:
+    group: apps
+    version: v1
+    kind: DaemonSet
+    name: pmem-csi-node
+  path: ../testing/lvm-coverage-patch.yaml
+
+images:
+- name: intel/pmem-csi-driver
+  newName: intel/pmem-csi-driver-test
+- name: intel/pmem-ns-init
+  newName: intel/pmem-ns-init-test
+- name: intel/pmem-vgm
+  newName: intel/pmem-vgm-test
