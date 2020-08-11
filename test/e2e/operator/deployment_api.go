@@ -235,6 +235,56 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				return validate.DriverDeployment(client, k8sver, d.Namespace, deployment)
 			}, "1m", "20s").ShouldNot(HaveOccurred(), "driver validation failure after restarting")
 		})
+
+		It("shall recover from conflicts", func() {
+			deployment := getDeployment("test-recover-from-conflicts")
+			sec := &corev1.Secret{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "Secret",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      deployment.GetHyphenedName() + "-registry-secrets",
+					Namespace: d.Namespace,
+				},
+				Type: corev1.SecretTypeTLS,
+				Data: map[string][]byte{
+					"ca.crt":  []byte("fake ca"),
+					"tls.key": []byte("fake key"),
+					"tls.crt": []byte("fake crt"),
+				},
+			}
+			deleteSecret := func(name string) {
+				Eventually(func() error {
+					err := f.ClientSet.CoreV1().Secrets(d.Namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
+					deploy.LogError(err, "Delete secret error: %v, will retry...", err)
+					if errors.IsNotFound(err) {
+						return nil
+					}
+					return err
+				}, "3m", "1s").ShouldNot(HaveOccurred(), "delete secret %q", name)
+			}
+			Eventually(func() error {
+				_, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Create(context.Background(), sec, metav1.CreateOptions{})
+				deploy.LogError(err, "create secret error: %v, will retry...", err)
+				return err
+			}, "3m", "1s").ShouldNot(HaveOccurred(), "create secret %q", sec.Name)
+			defer deleteSecret(sec.Name)
+
+			deployment = deploy.CreateDeploymentCR(f, deployment)
+			defer deploy.DeleteDeploymentCR(f, deployment.Name)
+
+			// The deployment should fail to create required secret(s) as it already
+			// exists and is owned by others.
+			Eventually(func() bool {
+				out := deploy.GetDeploymentCR(f, deployment.Name)
+				return out.Status.Phase == api.DeploymentPhaseFailed
+			}, "3m", "1s").Should(BeTrue(), "deployment should fail %q", deployment.Name)
+
+			// Deleting the existing secret should make the deployment succeed.
+			deleteSecret(sec.Name)
+			validateDriver(deployment)
+		})
 	})
 
 	Context("switch device mode", func() {
