@@ -187,8 +187,17 @@ EOF
         ${KUBECTL} apply --kustomize "$tmpdir/my-deployment"
         ${SSH} rm -rf "$tmpdir"
     else
-        echo >&2 "$path is missing."
-        exit 1
+        case "$path" in
+            */scheduler|*/webhook)
+                # optional, continue
+                :
+                ;;
+            *)
+                # Should be there, fail.
+                echo >&2 "$path is missing."
+                exit 1
+                ;;
+        esac
     fi
 done
 

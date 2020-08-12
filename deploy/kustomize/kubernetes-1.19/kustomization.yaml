@@ -8,7 +8,16 @@ resources:
 # The RBAC files must match the image versions.
 images:
 - name: quay.io/k8scsi/csi-provisioner
+  # TODO: use 2.0.0-rc1
   newTag: canary
-  newName: localhost:5001/csi-provisioner
+  newName: 172.17.42.1:5001/csi-provisioner
 - name: quay.io/k8scsi/csi-node-driver-registrar
   newTag: v1.2.0
+
+patchesJson6902:
+- target:
+    group: apps
+    version: v1
+    kind: StatefulSet
+    name: pmem-csi-controller
+  path: ../patches/external-provisioner-storage-capacity.patch

@@ -116,9 +116,13 @@ if $INIT_KUBERNETES; then
     # Testing may involve a Docker registry running on the build host (see
     # TEST_LOCAL_REGISTRY and TEST_PMEM_REGISTRY). We need to trust that
     # registry, otherwise Docker will fail to pull images from it.
+    #
+    # Also select systemd as cgroupdriver (https://kubernetes.io/docs/setup/production-environment/container-runtimes/#cgroup-drivers)
     mkdir -p /etc/docker
     cat >/etc/docker/daemon.json <<EOF
-{ "insecure-registries": [ $(echo $INSECURE_REGISTRIES | sed 's|^|"|g;s| |", "|g;s|$|"|') ] }
+{ "insecure-registries": [ $(echo $INSECURE_REGISTRIES | sed 's|^|"|g;s| |", "|g;s|$|"|') ],
+  "exec-opts": ["native.cgroupdriver=systemd"]
+}
 EOF
 
     # Proxy settings for Docker.
