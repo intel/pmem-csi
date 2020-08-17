@@ -197,11 +197,11 @@ ${KUBECTL} label --overwrite ns kube-system pmem-csi.intel.com/webhook=ignore
 if [ "${TEST_DEPLOYMENT_QUIET}" = "" ]; then
     cat <<EOF
 
-To try out the pmem-csi driver persistent volumes:
+To try out the PMEM-CSI driver with persistent volumes:
    cat deploy/kubernetes-${KUBERNETES_VERSION}/pmem-pvc.yaml | ${KUBECTL} create -f -
    cat deploy/kubernetes-${KUBERNETES_VERSION}/pmem-app.yaml | ${KUBECTL} create -f -
 
-To try out the pmem-csi driver cache volumes:
+To try out the PMEM-CSI driver with cache volumes:
    cat deploy/kubernetes-${KUBERNETES_VERSION}/pmem-pvc-cache.yaml | ${KUBECTL} create -f -
    cat deploy/kubernetes-${KUBERNETES_VERSION}/pmem-app-cache.yaml | ${KUBECTL} create -f -
 EOF
@@ -209,7 +209,7 @@ EOF
     if [ -e ${DEPLOYMENT_DIRECTORY}/pmem-storageclass-late-binding.yaml ]; then
         cat <<EOF
 
-To try out the pmem-csi driver persistent volumes with late binding:
+To try out the PMEM-CSI driver with persistent volumes that use late binding:
    cat deploy/kubernetes-${KUBERNETES_VERSION}/pmem-pvc-late-binding.yaml | ${KUBECTL} create -f -
    cat deploy/kubernetes-${KUBERNETES_VERSION}/pmem-app-late-binding.yaml | ${KUBECTL} create -f -
 EOF
@@ -218,7 +218,7 @@ EOF
     if [ -e ${DEPLOYMENT_DIRECTORY}/pmem-app-ephemeral.yaml ]; then
         cat <<EOF
 
-To try out the pmem-csi driver ephemeral volumes:
+To try out the PMEM-CSI driver with ephemeral volumes:
    cat deploy/kubernetes-${KUBERNETES_VERSION}/pmem-app-ephemeral.yaml | ${KUBECTL} create -f -
 EOF
     fi
