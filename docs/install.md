@@ -563,7 +563,7 @@ ephemeral volumes. The volume request could use below fields as
 Check with provided [example application](/deploy/kubernetes-1.15/pmem-app-ephemeral.yaml) for
 ephemeral volume usage.
 
-#### Raw block volumes
+### Raw block volumes
 
 Applications can use volumes provisioned by PMEM-CSI as [raw block
 devices](https://kubernetes.io/blog/2019/03/07/raw-block-volume-support-to-beta/). Such
@@ -586,7 +586,7 @@ That example demonstrates how to handle some details:
 - [Kubernetes bug #85624](https://github.com/kubernetes/kubernetes/issues/85624)
   must be worked around to format and mount the raw block device.
 
-#### Enable scheduler extensions
+### Enable scheduler extensions
 
 The PMEM-CSI scheduler extender and admission webhook are provided by
 the PMEM-CSI controller. They need to be enabled during deployment via
