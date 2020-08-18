@@ -87,7 +87,7 @@ func TestDynamicLateBindingProvisioning(client clientset.Interface, claim *v1.Pe
 	// hiccups.
 	if pv.Spec.PersistentVolumeReclaimPolicy == v1.PersistentVolumeReclaimDelete {
 		By(fmt.Sprintf("%s: deleting the claim's PV %q", id, pv.Name))
-		framework.ExpectNoError(framework.WaitForPersistentVolumeDeleted(client, pv.Name, 5*time.Second, 20*time.Minute))
+		framework.ExpectNoError(e2epv.WaitForPersistentVolumeDeleted(client, pv.Name, 5*time.Second, 20*time.Minute))
 	}
 }
 

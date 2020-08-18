@@ -34,7 +34,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework/ginkgowrapper"
 	e2ekubectl "k8s.io/kubernetes/test/e2e/framework/kubectl"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
-	"k8s.io/kubernetes/test/e2e/framework/podlogs"
+	"k8s.io/kubernetes/test/e2e/storage/podlogs"
 )
 
 // There are certain operations we only want to run once per overall test invocation
