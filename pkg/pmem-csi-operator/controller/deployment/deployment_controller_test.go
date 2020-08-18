@@ -308,7 +308,7 @@ func TestDeploymentController(t *testing.T) {
 		t.Run("provided private keys and certificates", func(t *testing.T) {
 			tc := setup(t)
 			ca, err := pmemtls.NewCA(nil, nil)
-			require.NoError(t, err, "faield to instantiate CA")
+			require.NoError(t, err, "failed to instantiate CA")
 
 			regKey, err := pmemtls.NewPrivateKey()
 			require.NoError(t, err, "failed to generate a private key: %v", err)

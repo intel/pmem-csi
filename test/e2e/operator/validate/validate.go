@@ -281,7 +281,7 @@ StatefulSet:` + defaultsApps + `
 // In addition, it fills in default values in the expected spec if they are missing
 // before comparing against the actual value. This makes it possible to
 // compare the on-disk YAML files which are typically not complete against
-// objects frome the apiserver which have all defaults filled in.
+// objects from the apiserver which have all defaults filled in.
 func compareSpec(kind string, expected, actual interface{}) []string {
 	defaults := defaultSpecValues[kind]
 	path := "spec"
