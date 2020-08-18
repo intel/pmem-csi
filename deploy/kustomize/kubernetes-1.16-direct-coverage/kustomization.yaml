@@ -1,5 +1,5 @@
 bases:
-- ../kubernetes-1.15-direct
+- ../kubernetes-1.15-direct-coverage
 
 patchesJson6902:
 - target:
