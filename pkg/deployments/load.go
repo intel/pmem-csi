@@ -198,7 +198,7 @@ func loadObjects(kubernetes version.Version, deviceMode api.DeviceMode,
 	// item. Only works for .yaml.
 	//
 	// We need to split ourselves because we need access to each
-	// original chunk of data for decoding.  kubectl has its own
+	// original chunk of data for decoding. kubectl has its own
 	// infrastructure for this, but that is a lot of code with
 	// many dependencies.
 	items := bytes.Split(yaml, []byte("\n---"))

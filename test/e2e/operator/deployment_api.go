@@ -81,7 +81,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		k8sver = *ver
 
 		// All tests are expected to complete in 5 minutes.
-		// We need to set up the global variables indirectly to avoid a watning about cancel not being called.
+		// We need to set up the global variables indirectly to avoid a warning about cancel not being called.
 		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Minute)
 		ctx, cancel = ctx2, cancel2
 	})
