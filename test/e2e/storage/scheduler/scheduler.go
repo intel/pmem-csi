@@ -60,7 +60,7 @@ func InitSchedulerTestSuite() testsuites.TestSuite {
 	}
 	if ephemeral.Supported {
 		suite.tsInfo.TestPatterns = append(suite.tsInfo.TestPatterns,
-			testpatterns.DefaultFsEphemeralVolume,
+			testpatterns.DefaultFsCSIEphemeralVolume,
 		)
 	}
 	return suite

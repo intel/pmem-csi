@@ -105,7 +105,7 @@ func (m *manifestDriver) GetDynamicProvisionStorageClass(config *testsuites.PerT
 	Expect(err).NotTo(HaveOccurred())
 	Expect(len(items)).To(Equal(1), "exactly one item from %s", scManifest)
 
-	err = utils.PatchItems(f, items...)
+	err = utils.PatchItems(f, f.Namespace, items...)
 	Expect(err).NotTo(HaveOccurred())
 	err = utils.PatchCSIDeployment(f, m.finalPatchOptions(f), items[0])
 
@@ -139,7 +139,7 @@ func (m *manifestDriver) PrepareTest(f *framework.Framework) (*testsuites.PerTes
 	}
 
 	By(fmt.Sprintf("deploying %s driver", m.driverInfo.Name))
-	cleanup, err := utils.CreateFromManifests(f, func(item interface{}) error {
+	cleanup, err := utils.CreateFromManifests(f, f.Namespace, func(item interface{}) error {
 		return utils.PatchCSIDeployment(f, m.finalPatchOptions(f), item)
 	},
 		m.manifests...,

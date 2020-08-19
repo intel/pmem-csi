@@ -58,9 +58,9 @@ func InitDaxTestSuite() testsuites.TestSuite {
 	}
 	if ephemeral.Supported {
 		suite.tsInfo.TestPatterns = append(suite.tsInfo.TestPatterns,
-			testpatterns.DefaultFsEphemeralVolume,
-			testpatterns.Ext4EphemeralVolume,
-			testpatterns.XfsEphemeralVolume,
+			testpatterns.DefaultFsCSIEphemeralVolume,
+			testpatterns.Ext4CSIEphemeralVolume,
+			testpatterns.XfsCSIEphemeralVolume,
 		)
 	}
 	return suite
