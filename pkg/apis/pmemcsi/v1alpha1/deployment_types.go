@@ -91,6 +91,8 @@ type DeploymentSpec struct {
 	PMEMPercentage uint16 `json:"pmemPercentage,omitempty"`
 	// Labels contains additional labels for all objects created by the operator.
 	Labels map[string]string `json:"labels,omitempty"`
+	// KubeletDir kubelet's root directory path
+	KubeletDir string `json:"kubeletDir,omitempty"`
 }
 
 // DeploymentStatus defines the observed state of Deployment
@@ -163,6 +165,8 @@ const (
 	DefaultDeviceMode = DeviceModeLVM
 	// DefaultPMEMPercentage PMEM space to reserve for the driver
 	DefaultPMEMPercentage = 100
+	// DefaultKubeletDir default kubelet's path
+	DefaultKubeletDir = "/var/lib/kubelet"
 )
 
 var (
@@ -204,6 +208,7 @@ const (
 	RegistryKey
 	NodeControllerCertificate
 	NodeControllerKey
+	KubeletDir
 )
 
 func (c DeploymentChange) String() string {
@@ -224,6 +229,7 @@ func (c DeploymentChange) String() string {
 		RegistryKey:               "registryKey",
 		NodeControllerCertificate: "nodeControllerCert",
 		NodeControllerKey:         "nodeControllerKey",
+		KubeletDir:                "kubeletDir",
 	}[c]
 }
 
@@ -293,6 +299,10 @@ func (d *Deployment) EnsureDefaults(operatorImage string) error {
 		d.Spec.PMEMPercentage = DefaultPMEMPercentage
 	}
 
+	if d.Spec.KubeletDir == "" {
+		d.Spec.KubeletDir = DefaultKubeletDir
+	}
+
 	return nil
 }
 
@@ -356,6 +366,9 @@ func (d *Deployment) Compare(other *Deployment) map[DeploymentChange]struct{} {
 	}
 	if bytes.Compare(d.Spec.NodeControllerPrivateKey, other.Spec.NodeControllerPrivateKey) != 0 {
 		changes[NodeControllerKey] = struct{}{}
+	}
+	if d.Spec.KubeletDir != other.Spec.KubeletDir {
+		changes[KubeletDir] = struct{}{}
 	}
 
 	return changes
@@ -460,7 +473,12 @@ func GetDeploymentCRDSchema() *apiextensions.JSONSchemaProps {
 								Type: "string",
 							},
 						},
-					}},
+					},
+					"kubeletDir": apiextensions.JSONSchemaProps{
+						Type:        "string",
+						Description: "Kubelet root directory path",
+					},
+				},
 			},
 			"status": apiextensions.JSONSchemaProps{
 				Type:        "object",

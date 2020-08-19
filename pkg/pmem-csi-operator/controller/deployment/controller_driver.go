@@ -105,6 +105,8 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, chang
 			updateAll = true
 		case api.CACertificate, api.RegistryCertificate, api.NodeControllerCertificate:
 			updateSecrets = true
+		case api.KubeletDir:
+			updateNodeDriver = true
 		}
 
 		if err != nil {
@@ -717,7 +719,7 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 							Name: "registration-dir",
 							VolumeSource: corev1.VolumeSource{
 								HostPath: &corev1.HostPathVolumeSource{
-									Path: "/var/lib/kubelet/plugins_registry/",
+									Path: d.Spec.KubeletDir + "/plugins_registry/",
 									Type: &directoryOrCreate,
 								},
 							},
@@ -726,7 +728,7 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 							Name: "mountpoint-dir",
 							VolumeSource: corev1.VolumeSource{
 								HostPath: &corev1.HostPathVolumeSource{
-									Path: "/var/lib/kubelet/plugins/kubernetes.io/csi",
+									Path: d.Spec.KubeletDir + "/plugins/kubernetes.io/csi",
 									Type: &directoryOrCreate,
 								},
 							},
@@ -735,7 +737,7 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 							Name: "pods-dir",
 							VolumeSource: corev1.VolumeSource{
 								HostPath: &corev1.HostPathVolumeSource{
-									Path: "/var/lib/kubelet/pods",
+									Path: d.Spec.KubeletDir + "/pods",
 									Type: &directoryOrCreate,
 								},
 							},
@@ -908,12 +910,12 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:             "mountpoint-dir",
-				MountPath:        "/var/lib/kubelet/plugins/kubernetes.io/csi",
+				MountPath:        d.Spec.KubeletDir + "/plugins/kubernetes.io/csi",
 				MountPropagation: &bidirectional,
 			},
 			{
 				Name:             "pods-dir",
-				MountPath:        "/var/lib/kubelet/pods",
+				MountPath:        d.Spec.KubeletDir + "/pods",
 				MountPropagation: &bidirectional,
 			},
 			{
