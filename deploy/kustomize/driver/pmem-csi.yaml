@@ -156,7 +156,7 @@ spec:
                   "/usr/local/bin/pmem-csi-driver",
                   "-v=3",
                   "-mode=node",
-                  "-endpoint=unix:///var/lib/$(PMEM_CSI_DRIVER_NAME)/csi.sock",
+                  "-endpoint=unix:///csi/csi.sock",
                   "-nodeid=$(KUBE_NODE_NAME)",
                   "-controllerEndpoint=tcp://$(KUBE_POD_IP):10001",
                   "-registryEndpoint=tcp://pmem-csi-controller:10000",
@@ -200,6 +200,8 @@ spec:
           mountPath: /dev
         - name: sys-dir
           mountPath: /sys
+        - name: socket-dir
+          mountPath: /csi
         - name: pmem-state-dir
           # This must be the same path as on the host, otherwise
           # Kata Containers cannot find the file that gets attached
@@ -216,24 +218,38 @@ spec:
         imagePullPolicy: IfNotPresent
         args: [
             "-v=3",
-            "--kubelet-registration-path=/var/lib/$(PMEM_CSI_DRIVER_NAME)/csi.sock",
-            "--csi-address=/pmem-csi/csi.sock" ]
+            "--kubelet-registration-path=/var/lib/kubelet/plugins/$(PMEM_CSI_DRIVER_NAME)/csi.sock",
+            "--csi-address=/csi/csi.sock" ]
         securityContext:
           readOnlyRootFilesystem: true
         volumeMounts:
-        - name: pmem-state-dir
-          mountPath: /pmem-csi
-        # node-driver-registrar uses /registration(hard-coded path) to keep its listening socket
-        # The socket path is used by kubelet for plugin registration
-        # so, we should make sure the appropriate host path available.
+        - name: socket-dir
+          mountPath: /csi
         - name: registration-dir
+          # node-driver-registrar uses /registration (hard-coded path in the source)
+          # to keep its listening socket. The corresponding host path is set below
+          # for the volume.
           mountPath: /registration
         env:
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
       volumes:
+        - name: socket-dir
+          hostPath:
+            # This directory has to be under /var/lib/kubelet/plugins to
+            # work on OpenShift 4.5 with SELinux enabled. When
+            # we were using /var/lib/pmem-csi.intel.com, node-driver-registrar
+            # could not connect. Disabling SELinux made a difference, but
+            # the exact root cause was not determined.
+            #
+            # The last path component must match PMEM_CSI_DRIVER_NAME.
+            # To simplify updating it via kustomize+JSON patch, the volume
+            # is intentionally listed first.
+            path: /var/lib/kubelet/plugins/pmem-csi.intel.com
+            type: DirectoryOrCreate
         - name: registration-dir
           hostPath:
+            # This is where kubelet expects registration sockets for plugins.
             path: /var/lib/kubelet/plugins_registry/
             type: DirectoryOrCreate
         - name: mountpoint-dir
@@ -249,6 +265,8 @@ spec:
             secretName: pmem-csi-node-secrets
         - name: pmem-state-dir
           hostPath:
+            # This state directory must include the CSI driver name because each
+            # installation with a certain name must have its own, separate state.
             path: /var/lib/pmem-csi.intel.com
             type: DirectoryOrCreate
         - name: dev-dir

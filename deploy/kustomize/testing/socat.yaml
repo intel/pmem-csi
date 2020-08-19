@@ -31,12 +31,12 @@ spec:
         args:
         - -s
         - tcp-listen:9735,fork,reuseaddr # port 9735 *on the host*
-        - unix-connect:/pmem-csi/csi.sock
+        - unix-connect:/csi/csi.sock
         securityContext:
           privileged: true
         volumeMounts:
-        - name: plugin-state-dir
-          mountPath: /pmem-csi
+        - name: socket-dir
+          mountPath: /csi
         # mountpoint-dir and staging-dir are needed for creating directories during sanity testing.
         - name: mountpoint-dir
           mountPath: /var/lib/kubelet/pods
@@ -46,9 +46,9 @@ spec:
           mountPropagation: Bidirectional
       volumes:
       - hostPath:
-          path: /var/lib/pmem-csi.intel.com/
+          path: /var/lib/kubelet/plugins/pmem-csi.intel.com
           type: DirectoryOrCreate
-        name: plugin-state-dir
+        name: socket-dir
       - hostPath:
           path: /var/lib/kubelet/plugins/kubernetes.io/csi/pv
           type: DirectoryOrCreate
