@@ -38,6 +38,7 @@ DEPLOY=(
     scheduler
     webhook
 )
+echo "INFO: deploying from ${DEPLOYMENT_DIRECTORY}/${TEST_DEVICEMODE}${deployment_suffix}"
 
 # Read certificate files and turn them into Kubernetes secrets.
 #
