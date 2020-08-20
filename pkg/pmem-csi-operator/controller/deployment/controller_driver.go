@@ -52,6 +52,15 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 	oldDeployment, foundInCache := r.deployments[d.Name]
 	if foundInCache {
 		changes = d.Compare(oldDeployment)
+	} else {
+		/* New deployment */
+		r.evRecorder.Event(d, corev1.EventTypeNormal, api.EventReasonNew, "Processing new driver deployment")
+	}
+
+	if err := d.EnsureDefaults(r.containerImage); err != nil {
+		d.Deployment.Status.Phase = api.DeploymentPhaseFailed
+		r.evRecorder.Event(d, corev1.EventTypeWarning, api.EventReasonFailed, err.Error())
+		return true, err
 	}
 
 	klog.Infof("Deployment: %q, state %q, changes %v, in cache %v", d.Name, d.Status.Phase, changes, foundInCache)
@@ -64,8 +73,10 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 		// TODO: wait for functional driver before entering "running" phase.
 		// For now we go straight to it.
 		d.Status.Phase = api.DeploymentPhaseRunning
+		r.evRecorder.Event(d, corev1.EventTypeNormal, api.EventReasonRunning, "Driver deployment successful")
 	} else if d.Status.Phase == api.DeploymentPhaseNew {
 		d.Status.Phase = api.DeploymentPhaseFailed
+		r.evRecorder.Event(d, corev1.EventTypeWarning, api.EventReasonFailed, err.Error())
 	}
 
 	return requeue, err

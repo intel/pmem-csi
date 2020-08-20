@@ -231,7 +231,11 @@ Spec:
       Memory:  100Mi
 Status:
   Phase:  Running
-Events:   <none>
+Events:
+  Type    Reason         Age                From               Message
+  ----    ------         ----               ----               -------
+  Normal  NewDeployment  34s                pmem-csi-operator  Processing new driver deployment
+  Normal  Running        2s (x10 over 26s)  pmem-csi-operator  Driver deployment successful
 
 
 $ kubectl get po
@@ -878,6 +882,13 @@ The possible `phase` values and their meaning are as below:
 
 <sup>1</sup> This check has not been implemented yet. Instead, the deployment goes straight to `Running` after creating sub-resources.
 <sup>2</sup> Failure reason is supposed to be carried by one of additional `DeploymentStatus` field, but not implemented yet.
+
+#### Deployment Events
+
+The PMEM-CSI operator posts events on the progress of a `Deployment`. If the
+deployment is in the `Failed` state, then one can look into the event(s) using
+`kubectl describe` on that deployment for the detailed failure reason.
+
 
 > **Note on multiple deployments**
 >

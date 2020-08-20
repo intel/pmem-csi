@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"runtime"
 
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 
 	"github.com/intel/pmem-csi/pkg/apis"
@@ -101,12 +102,18 @@ func Main() int {
 		return 1
 	}
 
+	cs, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		pmemcommon.ExitError("failed to get in-cluster client: %v", err)
+		return 1
+	}
 	// Setup all Controllers
 	if err := controller.AddToManager(mgr, controller.ControllerOptions{
-		Config:      mgr.GetConfig(),
-		Namespace:   namespace,
-		K8sVersion:  *ver,
-		DriverImage: driverImage,
+		Config:       mgr.GetConfig(),
+		Namespace:    namespace,
+		K8sVersion:   *ver,
+		DriverImage:  driverImage,
+		EventsClient: cs.CoreV1().Events(""),
 	}); err != nil {
 		pmemcommon.ExitError("Failed to add controller to manager: ", err)
 		return 1
