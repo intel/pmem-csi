@@ -32,14 +32,6 @@ rules:
   verbs:
   - '*'
 - apiGroups:
-  - apps
-  resourceNames:
-  - pmem-csi-operator
-  resources:
-  - deployments/finalizers
-  verbs:
-  - update
-- apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - roles
@@ -84,6 +76,7 @@ rules:
   resources:
   - deployments
   - deployments/status
+  - deployments/finalizers
   verbs:
   - '*'
 ---
