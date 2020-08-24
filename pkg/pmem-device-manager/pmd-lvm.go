@@ -343,7 +343,9 @@ func createNS(r *ndctl.Region, percentage uint) error {
 			Size:  canUse,
 			Align: align,
 		})
-		return fmt.Errorf("failed to create PMEM namespace with size '%d' in region '%s': %v", canUse, r.DeviceName(), err)
+		if err != nil {
+			return fmt.Errorf("failed to create PMEM namespace with size '%d' in region '%s': %v", canUse, r.DeviceName(), err)
+		}
 	}
 
 	return nil
