@@ -26,7 +26,7 @@ func LoadObjects(kubernetes version.Version, deviceMode api.DeviceMode) ([]unstr
 	return loadObjects(kubernetes, deviceMode, nil, nil)
 }
 
-var pmemImage = regexp.MustCompile(`image: intel/pmem-csi-driver(-test)?:\w+`)
+var pmemImage = regexp.MustCompile(`image: intel/pmem-csi-driver(-test)?:\S+`)
 var nameRegex = regexp.MustCompile(`(name|app|secretName|serviceName|serviceAccountName): pmem-csi`)
 
 // LoadAndCustomizeObjects reads all objects stored in a pmem-csi.yaml reference file
