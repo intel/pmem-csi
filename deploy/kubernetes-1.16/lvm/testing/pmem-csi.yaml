@@ -341,7 +341,7 @@ spec:
         - -deviceManager=lvm
         - -v=3
         - -mode=node
-        - -endpoint=unix:///var/lib/$(PMEM_CSI_DRIVER_NAME)/csi.sock
+        - -endpoint=unix:///csi/csi.sock
         - -nodeid=$(KUBE_NODE_NAME)
         - -controllerEndpoint=tcp://$(KUBE_POD_IP):10001
         - -registryEndpoint=tcp://pmem-csi-controller:10000
@@ -389,6 +389,8 @@ spec:
           name: dev-dir
         - mountPath: /sys
           name: sys-dir
+        - mountPath: /csi
+          name: socket-dir
         - mountPath: /var/lib/pmem-csi.intel.com
           mountPropagation: Bidirectional
           name: pmem-state-dir
@@ -396,8 +398,8 @@ spec:
           name: coverage-dir
       - args:
         - -v=3
-        - --kubelet-registration-path=/var/lib/$(PMEM_CSI_DRIVER_NAME)/csi.sock
-        - --csi-address=/pmem-csi/csi.sock
+        - --kubelet-registration-path=/var/lib/kubelet/plugins/$(PMEM_CSI_DRIVER_NAME)/csi.sock
+        - --csi-address=/csi/csi.sock
         - -v=5
         env:
         - name: PMEM_CSI_DRIVER_NAME
@@ -408,13 +410,17 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
         volumeMounts:
-        - mountPath: /pmem-csi
-          name: pmem-state-dir
+        - mountPath: /csi
+          name: socket-dir
         - mountPath: /registration
           name: registration-dir
       nodeSelector:
         storage: pmem
       volumes:
+      - hostPath:
+          path: /var/lib/kubelet/plugins/pmem-csi.intel.com
+          type: DirectoryOrCreate
+        name: socket-dir
       - hostPath:
           path: /var/lib/kubelet/plugins_registry/
           type: DirectoryOrCreate
@@ -469,14 +475,14 @@ spec:
       - args:
         - -s
         - tcp-listen:9735,fork,reuseaddr
-        - unix-connect:/pmem-csi/csi.sock
+        - unix-connect:/csi/csi.sock
         image: alpine/socat:1.0.3
         name: socat
         securityContext:
           privileged: true
         volumeMounts:
-        - mountPath: /pmem-csi
-          name: plugin-state-dir
+        - mountPath: /csi
+          name: socket-dir
         - mountPath: /var/lib/kubelet/pods
           mountPropagation: Bidirectional
           name: mountpoint-dir
@@ -486,9 +492,9 @@ spec:
       hostNetwork: true
       volumes:
       - hostPath:
-          path: /var/lib/pmem-csi.intel.com/
+          path: /var/lib/kubelet/plugins/pmem-csi.intel.com
           type: DirectoryOrCreate
-        name: plugin-state-dir
+        name: socket-dir
       - hostPath:
           path: /var/lib/kubelet/plugins/kubernetes.io/csi/pv
           type: DirectoryOrCreate
