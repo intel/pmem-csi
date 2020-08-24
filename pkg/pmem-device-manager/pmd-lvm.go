@@ -52,6 +52,11 @@ func NewPmemDeviceManagerLVM(pmemPercentage uint) (PmemDeviceManager, error) {
 	for _, bus := range ctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
 			vgName := pmemcommon.VgName(bus, r)
+			if r.Type() != ndctl.PmemRegion {
+				klog.Infof("Region is not suitable for fsdax, skipping it: id = %q, device %q", r.ID(), r.DeviceName())
+				continue
+			}
+
 			if err := createNS(r, pmemPercentage); err != nil {
 				return nil, err
 			}
