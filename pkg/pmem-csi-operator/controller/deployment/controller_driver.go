@@ -714,6 +714,15 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 					},
 					Volumes: []corev1.Volume{
 						{
+							Name: "socket-dir",
+							VolumeSource: corev1.VolumeSource{
+								HostPath: &corev1.HostPathVolumeSource{
+									Path: "/var/lib/kubelet/plugins/" + d.GetName(),
+									Type: &directoryOrCreate,
+								},
+							},
+						},
+						{
 							Name: "registration-dir",
 							VolumeSource: corev1.VolumeSource{
 								HostPath: &corev1.HostPathVolumeSource{
@@ -813,7 +822,7 @@ func (d *PmemCSIDriver) getNodeDriverCommand() []string {
 		fmt.Sprintf("-deviceManager=%s", d.Spec.DeviceMode),
 		fmt.Sprintf("-v=%d", d.Spec.LogLevel),
 		"-mode=node",
-		"-endpoint=unix:///var/lib/$(PMEM_CSI_DRIVER_NAME)/csi.sock",
+		"-endpoint=unix:///csi/csi.sock",
 		"-nodeid=$(KUBE_NODE_NAME)",
 		fmt.Sprintf("-controllerEndpoint=tcp://$(KUBE_POD_IP):%d", nodeControllerPort),
 		// User controller service name(== deployment name) as registry endpoint.
@@ -935,6 +944,10 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 				MountPath: "/sys",
 			},
 			{
+				Name:      "socket-dir",
+				MountPath: "/csi",
+			},
+			{
 				Name:             "pmem-state-dir",
 				MountPath:        "/var/lib/" + d.GetName(),
 				MountPropagation: &bidirectional,
@@ -1047,16 +1060,16 @@ func (d *PmemCSIDriver) getNodeRegistrarContainer() corev1.Container {
 		ImagePullPolicy: d.Spec.PullPolicy,
 		Args: []string{
 			fmt.Sprintf("-v=%d", d.Spec.LogLevel),
-			"--kubelet-registration-path=/var/lib/$(PMEM_CSI_DRIVER_NAME)/csi.sock",
-			"--csi-address=/pmem-csi/csi.sock",
+			"--kubelet-registration-path=/var/lib/kubelet/plugins/$(PMEM_CSI_DRIVER_NAME)/csi.sock",
+			"--csi-address=/csi/csi.sock",
 		},
 		SecurityContext: &corev1.SecurityContext{
 			ReadOnlyRootFilesystem: &true,
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      "pmem-state-dir",
-				MountPath: "/pmem-csi",
+				Name:      "socket-dir",
+				MountPath: "/csi",
 			},
 			{
 				Name:      "registration-dir",

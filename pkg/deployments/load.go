@@ -26,7 +26,7 @@ func LoadObjects(kubernetes version.Version, deviceMode api.DeviceMode) ([]unstr
 	return loadObjects(kubernetes, deviceMode, nil, nil)
 }
 
-var pmemImage = regexp.MustCompile(`image: intel/pmem-csi-driver(-test)?:\w+`)
+var pmemImage = regexp.MustCompile(`image: intel/pmem-csi-driver(-test)?:\S+`)
 var nameRegex = regexp.MustCompile(`(name|app|secretName|serviceName|serviceAccountName): pmem-csi`)
 
 // LoadAndCustomizeObjects reads all objects stored in a pmem-csi.yaml reference file
@@ -42,9 +42,10 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 		// except for CSIDriver which needs the exact name.
 		*yaml = nameRegex.ReplaceAll(*yaml, []byte("$1: "+deployment.GetHyphenedName()))
 
-		// Update the driver name inside the state dir.
+		// Update the driver name inside the state and socket dir.
 		*yaml = bytes.ReplaceAll(*yaml, []byte("path: /var/lib/pmem-csi.intel.com"), []byte("path: /var/lib/"+deployment.Name))
 		*yaml = bytes.ReplaceAll(*yaml, []byte("mountPath: /var/lib/pmem-csi.intel.com"), []byte("mountPath: /var/lib/"+deployment.Name))
+		*yaml = bytes.ReplaceAll(*yaml, []byte("path: /var/lib/kubelet/plugins/pmem-csi.intel.com"), []byte("path: /var/lib/kubelet/plugins/"+deployment.Name))
 
 		// This assumes that all namespaced objects actually have "namespace: default".
 		*yaml = bytes.ReplaceAll(*yaml, []byte("namespace: default"), []byte("namespace: "+namespace))
