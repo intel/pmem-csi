@@ -19,13 +19,16 @@ import (
 
 	"github.com/prometheus/common/expfmt"
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/kubernetes/test/e2e/framework"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 
 	"github.com/onsi/ginkgo"
+	"github.com/onsi/gomega"
 )
 
 const (
@@ -176,6 +179,29 @@ func WaitForPMEMDriver(c *Cluster, name, namespace string) (metricsURL string) {
 		case <-ticker.C:
 			if ready() == nil {
 				return
+			}
+		}
+	}
+}
+
+// CheckPMEMDriver does some sanity checks for a running deployment.
+func CheckPMEMDriver(c *Cluster, deployment *Deployment) {
+	pods, err := c.cs.CoreV1().Pods(deployment.Namespace).List(context.Background(),
+		metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("%s in (%s)", deploymentLabel, deployment.Name),
+		},
+	)
+	framework.ExpectNoError(err, "list PMEM-CSI pods")
+	gomega.Expect(len(pods.Items)).Should(gomega.BeNumerically(">", 0), "should have PMEM-CSI pods")
+	for _, pod := range pods.Items {
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			if containerStatus.RestartCount > 0 {
+				framework.Failf("container %q in pod %q restarted %d times, last state: %+v",
+					containerStatus.Name,
+					pod.Name,
+					containerStatus.RestartCount,
+					containerStatus.LastTerminationState,
+				)
 			}
 		}
 	}
@@ -559,6 +585,9 @@ func Parse(deploymentName string) (*Deployment, error) {
 // a test runs, the desired deployment exists. Deployed drivers are intentionally
 // kept running to speed up the execution of multiple tests that all want the
 // same kind of deployment.
+//
+// The driver should never restart. A restart would indicate some
+// (potentially intermittent) issue.
 func EnsureDeployment(deploymentName string) *Deployment {
 	deployment, err := Parse(deploymentName)
 	if err != nil {
@@ -588,6 +617,7 @@ func EnsureDeployment(deploymentName string) *Deployment {
 				// Do some sanity checks on the running deployment before the test.
 				if deployment.HasDriver {
 					WaitForPMEMDriver(c, "pmem-csi", deployment.Namespace)
+					CheckPMEMDriver(c, deployment)
 				}
 				if deployment.HasOperator {
 					WaitForOperator(c, deployment.Namespace)
@@ -636,6 +666,7 @@ func EnsureDeployment(deploymentName string) *Deployment {
 			// looking at the driver state. Long-term we want the operator to do that
 			// checking itself.
 			WaitForPMEMDriver(c, "pmem-csi", deployment.Namespace)
+			CheckPMEMDriver(c, deployment)
 		}
 
 		for _, h := range installHooks {
@@ -693,6 +724,31 @@ func (d *Deployment) GetDriverDeployment() api.Deployment {
 			PMEMPercentage: 50,
 		},
 	}
+}
+
+// DeleteAllPods deletes all currently running pods that belong to the deployment.
+func (d Deployment) DeleteAllPods(c *Cluster) error {
+	listOptions := metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("%s in (%s)", deploymentLabel, d.Name),
+	}
+	pods, err := c.cs.CoreV1().Pods(d.Namespace).List(context.Background(), listOptions)
+	if err != nil {
+		return fmt.Errorf("list all PMEM-CSI pods: %v", err)
+	}
+	// Kick of deletion of several pods at once.
+	if err := c.cs.CoreV1().Pods(d.Namespace).DeleteCollection(context.Background(),
+		metav1.DeleteOptions{},
+		listOptions,
+	); err != nil {
+		return fmt.Errorf("delete all PMEM-CSI pods: %v", err)
+	}
+	// But still wait for every single one to be gone...
+	for _, pod := range pods.Items {
+		if err := waitForPodDeletion(c, pod); err != nil {
+			return fmt.Errorf("wait for pod deletion: %v", err)
+		}
+	}
+	return nil
 }
 
 // DescribeForAll registers tests like gomega.Describe does, except that
@@ -780,4 +836,21 @@ func DefineTests() {
 			})
 		}
 	}
+}
+
+// waitForPodDeletion returns an error if it takes too long for the pod to fully terminate.
+func waitForPodDeletion(c *Cluster, pod v1.Pod) error {
+	return wait.PollImmediate(2*time.Second, time.Minute, func() (bool, error) {
+		existingPod, err := c.cs.CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			return true, nil // done
+		}
+		if err != nil {
+			return true, err // stop wait with error
+		}
+		if pod.UID != existingPod.UID {
+			return true, nil // also done (pod was restarted)
+		}
+		return false, nil
+	})
 }

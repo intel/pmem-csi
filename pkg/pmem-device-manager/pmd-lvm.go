@@ -43,19 +43,25 @@ func NewPmemDeviceManagerLVM(pmemPercentage uint) (PmemDeviceManager, error) {
 	lvmMutex.Lock()
 	defer lvmMutex.Unlock()
 
-	ctx, err := ndctl.NewContext()
+	ndctx, err := ndctl.NewContext()
 	if err != nil {
 		return nil, err
 	}
+	defer ndctx.Free()
 
 	volumeGroups := []string{}
-	for _, bus := range ctx.GetBuses() {
+	for _, bus := range ndctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
 			vgName := pmemcommon.VgName(bus, r)
-			if err := createNS(r, pmemPercentage); err != nil {
+			if r.Type() != ndctl.PmemRegion {
+				klog.Infof("Region is not suitable for fsdax, skipping it: id = %q, device %q", r.ID(), r.DeviceName())
+				continue
+			}
+
+			if err := setupNS(r, pmemPercentage); err != nil {
 				return nil, err
 			}
-			if err := createVolumesForRegion(r, vgName); err != nil {
+			if err := setupVG(r, vgName); err != nil {
 				return nil, err
 			}
 			if _, err := pmemexec.RunCommand("vgs", vgName); err != nil {
@@ -65,7 +71,6 @@ func NewPmemDeviceManagerLVM(pmemPercentage uint) (PmemDeviceManager, error) {
 			}
 		}
 	}
-	ctx.Free()
 
 	return NewPmemDeviceManagerLVMForVGs(volumeGroups)
 }
@@ -300,7 +305,8 @@ const (
 	GB uint64 = 1024 * 1024 * 1024
 )
 
-func createNS(r *ndctl.Region, percentage uint) error {
+// setupNS checks if a namespace needs to be created in the region and if so, does that.
+func setupNS(r *ndctl.Region, percentage uint) error {
 	align := GB
 	realalign := align * r.InterleaveWays()
 	canUse := uint64(percentage) * (r.Size() / 100)
@@ -343,20 +349,23 @@ func createNS(r *ndctl.Region, percentage uint) error {
 			Size:  canUse,
 			Align: align,
 		})
-		return fmt.Errorf("failed to create PMEM namespace with size '%d' in region '%s': %v", canUse, r.DeviceName(), err)
+		if err != nil {
+			return fmt.Errorf("failed to create PMEM namespace with size '%d' in region '%s': %v", canUse, r.DeviceName(), err)
+		}
 	}
 
 	return nil
 }
 
-func createVolumesForRegion(r *ndctl.Region, vgName string) error {
-	cmd := ""
-	cmdArgs := []string{"--force", vgName}
+// setupVG ensures that all namespaces with name "pmem-csi" in the region
+// are part of the volume group.
+func setupVG(r *ndctl.Region, vgName string) error {
 	nsArray := r.ActiveNamespaces()
 	if len(nsArray) == 0 {
 		klog.V(3).Infof("No active namespaces in region %s", r.DeviceName())
 		return nil
 	}
+	var devNames []string
 	for _, ns := range nsArray {
 		// consider only namespaces having name given by this driver, to exclude foreign ones
 		if ns.Name() == "pmem-csi" {
@@ -365,14 +374,16 @@ func createVolumesForRegion(r *ndctl.Region, vgName string) error {
 			if not add to arg list */
 			output, err := pmemexec.RunCommand("pvs", "--noheadings", "-o", "vg_name", devName)
 			if err != nil || len(strings.TrimSpace(output)) == 0 {
-				cmdArgs = append(cmdArgs, devName)
+				devNames = append(devNames, devName)
 			}
 		}
 	}
-	if len(cmdArgs) == 2 {
+	if len(devNames) == 0 {
 		klog.V(3).Infof("no new namespace found to add to this group: %s", vgName)
 		return nil
 	}
+
+	cmd := ""
 	if _, err := pmemexec.RunCommand("vgdisplay", vgName); err != nil {
 		klog.V(3).Infof("No volume group with name %v, mark for creation", vgName)
 		cmd = "vgcreate"
@@ -381,6 +392,8 @@ func createVolumesForRegion(r *ndctl.Region, vgName string) error {
 		cmd = "vgextend"
 	}
 
+	cmdArgs := []string{"--force", vgName}
+	cmdArgs = append(cmdArgs, devNames...)
 	_, err := pmemexec.RunCommand(cmd, cmdArgs...) //nolint gosec
 	if err != nil {
 		return fmt.Errorf("failed to create/extend volume group '%s': %v", vgName, err)

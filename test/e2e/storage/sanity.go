@@ -204,22 +204,29 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 	// is allocated dynamically and changes when redeploying. Therefore
 	// we register a hook which clears the connection when PMEM-CSI
 	// gets re-deployed.
+	scFinalize := func() {
+		sc.Finalize()
+		// Not sure why this isn't in Finalize - a bug?
+		sc.Conn = nil
+		sc.ControllerConn = nil
+	}
 	deploy.AddUninstallHook(func(deploymentName string) {
 		framework.Logf("sanity: deployment %s is gone, closing test connections to controller %s and node %s.",
 			deploymentName,
 			config.ControllerAddress,
 			config.Address)
-		sc.Finalize()
+		scFinalize()
 	})
 
 	var _ = Describe("PMEM-CSI", func() {
 		var (
-			cl      *sanity.Cleanup
-			nc      csi.NodeClient
-			cc, ncc csi.ControllerClient
-			nodeID  string
-			v       volume
-			cancel  func()
+			cl       *sanity.Cleanup
+			nc       csi.NodeClient
+			cc, ncc  csi.ControllerClient
+			nodeID   string
+			v        volume
+			cancel   func()
+			rebooted bool
 		)
 
 		BeforeEach(func() {
@@ -234,6 +241,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 				ControllerPublishSupported: true,
 				NodeStageSupported:         true,
 			}
+			rebooted = false
 			nid, err := nc.NodeGetInfo(
 				context.Background(),
 				&csi.NodeGetInfoRequest{})
@@ -256,6 +264,19 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			cl.DeleteVolumes()
 			cancel()
 			sc.Teardown()
+
+			if rebooted {
+				// Remove all cached connections, too.
+				scFinalize()
+
+				// Rebooting a node increases the restart counter of
+				// the containers. This is normal in that case, but
+				// for the next test triggers the check that
+				// containers shouldn't restart. To get around that,
+				// we delete all PMEM-CSI pods after a reboot test.
+				By("stopping all PMEM-CSI pods after rebooting some node(s)")
+				d.DeleteAllPods(cluster)
+			}
 		})
 
 		It("stores state across reboots for single volume", func() {
@@ -273,7 +294,9 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			createdVolumes, err := ncc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
 			framework.ExpectNoError(err, "Failed to list volumes after reboot")
 			Expect(createdVolumes.Entries).To(HaveLen(len(initialVolumes.Entries)+1), "one more volume on : %s", nodeID)
+
 			// Restart.
+			rebooted = true
 			restartNode(f.ClientSet, nodeID, sc)
 
 			// Once we get an answer, it is expected to be the same as before.
@@ -295,6 +318,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			nodeID := v.publish(name, vol)
 
 			// Restart.
+			rebooted = true
 			restartNode(f.ClientSet, nodeID, sc)
 
 			_, err := ncc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
@@ -359,6 +383,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			capacity, err := cc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
 			framework.ExpectNoError(err, "get capacity before restart")
 
+			rebooted = true
 			restartNode(f.ClientSet, controllerNode, sc)
 
 			_, err = WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,
