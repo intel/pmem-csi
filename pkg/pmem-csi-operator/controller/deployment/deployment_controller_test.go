@@ -341,6 +341,36 @@ func TestDeploymentController(t *testing.T) {
 			validateEvents(t, tc, dep, []string{api.EventReasonNew, api.EventReasonFailed})
 		})
 
+		t.Run("LVM mode", func(t *testing.T) {
+			tc := setup(t)
+			d := &pmemDeployment{
+				name:       "test-driver-modes",
+				deviceMode: "lvm",
+			}
+
+			dep := getDeployment(d)
+
+			err := tc.c.Create(context.TODO(), dep)
+			require.NoError(t, err, "failed to create deployment")
+			testReconcilePhase(t, tc.rc, tc.c, d.name, false, false, api.DeploymentPhaseRunning)
+			validateDriver(t, tc, dep, []string{api.EventReasonNew, api.EventReasonRunning})
+		})
+
+		t.Run("direct mode", func(t *testing.T) {
+			tc := setup(t)
+			d := &pmemDeployment{
+				name:       "test-driver-modes",
+				deviceMode: "direct",
+			}
+
+			dep := getDeployment(d)
+
+			err := tc.c.Create(context.TODO(), dep)
+			require.NoError(t, err, "failed to create deployment")
+			testReconcilePhase(t, tc.rc, tc.c, d.name, false, false, api.DeploymentPhaseRunning)
+			validateDriver(t, tc, dep, []string{api.EventReasonNew, api.EventReasonRunning})
+		})
+
 		t.Run("provided private keys", func(t *testing.T) {
 			tc := setup(t)
 			defer teardown(t, tc)
@@ -522,8 +552,12 @@ func TestDeploymentController(t *testing.T) {
 	t.Parallel()
 
 	// Validate for all supported Kubernetes versions.
+	versions := map[version.Version]bool{}
 	for _, yaml := range deploy.ListAll() {
-		version := yaml.Kubernetes
+		versions[yaml.Kubernetes] = true
+	}
+	for version := range versions {
+		version := version
 		t.Run(fmt.Sprintf("Kubernetes %v", version), func(t *testing.T) {
 			testIt(t, version)
 		})
