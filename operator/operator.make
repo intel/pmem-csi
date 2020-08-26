@@ -5,6 +5,7 @@ _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION):
 	mkdir -p _work/bin/ 2> /dev/null
 	curl -L https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk-$(OPERATOR_SDK_VERSION)-x86_64-linux-gnu -o $(abspath $@)
 	chmod a+x $(abspath $@)
+	$(shell cd _work/bin/; ln -sf operator-sdk-$(OPERATOR_SDK_VERSION) operator-sdk)
 
 # Re-generates the K8S source. This target is supposed to run
 # upon any changes made to operator api.
@@ -36,6 +37,9 @@ MANIFESTS_DIR=deploy/kustomize/olm-catalog
 CATALOG_DIR=deploy/olm-catalog
 BUNDLE_DIR=deploy/bundle
 SHORT_VERSION=$(shell echo $(VERSION) | cut -f1,2 -d'.')
+KUBECONFIG := $(shell echo $(PWD)/_work/$(CLUSTER)/kube.config)
+# Defaults to 0.7.0 release to generate catalog to use for e2e tests
+VERSION := 0.7.0
 
 # Generate CRD and add kustomization support
 operator-generate-crd: controller-gen
@@ -51,6 +55,8 @@ operator-generate-catalog: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) _work/
 	@sed -i -e 's;X.Y.Z;$(VERSION);g' -e 's;X.Y;$(SHORT_VERSION);g' $(CATALOG_DIR)/$(VERSION)/pmem-csi-operator.clusterserviceversion.yaml
 	$(MAKE) operator-clean-crd
 
+# Generate OLM bundle. OperatorHub/OLM still does not support bundle format
+# but soon it will move from 'packagemanifests' to 'bundles'.
 operator-generate-bundle: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) _work/kustomize operator-generate-crd
 	@echo "Generating operator bundle ..."
 	@_work/kustomize build --load_restrictor=none $(MANIFESTS_DIR) | $< generate bundle  --version=$(VERSION) \

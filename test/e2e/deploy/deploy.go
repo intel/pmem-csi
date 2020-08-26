@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"time"
 
+	pmemexec "github.com/intel/pmem-csi/pkg/exec"
 	"github.com/prometheus/common/expfmt"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -65,6 +66,15 @@ func WaitForOperator(c *Cluster, namespace string) *v1.Pod {
 	operator := c.WaitForAppInstance("pmem-csi-operator", "", namespace)
 	ginkgo.By("Operator is ready!")
 	return operator
+}
+
+// WaitForOLM watis till the "olm-operator" Pod in given namspace
+// is ready else fails with exception.
+func WaitForOLM(c *Cluster, namespace string) *v1.Pod {
+	ginkgo.By("Waiting if the OLM deployment is ready...")
+	olm := c.WaitForAppInstance("olm-operator", "", namespace)
+	ginkgo.By("OLM is ready!")
+	return olm
 }
 
 // WaitForPMEMDriver ensures that the PMEM-CSI driver is ready for use, which is
@@ -445,6 +455,9 @@ type Deployment struct {
 	// HasOperator is true if the operator is running.
 	HasOperator bool
 
+	// HasOLM is true if the OLM(OperatorLifecycleManager) is running.
+	HasOLM bool
+
 	// Mode is the driver mode of the deployment.
 	Mode api.DeviceMode
 
@@ -516,7 +529,11 @@ func findDriver(c *Cluster) (*Deployment, error) {
 }
 
 func findOperator(c *Cluster) (*Deployment, error) {
-	list, err := c.cs.AppsV1().Deployments("").List(context.Background(), metav1.ListOptions{LabelSelector: deploymentLabel})
+	// In case of operator deployed by OLM the labels on the Deployment object
+	// get overwritten by OLM reconcile loop.
+	// But the ReplicaSet underneath holds the labels we set on Deployment.
+	// So to cover all the cases we depend on ReplicaSet label.
+	list, err := c.cs.AppsV1().ReplicaSets("").List(context.Background(), metav1.ListOptions{LabelSelector: deploymentLabel})
 	if err != nil {
 		return nil, err
 	}
@@ -550,8 +567,9 @@ var allDeployments = []string{
 	"operator",
 	"operator-lvm-production",
 	"operator-direct-production", // Uses kube-system, to ensure that deployment in a namespace also works.
+	"olm-operator",               // operator installed by the OLM
 }
-var deploymentRE = regexp.MustCompile(`^(operator)?-?(\w*)?-?(testing|production)?$`)
+var deploymentRE = regexp.MustCompile(`^(olm)?-?(operator)?-?(\w*)?-?(testing|production)?$`)
 
 // Parse the deployment name and sets fields accordingly.
 func Parse(deploymentName string) (*Deployment, error) {
@@ -567,13 +585,16 @@ func Parse(deploymentName string) (*Deployment, error) {
 	if matches == nil {
 		return nil, fmt.Errorf("unsupported deployment %s", deploymentName)
 	}
-	if matches[1] == "operator" {
+	if matches[1] == "olm" {
+		deployment.HasOLM = true
+	}
+	if matches[2] == "operator" {
 		deployment.HasOperator = true
 	}
-	if matches[2] != "" {
+	if matches[3] != "" {
 		deployment.HasDriver = true
-		deployment.Testing = matches[3] == "testing"
-		if err := deployment.Mode.Set(matches[2]); err != nil {
+		deployment.Testing = matches[4] == "testing"
+		if err := deployment.Mode.Set(matches[3]); err != nil {
 			return nil, fmt.Errorf("deployment name %s: %v", deploymentName, err)
 		}
 	}
@@ -622,24 +643,48 @@ func EnsureDeployment(deploymentName string) *Deployment {
 				if deployment.HasOperator {
 					WaitForOperator(c, deployment.Namespace)
 				}
+				if deployment.HasOLM {
+					WaitForOLM(c, "olm")
+				}
 				return
 			}
 			framework.Logf("have %s PMEM-CSI deployment, want %s -> delete existing deployment", running.Name, deployment.Name)
+
+			if running.HasOLM {
+				cmd := exec.Command("test/stop-operator.sh", "-olm")
+				cmd.Dir = os.Getenv("REPO_ROOT")
+				cmd.Env = append(os.Environ(),
+					"TEST_OPERATOR_NAMESPACE="+running.Namespace,
+					"TEST_OPERATOR_DEPLOYMENT="+running.Name)
+
+				output, err := pmemexec.Run(cmd)
+				framework.ExpectNoError(err, "delete operator deployment: %q\nOutput: %s", deployment.Name, output)
+			}
 			err := RemoveObjects(c, running.Name)
 			framework.ExpectNoError(err, "remove PMEM-CSI deployment")
+		}
+		framework.Logf("Deployment: %s, HasOLM: %v\n", deployment.Name, deployment.HasOLM)
+		if deployment.HasOLM {
+			cmd := exec.Command("test/start-stop-olm.sh", "start")
+			cmd.Dir = os.Getenv("REPO_ROOT")
+			output, err := pmemexec.Run(cmd)
+			framework.ExpectNoError(err, "create operator deployment: %q\nOutput: %s", deployment.Name, output)
+			WaitForOLM(c, "olm")
 		}
 
 		if deployment.HasOperator {
 			// At the moment, the only supported deployment method is via test/start-operator.sh.
-			cmd := exec.Command("test/start-operator.sh")
+			cmdArgs := []string{}
+			if deployment.HasOLM {
+				cmdArgs = append(cmdArgs, "-olm")
+			}
+			cmd := exec.Command("test/start-operator.sh", cmdArgs...)
 			cmd.Dir = os.Getenv("REPO_ROOT")
 			cmd.Env = append(os.Environ(),
 				"TEST_OPERATOR_NAMESPACE="+deployment.Namespace,
 				"TEST_OPERATOR_DEPLOYMENT="+deployment.Name)
-			cmd.Stdout = ginkgo.GinkgoWriter
-			cmd.Stderr = ginkgo.GinkgoWriter
-			err = cmd.Run()
-			framework.ExpectNoError(err, "create operator deployment: %q", deployment.Name)
+			output, err := pmemexec.Run(cmd)
+			framework.ExpectNoError(err, "create operator deployment: %q\nOutput: %s", deployment.Name, output)
 
 			WaitForOperator(c, deployment.Namespace)
 		}
@@ -656,10 +701,8 @@ func EnsureDeployment(deploymentName string) *Deployment {
 					"TEST_DEPLOYMENT_QUIET=quiet",
 					"TEST_DEPLOYMENTMODE="+deployment.DeploymentMode(),
 					"TEST_DEVICEMODE="+string(deployment.Mode))
-				cmd.Stdout = ginkgo.GinkgoWriter
-				cmd.Stderr = ginkgo.GinkgoWriter
-				err = cmd.Run()
-				framework.ExpectNoError(err, "create %s PMEM-CSI deployment", deployment.Name)
+				output, err := pmemexec.Run(cmd)
+				framework.ExpectNoError(err, "create %s PMEM-CSI deployment\nOutput: %s", deployment.Name, output)
 			}
 
 			// We check for a running driver the same way at the moment, by directly
