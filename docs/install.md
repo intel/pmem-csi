@@ -271,8 +271,8 @@ Once the above deployment installation is successful, we can see all the driver
 pods in `Running` state:
 ``` console
 $ kubectl get deployments.pmem-csi.intel.com
-NAME                 AGE
-pmem-csi.intel.com   50s
+NAME                 DEVICEMODE   NODESELECTOR   IMAGE   STATUS   AGE
+pmem-deployment      lvm                                 Running  50s
 
 $ kubectl describe deployment.pmem-csi.intel.com/pmem-csi.intel.com
 Name:         pmem-csi.intel.com

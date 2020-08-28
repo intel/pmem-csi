@@ -9,6 +9,22 @@ metadata:
   creationTimestamp: null
   name: deployments.pmem-csi.intel.com
 spec:
+  additionalPrinterColumns:
+  - JSONPath: .spec.deviceMode
+    name: DeviceMode
+    type: string
+  - JSONPath: .spec.nodeSelector
+    name: NodeSelector
+    type: string
+  - JSONPath: .spec.image
+    name: Image
+    type: string
+  - JSONPath: .status.phase
+    name: Status
+    type: string
+  - JSONPath: .metatdata.creationTimestamp
+    name: Age
+    type: date
   group: pmem-csi.intel.com
   names:
     kind: Deployment
