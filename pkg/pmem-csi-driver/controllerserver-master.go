@@ -461,7 +461,7 @@ func (cs *masterController) GetCapacity(ctx context.Context, req *csi.GetCapacit
 		}
 		cap, err := cs.getNodeCapacity(ctx, node, req)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to get node(%s) capacity: %s", node, err.Error())
+			return nil, status.Errorf(codes.Internal, "failed to get node %s capacity: %s", node.NodeID, err.Error())
 		}
 		capacity = cap
 	} else {

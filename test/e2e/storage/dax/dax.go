@@ -77,10 +77,13 @@ type local struct {
 	config      *testsuites.PerTestConfig
 	testCleanup func()
 
-	resource       *testsuites.VolumeResource
-	root           string
-	daxCheckBinary string
+	resource *testsuites.VolumeResource
+	root     string
 }
+
+const (
+	daxCheckBinary = "_work/pmem-dax-check"
+)
 
 func (p *daxTestSuite) DefineTests(driver testsuites.TestDriver, pattern testpatterns.TestPattern) {
 	var l local
@@ -92,8 +95,7 @@ func (p *daxTestSuite) DefineTests(driver testsuites.TestDriver, pattern testpat
 
 		// Build pmem-dax-check helper binary.
 		l.root = os.Getenv("REPO_ROOT")
-		l.daxCheckBinary = "_work/pmem-dax-check"
-		build := exec.Command("/bin/sh", "-c", os.Getenv("GO")+" build -o "+l.daxCheckBinary+" ./test/cmd/pmem-dax-check")
+		build := exec.Command("/bin/sh", "-c", os.Getenv("GO")+" build -o "+daxCheckBinary+" ./test/cmd/pmem-dax-check")
 		build.Stdout = GinkgoWriter
 		build.Stderr = GinkgoWriter
 		build.Dir = l.root
@@ -124,18 +126,37 @@ func (p *daxTestSuite) DefineTests(driver testsuites.TestDriver, pattern testpat
 		init()
 		defer cleanup()
 
-		l.testDaxInPod(f, l.resource.Pattern.VolMode, l.resource.VolSource, l.config, withKataContainers)
+		testDaxInPod(f, l.root, l.resource.Pattern.VolMode, l.resource.VolSource, l.config, withKataContainers)
 	})
 }
 
-func (l local) testDaxInPod(
+func testDaxInPod(
 	f *framework.Framework,
+	root string,
 	volumeMode v1.PersistentVolumeMode,
 	source *v1.VolumeSource,
 	config *testsuites.PerTestConfig,
 	withKataContainers bool,
 ) {
+	pod := CreatePod(f, "dax-volume-test", volumeMode, source, config, withKataContainers)
+	defer func() {
+		DeletePod(f, pod)
+	}()
+	checkWithNormalRuntime := testDax(f, pod, root, volumeMode, source, withKataContainers)
+	DeletePod(f, pod)
+	if checkWithNormalRuntime {
+		testDaxOutside(f, pod, root)
+	}
+}
 
+func CreatePod(
+	f *framework.Framework,
+	name string,
+	volumeMode v1.PersistentVolumeMode,
+	source *v1.VolumeSource,
+	config *testsuites.PerTestConfig,
+	withKataContainers bool,
+) *v1.Pod {
 	const (
 		volPath       = "/vol1"
 		volName       = "vol1"
@@ -145,7 +166,7 @@ func (l local) testDaxInPod(
 	root := int64(0)
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "dax-volume-test",
+			Name:      name,
 			Namespace: f.Namespace.Name,
 		},
 		Spec: v1.PodSpec{
@@ -252,23 +273,33 @@ func (l local) testDaxInPod(
 	ns := f.Namespace.Name
 	podClient := f.PodClientNS(ns)
 	createdPod := podClient.Create(pod)
-	defer func() {
-		By("delete the pod")
-		podClient.DeleteSync(createdPod.Name, metav1.DeleteOptions{}, framework.DefaultPodDeletionTimeout)
-	}()
 	podErr := e2epod.WaitForPodRunningInNamespace(f.ClientSet, createdPod)
 	framework.ExpectNoError(podErr, "running pod")
+
+	return createdPod
+}
+
+func testDax(
+	f *framework.Framework,
+	pod *v1.Pod,
+	root string,
+	volumeMode v1.PersistentVolumeMode,
+	source *v1.VolumeSource,
+	withKataContainers bool,
+) bool {
+	ns := f.Namespace.Name
+	containerName := pod.Spec.Containers[0].Name
 	if volumeMode == v1.PersistentVolumeBlock {
 		By("mounting raw block device")
 		// TODO: remove the workaround above and script invocation here.
-		pmempod.RunInPod(f, l.root, nil, "/data/create-dax-dev.sh && mkfs.ext4 -b 4096 /dax-dev && mkdir -p /mnt && mount -odax /dax-dev /mnt", ns, pod.Name, containerName)
+		pmempod.RunInPod(f, root, nil, "/data/create-dax-dev.sh && mkfs.ext4 -b 4096 /dax-dev && mkdir -p /mnt && mount -odax /dax-dev /mnt", ns, pod.Name, containerName)
 	}
 
 	By("checking that missing DAX support is detected")
-	pmempod.RunInPod(f, l.root, []string{l.daxCheckBinary}, l.daxCheckBinary+" /no-dax; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
+	pmempod.RunInPod(f, root, []string{daxCheckBinary}, daxCheckBinary+" /no-dax; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
 
 	By("checking volume for DAX support")
-	pmempod.RunInPod(f, l.root, []string{l.daxCheckBinary}, "lsblk; mount | grep /mnt; "+l.daxCheckBinary+" /mnt/daxtest", ns, pod.Name, containerName)
+	pmempod.RunInPod(f, root, []string{daxCheckBinary}, "lsblk; mount | grep /mnt; "+daxCheckBinary+" /mnt/daxtest", ns, pod.Name, containerName)
 
 	// Data written in a container running under Kata Containers
 	// should be visible also in a normal container, unless the
@@ -277,27 +308,41 @@ func (l local) testDaxInPod(
 	checkWithNormalRuntime := withKataContainers && source.CSI == nil
 	if checkWithNormalRuntime {
 		By("creating file for usage under normal pod")
-		pmempod.RunInPod(f, l.root, nil, "touch /mnt/hello-world", ns, pod.Name, containerName)
+		pmempod.RunInPod(f, root, nil, "touch /mnt/hello-world", ns, pod.Name, containerName)
 	}
+
+	return checkWithNormalRuntime
+}
+
+func DeletePod(
+	f *framework.Framework,
+	pod *v1.Pod,
+) {
+	By(fmt.Sprintf("Deleting pod %s", pod.Name))
+	err := e2epod.DeletePodWithWait(f.ClientSet, pod)
+	framework.ExpectNoError(err, "while deleting pod")
+}
+
+func testDaxOutside(
+	f *framework.Framework,
+	pod *v1.Pod,
+	root string,
+) {
+	// Check for data written earlier.
+	pod.Spec.RuntimeClassName = nil
+	pod.Name = "data-volume-test"
+
+	By(fmt.Sprintf("Creating pod %s", pod.Name))
+	ns := f.Namespace.Name
+	podClient := f.PodClientNS(ns)
+	pod = podClient.Create(pod)
+	podErr := e2epod.WaitForPodRunningInNamespace(f.ClientSet, pod)
+	framework.ExpectNoError(podErr, "running second pod")
+	By("checking for previously created file under normal pod")
+	containerName := pod.Spec.Containers[0].Name
+	pmempod.RunInPod(f, root, nil, "ls -l /mnt/hello-world", ns, pod.Name, containerName)
 
 	By(fmt.Sprintf("Deleting pod %s", pod.Name))
 	err := e2epod.DeletePodWithWait(f.ClientSet, pod)
 	framework.ExpectNoError(err, "while deleting pod")
-
-	if checkWithNormalRuntime {
-		// Check for data written earlier.
-		pod.Spec.RuntimeClassName = nil
-		pod.Name = "data-volume-test"
-
-		By(fmt.Sprintf("Creating pod %s", pod.Name))
-		createdPod = podClient.Create(pod)
-		podErr := e2epod.WaitForPodRunningInNamespace(f.ClientSet, createdPod)
-		framework.ExpectNoError(podErr, "running second pod")
-		By("checking for previously created file under normal pod")
-		pmempod.RunInPod(f, l.root, nil, "ls -l /mnt/hello-world", ns, pod.Name, containerName)
-
-		By(fmt.Sprintf("Deleting pod %s", pod.Name))
-		err := e2epod.DeletePodWithWait(f.ClientSet, pod)
-		framework.ExpectNoError(err, "while deleting pod")
-	}
 }

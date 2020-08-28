@@ -50,7 +50,7 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 	BeforeEach(func() {
 		cluster, err := deploy.NewCluster(f.ClientSet, f.DynamicClient)
 		framework.ExpectNoError(err, "get cluster information")
-		metricsURL = deploy.WaitForPMEMDriver(cluster, "pmem-csi", d.Namespace, d.Testing)
+		metricsURL = deploy.WaitForPMEMDriver(cluster, "pmem-csi", d)
 	})
 
 	It("works", func() {

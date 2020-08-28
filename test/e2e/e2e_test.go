@@ -36,6 +36,7 @@ import (
 	_ "github.com/intel/pmem-csi/test/e2e/operator"
 	_ "github.com/intel/pmem-csi/test/e2e/storage"
 	_ "github.com/intel/pmem-csi/test/e2e/tls"
+	_ "github.com/intel/pmem-csi/test/e2e/versionskew"
 
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 )

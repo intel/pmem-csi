@@ -28,6 +28,7 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/ephemeral"
 	"github.com/intel/pmem-csi/test/e2e/storage/dax"
 	"github.com/intel/pmem-csi/test/e2e/storage/scheduler"
+	"github.com/intel/pmem-csi/test/e2e/versionskew"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -47,7 +48,7 @@ var (
 )
 
 var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
-	csiTestDriver := driver.New(d.Name, "pmem-csi.intel.com", nil, nil)
+	csiTestDriver := driver.New(d.Name(), "pmem-csi.intel.com", nil, nil)
 
 	// List of testSuites to be added below.
 	var csiTestSuites = []func() testsuites.TestSuite{
@@ -61,6 +62,7 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 		testsuites.InitVolumesTestSuite,
 		dax.InitDaxTestSuite,
 		scheduler.InitSchedulerTestSuite,
+		versionskew.InitSkewTestSuite,
 	}
 
 	if ephemeral.Supported {
@@ -157,7 +159,7 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 
 	// Also run some limited tests with Kata Containers, using different
 	// storage classes than usual.
-	kataDriver := driver.New(d.Name+"-pmem-csi-kata", "pmem-csi.intel.com",
+	kataDriver := driver.New(d.Name()+"-pmem-csi-kata", "pmem-csi.intel.com",
 		[]string{"xfs", "ext4"},
 		map[string]string{
 			"ext4": "deploy/common/pmem-storageclass-ext4-kata.yaml",
