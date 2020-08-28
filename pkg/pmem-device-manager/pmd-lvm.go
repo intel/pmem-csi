@@ -308,13 +308,18 @@ const (
 // setupNS checks if a namespace needs to be created in the region and if so, does that.
 func setupNS(r *ndctl.Region, percentage uint) error {
 	align := GB
+	// In doc for "ndctl create-namespace" https://pmem.io/ndctl/ndctl-create-namespace.html
+	// it is stated that:
+	// For pmem namepsaces the size must be a multiple of the interleave-width and the namespace alignment.
+	// Because "align" is already used for argument we pass into r.CreateNamespace,
+	// we use "realalign" for multiplied alignment value required by above requirement.
 	realalign := align * r.InterleaveWays()
 	canUse := uint64(percentage) * r.Size() / 100
 	klog.V(3).Infof("Create fsdax-namespaces in %v, allowed %d %%, real align %d:\ntotal       : %16d\navail       : %16d\ncan use     : %16d",
 		r.DeviceName(), percentage, realalign, r.Size(), r.AvailableSize(), canUse)
 	// Subtract sizes of existing active namespaces with currently handled mode and owned by pmem-csi
 	for _, ns := range r.ActiveNamespaces() {
-		klog.V(5).Infof("createNS: Exists: Size %16d Mode:%v Device:%v Name:%v", ns.Size(), ns.Mode(), ns.DeviceName(), ns.Name())
+		klog.V(5).Infof("setupNS: Exists: Size %16d Mode:%v Device:%v Name:%v", ns.Size(), ns.Mode(), ns.DeviceName(), ns.Name())
 		if ns.Name() != "pmem-csi" {
 			continue
 		}
