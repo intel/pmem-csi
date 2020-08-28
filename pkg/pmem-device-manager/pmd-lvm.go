@@ -309,7 +309,7 @@ const (
 func setupNS(r *ndctl.Region, percentage uint) error {
 	align := GB
 	realalign := align * r.InterleaveWays()
-	canUse := uint64(percentage) * (r.Size() / 100)
+	canUse := uint64(percentage) * r.Size() / 100
 	klog.V(3).Infof("Create fsdax-namespaces in %v, allowed %d %%, real align %d:\ntotal       : %16d\navail       : %16d\ncan use     : %16d",
 		r.DeviceName(), percentage, realalign, r.Size(), r.AvailableSize(), canUse)
 	// Subtract sizes of existing active namespaces with currently handled mode and owned by pmem-csi
