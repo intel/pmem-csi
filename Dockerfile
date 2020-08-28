@@ -96,6 +96,22 @@ RUN set -x && \
     cp /go/LICENSE /usr/local/share/package-licenses/go.LICENSE && \
     cp LICENSE /usr/local/share/package-licenses/PMEM-CSI.LICENSE
 
+# Some of the licenses might require us to distribute source code.
+# We cannot just point to the upstream repos because those might
+# disappear. We could host a copy at a location under our control,
+# but keeping that in sync with the published container images
+# would be tricky. So what we do instead is copy the (small!)
+# source code which has this requirement into the image.
+RUN set -x && \
+    mkdir -p /usr/local/share/package-sources && \
+    for license in $(grep -l -r -w -e MPL -e GPL -e LGPL /usr/local/share/package-licenses | sed -e 's;^/usr/local/share/package-licenses/;;'); do \
+        if ! (dir=$(dirname $license) && \
+              tar -Jvcf /usr/local/share/package-sources/$(echo $dir | tr / _).tar.xz vendor/$dir ); then \
+              exit 1; \
+        fi; \
+    done; \
+    ls -l /usr/local/share/package-sources
+
 # The actual pmem-csi-driver image.
 FROM runtime as pmem
 
@@ -107,6 +123,7 @@ COPY --from=binaries /usr/local/lib/libdaxctl.so.* /usr/local/lib/
 RUN for i in /usr/local/lib/lib*.so.*; do ln -fs $i /usr/lib64; done
 COPY --from=binaries /usr/local/bin/pmem-* /usr/local/bin/
 COPY --from=binaries /usr/local/share/package-licenses /usr/local/share/package-licenses
+COPY --from=binaries /usr/local/share/package-sources /usr/local/share/package-sources
 COPY --from=binaries /usr/local/lib/NDCTL.COPYING /usr/local/share/package-licenses/
 # default lvm config uses lvmetad and throwing below warning for all lvm tools
 # WARNING: Failed to connect to lvmetad. Falling back to device scanning.
