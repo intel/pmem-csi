@@ -1,7 +1,5 @@
 # Introduction to PMEM-CSI for Kubernetes
 
-**Note: This is Alpha code and not production ready.**
-
 Intel PMEM-CSI is a [CSI](https://github.com/container-storage-interface/spec)
 storage driver for container orchestrators like
 Kubernetes. It makes local persistent memory
@@ -56,6 +54,42 @@ Not supported officially by upstream anymore.
 [external-provisioner](https://github.com/kubernetes-csi/external-provisioner/)
 2.0.0 because support for the v1beta CSI APIs was removed. Also not
 supported officially by upstream anymore.
+
+## Feature status
+
+PMEM-CSI is under active development. New features get added
+continuously and old features may get removed. To minimize the impact
+of feature changes on production usage, the project is using the
+following approach:
+- New features are considered alpha while their API and usage are
+  still under discussion.
+- Stable features are supported and tested across up- and downgrades
+  between all supported PMEM-CSI releases. Whether a release is still
+  supported is documented in the release notes.
+- Alpha features may get removed at any time. Stable features will be
+  marked as deprecated first and then may get removed after half a
+  year. Deprecations are announced in the release notes of the release
+  which deprecates the feature.
+
+The following table lists the features that are stable:
+
+Feature | Introduced in
+--------|--------------
+[LVM mode](docs/design.html#lvm-device-mode) | [v0.5.0]
+[Direct mode](https://intel.github.io/pmem-csi/latest/docs/design.html#direct-device-mode) | [v0.5.0]
+[Persistent volumes](https://intel.github.io/pmem-csi/latest/docs/design.html#volume-persistency) | [v0.5.0]
+[CSI Ephemeral volumes](https://intel.github.io/pmem-csi/latest/docs/design.html#volume-persistency) | [v0.6.0]
+[Raw block volumes](https://intel.github.io/pmem-csi/latest/docs/install.html#raw-block-volumes) | [v0.6.0]
+[Capacity-aware pod scheduling](https://intel.github.io/pmem-csi/latest/docs/design.html#capacity-aware-pod-scheduling) | [v0.7.0]
+
+[v0.5.0]: https://github.com/intel/pmem-csi/releases/tag/v0.5.0
+[v0.6.0]: https://github.com/intel/pmem-csi/releases/tag/v0.6.0
+[v0.7.0]: https://github.com/intel/pmem-csi/releases/tag/v0.7.0
+
+Release notes are prepared only for major new releases (like v0.6.0)
+but not for automatic updates (like v0.6.1). For more information on
+releases, see [release
+management](docs/DEVELOPMENT.md#release-management).
 
 ## Demo
 
