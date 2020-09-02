@@ -37,7 +37,7 @@ NO_PROXY=$(shell echo "$${NO_PROXY:-$${no_proxy}},$$(ip addr | grep inet6 | grep
 export HTTP_PROXY HTTPS_PROXY NO_PROXY
 
 REGISTRY_NAME?=$(shell . test/test-config.sh && echo $${TEST_BUILD_PMEM_REGISTRY})
-IMAGE_VERSION?=v0.7.17
+IMAGE_VERSION?=v0.7.18
 IMAGE_TAG=$(REGISTRY_NAME)/pmem-csi-driver$*:$(IMAGE_VERSION)
 # Pass proxy config via --build-arg only if these are set,
 # enabling proxy config other way, like ~/.docker/config.json
