@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package deployment
 
 import (
+	"context"
 	"crypto/rsa"
 	"crypto/tls"
 	"fmt"
@@ -25,10 +26,15 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/klog"
+	"k8s.io/kubectl/pkg/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -36,6 +42,25 @@ const (
 	controllerMetricsPort = 10010
 	nodeControllerPort    = 10001
 )
+
+// A list of all object types potentially created by the operator,
+// in this or any previous release. In other words, this list may grow,
+// but never shrink, because a newer release needs to delete objects
+// created by an older release.
+// This list also must be kept in sync with the operator RBAC rules.
+var AllObjectTypes = []schema.GroupVersionKind{
+	rbacv1.SchemeGroupVersion.WithKind("RoleList"),
+	rbacv1.SchemeGroupVersion.WithKind("ClusterRoleList"),
+	rbacv1.SchemeGroupVersion.WithKind("RoleBindingList"),
+	rbacv1.SchemeGroupVersion.WithKind("ClusterRoleBindingList"),
+	corev1.SchemeGroupVersion.WithKind("ServiceAccountList"),
+	corev1.SchemeGroupVersion.WithKind("SecretList"),
+	corev1.SchemeGroupVersion.WithKind("ServiceList"),
+	corev1.SchemeGroupVersion.WithKind("ConfigMapList"),
+	appsv1.SchemeGroupVersion.WithKind("DaemonSetList"),
+	appsv1.SchemeGroupVersion.WithKind("StatefulSetList"),
+	storagev1beta1.SchemeGroupVersion.WithKind("CSIDriverList"),
+}
 
 type PmemCSIDriver struct {
 	*api.Deployment
@@ -137,6 +162,15 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, chang
 			return true, err
 		}
 		objects = append(objects, objs...)
+
+		// If not found cache might be result of operator restart
+		// check if this deployment has any objects to be deleted
+		if !foundInCache {
+			if err := d.deleteObsoleteObjects(r, objs); err != nil {
+				klog.Infof("Failed to delete obsolete objects: %v", err)
+				return true, err
+			}
+		}
 	} else {
 		if updateSecrets {
 			objs, err := d.getSecrets()
@@ -203,14 +237,69 @@ func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, chang
 	return false, nil
 }
 
-func (d *PmemCSIDriver) deployObjects(r *ReconcileDeployment) error {
-	objects, err := d.getDeploymentObjects()
-	if err != nil {
-		return err
+func objectIsObsolete(objList []apiruntime.Object, toFind unstructured.Unstructured) (bool, error) {
+	for i := range objList {
+		metaObj, err := meta.Accessor(objList[i])
+		if err != nil {
+			return false, err
+		}
+		if metaObj.GetName() == toFind.GetName() &&
+			objList[i].GetObjectKind().GroupVersionKind() == toFind.GetObjectKind().GroupVersionKind() {
+			return false, nil
+		}
 	}
-	for _, obj := range objects {
-		if err := r.Create(obj); err != nil {
+
+	return true, nil
+}
+
+func (d *PmemCSIDriver) isOwnerOf(obj unstructured.Unstructured) bool {
+	for _, owner := range obj.GetOwnerReferences() {
+		if owner.UID == d.GetUID() {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (d *PmemCSIDriver) deleteObsoleteObjects(r *ReconcileDeployment, newObjects []apiruntime.Object) error {
+	for _, gvk := range AllObjectTypes {
+		list := &unstructured.UnstructuredList{}
+		list.SetGroupVersionKind(gvk)
+		opts := &client.ListOptions{
+			Namespace: d.namespace,
+		}
+
+		klog.Infof("Fetching '%s' list with options: %v", gvk, opts.Namespace)
+		if err := r.client.List(context.TODO(), list, opts); err != nil {
 			return err
+		}
+
+		for _, obj := range list.Items {
+			if !d.isOwnerOf(obj) {
+				continue
+			}
+			obsolete, err := objectIsObsolete(newObjects, obj)
+			if err != nil {
+				return err
+			}
+			if !obsolete {
+				continue
+			}
+			o, err := scheme.Scheme.New(obj.GetObjectKind().GroupVersionKind())
+			if err != nil {
+				return err
+			}
+			metaObj, err := meta.Accessor(o)
+			if err != nil {
+				return err
+			}
+			metaObj.SetName(obj.GetName())
+			metaObj.SetNamespace(obj.GetNamespace())
+
+			if err := r.Delete(o); err != nil && !errors.IsNotFound(err) {
+				return err
+			}
 		}
 	}
 	return nil
@@ -352,19 +441,6 @@ func validateCertificates(caCert, regKey, regCert, ncKey, ncCert []byte) error {
 	conn.Close()
 
 	return nil
-}
-
-func (d *PmemCSIDriver) getOwnerReference() metav1.OwnerReference {
-	blockOwnerDeletion := true
-	isController := true
-	return metav1.OwnerReference{
-		APIVersion:         d.APIVersion,
-		Kind:               d.Kind,
-		Name:               d.GetName(),
-		UID:                d.GetUID(),
-		BlockOwnerDeletion: &blockOwnerDeletion,
-		Controller:         &isController,
-	}
 }
 
 func (d *PmemCSIDriver) getCSIDriver() *storagev1beta1.CSIDriver {
@@ -1038,7 +1114,7 @@ func (d *PmemCSIDriver) getObjectMeta(name string, isClusterResource bool) metav
 	meta := metav1.ObjectMeta{
 		Name: name,
 		OwnerReferences: []metav1.OwnerReference{
-			d.getOwnerReference(),
+			d.GetOwnerReference(),
 		},
 		Labels: d.Spec.Labels,
 	}

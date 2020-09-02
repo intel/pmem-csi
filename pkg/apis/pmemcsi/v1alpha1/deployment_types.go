@@ -391,6 +391,21 @@ func (d *Deployment) GetHyphenedName() string {
 	return strings.ReplaceAll(d.GetName(), ".", "-")
 }
 
+// GetOwnerReference returns self owner reference could be used by other object
+// to add this deployment to it's owner reference list.
+func (d *Deployment) GetOwnerReference() metav1.OwnerReference {
+	blockOwnerDeletion := true
+	isController := true
+	return metav1.OwnerReference{
+		APIVersion:         d.APIVersion,
+		Kind:               d.Kind,
+		Name:               d.GetName(),
+		UID:                d.GetUID(),
+		BlockOwnerDeletion: &blockOwnerDeletion,
+		Controller:         &isController,
+	}
+}
+
 func GetDeploymentCRDSchema() *apiextensions.JSONSchemaProps {
 	One := float64(1)
 	Hundred := float64(100)

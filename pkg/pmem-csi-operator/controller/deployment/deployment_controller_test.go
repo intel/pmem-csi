@@ -26,6 +26,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -546,6 +547,84 @@ func TestDeploymentController(t *testing.T) {
 					})
 				})
 			}
+		})
+
+		t.Run("delete obsolete objects", func(t *testing.T) {
+			tc := setup(t)
+			defer teardown(t, tc)
+			d := &pmemDeployment{
+				name: "test-driver-upgrades",
+			}
+
+			dep := getDeployment(d)
+
+			err := tc.c.Create(context.TODO(), dep)
+			require.NoError(t, err, "failed to create deployment")
+			testReconcilePhase(t, tc.rc, tc.c, d.name, false, false, api.DeploymentPhaseRunning)
+			validateDriver(t, tc, dep, []string{api.EventReasonNew, api.EventReasonRunning})
+
+			err = tc.c.Get(context.TODO(), client.ObjectKey{Name: d.name}, dep)
+			require.NoError(t, err, "get deployment")
+
+			cm1 := &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "ConfigMap",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: dep.GetHyphenedName(),
+					OwnerReferences: []metav1.OwnerReference{
+						dep.GetOwnerReference(),
+					},
+					Namespace: testNamespace,
+				},
+				Data: map[string]string{},
+			}
+			err = tc.c.Create(context.TODO(), cm1)
+			require.NoError(t, err, "create configmap owned by deployment")
+
+			cm2 := &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "ConfigMap",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "unrelated-cm",
+					Namespace: testNamespace,
+				},
+				Data: map[string]string{},
+			}
+			err = tc.c.Create(context.TODO(), cm2)
+			require.NoError(t, err, "create configmap: %s", cm2.Name)
+
+			defer func() {
+				err := tc.c.Delete(context.TODO(), cm1)
+				if err != nil && !errors.IsNotFound(err) {
+					require.NoErrorf(t, err, "delete configmap: %s", cm1.Name)
+				}
+				err = tc.c.Delete(context.TODO(), cm2)
+				if err != nil && !errors.IsNotFound(err) {
+					require.NoErrorf(t, err, "delete configmap: %s", cm2.Name)
+				}
+			}()
+
+			// Use a fresh reconciler to mimic operator restart
+			tc.rc = newReconcileDeployment(tc.c, tc.cs)
+
+			// A fresh reconcile should delete the newly created above ConfigMap
+			testReconcilePhase(t, tc.rc, tc.c, d.name, false, false, api.DeploymentPhaseRunning)
+			err = tc.c.Get(context.TODO(), client.ObjectKey{Name: d.name}, dep)
+			require.NoError(t, err, "get deployment")
+			validateDriver(t, tc, dep, []string{api.EventReasonNew, api.EventReasonRunning})
+
+			cm := &corev1.ConfigMap{}
+			err = tc.c.Get(context.TODO(), client.ObjectKey{Name: cm1.Name, Namespace: testNamespace}, cm)
+			require.Errorf(t, err, "get '%s' config map after reconcile", cm1.Name)
+			require.True(t, errors.IsNotFound(err), "config map not found after reconcile")
+
+			// operator should not delete the objects unrelated to any deployment
+			err = tc.c.Get(context.TODO(), client.ObjectKey{Name: cm2.Name, Namespace: testNamespace}, cm)
+			require.NoErrorf(t, err, "get '%s' config map after reconcile", cm2.Name)
 		})
 	}
 

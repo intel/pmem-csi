@@ -23,6 +23,7 @@ import (
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	"github.com/intel/pmem-csi/pkg/deployments"
+	operatordeployment "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment"
 	"github.com/intel/pmem-csi/pkg/version"
 
 	"gopkg.in/yaml.v2"
@@ -422,35 +423,18 @@ func prettyPrintObjectID(object unstructured.Unstructured) string {
 		object.GetNamespace())
 }
 
-// A list of all object types potentially created by the
-// operator. It's okay and desirable to list more than actually used
-// at the moment, to catch new objects.
-var allObjectTypes = []schema.GroupVersionKind{
-	schema.GroupVersionKind{"", "v1", "SecretList"},
-	schema.GroupVersionKind{"", "v1", "ServiceList"},
-	schema.GroupVersionKind{"", "v1", "ServiceAccountList"},
-	schema.GroupVersionKind{"admissionregistration.k8s.io", "v1beta1", "MutatingWebhookConfigurationList"},
-	schema.GroupVersionKind{"apps", "v1", "DaemonSetList"},
-	schema.GroupVersionKind{"apps", "v1", "DeploymentList"},
-	schema.GroupVersionKind{"apps", "v1", "ReplicaSetList"},
-	schema.GroupVersionKind{"apps", "v1", "StatefulSetList"},
-	schema.GroupVersionKind{"rbac.authorization.k8s.io", "v1", "ClusterRoleList"},
-	schema.GroupVersionKind{"rbac.authorization.k8s.io", "v1", "ClusterRoleBindingList"},
-	schema.GroupVersionKind{"rbac.authorization.k8s.io", "v1", "RoleList"},
-	schema.GroupVersionKind{"rbac.authorization.k8s.io", "v1", "RoleBindingList"},
-	schema.GroupVersionKind{"storage.k8s.io", "v1beta1", "CSIDriverList"},
-}
-
-func listAllDeployedObjects(client client.Client, deployment api.Deployment) ([]unstructured.Unstructured, error) {
+func listAllDeployedObjects(c client.Client, deployment api.Deployment) ([]unstructured.Unstructured, error) {
 	objects := []unstructured.Unstructured{}
 
-	for _, gvk := range allObjectTypes {
+	for _, gvk := range operatordeployment.AllObjectTypes {
 		list := &unstructured.UnstructuredList{}
 		list.SetGroupVersionKind(gvk)
+		opts := &client.ListOptions{
+			Namespace: deployment.Namespace,
+		}
 		// Filtering by owner doesn't work, so we have to use brute-force and look at all
 		// objects.
-		// TODO (?): filter at least by namespace, where applicable.
-		if err := client.List(context.Background(), list); err != nil {
+		if err := c.List(context.Background(), list, opts); err != nil {
 			return objects, fmt.Errorf("list %s: %v", gvk, err)
 		}
 	outer:
