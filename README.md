@@ -55,6 +55,15 @@ Click the image to watch the animated demo on asciinema.org:
 
 [![asciicast](https://asciinema.org/a/4M5PSwbYkaXs0dPHYUIVbakqB.svg)](https://asciinema.org/a/4M5PSwbYkaXs0dPHYUIVbakqB)
 
+## License
+
+All of the source code required to build PMEM-CSI is available under
+Open Source licenses.  The source code files identify external Go
+modules used. Binaries are distributed as container images on
+DockerHub. Those images contain license texts under
+`/usr/local/share/package-licenses` and source code under
+`/usr/local/share/package-sources`.
+
 ## Content
 
 - [PMEM-CSI for Kubernetes](#pmem-csi-for-kubernetes)
