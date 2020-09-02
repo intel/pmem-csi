@@ -50,9 +50,7 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 	changes := map[api.DeploymentChange]struct{}{}
 
 	oldDeployment, foundInCache := r.deployments[d.Name]
-	if foundInCache {
-		changes = d.Compare(oldDeployment)
-	} else {
+	if !foundInCache {
 		/* New deployment */
 		r.evRecorder.Event(d, corev1.EventTypeNormal, api.EventReasonNew, "Processing new driver deployment")
 	}
@@ -61,6 +59,10 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 		d.Deployment.Status.Phase = api.DeploymentPhaseFailed
 		r.evRecorder.Event(d, corev1.EventTypeWarning, api.EventReasonFailed, err.Error())
 		return true, err
+	}
+
+	if foundInCache {
+		changes = d.Compare(oldDeployment)
 	}
 
 	klog.Infof("Deployment: %q, state %q, changes %v, in cache %v", d.Name, d.Status.Phase, changes, foundInCache)
