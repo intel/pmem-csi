@@ -6,7 +6,7 @@
 # This is used on release branches before tagging a stable version. The master and devel
 # branches default to using the latest Clear Linux.
 ARG CLEAR_LINUX_BASE=clearlinux@sha256:08fbd70b288a60494d93bf6d0f8604cd4d3c88da6706b5f20e4c32daa5bf33fd
-ARG SWUPD_UPDATE_ARG="--version=33660"
+ARG SWUPD_UPDATE_ARG="--version=33670"
 
 # Common base image for building PMEM-CSI:
 # - up-to-date Clear Linux
