@@ -19,7 +19,7 @@ import (
 // RunInPod optionally tars up some files or directories, unpacks them in a container,
 // and executes a shell command. Any error is treated as test failure.
 func RunInPod(f *framework.Framework, rootdir string, items []string, command string, namespace, pod, container string) (string, string) {
-	var input io.Reader
+	var input io.ReadCloser
 	var cmdPrefix string
 	if len(items) > 0 {
 		args := []string{"-cf", "-"}
@@ -54,6 +54,12 @@ func RunInPod(f *framework.Framework, rootdir string, items []string, command st
 		CaptureStderr: true,
 	}
 	stdout, stderr, err := f.ExecWithOptions(options)
+	if input != nil {
+		// Tell tar that it can stop writing. Necessary if ExecWithOptions did not consume
+		// all output of tar, because otherwise tar is stuck and tar.Wait() above will
+		// block.
+		input.Close()
+	}
 	framework.ExpectNoError(err, "command failed in namespace %s, pod/container %s/%s:\nstderr:\n%s\nstdout:%s\n",
 		namespace, pod, container, stderr, stdout)
 	fmt.Fprintf(GinkgoWriter, "stderr:\n%s\nstdout:\n%s\n",
