@@ -1,9 +1,11 @@
 namePrefix: pmem-csi-
 
-# A copy because https://github.com/kubernetes-sigs/kustomize/pull/2167 is not in any
-# release yet and we remove the unused service account.
 resources:
-- external-provisioner-rbac.yaml
+- https://github.com/kubernetes-csi/external-provisioner/raw/v1.6.0/deploy/kubernetes/rbac.yaml
+
+# We define our own service account.
+patchesStrategicMerge:
+- ../../patches/delete-csi-provisioner-service-account-patch.yaml
 
 # We use the upstream [Cluster]RoleBinding and just replace
 # the account name.

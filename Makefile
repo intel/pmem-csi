@@ -139,7 +139,7 @@ include test/start-stop.make
 include test/test.make
 
 #Kustomize latest release version
-KUSTOMIZE_VERSION=v3.4.0
+KUSTOMIZE_VERSION=v3.8.2
 _work/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz:
 	curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz -o $(abspath $@)
 
