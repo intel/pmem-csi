@@ -38,6 +38,30 @@ rules:
   - delete
   - update
   - create
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - csistoragecapacities
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+- apiGroups:
+  - apps
+  resources:
+  - replicasets
+  verbs:
+  - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -109,6 +133,14 @@ rules:
   - ""
   resources:
   - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - volumeattachments
   verbs:
   - get
   - list
@@ -270,7 +302,7 @@ spec:
         - --strict-topology=true
         - --timeout=5m
         - -v=5
-        image: quay.io/k8scsi/csi-provisioner:v1.6.0
+        image: quay.io/k8scsi/csi-provisioner:v2.0.0
         imagePullPolicy: IfNotPresent
         name: external-provisioner
         securityContext:
