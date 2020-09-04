@@ -201,7 +201,7 @@ pipeline {
 
         // Some stages are skipped entirely when testing PRs, the
         // others skip certain tests in that case:
-        // - production deployment is only tested with Kubernetes 1.15
+        // - production deployment is only tested with Kubernetes 1.16
         //   and testing deployment only with Kubernetes 1.18
         stage('Testing') {
             parallel {
@@ -229,7 +229,6 @@ pipeline {
                     }
                 }
                 stage('1.16') {
-                    when { not { changeRequest() } }
                     options {
                         timeout(time: 240, unit: "MINUTES")
                     }
@@ -237,18 +236,7 @@ pipeline {
                         label "pmem-csi"
                     }
                     steps {
-                        TestInVM("fedora-1.16", "fedora", "", "1.16", "")
-                    }
-                }
-                stage('1.15') {
-                    options {
-                        timeout(time: 240, unit: "MINUTES")
-                    }
-                    agent {
-                        label "pmem-csi"
-                    }
-                    steps {
-                        TestInVM("fedora-1.15", "fedora", "", "1.15", "Top.Level..[[:alpha:]]*-testing[[:space:]]")
+                        TestInVM("fedora-1.16", "fedora", "", "1.16", "Top.Level..[[:alpha:]]*-testing[[:space:]]")
                     }
                 }
 

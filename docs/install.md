@@ -564,7 +564,7 @@ ephemeral volumes. The volume request could use below fields as
 |`eraseAfter`|Clear all data after use and before<br> deleting the volume|Yes|`true` (default),<br> `false`|
 |`kataContainers`|Prepare volume for use in Kata Containers.|Yes|`false/0/f/FALSE` (default),<br> `true/1/t/TRUE`|
 
-Check with provided [example application](/deploy/kubernetes-1.15/pmem-app-ephemeral.yaml) for
+Check with provided [example application](/deploy/kubernetes-1.16/pmem-app-ephemeral.yaml) for
 ephemeral volume usage.
 
 ### Raw block volumes

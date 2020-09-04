@@ -153,28 +153,6 @@ TEST_E2E_SKIP_ALL += should.access.volume.from.different.nodes
 # Test is flawed and will become optional soon (probably csi-test 3.2.0): https://github.com/kubernetes-csi/csi-test/pull/258
 TEST_E2E_SKIP_ALL += NodeUnpublishVolume.*should.fail.when.the.volume.is.missing
 
-# This is a test for behavior of kubelet which Kubernetes <= 1.15 doesn't pass.
-TEST_E2E_SKIP_1.14 += volumeMode.should.not.mount.*map.unused.volumes.in.a.pod
-TEST_E2E_SKIP_1.15 += volumeMode.should.not.mount.*map.unused.volumes.in.a.pod
-
-# It looks like Kubernetes <= 1.15 does not wait for
-# NodeUnpublishVolume to complete before deleting the pod:
-#
-# Apr 21 17:33:12.743: INFO: Wait up to 5m0s for pod "dax-volume-test" to be fully deleted
-# pmem-csi-node-4dsmr/pmem-driver@pmem..ker2: I0421 17:33:34.491659       1 tracing.go:19] GRPC call: /csi.v1.Node/NodeGetCapabilities
-# pmem-csi-node-4dsmr/pmem-driver@pmem..ker2: I0421 17:33:45.549013       1 tracing.go:19] GRPC call: /csi.v1.Node/NodeUnpublishVolume
-# pmem-csi-node-4dsmr/pmem-driver@pmem..ker2: I0421 17:33:45.549189       1 nodeserver.go:295] NodeUnpublishVolume: unmount /var/lib/kubelet/pods/1c5f1fec-b08b-4264-8c55-40a22c1b3d16/volumes/kubernetes.io~csi/vol1/mount
-# STEP: delete the pod
-# Apr 21 17:33:46.769: INFO: Waiting for pod dax-volume-test to disappear
-# Apr 21 17:33:46.775: INFO: Pod dax-volume-test no longer exists
-#
-# That breaks our volume leak detection because the test continues
-# before the volume is truly removed. As a workaround, we disable
-# ephemeral volume tests on Kubernetes <= 1.15. That's okay because the feature
-# was alpha in those releases and shouldn't be used.
-TEST_E2E_SKIP_1.14 += Testpattern:.Ephemeral-volume Testpattern:.inline.ephemeral.CSI.volume
-TEST_E2E_SKIP_1.15 += Testpattern:.Ephemeral-volume Testpattern:.inline.ephemeral.CSI.volume
-
 # Add all Kubernetes version-specific suppressions.
 TEST_E2E_SKIP_ALL += $(TEST_E2E_SKIP_$(shell cat _work/$(CLUSTER)/kubernetes.version))
 
