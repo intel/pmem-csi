@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
+	pmemexec "github.com/intel/pmem-csi/pkg/exec"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 

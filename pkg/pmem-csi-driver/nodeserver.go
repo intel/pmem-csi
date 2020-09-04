@@ -22,11 +22,11 @@ import (
 	"k8s.io/klog"
 	"k8s.io/utils/mount"
 
+	pmemexec "github.com/intel/pmem-csi/pkg/exec"
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	"github.com/intel/pmem-csi/pkg/imagefile"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
-	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 	"github.com/intel/pmem-csi/pkg/volumepathhandler"
 )
 

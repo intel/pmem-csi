@@ -8,9 +8,9 @@ import (
 	"sync"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	pmemexec "github.com/intel/pmem-csi/pkg/exec"
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
-	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
 	"k8s.io/klog"
 )
 

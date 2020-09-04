@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	pmemexec "github.com/intel/pmem-csi/pkg/pmem-exec"
+	pmemexec "github.com/intel/pmem-csi/pkg/exec"
 	"golang.org/x/sys/unix"
 	"k8s.io/klog"
 )
