@@ -1,3 +1,5 @@
+# Generated with "make kustomize", do not edit!
+
 apiVersion: v1
 kind: ServiceAccount
 metadata:

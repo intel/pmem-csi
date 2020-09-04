@@ -179,7 +179,7 @@ kustomize: _work/go-bindata clean_kustomize_output $(KUSTOMIZE_OUTPUT)
 	$< -o deploy/bindata_generated.go -pkg deploy deploy/kubernetes-*/*/pmem-csi.yaml
 
 $(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
-	$< build --load_restrictor none $(KUSTOMIZATION_$@) >$@
+	(echo '# Generated with "make kustomize", do not edit!'; echo; $< build --load_restrictor none $(KUSTOMIZATION_$@)) >$@
 	if echo "$@" | grep '/pmem-csi-' | grep -qv '\-operator'; then \
 		dir=$$(echo "$@" | tr - / | sed -e 's;kubernetes/;kubernetes-;' -e 's/.yaml//' -e 's;/pmem/csi/;/;') && \
 		mkdir -p $$dir && \
