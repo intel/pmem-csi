@@ -184,7 +184,25 @@ EOF
 EOF
                 ;;
         esac
-        ${KUBECTL} apply --kustomize "$tmpdir/my-deployment"
+        # When quickly taking down one installation of PMEM-CSI and recreating it, sometimes we get:
+        #   nodePort: Invalid value: 32000: provided port is already allocated
+        #
+        # A fix is going into 1.19: https://github.com/kubernetes/kubernetes/pull/89937/commits
+        # Not sure whether that is applicable here because we don't use a HA setup and
+        # besides, we also need to support older Kubernetes releases. Therefore we retry...
+        start=$SECONDS
+        while ! output="$(${KUBECTL} apply --kustomize "$tmpdir/my-deployment" 2>&1)"; do
+            if echo "$output" | grep -q "nodePort: Invalid value: ${TEST_SCHEDULER_EXTENDER_NODE_PORT}: provided port is already allocated" &&
+                    [ $(($SECONDS - $start)) -lt 60 ]; then
+                # Retry later...
+                echo "Warning: kubectl failed with potentially temporary error, will try again: $output"
+                sleep 1
+            else
+                echo "$output"
+                exit 1
+            fi
+        done
+        echo "$output"
         ${SSH} rm -rf "$tmpdir"
     else
         echo >&2 "$path is missing."
