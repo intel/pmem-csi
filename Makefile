@@ -157,14 +157,15 @@ KUSTOMIZE_INPUT := $(shell [ ! -d deploy/kustomize ] || find deploy/kustomize -t
 # The "testing" flavor of the generated files contains both
 # the loglevel changes and enables coverage data collection.
 KUSTOMIZE_OUTPUT :=
-KUSTOMIZE_OUTPUT += deploy/kubernetes-1.16/pmem-csi-direct.yaml
-KUSTOMIZATION_deploy/kubernetes-1.16/pmem-csi-direct.yaml = deploy/kustomize/kubernetes-base-direct
-KUSTOMIZE_OUTPUT += deploy/kubernetes-1.16/pmem-csi-lvm.yaml
-KUSTOMIZATION_deploy/kubernetes-1.16/pmem-csi-lvm.yaml = deploy/kustomize/kubernetes-base-lvm
-KUSTOMIZE_OUTPUT += deploy/kubernetes-1.16/pmem-csi-direct-testing.yaml
-KUSTOMIZATION_deploy/kubernetes-1.16/pmem-csi-direct-testing.yaml = deploy/kustomize/kubernetes-base-direct-coverage
-KUSTOMIZE_OUTPUT += deploy/kubernetes-1.16/pmem-csi-lvm-testing.yaml
-KUSTOMIZATION_deploy/kubernetes-1.16/pmem-csi-lvm-testing.yaml = deploy/kustomize/kubernetes-base-lvm-coverage
+KUSTOMIZE_OUTPUT += deploy/kubernetes-1.17/pmem-csi-direct.yaml
+KUSTOMIZATION_deploy/kubernetes-1.17/pmem-csi-direct.yaml = deploy/kustomize/kubernetes-base-direct
+KUSTOMIZE_OUTPUT += deploy/kubernetes-1.17/pmem-csi-lvm.yaml
+KUSTOMIZATION_deploy/kubernetes-1.17/pmem-csi-lvm.yaml = deploy/kustomize/kubernetes-base-lvm
+KUSTOMIZE_OUTPUT += deploy/kubernetes-1.17/pmem-csi-direct-testing.yaml
+KUSTOMIZATION_deploy/kubernetes-1.17/pmem-csi-direct-testing.yaml = deploy/kustomize/kubernetes-base-direct-coverage
+KUSTOMIZE_OUTPUT += deploy/kubernetes-1.17/pmem-csi-lvm-testing.yaml
+KUSTOMIZATION_deploy/kubernetes-1.17/pmem-csi-lvm-testing.yaml = deploy/kustomize/kubernetes-base-lvm-coverage
+
 KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-ext4.yaml
 KUSTOMIZATION_deploy/common/pmem-storageclass-ext4.yaml = deploy/kustomize/storageclass-ext4
 KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-xfs.yaml

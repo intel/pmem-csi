@@ -206,17 +206,17 @@ pipeline {
         stage('Testing') {
             parallel {
                 // This runs most tests and thus gets to use the initial worker immediately.
-                stage('1.18') {
+                stage('1.19') {
                     options {
                         timeout(time: 240, unit: "MINUTES")
                     }
                     steps {
-                        TestInVM("", "fedora", "", "1.18", "Top.Level..[[:alpha:]]*-production[[:space:]]")
+                        TestInVM("", "fedora", "", "1.19", "Top.Level..[[:alpha:]]*-production[[:space:]]")
                     }
                 }
 
                 // All others set up their own worker.
-                stage('1.17') {
+                stage('1.18') {
                     when { not { changeRequest() } }
                     options {
                         timeout(time: 240, unit: "MINUTES")
@@ -225,10 +225,10 @@ pipeline {
                         label "pmem-csi"
                     }
                     steps {
-                        TestInVM("fedora-1.17", "fedora", "", "1.17", "")
+                        TestInVM("fedora-1.18", "fedora", "", "1.18", "")
                     }
                 }
-                stage('1.16') {
+                stage('1.17') {
                     options {
                         timeout(time: 240, unit: "MINUTES")
                     }
@@ -236,7 +236,7 @@ pipeline {
                         label "pmem-csi"
                     }
                     steps {
-                        TestInVM("fedora-1.16", "fedora", "", "1.16", "Top.Level..[[:alpha:]]*-testing[[:space:]]")
+                        TestInVM("fedora-1.17", "fedora", "", "1.17", "Top.Level..[[:alpha:]]*-testing[[:space:]]")
                     }
                 }
 

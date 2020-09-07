@@ -33,9 +33,10 @@ versions:
 | 1.13               | CSINodeInfo, CSIDriverRegistry,<br>CSIBlockVolume</br>| unsupported <sup>1</sup>
 | 1.14               |                                | unsupported <sup>2</sup>
 | 1.15               | CSIInlineVolume                | unsupported <sup>3</sup>
-| 1.16               |                                |
-| 1.17               |                                |
-| 1.18               |                                |
+| 1.16               |                                | unsupported <sup>4</sup>
+| 1.17               |                                | supported
+| 1.18               |                                | supported
+| 1.19               |                                | supported
 
 <sup>1</sup> Several relevant features are only available in alpha
 quality in Kubernetes 1.13 and the combination of skip attach and
@@ -50,6 +51,11 @@ officially by upstream anymore.
 Not supported officially by upstream anymore.
 
 <sup>3</sup> Not supported officially by upstream anymore.
+
+<sup>4</sup> No longer supported by current
+[external-provisioner](https://github.com/kubernetes-csi/external-provisioner/)
+2.0.0 because support for the v1beta CSI APIs was removed. Also not
+supported officially by upstream anymore.
 
 ## Demo
 
