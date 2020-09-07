@@ -23,6 +23,10 @@ type YamlFile struct {
 	// was written for.
 	Kubernetes version.Version
 
+	// Flavor is a variant of the normal deployment for the Kubernetes version.
+	// Empty or a string leading with a hyphen.
+	Flavor string
+
 	// DeviceMode defines in which mode the deployed driver will
 	// operate.
 	DeviceMode api.DeviceMode
@@ -30,7 +34,7 @@ type YamlFile struct {
 
 var yamls []YamlFile
 
-var re = regexp.MustCompile(`^deploy/kubernetes-([^/]*)/([^/]*)/pmem-csi.yaml$`)
+var re = regexp.MustCompile(`^deploy/kubernetes-([0-9\.]*)([^/]*)/([^/]*)/pmem-csi.yaml$`)
 
 func init() {
 	for _, file := range AssetNames() {
@@ -45,7 +49,8 @@ func init() {
 		yamls = append(yamls, YamlFile{
 			Name:       file,
 			Kubernetes: kubernetes,
-			DeviceMode: api.DeviceMode(parts[2]),
+			Flavor:     parts[3],
+			DeviceMode: api.DeviceMode(parts[3]),
 		})
 	}
 }

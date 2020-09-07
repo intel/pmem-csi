@@ -153,42 +153,59 @@ _work/kustomize: _work/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz
 # output.
 KUSTOMIZE_INPUT := $(shell [ ! -d deploy/kustomize ] || find deploy/kustomize -type f)
 
-# Output files and their corresponding kustomize target.
+# Output files and their corresponding kustomization, in the format <target .yaml>=<kustomization directory>
+KUSTOMIZE :=
+
+# For each supported Kubernetes version, we provide four different flavors.
 # The "testing" flavor of the generated files contains both
 # the loglevel changes and enables coverage data collection.
-KUSTOMIZE_OUTPUT :=
-KUSTOMIZE_OUTPUT += deploy/kubernetes-1.17/pmem-csi-direct.yaml
-KUSTOMIZATION_deploy/kubernetes-1.17/pmem-csi-direct.yaml = deploy/kustomize/kubernetes-base-direct
-KUSTOMIZE_OUTPUT += deploy/kubernetes-1.17/pmem-csi-lvm.yaml
-KUSTOMIZATION_deploy/kubernetes-1.17/pmem-csi-lvm.yaml = deploy/kustomize/kubernetes-base-lvm
-KUSTOMIZE_OUTPUT += deploy/kubernetes-1.17/pmem-csi-direct-testing.yaml
-KUSTOMIZATION_deploy/kubernetes-1.17/pmem-csi-direct-testing.yaml = deploy/kustomize/kubernetes-base-direct-coverage
-KUSTOMIZE_OUTPUT += deploy/kubernetes-1.17/pmem-csi-lvm-testing.yaml
-KUSTOMIZATION_deploy/kubernetes-1.17/pmem-csi-lvm-testing.yaml = deploy/kustomize/kubernetes-base-lvm-coverage
+KUSTOMIZE_KUBERNETES_OUTPUT = \
+    deploy/kubernetes-X.XX/pmem-csi-direct.yaml=deploy/kustomize/kubernetes-base-direct \
+    deploy/kubernetes-X.XX/pmem-csi-lvm.yaml=deploy/kustomize/kubernetes-base-lvm \
+    deploy/kubernetes-X.XX/pmem-csi-direct-testing.yaml=deploy/kustomize/kubernetes-base-direct-coverage \
+    deploy/kubernetes-X.XX/pmem-csi-lvm-testing.yaml=deploy/kustomize/kubernetes-base-lvm-coverage \
 
-KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-ext4.yaml
-KUSTOMIZATION_deploy/common/pmem-storageclass-ext4.yaml = deploy/kustomize/storageclass-ext4
-KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-xfs.yaml
-KUSTOMIZATION_deploy/common/pmem-storageclass-xfs.yaml = deploy/kustomize/storageclass-xfs
-KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-cache.yaml
-KUSTOMIZATION_deploy/common/pmem-storageclass-cache.yaml = deploy/kustomize/storageclass-cache
-KUSTOMIZE_OUTPUT += deploy/common/pmem-storageclass-late-binding.yaml
-KUSTOMIZATION_deploy/common/pmem-storageclass-late-binding.yaml = deploy/kustomize/storageclass-late-binding
-KUSTOMIZE_OUTPUT += deploy/operator/pmem-csi-operator.yaml
-KUSTOMIZATION_deploy/operator/pmem-csi-operator.yaml = deploy/kustomize/operator
-kustomize: _work/go-bindata clean_kustomize_output $(KUSTOMIZE_OUTPUT)
-	$< -o deploy/bindata_generated.go -pkg deploy deploy/kubernetes-*/*/pmem-csi.yaml
+KUSTOMIZE_KUBERNETES_VERSIONS = \
+    1.17 \
+    1.18 \
+    1.19 \
+
+KUSTOMIZE += $(foreach version,$(KUSTOMIZE_KUBERNETES_VERSIONS),$(subst X.XX,$(version),$(KUSTOMIZE_KUBERNETES_OUTPUT)))
+
+KUSTOMIZE += deploy/common/pmem-storageclass-ext4.yaml=deploy/kustomize/storageclass-ext4
+KUSTOMIZE += deploy/common/pmem-storageclass-xfs.yaml=deploy/kustomize/storageclass-xfs
+KUSTOMIZE += deploy/common/pmem-storageclass-cache.yaml=deploy/kustomize/storageclass-cache
+KUSTOMIZE += deploy/common/pmem-storageclass-late-binding.yaml=deploy/kustomize/storageclass-late-binding
+KUSTOMIZE += deploy/operator/pmem-csi-operator.yaml=deploy/kustomize/operator
+
+KUSTOMIZE_OUTPUT := $(foreach item,$(KUSTOMIZE),$(firstword $(subst =, ,$(item))))
+
+# This function takes the name of a .yaml output file and returns the
+# corresponding kustomization as specified in KUSTOMIZE. It works by
+# iterating over all items and only return the second half of the
+# right one.
+KUSTOMIZE_LOOKUP_KUSTOMIZATION = $(strip $(foreach item,$(KUSTOMIZE),$(if $(filter $(1)=%,$(item)),$(word 2,$(subst =, ,$(item))))))
+
+# This function takes the kustomize binary and the name of an output
+# file as arguments and returns the command which produces that file
+# as stdout.
+KUSTOMIZE_INVOCATION = (echo '\# Generated with "make kustomize", do not edit!'; echo; $(1) build --load_restrictor none $(call KUSTOMIZE_LOOKUP_KUSTOMIZATION,$(2)))
 
 $(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
-	(echo '# Generated with "make kustomize", do not edit!'; echo; $< build --load_restrictor none $(KUSTOMIZATION_$@)) >$@
+	mkdir -p ${@D}
+	$(call KUSTOMIZE_INVOCATION,$<,$@) >$@
 	if echo "$@" | grep '/pmem-csi-' | grep -qv '\-operator'; then \
-		dir=$$(echo "$@" | tr - / | sed -e 's;kubernetes/;kubernetes-;' -e 's/.yaml//' -e 's;/pmem/csi/;/;') && \
+		dir=$$(echo "$@" | tr - / | sed -e 's;kubernetes/;kubernetes-;' -e 's;/alpha/;-alpha/;' -e 's/.yaml//' -e 's;/pmem/csi/;/;') && \
 		mkdir -p $$dir && \
 		cp $@ $$dir/pmem-csi.yaml && \
 		echo 'resources: [ pmem-csi.yaml ]' > $$dir/kustomization.yaml; \
 	fi
 
+kustomize: _work/go-bindata clean_kustomize_output $(KUSTOMIZE_OUTPUT)
+	$< -o deploy/bindata_generated.go -pkg deploy deploy/kubernetes-*/*/pmem-csi.yaml
+
 clean_kustomize_output:
+	rm -rf deploy/kubernetes-*
 	rm -f $(KUSTOMIZE_OUTPUT)
 
 # Always re-generate the output files because "git rebase" might have
@@ -212,7 +229,7 @@ _work/go-bindata:
 test: test-kustomize
 test-kustomize: $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
 $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT)): test-kustomize-%: _work/kustomize
-	@ if ! diff <($< build --load_restrictor none $(KUSTOMIZATION_$*)) $*; then echo "$* was modified manually" && false; fi
+	if ! diff <($(call KUSTOMIZE_INVOCATION,$<,$*)) $*; then echo "$* was modified manually" && false; fi
 
 # Targets in the makefile can depend on check-go-version-<path to go binary>
 # to trigger a warning if the x.y version of that binary does not match

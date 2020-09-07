@@ -384,14 +384,14 @@ and that the driver's log output doesn't contain errors.
 - **Define two storage classes using the driver**
 
 ``` console
-$ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-storageclass-ext4.yaml
-$ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-storageclass-xfs.yaml
+$ kubectl create -f deploy/common/pmem-storageclass-ext4.yaml
+$ kubectl create -f deploy/common/pmem-storageclass-xfs.yaml
 ```
 
-- **Provision two pmem-csi volumes**
+- **Provision two PMEM-CSI volumes**
 
 ``` console
-$ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-pvc.yaml
+$ kubectl create -f deploy/common/pmem-pvc.yaml
 ```
 
 - **Verify two Persistent Volume Claims have 'Bound' status**
@@ -406,7 +406,7 @@ pmem-csi-pvc-xfs    Bound    pvc-f7101fd2-6b36-11e9-bf09-deadbeef0100   4Gi     
 - **Start two applications requesting one provisioned volume each**
 
 ``` console
-$ kubectl create -f deploy/kubernetes-<kubernetes version>/pmem-app.yaml
+$ kubectl create -f deploy/common/pmem-app.yaml
 ```
 
 These applications use **storage: pmem** in the <i>nodeSelector</i>
@@ -475,8 +475,8 @@ provisioned volume can be used:
   of PMEM volumes each volume on different node. The number of PMEM
   volumes to create can be specified by `cacheSize` StorageClass
   parameter. Applications which claim a `cache` volume can use
-  `ReadWriteMany` in its `accessModes` list. Check with provided 
-  [cacheStorageClass](/deploy/common/pmem-storageclass-cache.yaml)
+  `ReadWriteMany` in its `accessModes` list. Try it out with the provided
+  [cache storage class](/deploy/common/pmem-storageclass-cache.yaml)
   example. This
   [diagram](/docs/images/sequence/pmem-csi-cache-sequence-diagram.png)
   illustrates how a cache volume gets provisioned in Kubernetes using
@@ -488,8 +488,8 @@ own instance but will end up sharing the same PMEM volume instead.
 Application deployment has to consider this and use available Kubernetes
 mechanisms like [node
 anti-affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity).
-Check with the provided 
-[cacheapplication](/deploy/common/pmem-app-cache.yaml) example.
+Try it out with provided
+[cache application](/deploy/common/pmem-app-cache.yaml) example.
 
 **WARNING**: late binding (`volumeBindingMode:WaitForFirstConsume`) has some caveats:
 * Pod creation may get stuck when there isn't enough capacity left for
@@ -564,8 +564,9 @@ ephemeral volumes. The volume request could use below fields as
 |`eraseAfter`|Clear all data after use and before<br> deleting the volume|Yes|`true` (default),<br> `false`|
 |`kataContainers`|Prepare volume for use in Kata Containers.|Yes|`false/0/f/FALSE` (default),<br> `true/1/t/TRUE`|
 
-Check with provided [example application](/deploy/kubernetes-1.16/pmem-app-ephemeral.yaml) for
-ephemeral volume usage.
+Try out ephemeral volume usage with the provided [example
+application](/deploy/common/pmem-app-ephemeral.yaml).
+
 
 ### Raw block volumes
 
