@@ -554,6 +554,12 @@ and Kata Containers does not support that one.
 
 ### Ephemeral inline volumes
 
+#### Kubernetes CSI specific
+
+This is the original implementation of ephemeral inline volumes for
+CSI drivers in Kubernetes. It is currently available as a beta feature
+in Kubernetes.
+
 Volume requests [embedded in the pod spec](https://kubernetes-csi.github.io/docs/ephemeral-local-volumes.html#example-of-inline-csi-pod-spec) are provisioned as
 ephemeral volumes. The volume request could use below fields as
 [`volumeAttributes`](https://kubernetes.io/docs/concepts/storage/volumes/#csi):
@@ -567,6 +573,22 @@ ephemeral volumes. The volume request could use below fields as
 Try out ephemeral volume usage with the provided [example
 application](/deploy/common/pmem-app-ephemeral.yaml).
 
+
+#### Generic
+
+This approach was introduced in [Kubernetes
+1.19](https://kubernetes.io/blog/2020/09/01/ephemeral-volumes-with-storage-capacity-tracking/)
+with the goal of using them for PMEM-CSI instead of the older
+approach. In contrast CSI ephemeral inline volumes, no changes are
+needed in CSI drivers, so PMEM-CSI already fully supports this if the
+cluster has the feature enabled. See
+[`pmem-app-generic-ephemeral.yaml`](/deploy/common/pmem-app-generic-ephemeral.yaml)
+for an example.
+
+When using generic ephemeral inline volumes together with [storage
+capacity tracking](#storage-capacity-tracking), the [PMEM-CSI
+scheduler extensions](#enable-scheduler-extensions) are not needed
+anymore.
 
 ### Raw block volumes
 
@@ -773,6 +795,37 @@ EOF
 
 $ kubectl create --kustomize my-webhook
 ```
+
+### Storage capacity tracking
+
+[Kubernetes
+1.19](https://kubernetes.io/blog/2020/09/01/ephemeral-volumes-with-storage-capacity-tracking/)
+introduces support for publishing and using storage capacity
+information for pod scheduling. PMEM-CSI must be deployed
+differently to use this feature:
+
+- `external-provisioner` must be told to publish storage capacity
+  information via command line arguments.
+- A flag in the CSI driver information must be set for the Kubernetes
+  scheduler, otherwise it ignores that information when considering
+  pods with unbound volume.
+
+Because the `CSIStorageCapacity` feature is still alpha in 1.19 and
+driver deployment would fail on a cluster without support for it, none
+of the normal deployment files nor the operator enable that. Instead,
+special kustomize variants are provided in
+`deploy/kubernetes-1.19-alpha*`.
+
+They can be used for example in the QEMU test cluster with:
+
+```console
+$ TEST_KUBERNETES_VERSION=1.19 make start
+...
+$ TEST_KUBERNETES_FLAVOR=-alpha test/setup-deployment.sh
+INFO: deploying from /nvme/gopath/src/github.com/intel/pmem-csi/deploy/kubernetes-1.19-alpha/lvm/testing
+...
+```
+
 <!-- FILL TEMPLATE:
 
   ### How to extend the plugin

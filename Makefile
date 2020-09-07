@@ -172,6 +172,10 @@ KUSTOMIZE_KUBERNETES_VERSIONS = \
 
 KUSTOMIZE += $(foreach version,$(KUSTOMIZE_KUBERNETES_VERSIONS),$(subst X.XX,$(version),$(KUSTOMIZE_KUBERNETES_OUTPUT)))
 
+# Special case Kubernetes 1.19 with alpha features:
+# use different base.
+KUSTOMIZE += $(subst kubernetes-base,kubernetes-1.19-alpha,$(subst X.XX,1.19-alpha,$(KUSTOMIZE_KUBERNETES_OUTPUT)))
+
 KUSTOMIZE += deploy/common/pmem-storageclass-ext4.yaml=deploy/kustomize/storageclass-ext4
 KUSTOMIZE += deploy/common/pmem-storageclass-xfs.yaml=deploy/kustomize/storageclass-xfs
 KUSTOMIZE += deploy/common/pmem-storageclass-cache.yaml=deploy/kustomize/storageclass-cache

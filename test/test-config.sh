@@ -141,6 +141,12 @@ fi
 # to use the Kubernetes version that ships with it.
 : ${TEST_KUBERNETES_VERSION:=1.19}
 
+# Can be used to pick one of potentially severally of the
+# pre-generated deploy/kubernetes-<version><flavor> deployment
+# variants for a certain Kubernetes release. Either empty or must
+# match the directory suffix, i.e. start with a hyphen.
+: ${TEST_KUBERNETES_FLAVOR:=}
+
 # Kubernetes feature gates to enable/disable.
 # EndpointSlice is disabled because of https://github.com/kubernetes/kubernetes/issues/91287
 # 1.19 should have a fix and also needs it to be enabled because without it,
