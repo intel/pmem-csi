@@ -31,7 +31,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/test/e2e/framework"
-	"k8s.io/kubernetes/test/e2e/framework/ginkgowrapper"
 	e2ekubectl "k8s.io/kubernetes/test/e2e/framework/kubectl"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"k8s.io/kubernetes/test/e2e/storage/podlogs"
@@ -146,7 +145,8 @@ var _ = ginkgo.SynchronizedAfterSuite(func() {
 // E2E tests using the Ginkgo runner.
 // This function is called on each Ginkgo node in parallel mode.
 func RunE2ETests(t *testing.T) {
-	gomega.RegisterFailHandler(ginkgowrapper.Fail)
+	// Log failure immediately in addition to recording the test failure.
+	gomega.RegisterFailHandler(framework.Fail)
 
 	// Run tests through the Ginkgo runner with output to console + JUnit for Jenkins
 	var r []ginkgo.Reporter
