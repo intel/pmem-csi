@@ -69,7 +69,7 @@ func UpdateTests() []UpdateTest {
 			}
 		},
 		"pmemPercentage": func(d *api.Deployment) {
-			d.Spec.PMEMPercentage++
+			d.Spec.PMEMPercentage--
 		},
 		"labels": func(d *api.Deployment) {
 			if d.Spec.Labels == nil {
