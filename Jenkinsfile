@@ -53,6 +53,10 @@ pipeline {
         // Set below via a script, must *not* be set here as it can't be overwritten.
         // BUILD_TARGET = ""
 
+        // CACHEBUST is passed when building images to ensure that the base layer gets
+        // updated when building releases.
+        // CACHEBUST = ""
+
         // This image is pulled at the beginning and used as cache.
         // TODO: Here we use "canary" which is correct for the "devel" branch, but other
         // branches may need something else to get better caching.
@@ -77,6 +81,8 @@ pipeline {
 
                 withDockerRegistry([ credentialsId: "${env.DOCKER_REGISTRY}", url: "https://${REGISTRY_NAME}" ]) {
                     script {
+                        env.CACHEBUST = ""
+
                         // Despite its name, GIT_LOCAL_BRANCH contains the tag name when building a tag.
                         // At some point it also contained the branch name when building
                         // a branch, but not anymore, therefore we fall back to BRANCH_NAME
@@ -85,6 +91,7 @@ pipeline {
                         // then we have GIT_BRANCH.
                         if (env.GIT_LOCAL_BRANCH != null) {
                             env.BUILD_TARGET = env.GIT_LOCAL_BRANCH
+                            env.CACHEBUST = env.GIT_LOCAL_BRANCH
                         } else if ( env.BRANCH_NAME != null ) {
                             env.BUILD_TARGET = env.BRANCH_NAME
                         } else {
@@ -96,18 +103,8 @@ pipeline {
                             // Pull previous image and use it as cache (https://andrewlock.net/caching-docker-layers-on-serverless-build-hosts-with-multi-stage-builds---target,-and---cache-from/).
                             sh ( script: "docker image pull ${env.BUILD_IMAGE} || true")
                             sh ( script: "docker image pull ${env.PMEM_CSI_IMAGE} || true")
-
-                            // PR jobs need to use the same CACHEBUST value as the latest build for their
-                            // target branch, otherwise they cannot reuse the cached layers. Another advantage
-                            // is that they use a version of Clear Linux that is known to work, because "swupd update"
-                            // will be cached.
-                            env.CACHEBUST = sh ( script: "docker inspect -f '{{ .Config.Labels.cachebust }}' ${env.BUILD_IMAGE} 2>/dev/null || true", returnStdout: true).trim()
                         } else {
                             env.BUILD_IMAGE = "${env.REGISTRY_NAME}/pmem-clearlinux-builder:${env.BRANCH_NAME}-rejected"
-                        }
-
-                        if (env.CACHEBUST == null || env.CACHEBUST == "") {
-                            env.CACHEBUST = env.BUILD_ID
                         }
                     }
                     sh "env; echo Building BUILD_IMAGE=${env.BUILD_IMAGE} for BUILD_TARGET=${env.BUILD_TARGET}, CHANGE_ID=${env.CHANGE_ID}, CACHEBUST=${env.CACHEBUST}."
@@ -115,29 +112,6 @@ pipeline {
 
                     PrepareEnv()
                 }
-            }
-        }
-
-        stage('update base image') {
-            // Update the base image before doing a full build + test cycle. If that works,
-            // we push the new commits to GitHub.
-            when { environment name: 'JOB_BASE_NAME', value: 'pmem-csi-release' }
-
-            steps {
-                script {
-                    status = sh ( script: "${RunInBuilder()} ${env.BUILD_CONTAINER} hack/create-new-release.sh", returnStatus: true )
-                    if ( status == 2 ) {
-                        // https://stackoverflow.com/questions/42667600/abort-current-build-from-pipeline-in-jenkins
-                        currentBuild.result = 'ABORTED'
-                        error('No new release, aborting...')
-                    }
-                    if ( status != 0 ) {
-                        error("Creating a new release failed.")
-                    }
-                }
-                // We must ensure that the workers use the same modified source code.
-                // This relies on create-new-release.sh producing just a single commit.
-                sh "git format-patch -n1 --stdout >_work/release.patch"
             }
         }
 
@@ -166,7 +140,7 @@ pipeline {
             steps {
                 // This builds images for REGISTRY_NAME with the version automatically determined by
                 // the make rules.
-                sh "${RunInBuilder()} ${env.BUILD_CONTAINER} make build-images"
+                sh "${RunInBuilder()} ${env.BUILD_CONTAINER} make build-images CACHEBUST=${env.CACHEBUST}"
 
                 // For testing we have to have those same images also in a registry. Tag and push for
                 // localhost, which is the default test registry.
@@ -195,7 +169,6 @@ pipeline {
                            lz4 > _work/images.tar.lz4 && \
                     ls -l -h _work/images.tar.lz4"
                 stash includes: '_work/images.tar.lz4', name: 'images'
-                stash includes: '_work/release.patch', name: 'release', allowEmpty: true
             }
         }
 
@@ -307,7 +280,7 @@ git push origin HEAD:master
                 sh "imageversion=\$(${RunInBuilder()} ${env.BUILD_CONTAINER} make print-image-version) && \
                     expectedversion=\$(echo '${env.BUILD_TARGET}' | sed -e 's/devel/canary/') && \
                     if [ \"\$imageversion\" = \"\$expectedversion\" ] ; then \
-                        ${RunInBuilder()} ${env.BUILD_CONTAINER} make push-images PUSH_IMAGE_DEP=; \
+                        ${RunInBuilder()} ${env.BUILD_CONTAINER} make push-images CACHEBUST=${env.CACHEBUST} PUSH_IMAGE_DEP=; \
                     else \
                         echo \"Skipping the pushing of PMEM-CSI driver images with version \$imageversion because this build is for ${env.BUILD_TARGET}.\"; \
                     fi"
@@ -337,7 +310,7 @@ git push origin HEAD:master
 String RunInBuilder() {
     "\
     docker exec \
-    -e BUILD_IMAGE_ID=${env.CACHEBUST} \
+    -e CACHEBUST=${env.CACHEBUST} \
     -e 'BUILD_ARGS=--cache-from ${env.BUILD_IMAGE} --cache-from ${env.PMEM_CSI_IMAGE}' \
     -e DOCKER_CONFIG=${WORKSPACE}/_work/docker-config \
     -e REGISTRY_NAME=${env.REGISTRY_NAME} \
@@ -425,15 +398,6 @@ void PrepareEnv() {
             timeout=\$((timeout + 10)); \
        done"
 
-    // Install additional tools:
-    // - ssh client for govm
-    // - python3 for Sphinx (i.e. make html)
-    // - parted, xfsprogs, os-cloudguest-aws (contains mkfs.ext4) for ImageFile test
-    sh "docker exec ${env.BUILD_CONTAINER} swupd bundle-add openssh-client python3-basic parted xfsprogs os-cloudguest-aws"
-
-    // Now commit those changes to ensure that the result of "swupd bundle add" gets cached.
-    sh "docker commit ${env.BUILD_CONTAINER} ${env.BUILD_IMAGE}"
-
     // Make /usr/local/bin writable for all users. Used to install kubectl.
     sh "docker exec ${env.BUILD_CONTAINER} sh -c 'mkdir -p /usr/local/bin && chmod a+wx /usr/local/bin'"
 
@@ -458,11 +422,6 @@ void RestoreEnv() {
     // Get images, ready for use and/or pushing to localhost:5000.
     unstash 'images'
     sh 'lz4cat _work/images.tar.lz4 | docker load'
-
-    // In case of a release update, also apply the same source code patch.
-    // Does not exist during normal PR testing.
-    unstash 'release'
-    sh 'if [ -f _work/release.patch ]; then git am _work/release.patch; fi'
 
     // Set up build container and registry.
     PrepareEnv()

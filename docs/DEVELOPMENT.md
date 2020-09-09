@@ -82,9 +82,9 @@ Nonetheless, input needs to be validated to catch mistakes:
 ### Branching
 
 The `master` branch is the main branch. It is guaranteed to have
-passed full CI testing. However, it always uses the latest Clear Linux
-for building container images, so changes in Clear Linux can break the
-building of older revisions.
+passed full CI testing. However, the Dockerfile uses whatever is
+the latest upstream content for the base distribution and therefore
+tests results are not perfectly reproducible.
 
 The `devel` branch contains additional commits on top of `master`
 which might not have been tested in that combination yet. Therefore it
@@ -107,10 +107,7 @@ that. This will block updating `master` and thus needs to be dealt
 quickly.
 
 Releases are created by branching `release-x.y` from `master` or some
-older, stable revision. On that new branch, the base image is locked
-onto a certain Clear Linux version with the
-`hack/update-clear-linux-base.sh` script. Those `release-x.y` branches
-are then fully reproducible. The actual `vx.y.z` release tags are set
+older, stable revision. The actual `vx.y.z` release tags are set
 on revisions in the corresponding `release-x.y` branch.
 
 Releases and the corresponding images are never changed. If something
@@ -118,10 +115,9 @@ goes wrong after setting a tag (like detecting a bug while testing the
 release images), a new release is created.
 
 Container images reference a fixed base image. To ensure that the base
-image remains secure, `hack/update-clear-linux-base.sh` gets run
-periodically to update a `release-x.y` branch and a new release with
-`z` increased by one is created. Other bug fixed might be added to
-that release by merging into the branch.
+image remains secure, it gets scanned for known vulnerabilities regularly
+and a new release is prepared manually if needed. The new release then
+uses a newer base image.
 
 ### Tagging
 
@@ -140,7 +136,6 @@ Jenkinsfile ensures that.
 ### Release checklist
 
 * Create a new `release-x.y` branch.
-* Run `hack/update-clear-linux-base.sh`.
 * Run `hack/set-version.sh vx.y.z` and commit the modified files.
 * Push to `origin`.
 * [Create a draft

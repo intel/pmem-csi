@@ -79,14 +79,8 @@ $(CMDS): check-go-version-$(GO_BINARY)
 $(TEST_CMDS): %-test: check-go-version-$(GO_BINARY)
 	$(GO) test --cover -covermode=atomic -c -coverpkg=./pkg/... -ldflags '-X github.com/intel/pmem-csi/pkg/$*.version=${VERSION}' -o ${OUTPUT_DIR}/$@ ./cmd/$*
 
-# The default is to refresh the base image once a day when building repeatedly.
-# This is achieved by passing a fake variable that changes its value once per day.
-# A CI system that produces production images should instead use
-# `make  BUILD_IMAGE_ID=<some unique number>`.
-#
-# At the moment this build ID is not recorded in the resulting images.
-# The VERSION variable should be used for that, if desired.
-BUILD_IMAGE_ID?=$(shell date +%Y-%m-%d)
+# Set by the CI to ensure that image building really pulls a new base.
+CACHEBUST=
 
 # Build and publish images for production or testing (i.e. with test binaries).
 # Pushing images also automatically rebuilds the image first. This can be disabled
@@ -94,7 +88,7 @@ BUILD_IMAGE_ID?=$(shell date +%Y-%m-%d)
 build-images: build-image build-test-image
 push-images: push-image push-test-image
 build-image build-test-image: build%-image: populate-vendor-dir
-	docker build --pull --build-arg CACHEBUST=$(BUILD_IMAGE_ID) --build-arg GOFLAGS=-mod=vendor --build-arg BIN_SUFFIX=$(findstring -test,$*) $(BUILD_ARGS) -t $(IMAGE_TAG) -f ./Dockerfile . --label revision=$(VERSION)
+	docker build --pull --build-arg CACHEBUST=$(CACHEBUST) --build-arg GOFLAGS=-mod=vendor --build-arg BIN_SUFFIX=$(findstring -test,$*) $(BUILD_ARGS) -t $(IMAGE_TAG) -f ./Dockerfile . --label revision=$(VERSION)
 PUSH_IMAGE_DEP = build%-image
 # "docker push" has been seen to fail temporarily with "error creating overlay mount to /var/lib/docker/overlay2/xxx/merged: device or resource busy".
 # Here we simply try three times before giving up.
