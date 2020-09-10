@@ -272,12 +272,6 @@ A production deployment can improve upon that by using some other key
 delivery mechanism, like for example
 [Vault](https://www.vaultproject.io/).
 
-<!-- FILL TEMPLATE:
-* Target users and use cases
-* Design decisions & tradeoffs that were made
-* What is in scope and outside of scope
--->
-
 ## Volume Persistency
 
 In a typical CSI deployment, volumes are provided by a storage backend

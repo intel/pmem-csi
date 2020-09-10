@@ -826,28 +826,6 @@ INFO: deploying from /nvme/gopath/src/github.com/intel/pmem-csi/deploy/kubernete
 ...
 ```
 
-<!-- FILL TEMPLATE:
-
-  ### How to extend the plugin
-
-You can modify PMEM-CSI to support more xxx by changing the `variable` from Y to Z.
-
-
-  ## Maintenance
-
-* Known limitations
-* What is supported and what isn't supported
-    * Disclaimer that nothing is supported with any kind of SLA
-* Example configuration for target use case
-* How to upgrade
-* Upgrade cadence
-
-
-  ## Troubleshooting
-
-* If you see this error, then enter this command `blah`.
--->
-
 ## PMEM-CSI Deployment CRD
 
 `Deployment` is a cluster-scoped Kubernetes resource in the
@@ -975,16 +953,3 @@ It is important to include the following details:
 Vulnerability information is extremely sensitive. Please encrypt all security vulnerability reports using our [PGP key](https://www.intel.com/content/www/us/en/security-center/pgp-public-key.html).
 
 A member of the Intel Product Security Team will review your e-mail and contact you to collaborate on resolving the issue. For more information on how Intel works to resolve security issues, see: [vulnerability handling guidelines](https://www.intel.com/content/www/us/en/security-center/vulnerability-handling-guidelines.html).
-
-<!-- FILL TEMPLATE:
-Contact the development team (*TBD: slack or email?*)
-
-
-  ## References
-
-Pointers to other useful documentation.
-
-* Video tutorial
-    * Simple youtube style. Demo installation following steps in readme.
-      Useful to show relevant paths. Helps with troubleshooting.
--->
