@@ -72,6 +72,9 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 // blank assignment to verify that ReconcileDeployment implements reconcile.Reconciler
 var _ reconcile.Reconciler = &ReconcileDeployment{}
 
+// ReconcileHook function to be invoked on reconciling a deployment.
+type ReconcileHook *func(d *pmemcsiv1alpha1.Deployment)
+
 // ReconcileDeployment reconciles a Deployment object
 type ReconcileDeployment struct {
 	client        client.Client
@@ -82,7 +85,8 @@ type ReconcileDeployment struct {
 	// container image used for deploying the operator
 	containerImage string
 	// known deployments
-	deployments map[string]*pmemcsiv1alpha1.Deployment
+	deployments    map[string]*pmemcsiv1alpha1.Deployment
+	reconcileHooks map[ReconcileHook]struct{}
 }
 
 // NewReconcileDeployment creates new deployment reconciler
@@ -120,6 +124,7 @@ func NewReconcileDeployment(client client.Client, opts pmemcontroller.Controller
 		namespace:      opts.Namespace,
 		containerImage: opts.DriverImage,
 		deployments:    map[string]*pmemcsiv1alpha1.Deployment{},
+		reconcileHooks: map[ReconcileHook]struct{}{},
 	}, nil
 }
 
@@ -151,6 +156,12 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{Requeue: requeue, RequeueAfter: requeueDelayOnError}, err
 	}
 
+	for f := range r.reconcileHooks {
+		if f != nil {
+			(*f)(deployment)
+		}
+	}
+
 	// If the deployment has already been marked for deletion,
 	// then we don't need to do anything for it because the
 	// apiserver is in the process of garbage-collecting all
@@ -159,13 +170,14 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{Requeue: false}, nil
 	}
 
+	patch := client.MergeFrom(deployment.DeepCopy())
 	d := &PmemCSIDriver{deployment, r.namespace, r.k8sVersion}
 
 	// update status
 	defer func() {
 		klog.Infof("Updating deployment status....")
 		d.Deployment.Status.LastUpdated = metav1.Now()
-		if statusErr := r.client.Status().Update(context.TODO(), d.Deployment); statusErr != nil {
+		if statusErr := r.client.Status().Patch(context.TODO(), d.Deployment, patch); statusErr != nil {
 			klog.Warningf("failed to update status %q for deployment %q: %v",
 				d.Deployment.Status.Phase, d.Name, statusErr)
 		}
@@ -193,6 +205,16 @@ func (r *ReconcileDeployment) Namespace() string {
 
 func (r *ReconcileDeployment) EventBroadcaster() record.EventBroadcaster {
 	return r.evBroadcaster
+}
+
+// AddHook adds given reconcile hook to hooks list
+func (r *ReconcileDeployment) AddHook(h ReconcileHook) {
+	r.reconcileHooks[h] = struct{}{}
+}
+
+// RemoveHook removes previously added hook
+func (r *ReconcileDeployment) RemoveHook(h ReconcileHook) {
+	delete(r.reconcileHooks, h)
 }
 
 //Get tries to retrives the Kubernetes objects

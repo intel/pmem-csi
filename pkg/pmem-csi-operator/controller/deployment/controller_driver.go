@@ -80,6 +80,8 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 		r.evRecorder.Event(d, corev1.EventTypeNormal, api.EventReasonNew, "Processing new driver deployment")
 	}
 
+	copy := d.DeepCopy()
+
 	if err := d.EnsureDefaults(r.containerImage); err != nil {
 		d.Deployment.Status.Phase = api.DeploymentPhaseFailed
 		r.evRecorder.Event(d, corev1.EventTypeWarning, api.EventReasonFailed, err.Error())
@@ -93,6 +95,10 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 	klog.Infof("Deployment: %q, state %q, changes %v, in cache %v", d.Name, d.Status.Phase, changes, foundInCache)
 
 	requeue, err := d.reconcileDeploymentChanges(r, changes, foundInCache)
+	// Some clients(fake client used in tests) do not support patching status reliably
+	// and updates even spec changes. So, revert any spec changes(like deployment defaults) we made.
+	// Those are not supposed to get saved on the API server.
+	d.Deployment.Spec = copy.Spec
 	if err == nil {
 		// If everything ok, update local cache
 		r.deployments[d.Name] = d.Deployment

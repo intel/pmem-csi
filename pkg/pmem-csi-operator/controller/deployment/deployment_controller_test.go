@@ -494,6 +494,38 @@ func TestDeploymentController(t *testing.T) {
 			validateEvents(t, tc, dep, []string{api.EventReasonNew, api.EventReasonFailed})
 		})
 
+		t.Run("modified deployment under reconcile", func(t *testing.T) {
+			tc := setup(t)
+			defer teardown(t, tc)
+
+			d := &pmemDeployment{
+				name: "modified-deployment",
+			}
+
+			var updatedDep *api.Deployment
+
+			dep := getDeployment(d)
+			err := tc.c.Create(context.TODO(), dep)
+			require.NoError(t, err, "failed to create deployment")
+
+			hook := func(d *api.Deployment) {
+				updatedDep = d.DeepCopy()
+				updatedDep.Spec.LogLevel++
+				err := tc.c.Update(context.TODO(), updatedDep)
+				require.NoError(t, err, "failed to update deployment")
+			}
+			tc.rc.(*deployment.ReconcileDeployment).AddHook(&hook)
+
+			testReconcilePhase(t, tc.rc, tc.c, d.name, false, false, api.DeploymentPhaseRunning)
+			validateDriver(t, tc, dep, []string{api.EventReasonNew, api.EventReasonRunning})
+
+			tc.rc.(*deployment.ReconcileDeployment).RemoveHook(&hook)
+
+			// Next reconcile phase should catch the deployment changes
+			testReconcilePhase(t, tc.rc, tc.c, d.name, false, false, api.DeploymentPhaseRunning)
+			validateDriver(t, tc, updatedDep, []string{api.EventReasonNew, api.EventReasonRunning})
+		})
+
 		t.Run("updating", func(t *testing.T) {
 			t.Parallel()
 			for _, testcase := range testcases.UpdateTests() {
