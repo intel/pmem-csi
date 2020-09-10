@@ -17,7 +17,7 @@ CLUSTER_DIRECTORY="${CLUSTER_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
 SSH="${CLUSTER_DIRECTORY}/ssh.0"
 KUBECTL="${SSH} kubectl" # Always use the kubectl installed in the cluster.
 KUBERNETES_VERSION="$(cat "$CLUSTER_DIRECTORY/kubernetes.version")"
-DEPLOYMENT_DIRECTORY="${REPO_DIRECTORY}/deploy/kubernetes-$KUBERNETES_VERSION"
+DEPLOYMENT_DIRECTORY="${REPO_DIRECTORY}/deploy/kubernetes-$KUBERNETES_VERSION${TEST_KUBERNETES_FLAVOR}"
 case ${TEST_DEPLOYMENTMODE} in
     testing)
         deployment_suffix="/testing";;
@@ -90,7 +90,17 @@ case "$KUBERNETES_VERSION" in
 esac
 
 for deploy in ${DEPLOY[@]}; do
+    # Deployment files can come from:
+    # 1. deploy/kubernetes-*
+    # 2. deploy/common
+    # 3. deploy/kustomize directly
     path="${DEPLOYMENT_DIRECTORY}/${deploy}"
+    if ! [ -e "$path" ]; then
+        path="${REPO_DIRECTORY}/deploy/common/${deploy}"
+    fi
+    if ! [ -e "$path" ]; then
+        path="${REPO_DIRECTORY}/deploy/kustomize/${deploy}"
+    fi
     if [ -f "$path" ]; then
         ${KUBECTL} apply -f - <"$path"
     elif [ -d "$path" ]; then
@@ -206,8 +216,17 @@ EOF
         echo "$output"
         ${SSH} rm -rf "$tmpdir"
     else
-        echo >&2 "$path is missing."
-        exit 1
+        case "$path" in
+            */scheduler|*/webhook)
+                # optional, continue
+                :
+                ;;
+            *)
+                # Should be there, fail.
+                echo >&2 "$path is missing."
+                exit 1
+                ;;
+        esac
     fi
 done
 
@@ -217,28 +236,18 @@ if [ "${TEST_DEPLOYMENT_QUIET}" = "" ]; then
     cat <<EOF
 
 To try out the PMEM-CSI driver with persistent volumes:
-   cat deploy/kubernetes-${KUBERNETES_VERSION}/pmem-pvc.yaml | ${KUBECTL} create -f -
-   cat deploy/kubernetes-${KUBERNETES_VERSION}/pmem-app.yaml | ${KUBECTL} create -f -
+   cat deploy/common/pmem-pvc.yaml | ${KUBECTL} create -f -
+   cat deploy/common/pmem-app.yaml | ${KUBECTL} create -f -
 
 To try out the PMEM-CSI driver with cache volumes:
-   cat deploy/kubernetes-${KUBERNETES_VERSION}/pmem-pvc-cache.yaml | ${KUBECTL} create -f -
-   cat deploy/kubernetes-${KUBERNETES_VERSION}/pmem-app-cache.yaml | ${KUBECTL} create -f -
-EOF
-
-    if [ -e ${DEPLOYMENT_DIRECTORY}/pmem-storageclass-late-binding.yaml ]; then
-        cat <<EOF
+   cat deploy/common/pmem-pvc-cache.yaml | ${KUBECTL} create -f -
+   cat deploy/common/pmem-app-cache.yaml | ${KUBECTL} create -f -
 
 To try out the PMEM-CSI driver with persistent volumes that use late binding:
-   cat deploy/kubernetes-${KUBERNETES_VERSION}/pmem-pvc-late-binding.yaml | ${KUBECTL} create -f -
-   cat deploy/kubernetes-${KUBERNETES_VERSION}/pmem-app-late-binding.yaml | ${KUBECTL} create -f -
-EOF
-    fi
-
-    if [ -e ${DEPLOYMENT_DIRECTORY}/pmem-app-ephemeral.yaml ]; then
-        cat <<EOF
+   cat deploy/common/pmem-pvc-late-binding.yaml | ${KUBECTL} create -f -
+   cat deploy/common/pmem-app-late-binding.yaml | ${KUBECTL} create -f -
 
 To try out the PMEM-CSI driver with ephemeral volumes:
-   cat deploy/kubernetes-${KUBERNETES_VERSION}/pmem-app-ephemeral.yaml | ${KUBECTL} create -f -
+   cat deploy/common/pmem-app-ephemeral.yaml | ${KUBECTL} create -f -
 EOF
-    fi
 fi

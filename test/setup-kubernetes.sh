@@ -85,8 +85,10 @@ list_gates () (
 sudo mkdir -p /var/lib/scheduler/
 sudo cp ca.crt /var/lib/scheduler/
 
-# https://github.com/kubernetes/kubernetes/blob/52d7614a8ca5b8aebc45333b6dc8fbf86a5e7ddf/staging/src/k8s.io/kube-scheduler/config/v1alpha1/types.go#L38-L107
-sudo sh -c 'cat >/var/lib/scheduler/scheduler-config.yaml' <<EOF
+case "$k8sversion" in
+    v1.1[5678]*)
+        # https://github.com/kubernetes/kubernetes/blob/52d7614a8ca5b8aebc45333b6dc8fbf86a5e7ddf/staging/src/k8s.io/kube-scheduler/config/v1alpha1/types.go#L38-L107
+        sudo sh -c 'cat >/var/lib/scheduler/scheduler-config.yaml' <<EOF
 apiVersion: kubescheduler.config.k8s.io/v1alpha1
 kind: KubeSchedulerConfiguration
 schedulerName: default-scheduler
@@ -99,8 +101,8 @@ clientConnection:
   kubeconfig: /etc/kubernetes/scheduler.conf
 EOF
 
-# https://github.com/kubernetes/kubernetes/blob/52d7614a8ca5b8aebc45333b6dc8fbf86a5e7ddf/staging/src/k8s.io/kube-scheduler/config/v1/types.go#L28-L47
-sudo sh -c 'cat >/var/lib/scheduler/scheduler-policy.cfg' <<EOF
+        # https://github.com/kubernetes/kubernetes/blob/52d7614a8ca5b8aebc45333b6dc8fbf86a5e7ddf/staging/src/k8s.io/kube-scheduler/config/v1/types.go#L28-L47
+        sudo sh -c 'cat >/var/lib/scheduler/scheduler-policy.cfg' <<EOF
 {
   "kind" : "Policy",
   "apiVersion" : "v1",
@@ -119,6 +121,27 @@ sudo sh -c 'cat >/var/lib/scheduler/scheduler-policy.cfg' <<EOF
     }]
 }
 EOF
+        ;;
+    *)
+        # https://github.com/kubernetes/kubernetes/blob/1afc53514032a44d091ae4a9f6e092171db9fe10/staging/src/k8s.io/kube-scheduler/config/v1beta1/types.go#L44-L96
+        sudo sh -c 'cat >/var/lib/scheduler/scheduler-config.yaml' <<EOF
+apiVersion: kubescheduler.config.k8s.io/v1beta1
+kind: KubeSchedulerConfiguration
+clientConnection:
+  # This is where kubeadm puts it.
+  kubeconfig: /etc/kubernetes/scheduler.conf
+extenders:
+- urlPrefix: https://127.0.0.1:${TEST_SCHEDULER_EXTENDER_NODE_PORT}
+  filterVerb: filter
+  prioritizeVerb: prioritize
+  weight: 1
+  managedResources:
+  - name: pmem-csi.intel.com/scheduler
+    ignoredByScheduler: true
+EOF
+        ;;
+esac
+
 
 # We always use systemd. Auto-detected for Docker, but not for other
 # CRIs
@@ -137,6 +160,7 @@ kubeadm_config_cluster="$kubeadm_config_cluster
 apiServer:
   extraArgs:
     feature-gates: ${TEST_FEATURE_GATES}
+    $(case "$k8sversion" in v1.1[5678]*) : ;; *) echo "runtime-config: storage.k8s.io/v1alpha1";; esac)
 controllerManager:
   extraArgs:
     feature-gates: ${TEST_FEATURE_GATES}
@@ -162,7 +186,7 @@ scheduler:
       readOnly: true
   extraArgs:
     feature-gates: ${TEST_FEATURE_GATES}
-    config: /var/lib/scheduler/scheduler-config.yaml
+    $(if [ -e /var/lib/scheduler/scheduler-config.yaml ]; then echo 'config: /var/lib/scheduler/scheduler-config.yaml'; fi)
 "
 
 if [ -e /dev/vdc ]; then

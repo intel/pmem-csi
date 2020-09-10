@@ -1,6 +1,0 @@
-# Append volumeLifeCycleModes to CSIDriver. Valid only for Kubernetes v1.16+
-- op: add
-  path: /spec/volumeLifecycleModes
-  value:
-    - Persistent
-    - Ephemeral

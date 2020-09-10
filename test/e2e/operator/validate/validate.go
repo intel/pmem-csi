@@ -267,6 +267,8 @@ DaemonSet:` + defaultsApps + `
   updateStrategy: ignore
 StatefulSet:` + defaultsApps + `
   updateStrategy: ignore
+CSIDriver:
+  storageCapacity: false
 `
 
 	err := yaml.UnmarshalStrict([]byte(defaultsYAML), &defaults)

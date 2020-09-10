@@ -139,12 +139,23 @@ fi
 # is installed instead of the latest one. Ignored when
 # using Clear Linux as OS because with Clear Linux we have
 # to use the Kubernetes version that ships with it.
-: ${TEST_KUBERNETES_VERSION:=1.18}
+: ${TEST_KUBERNETES_VERSION:=1.19}
+
+# Can be used to pick one of potentially severally of the
+# pre-generated deploy/kubernetes-<version><flavor> deployment
+# variants for a certain Kubernetes release. Either empty or must
+# match the directory suffix, i.e. start with a hyphen.
+: ${TEST_KUBERNETES_FLAVOR:=}
 
 # Kubernetes feature gates to enable/disable.
 # EndpointSlice is disabled because of https://github.com/kubernetes/kubernetes/issues/91287
+# 1.19 should have a fix and also needs it to be enabled because without it,
+# kube-proxy is unhappy ("failed to list *v1beta1.EndpointSlice") and fails to
+# set up IP forwarding rules.
 : ${TEST_FEATURE_GATES:=CSINodeInfo=true,CSIDriverRegistry=true,CSIBlockVolume=true,CSIInlineVolume=true\
-$(case ${TEST_KUBERNETES_VERSION} in 1.1[0-5]) ;; *) echo ',EndpointSlice=false';; esac)}
+$(case ${TEST_KUBERNETES_VERSION} in 1.1[0-5]|1.19) ;; *) echo ',EndpointSlice=false';; esac)\
+$(case ${TEST_KUBERNETES_VERSION} in 1.19) echo ',CSIStorageCapacity=true,GenericEphemeralVolume=true';; esac)\
+}
 
 # If non-empty, the version of Kata Containers which is to be installed
 # in the Kubernetes cluster. Installation is done with
