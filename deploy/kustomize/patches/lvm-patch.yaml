@@ -8,7 +8,7 @@
   path: /spec/template/spec/initContainers
   value:
   - name: pmem-ns-init
-    image: intel/pmem-csi-driver:v0.7.20
+    image: intel/pmem-csi-driver:v0.7.21
     imagePullPolicy: IfNotPresent
     command: ["/usr/local/bin/pmem-ns-init", "-v=3"]
     env:
@@ -22,7 +22,7 @@
     - name: sys-dir
       mountPath: /sys
   - name: pmem-vgm
-    image: intel/pmem-csi-driver:v0.7.20
+    image: intel/pmem-csi-driver:v0.7.21
     imagePullPolicy: IfNotPresent
     command: ["/usr/local/bin/pmem-vgm", "-v=3"]
     env:
