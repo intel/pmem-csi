@@ -447,7 +447,10 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						}()
 					}
 
+					By("Mutating deployment...")
 					testcase.Mutate(&deployment)
+					framework.Logf("Deployment after mutation: %+v", deployment.Spec)
+					By("Updating deployment...")
 					deployment = deploy.UpdateDeploymentCR(f, deployment)
 
 					if restart {
