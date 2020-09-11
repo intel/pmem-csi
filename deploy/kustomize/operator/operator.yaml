@@ -4,6 +4,12 @@ metadata:
   name: pmem-csi-operator
   namespace: default
 ---
+#
+# These RBAC rules must be kept in sync with the
+# AllObjectTypes list defined in
+# pkg/pmem-csi-operator/controller/deployment/controller_driver.go.
+# So that operator could list/get/delete the resources
+# that were obsolete.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
