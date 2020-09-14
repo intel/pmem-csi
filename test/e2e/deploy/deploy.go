@@ -663,6 +663,15 @@ func Parse(deploymentName string) (*Deployment, error) {
 	return deployment, nil
 }
 
+// MustParse calls Parse and panics when the name is not valid.
+func MustParse(deploymentName string) *Deployment {
+	deployment, err := Parse(deploymentName)
+	if err != nil {
+		framework.Failf("internal error while parsing %s: %v", deploymentName, err)
+	}
+	return deployment
+}
+
 // EnsureDeployment registers a BeforeEach function which will ensure that when
 // a test runs, the desired deployment exists. Deployed drivers are intentionally
 // kept running to speed up the execution of multiple tests that all want the
@@ -671,10 +680,7 @@ func Parse(deploymentName string) (*Deployment, error) {
 // The driver should never restart. A restart would indicate some
 // (potentially intermittent) issue.
 func EnsureDeployment(deploymentName string) *Deployment {
-	deployment, err := Parse(deploymentName)
-	if err != nil {
-		framework.Failf("internal error while parsing %s: %v", deploymentName, err)
-	}
+	deployment := MustParse(deploymentName)
 
 	f := framework.NewDefaultFramework("cluster")
 	f.SkipNamespaceCreation = true
@@ -906,10 +912,7 @@ func RunAllTests(d *Deployment) bool {
 // pass the filter function.
 func DescribeForSome(what string, enabled func(d *Deployment) bool, f func(d *Deployment)) bool {
 	for _, deploymentName := range allDeployments {
-		deployment, err := Parse(deploymentName)
-		if err != nil {
-			framework.Failf("internal error while parsing %s: %v", deploymentName, err)
-		}
+		deployment := MustParse(deploymentName)
 		if enabled(deployment) {
 			Describe(deploymentName, deploymentName, what, f)
 		}
