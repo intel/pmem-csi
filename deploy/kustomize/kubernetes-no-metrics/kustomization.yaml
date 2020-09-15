@@ -6,6 +6,8 @@ resources:
 - driverinfo-beta.yaml
 
 # The RBAC files must match the image versions.
+# The sidecar versions must be kept in sync with the
+# operator defaults in pkg/apis/pmemcsi/v1alpha1/deployment_types.go!
 images:
 - name: quay.io/k8scsi/csi-provisioner
   newTag: v2.0.0
