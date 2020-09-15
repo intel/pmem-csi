@@ -10,11 +10,13 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"reflect"
 	"regexp"
+	"strings"
 	"time"
 
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
@@ -34,6 +36,7 @@ import (
 
 const (
 	deploymentLabel = "pmem-csi.intel.com/deployment"
+	SocatPort       = 9735
 )
 
 // InstallHook is the callback function for AddInstallHook.
@@ -81,7 +84,8 @@ func WaitForOLM(c *Cluster, namespace string) *v1.Pod {
 // defined as:
 // - controller service is up and running
 // - all nodes have registered
-func WaitForPMEMDriver(c *Cluster, name, namespace string) (metricsURL string) {
+// - for testing deployments: TCP CSI endpoints are ready
+func WaitForPMEMDriver(c *Cluster, name, namespace string, testing bool) (metricsURL string) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	info := time.NewTicker(time.Minute)
@@ -165,6 +169,35 @@ func WaitForPMEMDriver(c *Cluster, name, namespace string) (metricsURL string) {
 		actualNodes := int(*nodesMetric.Gauge.Value)
 		if actualNodes != c.NumNodes()-1 {
 			return fmt.Errorf("only %d of %d nodes have registered", actualNodes, c.NumNodes()-1)
+		}
+
+		// Done for normal deployments.
+		if !testing {
+			return nil
+		}
+
+		// For testing deployments, also ensure that the CSI endpoints can be reached.
+		nodeAddress, controllerAddress, err := LookupCSIAddresses(c, namespace)
+		if err != nil {
+			return fmt.Errorf("look up CSI addresses: %v", err)
+		}
+		tryConnect := func(address string) error {
+			prefix := "dns:///" // triple slash is used by gRPC, which makes the address unparsable with net/url
+			if !strings.HasPrefix(address, prefix) {
+				return fmt.Errorf("unexpected non-DNS URL: %s", address)
+			}
+			conn, err := net.Dial("tcp", address[len(prefix):])
+			if err != nil {
+				return fmt.Errorf("dial %s: %v", address, err)
+			}
+			defer conn.Close()
+			return nil
+		}
+		if err := tryConnect(nodeAddress); err != nil {
+			return fmt.Errorf("connect to node: %v", err)
+		}
+		if err := tryConnect(controllerAddress); err != nil {
+			return fmt.Errorf("connect to controller: %v", err)
 		}
 
 		return nil
@@ -645,7 +678,7 @@ func EnsureDeployment(deploymentName string) *Deployment {
 				framework.Logf("reusing existing %s PMEM-CSI components", deployment.Name)
 				// Do some sanity checks on the running deployment before the test.
 				if deployment.HasDriver {
-					WaitForPMEMDriver(c, "pmem-csi", deployment.Namespace)
+					WaitForPMEMDriver(c, "pmem-csi", deployment.Namespace, deployment.Testing)
 					CheckPMEMDriver(c, deployment)
 				}
 				if deployment.HasOperator {
@@ -716,7 +749,7 @@ func EnsureDeployment(deploymentName string) *Deployment {
 			// We check for a running driver the same way at the moment, by directly
 			// looking at the driver state. Long-term we want the operator to do that
 			// checking itself.
-			WaitForPMEMDriver(c, "pmem-csi", deployment.Namespace)
+			WaitForPMEMDriver(c, "pmem-csi", deployment.Namespace, deployment.Testing)
 			CheckPMEMDriver(c, deployment)
 		}
 
@@ -800,6 +833,25 @@ func (d Deployment) DeleteAllPods(c *Cluster) error {
 		}
 	}
 	return nil
+}
+
+// LookupCSIAddresses returns controller and node addresses for gRPC dial.
+// Only works for testing deployments.
+func LookupCSIAddresses(c *Cluster, namespace string) (nodeAddress, controllerAddress string, err error) {
+	// Node #1 is expected to have a PMEM-CSI node driver
+	// instance. If it doesn't, connecting to the PMEM-CSI
+	// node service will fail.
+	nodeAddress = c.NodeServiceAddress(1, SocatPort)
+
+	// The cluster controller service can be reached via
+	// any node, what matters is the service port.
+	port, err := c.GetServicePort(context.Background(), "pmem-csi-controller-testing", namespace)
+	if err != nil {
+		return "", "", fmt.Errorf("get PMEM-CSI controller service port: %v", err)
+	}
+	controllerAddress = c.NodeServiceAddress(0, port)
+
+	return
 }
 
 // DescribeForAll registers tests like gomega.Describe does, except that

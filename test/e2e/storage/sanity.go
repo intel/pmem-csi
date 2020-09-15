@@ -99,8 +99,6 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 	var cleanup func()
 	var cluster *deploy.Cluster
 
-	const socatPort = 9735
-
 	BeforeEach(func() {
 		cs := f.ClientSet
 
@@ -108,15 +106,9 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 		cluster, err = deploy.NewCluster(cs, f.DynamicClient)
 		framework.ExpectNoError(err, "query cluster")
 
-		// Node #1 is expected to have a PMEM-CSI node driver
-		// instance. If it doesn't, connecting to the PMEM-CSI
-		// node service will fail.
-		config.Address = cluster.NodeServiceAddress(1, socatPort)
-		// The cluster controller service can be reached via
-		// any node, what matters is the service port.
-		port, err := cluster.GetServicePort(context.Background(), "pmem-csi-controller-testing", d.Namespace)
-		framework.ExpectNoError(err, "find controller test service")
-		config.ControllerAddress = cluster.NodeServiceAddress(0, port)
+		config.Address, config.ControllerAddress, err = deploy.LookupCSIAddresses(cluster, d.Namespace)
+		framework.ExpectNoError(err, "find CSI addresses")
+
 		framework.Logf("sanity: using controller %s and node %s", config.ControllerAddress, config.Address)
 
 		// f.ExecCommandInContainerWithFullOutput assumes that we want a pod in the test's namespace,
@@ -607,7 +599,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 				// Worker nodes with PMEM.
 				nodes = make(map[string]nodeClient)
 				for i := 1; i < cluster.NumNodes(); i++ {
-					addr := cluster.NodeServiceAddress(i, socatPort)
+					addr := cluster.NodeServiceAddress(i, deploy.SocatPort)
 					conn, err := sanityutils.Connect(addr, grpc.WithInsecure())
 					framework.ExpectNoError(err, "connect to socat instance on node #%d via %s", i, addr)
 					node := nodeClient{

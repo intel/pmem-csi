@@ -377,7 +377,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 						deployment = deploy.CreateDeploymentCR(f, deployment)
 						defer deploy.DeleteDeploymentCR(f, deployment.Name)
-						deploy.WaitForPMEMDriver(c, deployment.Name, corev1.NamespaceDefault)
+						deploy.WaitForPMEMDriver(c, deployment.Name, corev1.NamespaceDefault, false /* testing */)
 						validateDriver(deployment)
 
 						// NOTE(avalluri): As the current operator does not support deploying
@@ -575,7 +575,7 @@ func switchDeploymentMode(c *deploy.Cluster, f *framework.Framework, depName str
 		}, "3m", "1s").Should(BeTrue(), "Pod restart '%s'", pod)
 	}
 
-	deploy.WaitForPMEMDriver(c, depName, corev1.NamespaceDefault)
+	deploy.WaitForPMEMDriver(c, depName, corev1.NamespaceDefault, false /* testing */)
 
 	return deployment
 }
