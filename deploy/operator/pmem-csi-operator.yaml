@@ -145,7 +145,7 @@ spec:
               fieldPath: metadata.name
         - name: OPERATOR_NAME
           value: pmem-csi-operator
-        image: intel/pmem-csi-driver:v0.7.21
+        image: intel/pmem-csi-driver:v0.7.22
         imagePullPolicy: IfNotPresent
         name: pmem-csi-operator
         securityContext:
