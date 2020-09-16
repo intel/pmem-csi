@@ -148,13 +148,12 @@ fi
 : ${TEST_KUBERNETES_FLAVOR:=}
 
 # Kubernetes feature gates to enable/disable.
-# EndpointSlice is disabled because of https://github.com/kubernetes/kubernetes/issues/91287
-# 1.19 should have a fix and also needs it to be enabled because without it,
-# kube-proxy is unhappy ("failed to list *v1beta1.EndpointSlice") and fails to
-# set up IP forwarding rules.
+# EndpointSlice is disabled because of https://github.com/kubernetes/kubernetes/issues/91287 (Kubernetes
+# < 1.19) and because there were random connection failures to node ports during sanity
+# testing (Kubernetes 1.19.0)
 : ${TEST_FEATURE_GATES:=CSINodeInfo=true,CSIDriverRegistry=true,CSIBlockVolume=true,CSIInlineVolume=true\
-$(case ${TEST_KUBERNETES_VERSION} in 1.1[0-5]|1.19) ;; *) echo ',EndpointSlice=false';; esac)\
-$(case ${TEST_KUBERNETES_VERSION} in 1.19) echo ',CSIStorageCapacity=true,GenericEphemeralVolume=true';; esac)\
+$(case ${TEST_KUBERNETES_VERSION} in 1.1[0-5]) ;; *) echo ',EndpointSlice=false';; esac)\
+$(case ${TEST_KUBERNETES_VERSION} in 1.19) echo ',CSIStorageCapacity=true,GenericEphemeralVolume=true,EndpointSliceProxying=false';; esac)\
 }
 
 # If non-empty, the version of Kata Containers which is to be installed
