@@ -9,6 +9,7 @@
     - [Branching](#branching)
     - [Tagging](#tagging)
     - [Release checklist](#release-checklist)
+    - [Release PMEM-CSI operator](#release-PMEM-CSI-operator)
 - [APIs](#apis)
     - [CSI API](#csi-api)
     - [Network ports](#network-ports)
@@ -150,6 +151,30 @@ Jenkinsfile ensures that.
   and promotion of the resulting images to [Docker
   Hub](https://hub.docker.com/r/intel/pmem-csi-driver/tags?page=1&ordering=last_updated).
 * Publish the GitHub release.
+
+### Release PMEM-CSI operator
+
+Follow below steps to publish new operator release to [OperatorHub](https://operatorhub.io):
+
+* Generate OLM catalog for new release
+``` console
+$ make operator-generate-catalog VERSION=<X.Y.Z> #semantic version number
+```
+Running the above command generates the OLM catalog files under `deploy/olm-catalog/<X.Y.Z>`
+
+* Clone `operator-framework/community-operators` repository
+``` console
+$ git clone https://github.com/operator-framework/community-operators.git
+```
+
+* Copy generated catalog files. Commit the changes and submit a pull request to
+ [community-operators](https://github.com/operator-framework/community-operators) repository.
+```console
+$ cp -r <PMEM-CSI_ROOT>/deploy/olm-catalog/ <COMMUNITY-OPERATORS_ROOT>/upstream-community-operators/pmem-csi-operator/
+$ cd <COMMUNITY-OPERATORS_ROOT>
+$ git add upstream-community-operators/pmem-csi-operator/
+$ git commit -s -m "Updating PMEM-CSI Operator to version <X.Y.Z>"
+```
 
 ## APIs
 
