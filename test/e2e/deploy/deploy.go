@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/kubernetes/test/e2e/framework"
+	"k8s.io/kubernetes/test/e2e/framework/skipper"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 
@@ -48,6 +49,13 @@ type UninstallHook func(deploymentName string)
 var (
 	installHooks   []InstallHook
 	uninstallHooks []UninstallHook
+
+	// If WaitForPMEMDriver timed out once, then it is likely to
+	// time out again, which just makes overall testing very slow,
+	// in particular in the CI where usually no-one is monitoring
+	// progress. Therefore we only allow it to fail once and then
+	// skip all future tests.
+	waitForPMEMDriverTimedOut bool
 )
 
 // AddInstallHook registers a callback which is invoked after a successful driver installation.
@@ -90,8 +98,14 @@ func WaitForPMEMDriver(c *Cluster, name, namespace string, testing bool) (metric
 	defer ticker.Stop()
 	info := time.NewTicker(time.Minute)
 	defer info.Stop()
-	deadline, cancel := context.WithTimeout(context.Background(), framework.TestContext.SystemDaemonsetStartupTimeout)
+	deadline, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
+
+	if waitForPMEMDriverTimedOut {
+		// Abort early.
+		skipper.Skipf("installing PMEM-CSI driver during previous test was too slow")
+	}
+
 	framework.Logf("Waiting for PMEM-CSI driver.")
 
 	tlsConfig := tls.Config{
@@ -193,19 +207,24 @@ func WaitForPMEMDriver(c *Cluster, name, namespace string, testing bool) (metric
 			defer conn.Close()
 			return nil
 		}
-		if err := tryConnect(nodeAddress); err != nil {
-			return fmt.Errorf("connect to node: %v", err)
-		}
 		if err := tryConnect(controllerAddress); err != nil {
 			return fmt.Errorf("connect to controller: %v", err)
+		}
+		if err := tryConnect(nodeAddress); err != nil {
+			return fmt.Errorf("connect to node: %v", err)
 		}
 
 		return nil
 	}
 	ready := func() error {
-		lastError = check()
-		if lastError == nil {
+		newError := check()
+		if newError == nil {
 			framework.Logf("Done with waiting, PMEM-CSI driver %s is ready.", version)
+		}
+		// Only overwrite the last error if we haven't reached the deadline yet, because
+		// in that case the new error is probably just "context deadline exceeded".
+		if lastError == nil || deadline.Err() == nil {
+			lastError = newError
 		}
 		return lastError
 	}
@@ -218,6 +237,7 @@ func WaitForPMEMDriver(c *Cluster, name, namespace string, testing bool) (metric
 		case <-info.C:
 			framework.Logf("Still waiting for PMEM-CSI driver, last error: %v", lastError)
 		case <-deadline.Done():
+			waitForPMEMDriverTimedOut = true
 			framework.Failf("Giving up waiting for PMEM-CSI to start up, check the previous warnings and log output. Last error: %v", lastError)
 		case <-ticker.C:
 			if ready() == nil {
