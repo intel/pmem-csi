@@ -1,0 +1,42 @@
+extraScrapeConfigs: |
+  # Example scrape config for PMEM-CSI containers.
+  #
+  # The relabeling allows the actual container scrape endpoints to be configured in the
+  # Kubernetes deployment via the "pmem-csi.intel.com/scrape" annotations and the "metrics"
+  # container ports.
+
+  - job_name: 'pmem-csi-containers'
+
+    kubernetes_sd_configs:
+      - role: pod
+
+    relabel_configs:
+      # Only scrape containers which have the "pmem-csi.intel.com/scrape" annotation....
+      - source_labels: [__meta_kubernetes_pod_annotation_pmem_csi_intel_com_scrape]
+        action: keep
+        regex: containers
+      # ... and a "metrics" port.
+      - source_labels: [__meta_kubernetes_pod_container_port_name]
+        action: keep
+        regex: metrics
+      # Overwrite default port (if any) with the container port number.
+      - source_labels: [__address__, __meta_kubernetes_pod_container_port_number]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      # Add certain information from Kubernetes (namespace, pod and container names, node)
+      # as label to each sample. The node name is useful for daemon sets where
+      # pods typically have no meaningful name.
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: kubernetes_pod_name
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        action: replace
+        target_label: kubernetes_pod_container_name
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        action: replace
+        target_label: kubernetes_pod_node_name

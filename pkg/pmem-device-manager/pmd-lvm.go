@@ -97,10 +97,30 @@ type vgInfo struct {
 	free uint64
 }
 
-func (lvm *pmemLvm) GetCapacity() (uint64, error) {
+func (lvm *pmemLvm) GetCapacity() (capacity Capacity, err error) {
 	lvmMutex.Lock()
 	defer lvmMutex.Unlock()
-	return lvm.getCapacity()
+
+	var vgs []vgInfo
+	vgs, err = getVolumeGroups(lvm.volumeGroups)
+	if err != nil {
+		return
+	}
+
+	for _, vg := range vgs {
+		if vg.free > capacity.MaxVolumeSize {
+			// TODO: alignment?
+			capacity.MaxVolumeSize = vg.free
+		}
+		capacity.Available += vg.free
+		capacity.Managed += vg.size
+		capacity.Total, err = totalSize()
+		if err != nil {
+			return
+		}
+	}
+
+	return capacity, nil
 }
 
 func (lvm *pmemLvm) CreateDevice(volumeId string, size uint64) error {
@@ -261,22 +281,6 @@ func parseLVSOutput(output string) (map[string]*PmemDeviceInfo, error) {
 	}
 
 	return devices, nil
-}
-
-func (lvm *pmemLvm) getCapacity() (uint64, error) {
-	var capacity uint64
-	vgs, err := getVolumeGroups(lvm.volumeGroups)
-	if err != nil {
-		return 0, err
-	}
-
-	for _, vg := range vgs {
-		if vg.free > capacity {
-			capacity = vg.free
-		}
-	}
-
-	return capacity, nil
 }
 
 func getVolumeGroups(groups []string) ([]vgInfo, error) {

@@ -4,9 +4,11 @@ import (
 	"crypto/tls"
 	"fmt"
 	"sync"
+	"time"
 
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
+	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
@@ -16,6 +18,10 @@ import (
 	"k8s.io/klog"
 	"k8s.io/utils/keymutex"
 )
+
+// NodeLabel is a label used for Prometheus which identifies the
+// node that the controller talks to.
+const NodeLabel = "node"
 
 // RegistryListener is an interface for registry server change listeners
 // All the callbacks are called once after updating the in-memory
@@ -41,6 +47,11 @@ type RegistryServer struct {
 	clientTLSConfig *tls.Config
 	nodeClients     map[string]*NodeInfo
 	listeners       map[RegistryListener]struct{}
+
+	// All nodes share the same metrics manager, but log samples
+	// with a different "pmem_csi_node" label and thus get their
+	// own histogram.
+	cmm metrics.CSIMetricsManager
 }
 
 type NodeInfo struct {
@@ -63,13 +74,21 @@ func init() {
 	prometheus.MustRegister(pmemNodes)
 }
 
-func New(tlsConfig *tls.Config) *RegistryServer {
+func New(tlsConfig *tls.Config, driverName string) *RegistryServer {
 	return &RegistryServer{
 		rpcMutex:        keymutex.NewHashed(-1),
 		clientTLSConfig: tlsConfig,
 		nodeClients:     map[string]*NodeInfo{},
 		listeners:       map[RegistryListener]struct{}{},
+		cmm: metrics.NewCSIMetricsManagerWithOptions(driverName,
+			metrics.WithSubsystem("pmem_csi_controller"),
+			metrics.WithLabelNames(NodeLabel),
+		),
 	}
+}
+
+func (rs *RegistryServer) GetMetricsGatherer() prometheus.Gatherer {
+	return rs.cmm.GetRegistry()
 }
 
 func (rs *RegistryServer) RegisterService(rpcServer *grpc.Server) {
@@ -97,7 +116,32 @@ func (rs *RegistryServer) ConnectToNodeController(nodeId string) (*grpc.ClientCo
 
 	klog.V(3).Infof("Connecting to node controller: %s", nodeInfo.Endpoint)
 
-	return pmemgrpc.Connect(nodeInfo.Endpoint, rs.clientTLSConfig)
+	return pmemgrpc.Connect(nodeInfo.Endpoint, rs.clientTLSConfig,
+		grpc.WithUnaryInterceptor(func(
+			ctx context.Context,
+			method string,
+			req, reply interface{},
+			cc *grpc.ClientConn,
+			invoker grpc.UnaryInvoker,
+			opts ...grpc.CallOption) error {
+			start := time.Now()
+			err := invoker(ctx, method, req, reply, cc, opts...)
+			duration := time.Since(start)
+			cmmv, err2 := rs.cmm.WithLabelValues(
+				map[string]string{NodeLabel: nodeId},
+			)
+			if err2 != nil {
+				klog.Errorf("CSI call metrics: set label %s value: %v", NodeLabel, err2)
+			} else {
+				cmmv.RecordMetrics(
+					method,   /* operationName */
+					err,      /* operationErr */
+					duration, /* operationDuration */
+				)
+			}
+			return err
+		}),
+	)
 }
 
 func (rs *RegistryServer) AddListener(l RegistryListener) {

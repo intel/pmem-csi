@@ -391,17 +391,16 @@ func (cs *nodeControllerServer) ListVolumes(ctx context.Context, req *csi.ListVo
 }
 
 func (cs *nodeControllerServer) GetCapacity(ctx context.Context, req *csi.GetCapacityRequest) (*csi.GetCapacityResponse, error) {
-	var capacity int64
-
 	cap, err := cs.dm.GetCapacity()
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 
-	capacity = int64(cap)
-
 	return &csi.GetCapacityResponse{
-		AvailableCapacity: capacity,
+		// Maximum volume size works better for capacity-aware
+		// pod scheduling than the available size. The other
+		// capacity values are available as metric.
+		AvailableCapacity: int64(cap.MaxVolumeSize),
 	}, nil
 }
 

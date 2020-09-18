@@ -249,6 +249,8 @@ func parseDefaultSpecValues() map[string]interface{} {
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         imagePullPolicy: IfNotPresent
+        ports:
+          protocol: TCP
       volumes:
         secret:
           defaultMode: 420`

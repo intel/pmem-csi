@@ -1,0 +1,18 @@
+# This JSON patch adds the  necessary annotation, port definitions and
+# arguments to the PMEM-CSI node pod.
+
+# PMEM-CSI:
+- op: add
+  path: /spec/template/metadata/annotations
+  value:
+    pmem-csi.intel.com/scrape: containers
+- op: add
+  path: /spec/template/spec/containers/0/ports
+  value:
+  - name: metrics
+    containerPort: 10010
+- op: add
+  path: /spec/template/spec/containers/0/command/-
+  value: -metricsListen=:10010
+
+# TODO: node-driver-registrar once it has metrics support.

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kubernetes-csi/csi-lib-utils/connection"
+	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -53,7 +55,7 @@ func Connect(endpoint string, tlsConfig *tls.Config, dialOptions ...grpc.DialOpt
 }
 
 //NewServer is a helper function to start a grpc server at given endpoint and uses provided tlsConfig
-func NewServer(endpoint string, tlsConfig *tls.Config, opts ...grpc.ServerOption) (*grpc.Server, net.Listener, error) {
+func NewServer(endpoint string, tlsConfig *tls.Config, csiMetricsManager metrics.CSIMetricsManager, opts ...grpc.ServerOption) (*grpc.Server, net.Listener, error) {
 	proto, addr, err := parseEndpoint(endpoint)
 	if err != nil {
 		return nil, nil, err
@@ -70,7 +72,14 @@ func NewServer(endpoint string, tlsConfig *tls.Config, opts ...grpc.ServerOption
 		return nil, nil, err
 	}
 
-	opts = append(opts, grpc.UnaryInterceptor(pmemcommon.LogGRPCServer))
+	interceptors := []grpc.UnaryServerInterceptor{
+		pmemcommon.LogGRPCServer,
+	}
+	if csiMetricsManager != nil {
+		interceptors = append(interceptors,
+			connection.ExtendedCSIMetricsManager{CSIMetricsManager: csiMetricsManager}.RecordMetricsServerInterceptor)
+	}
+	opts = append(opts, grpc.ChainUnaryInterceptor(interceptors...))
 	if tlsConfig != nil {
 		opts = append(opts, grpc.Creds(credentials.NewTLS(tlsConfig)))
 	}

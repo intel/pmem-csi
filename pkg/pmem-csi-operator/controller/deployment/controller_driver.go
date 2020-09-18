@@ -38,9 +38,11 @@ import (
 )
 
 const (
-	controllerServicePort = 10000
-	controllerMetricsPort = 10010
-	nodeControllerPort    = 10001
+	controllerServicePort  = 10000
+	controllerMetricsPort  = 10010
+	nodeControllerPort     = 10001
+	nodeMetricsPort        = 10010
+	provisionerMetricsPort = 10011
 )
 
 // A list of all object types potentially created by the operator,
@@ -434,7 +436,7 @@ func validateCertificates(caCert, regKey, regCert, ncKey, ncCert []byte) error {
 	// start a registry server
 	server := grpcserver.NewNonBlockingGRPCServer()
 	path := path.Join(tmp, "socket")
-	if err := server.Start("unix://"+path, regCfg); err != nil {
+	if err := server.Start("unix://"+path, regCfg, nil); err != nil {
 		return err
 	}
 	defer server.ForceStop()
@@ -708,6 +710,9 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 							"app":                        d.GetHyphenedName() + "-controller",
 							"pmem-csi.intel.com/webhook": "ignore",
 						}),
+					Annotations: map[string]string{
+						"pmem-csi.intel.com/scrape": "containers",
+					},
 				},
 				Spec: corev1.PodSpec{
 					SecurityContext: &corev1.PodSecurityContext{
@@ -802,6 +807,9 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 							"app":                        d.GetHyphenedName() + "-node",
 							"pmem-csi.intel.com/webhook": "ignore",
 						}),
+					Annotations: map[string]string{
+						"pmem-csi.intel.com/scrape": "containers",
+					},
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector: d.Spec.NodeSelector,
@@ -897,12 +905,12 @@ func (d *PmemCSIDriver) getControllerCommand() []string {
 		"-mode=controller",
 		"-endpoint=unix:///csi/csi-controller.sock",
 		fmt.Sprintf("-registryEndpoint=tcp://0.0.0.0:%d", controllerServicePort),
-		fmt.Sprintf("-metricsListen=:%d", controllerMetricsPort),
 		"-nodeid=$(KUBE_NODE_NAME)",
 		"-caFile=/certs/ca.crt",
 		"-certFile=/certs/tls.crt",
 		"-keyFile=/certs/tls.key",
 		"-drivername=$(PMEM_CSI_DRIVER_NAME)",
+		fmt.Sprintf("-metricsListen=:%d", controllerMetricsPort),
 	}
 }
 
@@ -923,6 +931,7 @@ func (d *PmemCSIDriver) getNodeDriverCommand() []string {
 		"-statePath=/var/lib/$(PMEM_CSI_DRIVER_NAME)",
 		"-drivername=$(PMEM_CSI_DRIVER_NAME)",
 		fmt.Sprintf("-pmemPercentage=%d", d.Spec.PMEMPercentage),
+		fmt.Sprintf("-metricsListen=:%d", nodeMetricsPort),
 	}
 }
 
@@ -966,6 +975,7 @@ func (d *PmemCSIDriver) getControllerContainer() corev1.Container {
 				MountPath: "/tmp",
 			},
 		},
+		Ports:                  d.getMetricsPorts(controllerMetricsPort),
 		Resources:              *d.Spec.ControllerResources,
 		TerminationMessagePath: "/tmp/termination-log",
 		SecurityContext: &corev1.SecurityContext{
@@ -1044,6 +1054,7 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 				MountPropagation: &bidirectional,
 			},
 		},
+		Ports:     d.getMetricsPorts(nodeMetricsPort),
 		Resources: *d.Spec.NodeResources,
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &true,
@@ -1068,6 +1079,7 @@ func (d *PmemCSIDriver) getProvisionerContainer() corev1.Container {
 			"--feature-gates=Topology=true",
 			"--strict-topology=true",
 			"--timeout=5m",
+			fmt.Sprintf("--metrics-address=:%d", provisionerMetricsPort),
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -1075,6 +1087,7 @@ func (d *PmemCSIDriver) getProvisionerContainer() corev1.Container {
 				MountPath: "/csi",
 			},
 		},
+		Ports:     d.getMetricsPorts(provisionerMetricsPort),
 		Resources: *d.Spec.ControllerResources,
 		SecurityContext: &corev1.SecurityContext{
 			ReadOnlyRootFilesystem: &true,
@@ -1113,6 +1126,15 @@ func (d *PmemCSIDriver) getNodeRegistrarContainer() corev1.Container {
 			},
 		},
 		Resources: *d.Spec.NodeResources,
+	}
+}
+
+func (d *PmemCSIDriver) getMetricsPorts(port int32) []corev1.ContainerPort {
+	return []corev1.ContainerPort{
+		{
+			Name:          "metrics",
+			ContainerPort: port,
+		},
 	}
 }
 

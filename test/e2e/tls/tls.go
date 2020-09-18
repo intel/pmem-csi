@@ -172,8 +172,9 @@ func checkTLS(f *framework.Framework, server string) {
 		ports := re.FindAllStringSubmatch(output, -1)
 		for _, entry := range ports {
 			port, ciphers := entry[1], entry[2]
-			if port == "10002" {
-				// The socat debugging port. Can be ignored.
+			switch port {
+			case "10002", "10010", "10011":
+				// The socat debugging port and metrics ports. Can be ignored.
 				continue
 			}
 			// All other ports must use TLS, with exactly the

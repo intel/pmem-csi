@@ -58,19 +58,25 @@ func (pmem *pmemNdctl) GetMode() api.DeviceMode {
 	return api.DeviceModeDirect
 }
 
-func (pmem *pmemNdctl) GetCapacity() (uint64, error) {
+func (pmem *pmemNdctl) GetCapacity() (capacity Capacity, err error) {
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
 
-	ndctx, err := ndctl.NewContext()
+	var ndctx *ndctl.Context
+	ndctx, err = ndctl.NewContext()
 	if err != nil {
-		return 0, err
+		return
 	}
 	defer ndctx.Free()
 
-	var capacity uint64
 	for _, bus := range ndctx.GetBuses() {
-		for _, r := range bus.ActiveRegions() {
+		for _, r := range bus.AllRegions() {
+			capacity.Total += r.Size()
+			// TODO: check type?!
+			if !r.Enabled() {
+				continue
+			}
+
 			realalign := ndctlAlign * r.InterleaveWays()
 			available := r.MaxAvailableExtent()
 			// align down, avoid claiming more than what we really can serve
@@ -78,9 +84,11 @@ func (pmem *pmemNdctl) GetCapacity() (uint64, error) {
 			available /= realalign
 			available *= realalign
 			klog.V(4).Infof("GetCapacity: available after realalign: %d", available)
-			if available > capacity {
-				capacity = available
+			if available > capacity.MaxVolumeSize {
+				capacity.MaxVolumeSize = available
 			}
+			capacity.Available += available
+			capacity.Managed += r.Size()
 		}
 	}
 	// TODO: we should maintain capacity when adding or subtracting
@@ -212,4 +220,22 @@ func namespaceToPmemInfo(ns *ndctl.Namespace) *PmemDeviceInfo {
 		Path:     "/dev/" + ns.BlockDeviceName(),
 		Size:     ns.Size(),
 	}
+}
+
+// totalSize sums up all PMEM regions, regardless whether they are
+// enabled and regardless of their mode.
+func totalSize() (size uint64, err error) {
+	var ndctx *ndctl.Context
+	ndctx, err = ndctl.NewContext()
+	if err != nil {
+		return
+	}
+	defer ndctx.Free()
+
+	for _, bus := range ndctx.GetBuses() {
+		for _, region := range bus.AllRegions() {
+			size += region.Size()
+		}
+	}
+	return
 }

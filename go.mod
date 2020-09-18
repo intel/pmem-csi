@@ -14,7 +14,7 @@ require (
 	github.com/golang/protobuf v1.4.2
 	github.com/google/uuid v1.1.1
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
-	github.com/kubernetes-csi/csi-lib-utils v0.7.0
+	github.com/kubernetes-csi/csi-lib-utils v0.8.0
 	github.com/kubernetes-csi/csi-test/v3 v3.1.0
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.1
@@ -22,7 +22,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/common v0.10.0
-	github.com/stretchr/testify v1.4.0
+	github.com/stretchr/testify v1.5.1
 	go.uber.org/multierr v1.2.0 // indirect
 	go.uber.org/zap v1.11.0 // indirect
 	golang.org/x/net v0.0.0-20200707034311-ab3426394381
@@ -34,7 +34,7 @@ require (
 	k8s.io/api v0.19.0
 	k8s.io/apiextensions-apiserver v0.19.0
 	k8s.io/apimachinery v0.19.1-rc.0
-	k8s.io/client-go v0.19.0
+	k8s.io/client-go v1.19.0
 	k8s.io/component-base v0.19.0
 	k8s.io/klog v1.0.0
 	k8s.io/kube-scheduler v0.19.0
