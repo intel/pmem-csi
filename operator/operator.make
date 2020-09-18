@@ -19,8 +19,8 @@ _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION):
 # upon any changes made to operator api.
 #
 # GOROOT is needed because of https://github.com/operator-framework/operator-sdk/issues/1854#issuecomment-525132306
-operator-generate-k8s: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
-	GOROOT=$(shell $(GO) env GOROOT) _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) generate k8s
+operator-generate-k8s: controller-gen
+	GOROOT=$(shell $(GO) env GOROOT) $(CONTROLLER_GEN) object paths=./pkg/apis/...
 
 # find or download if necessary controller-gen
 # this make target is copied from Makefile generated
