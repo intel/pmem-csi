@@ -194,6 +194,9 @@ func WaitForPMEMDriver(c *Cluster, name, namespace string) (metricsURL string) {
 	}
 }
 
+// https://github.com/containerd/containerd/issues/4068
+var containerdTaskError = regexp.MustCompile(`failed to (start|create) containerd task`)
+
 // CheckPMEMDriver does some sanity checks for a running deployment.
 func CheckPMEMDriver(c *Cluster, deployment *Deployment) {
 	pods, err := c.cs.CoreV1().Pods(deployment.Namespace).List(context.Background(),
@@ -206,7 +209,12 @@ func CheckPMEMDriver(c *Cluster, deployment *Deployment) {
 	for _, pod := range pods.Items {
 		for _, containerStatus := range pod.Status.ContainerStatuses {
 			if containerStatus.RestartCount > 0 {
-				framework.Failf("container %q in pod %q restarted %d times, last state: %+v",
+				print := framework.Failf
+				if containerdTaskError.MatchString(fmt.Sprintf("%v", containerStatus.LastTerminationState)) {
+					// This is a known issue in containerd, only document it.
+					print = framework.Logf
+				}
+				print("container %q in pod %q restarted %d times, last state: %+v",
 					containerStatus.Name,
 					pod.Name,
 					containerStatus.RestartCount,
