@@ -22,3 +22,24 @@ patchesJson6902:
     kind: RoleBinding
     name: csi-provisioner-role-cfg
   path: ../../patches/controller-role-patch.yaml
+- target:
+    group: rbac.authorization.k8s.io
+    version: v1
+    kind: ClusterRole
+    name: external-provisioner-runner
+  patch: |-
+    # PMEM-CSI uses "skip attach" and thus external-provisioner doesn't
+    # need to watch VolumeAttachment objects as there never should be
+    # any that are relevant for it. We can avoid the overhead (in case
+    # other drivers cause the creation of such objects) and potential bugs
+    # in Kubernetes (during downgrade testing, "skip attach" did not work
+    # properly, potentially because the CSIDriver object wasn't known yet
+    # directly after installing the driver).
+    #
+    # There is currently no command line option to remove the watch,
+    # but we can disable it indirectly by removing the RBAC permissions.
+    # However, that then triggers some runtime warning.
+    #
+    # We know that the "volumeattachments" resource is listed as last element.
+    - op: remove
+      path: /rules/8

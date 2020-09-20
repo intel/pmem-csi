@@ -137,14 +137,6 @@ rules:
   - get
   - list
   - watch
-- apiGroups:
-  - storage.k8s.io
-  resources:
-  - volumeattachments
-  verbs:
-  - get
-  - list
-  - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -297,7 +289,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: quay.io/k8scsi/csi-provisioner:v2.0.0
+        image: k8s.gcr.io/sig-storage/csi-provisioner:v2.0.2
         imagePullPolicy: IfNotPresent
         name: external-provisioner
         ports:
@@ -409,7 +401,7 @@ spec:
         env:
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
-        image: quay.io/k8scsi/csi-node-driver-registrar:v1.2.0
+        image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v1.2.0
         imagePullPolicy: IfNotPresent
         name: driver-registrar
         securityContext:

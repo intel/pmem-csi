@@ -698,13 +698,6 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRole() *rbacv1.ClusterRol
 					"get", "list", "watch",
 				},
 			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"storage.k8s.io"},
-				Resources: []string{"volumeattachments"},
-				Verbs: []string{
-					"get", "list", "watch",
-				},
-			},
 		},
 	}
 }

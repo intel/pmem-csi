@@ -169,12 +169,12 @@ const (
 	// The sidecar versions must be kept in sync with the
 	// deploy/kustomize YAML files!
 
-	defaultProvisionerImageName = "quay.io/k8scsi/csi-provisioner"
-	defaultProvisionerImageTag  = "v2.0.0"
+	defaultProvisionerImageName = "k8s.gcr.io/sig-storage/csi-provisioner"
+	defaultProvisionerImageTag  = "v2.0.2"
 	// DefaultProvisionerImage default external provisioner image to use
 	DefaultProvisionerImage = defaultProvisionerImageName + ":" + defaultProvisionerImageTag
 
-	defaultRegistrarImageName = "quay.io/k8scsi/csi-node-driver-registrar"
+	defaultRegistrarImageName = "k8s.gcr.io/sig-storage/csi-node-driver-registrar"
 	defaultRegistrarImageTag  = "v1.2.0"
 	// DefaultRegistrarImage default node driver registrar image to use
 	DefaultRegistrarImage = defaultRegistrarImageName + ":" + defaultRegistrarImageTag

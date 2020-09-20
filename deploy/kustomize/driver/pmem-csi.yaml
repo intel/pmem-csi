@@ -113,7 +113,7 @@ spec:
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
       - name: external-provisioner
-        image: quay.io/k8scsi/csi-provisioner:v1.X.Y
+        image: k8s.gcr.io/sig-storage/csi-provisioner:v1.X.Y
         imagePullPolicy: IfNotPresent
         args:
         - -v=3
@@ -219,7 +219,7 @@ spec:
           # that mounted fs.
           mountPropagation: Bidirectional
       - name: driver-registrar
-        image: quay.io/k8scsi/csi-node-driver-registrar:v1.X.Y
+        image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v1.X.Y
         imagePullPolicy: IfNotPresent
         args: [
             "-v=3",

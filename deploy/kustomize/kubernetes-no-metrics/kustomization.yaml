@@ -9,7 +9,7 @@ resources:
 # The sidecar versions must be kept in sync with the
 # operator defaults in pkg/apis/pmemcsi/v1alpha1/deployment_types.go!
 images:
-- name: quay.io/k8scsi/csi-provisioner
-  newTag: v2.0.0
-- name: quay.io/k8scsi/csi-node-driver-registrar
+- name: k8s.gcr.io/sig-storage/csi-provisioner
+  newTag: v2.0.2
+- name: k8s.gcr.io/sig-storage/csi-node-driver-registrar
   newTag: v1.2.0
