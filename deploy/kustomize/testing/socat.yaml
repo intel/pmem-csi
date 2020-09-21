@@ -23,6 +23,7 @@ spec:
     metadata:
       labels:
         app: pmem-csi-node-testing
+        pmem-csi.intel.com/webhook: ignore
     spec:
       hostNetwork: true
       containers:
