@@ -189,7 +189,8 @@ RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 	TEST_CMD='$(TEST_CMD)' \
 	GO='$(GO)' \
 	TEST_PKGS='$(shell for i in $(TEST_PKGS); do if ls $$i/*_test.go 2>/dev/null >&2; then echo $$i; fi; done)' \
-	$(GO) test -count=1 -timeout 0 -v ./test/e2e \
+	$(GO) test -count=1 -timeout 0 -v ./test/e2e -args \
+                -v=5 \
                 -ginkgo.skip='$(subst $(space),|,$(strip $(subst @,$(space),$(TEST_E2E_SKIP_ALL))))' \
                 -ginkgo.focus='$(subst $(space),|,$(strip $(subst @,$(space),$(TEST_E2E_FOCUS))))' \
 		-ginkgo.randomizeAllSpecs=false \

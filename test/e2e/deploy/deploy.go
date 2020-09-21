@@ -801,8 +801,8 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 			cmd.Env = append(os.Environ(),
 				"TEST_OPERATOR_NAMESPACE="+running.Namespace,
 				"TEST_OPERATOR_DEPLOYMENT="+running.Name())
-			output, err := pmemexec.Run(cmd)
-			framework.ExpectNoError(err, "delete operator deployment: %q\nOutput: %s", deployment.Name(), output)
+			_, err := pmemexec.Run(cmd)
+			framework.ExpectNoError(err, "delete operator deployment: %q", deployment.Name())
 		}
 		err := RemoveObjects(c, MustParse(running.Name()))
 		framework.ExpectNoError(err, "remove PMEM-CSI deployment")
@@ -810,8 +810,8 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 	if deployment.HasOLM {
 		cmd := exec.Command("test/start-stop-olm.sh", "start")
 		cmd.Dir = os.Getenv("REPO_ROOT")
-		output, err := pmemexec.Run(cmd)
-		framework.ExpectNoError(err, "create operator deployment: %q\nOutput: %s", deployment.Name(), output)
+		_, err := pmemexec.Run(cmd)
+		framework.ExpectNoError(err, "create operator deployment: %q", deployment.Name())
 		WaitForOLM(c, "olm")
 	}
 
@@ -826,9 +826,8 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 		cmd.Env = append(os.Environ(),
 			"TEST_OPERATOR_NAMESPACE="+deployment.Namespace,
 			"TEST_OPERATOR_DEPLOYMENT="+deployment.Name())
-		output, err := pmemexec.Run(cmd)
-		framework.ExpectNoError(err, "create operator deployment: %q\nOutput: %s", deployment.Name(), output)
-
+		_, err := pmemexec.Run(cmd)
+		framework.ExpectNoError(err, "create operator deployment: %q", deployment.Name())
 		WaitForOperator(c, deployment.Namespace)
 	}
 	if deployment.HasDriver {
