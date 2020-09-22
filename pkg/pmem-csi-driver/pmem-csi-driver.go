@@ -38,7 +38,7 @@ import (
 	"google.golang.org/grpc/status"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 const (

@@ -11,7 +11,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 type RegionType string

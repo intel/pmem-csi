@@ -24,7 +24,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	storagelisters "k8s.io/client-go/listers/storage/v1"
-	"k8s.io/klog/klogr"
+	"k8s.io/klog/v2/klogr"
 	schedulerapi "k8s.io/kube-scheduler/extender/v1"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"

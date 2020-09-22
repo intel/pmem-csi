@@ -11,7 +11,7 @@ import (
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 const (
