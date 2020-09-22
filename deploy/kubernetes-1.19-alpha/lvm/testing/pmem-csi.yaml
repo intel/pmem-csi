@@ -529,6 +529,7 @@ spec:
       labels:
         app: pmem-csi-node-testing
         pmem-csi.intel.com/deployment: lvm-testing
+        pmem-csi.intel.com/webhook: ignore
     spec:
       containers:
       - args:

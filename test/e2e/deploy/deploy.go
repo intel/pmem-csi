@@ -10,11 +10,13 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"reflect"
 	"regexp"
+	"strings"
 	"time"
 
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
@@ -25,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/kubernetes/test/e2e/framework"
+	"k8s.io/kubernetes/test/e2e/framework/skipper"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 
@@ -34,6 +37,7 @@ import (
 
 const (
 	deploymentLabel = "pmem-csi.intel.com/deployment"
+	SocatPort       = 9735
 )
 
 // InstallHook is the callback function for AddInstallHook.
@@ -45,6 +49,13 @@ type UninstallHook func(deploymentName string)
 var (
 	installHooks   []InstallHook
 	uninstallHooks []UninstallHook
+
+	// If WaitForPMEMDriver timed out once, then it is likely to
+	// time out again, which just makes overall testing very slow,
+	// in particular in the CI where usually no-one is monitoring
+	// progress. Therefore we only allow it to fail once and then
+	// skip all future tests.
+	waitForPMEMDriverTimedOut bool
 )
 
 // AddInstallHook registers a callback which is invoked after a successful driver installation.
@@ -81,13 +92,20 @@ func WaitForOLM(c *Cluster, namespace string) *v1.Pod {
 // defined as:
 // - controller service is up and running
 // - all nodes have registered
-func WaitForPMEMDriver(c *Cluster, name, namespace string) (metricsURL string) {
+// - for testing deployments: TCP CSI endpoints are ready
+func WaitForPMEMDriver(c *Cluster, name, namespace string, testing bool) (metricsURL string) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	info := time.NewTicker(time.Minute)
 	defer info.Stop()
-	deadline, cancel := context.WithTimeout(context.Background(), framework.TestContext.SystemDaemonsetStartupTimeout)
+	deadline, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
+
+	if waitForPMEMDriverTimedOut {
+		// Abort early.
+		skipper.Skipf("installing PMEM-CSI driver during previous test was too slow")
+	}
+
 	framework.Logf("Waiting for PMEM-CSI driver.")
 
 	tlsConfig := tls.Config{
@@ -167,12 +185,46 @@ func WaitForPMEMDriver(c *Cluster, name, namespace string) (metricsURL string) {
 			return fmt.Errorf("only %d of %d nodes have registered", actualNodes, c.NumNodes()-1)
 		}
 
+		// Done for normal deployments.
+		if !testing {
+			return nil
+		}
+
+		// For testing deployments, also ensure that the CSI endpoints can be reached.
+		nodeAddress, controllerAddress, err := LookupCSIAddresses(c, namespace)
+		if err != nil {
+			return fmt.Errorf("look up CSI addresses: %v", err)
+		}
+		tryConnect := func(address string) error {
+			prefix := "dns:///" // triple slash is used by gRPC, which makes the address unparsable with net/url
+			if !strings.HasPrefix(address, prefix) {
+				return fmt.Errorf("unexpected non-DNS URL: %s", address)
+			}
+			conn, err := net.Dial("tcp", address[len(prefix):])
+			if err != nil {
+				return fmt.Errorf("dial %s: %v", address, err)
+			}
+			defer conn.Close()
+			return nil
+		}
+		if err := tryConnect(controllerAddress); err != nil {
+			return fmt.Errorf("connect to controller: %v", err)
+		}
+		if err := tryConnect(nodeAddress); err != nil {
+			return fmt.Errorf("connect to node: %v", err)
+		}
+
 		return nil
 	}
 	ready := func() error {
-		lastError = check()
-		if lastError == nil {
+		newError := check()
+		if newError == nil {
 			framework.Logf("Done with waiting, PMEM-CSI driver %s is ready.", version)
+		}
+		// Only overwrite the last error if we haven't reached the deadline yet, because
+		// in that case the new error is probably just "context deadline exceeded".
+		if lastError == nil || deadline.Err() == nil {
+			lastError = newError
 		}
 		return lastError
 	}
@@ -185,6 +237,7 @@ func WaitForPMEMDriver(c *Cluster, name, namespace string) (metricsURL string) {
 		case <-info.C:
 			framework.Logf("Still waiting for PMEM-CSI driver, last error: %v", lastError)
 		case <-deadline.Done():
+			waitForPMEMDriverTimedOut = true
 			framework.Failf("Giving up waiting for PMEM-CSI to start up, check the previous warnings and log output. Last error: %v", lastError)
 		case <-ticker.C:
 			if ready() == nil {
@@ -193,6 +246,9 @@ func WaitForPMEMDriver(c *Cluster, name, namespace string) (metricsURL string) {
 		}
 	}
 }
+
+// https://github.com/containerd/containerd/issues/4068
+var containerdTaskError = regexp.MustCompile(`failed to (start|create) containerd task`)
 
 // CheckPMEMDriver does some sanity checks for a running deployment.
 func CheckPMEMDriver(c *Cluster, deployment *Deployment) {
@@ -206,7 +262,12 @@ func CheckPMEMDriver(c *Cluster, deployment *Deployment) {
 	for _, pod := range pods.Items {
 		for _, containerStatus := range pod.Status.ContainerStatuses {
 			if containerStatus.RestartCount > 0 {
-				framework.Failf("container %q in pod %q restarted %d times, last state: %+v",
+				print := framework.Failf
+				if containerdTaskError.MatchString(fmt.Sprintf("%v", containerStatus.LastTerminationState)) {
+					// This is a known issue in containerd, only document it.
+					print = framework.Logf
+				}
+				print("container %q in pod %q restarted %d times, last state: %+v",
 					containerStatus.Name,
 					pod.Name,
 					containerStatus.RestartCount,
@@ -637,7 +698,7 @@ func EnsureDeployment(deploymentName string) *Deployment {
 				framework.Logf("reusing existing %s PMEM-CSI components", deployment.Name)
 				// Do some sanity checks on the running deployment before the test.
 				if deployment.HasDriver {
-					WaitForPMEMDriver(c, "pmem-csi", deployment.Namespace)
+					WaitForPMEMDriver(c, "pmem-csi", deployment.Namespace, deployment.Testing)
 					CheckPMEMDriver(c, deployment)
 				}
 				if deployment.HasOperator {
@@ -708,7 +769,7 @@ func EnsureDeployment(deploymentName string) *Deployment {
 			// We check for a running driver the same way at the moment, by directly
 			// looking at the driver state. Long-term we want the operator to do that
 			// checking itself.
-			WaitForPMEMDriver(c, "pmem-csi", deployment.Namespace)
+			WaitForPMEMDriver(c, "pmem-csi", deployment.Namespace, deployment.Testing)
 			CheckPMEMDriver(c, deployment)
 		}
 
@@ -792,6 +853,25 @@ func (d Deployment) DeleteAllPods(c *Cluster) error {
 		}
 	}
 	return nil
+}
+
+// LookupCSIAddresses returns controller and node addresses for gRPC dial.
+// Only works for testing deployments.
+func LookupCSIAddresses(c *Cluster, namespace string) (nodeAddress, controllerAddress string, err error) {
+	// Node #1 is expected to have a PMEM-CSI node driver
+	// instance. If it doesn't, connecting to the PMEM-CSI
+	// node service will fail.
+	nodeAddress = c.NodeServiceAddress(1, SocatPort)
+
+	// The cluster controller service can be reached via
+	// any node, what matters is the service port.
+	port, err := c.GetServicePort(context.Background(), "pmem-csi-controller-testing", namespace)
+	if err != nil {
+		return "", "", fmt.Errorf("get PMEM-CSI controller service port: %v", err)
+	}
+	controllerAddress = c.NodeServiceAddress(0, port)
+
+	return
 }
 
 // DescribeForAll registers tests like gomega.Describe does, except that

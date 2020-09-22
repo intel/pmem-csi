@@ -63,7 +63,7 @@ func (c *Cluster) NodeIP(node int) string {
 	return c.nodeIPs[node]
 }
 
-// NodeServiceAddress returns the dial address for a certain port on a certain nodes.
+// NodeServiceAddress returns the gRPC dial address for a certain port on a certain nodes.
 func (c *Cluster) NodeServiceAddress(node int, port int) string {
 	return fmt.Sprintf("dns:///%s:%d", c.nodeIPs[node], port)
 }

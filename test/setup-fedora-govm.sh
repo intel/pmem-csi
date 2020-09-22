@@ -39,7 +39,7 @@ enabled=1
 gpgcheck=1
 gpgkey=https://download.docker.com/linux/centos/gpg
 EOF
-    packages+=" docker-ce-3:19.03.5-3.el7"
+    packages+=" docker-ce-3:19.03.13-3.el7 containerd.io-1.3.7-3.1.el7"
 
     cat <<EOF > /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
@@ -146,10 +146,17 @@ EOF
     # And for containerd.
     mkdir -p /etc/containerd
     containerd config default >/etc/containerd/config.toml
-    sed -i -e 's/systemd_cgroup = false/systemd_cgroup = true/' /etc/containerd/config.toml
     for registry in $INSECURE_REGISTRIES; do
-        sed -i -e '/\[plugins.cri.registry.mirrors\]/a \        [plugins.cri.registry.mirrors."'$registry'"]\n          endpoint = ["http://'$registry'"]' /etc/containerd/config.toml
+        sed -i -e '/\[plugins."io.containerd.grpc.v1.cri".registry.mirrors\]/a \        [plugins."io.containerd.grpc.v1.cri".registry.mirrors."'$registry'"]\n          endpoint = ["http://'$registry'"]' /etc/containerd/config.toml
     done
+
+    # Enable systemd cgroups as described in https://github.com/containerd/containerd/issues/4203#issuecomment-651532765
+    sed -i -e 's/runtime_type = "io.containerd.runc.v1"/runtime_type = "io.containerd.runc.v2"/' /etc/containerd/config.toml
+    cat >>/etc/containerd/config.toml <<EOF
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+  SystemdCgroup = true
+EOF
+
 
     containerd_daemon=
     mkdir -p /etc/systemd/system/kubelet.service.d/
