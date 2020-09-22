@@ -492,7 +492,9 @@ anti-affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node
 Try it out with provided
 [cache application](/deploy/common/pmem-app-cache.yaml) example.
 
-**WARNING**: late binding (`volumeBindingMode:WaitForFirstConsume`) has some caveats:
+**WARNING** | Late binding (`volumeBindingMode:WaitForFirstConsume`) has some caveats:
+:---: | :---
+
 * Pod creation may get stuck when there isn't enough capacity left for
   the volumes; see the next section for details.
 * A node is only chosen the first time a pod starts. After that it will always restart
@@ -888,6 +890,9 @@ INFO: deploying from /nvme/gopath/src/github.com/intel/pmem-csi/deploy/kubernete
 
 ### Metrics support
 
+**WARNING** | Metric support is an alpha feature. What data is provided may change.
+:---: | :---
+
 Metrics support is controlled by command line options of the PMEM-CSI
 driver binary and of the CSI sidecars. Annotations and named container
 ports make it possible to discover these data scraping endpoints. The
@@ -1107,10 +1112,8 @@ appropriate values:
 operator dynamically chooses suitable image versions. Users have to
 take care of that themselves when overriding the values.
 
-**WARNING**: although all fields can be modified and changes will be
-propagated to the deployed driver, not all changes are safe. In
-particular, changing the `deviceMode` will not work when there are
-active volumes.
+**WARNING** | Although all fields can be modified and changes will be propagated to the deployed driver, not all changes are safe. In particular, changing the `deviceMode` will not work when there are active volumes.
+:---: | :---
 
 #### DeploymentStatus
 
