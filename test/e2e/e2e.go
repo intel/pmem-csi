@@ -30,6 +30,8 @@ import (
 	"github.com/onsi/gomega"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/util/flowcontrol"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2ekubectl "k8s.io/kubernetes/test/e2e/framework/kubectl"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
@@ -50,9 +52,16 @@ var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 
 	framework.Logf("checking config")
 
-	c, err := framework.LoadClientset()
+	// We don't want WaitForPodsRunningReady and pod logging to be throttled.
+	// Therefore we set a fake rate limiter which never throttles.
+	config, err := framework.LoadConfig()
 	if err != nil {
-		framework.Failf("Error loading client: %v", err)
+		framework.Failf("error creating client config: %v", err)
+	}
+	config.RateLimiter = flowcontrol.NewFakeAlwaysRateLimiter()
+	c, err := clientset.NewForConfig(config)
+	if err != nil {
+		framework.Failf("error creating client: %v", err)
 	}
 
 	if framework.TestContext.ReportDir != "" {
