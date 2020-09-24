@@ -148,7 +148,8 @@ spec:
                 fieldRef:
                   fieldPath: metadata.name
             - name: OPERATOR_NAME
-              # This should match to the operator container name
+              # This must match to the operator container name.
+              # The operator uses it to find its image.
               value: "pmem-csi-operator"
           volumeMounts:
           - name: tmp
