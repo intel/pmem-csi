@@ -548,10 +548,10 @@ func (d Deployment) DeploymentMode() string {
 // Name returns a string that encodes all attributes in the format expected by Parse.
 func (d Deployment) Name() string {
 	var parts []string
-	if d.HasOLM {
+	switch {
+	case d.HasOLM:
 		parts = append(parts, "olm")
-	}
-	if d.HasOperator {
+	case d.HasOperator:
 		parts = append(parts, "operator")
 	}
 	if d.HasDriver {
@@ -676,9 +676,9 @@ var allDeployments = []string{
 	"operator",
 	"operator-lvm-production",
 	"operator-direct-production", // Uses kube-system, to ensure that deployment in a namespace also works.
-	"olm-operator",               // operator installed by the OLM
+	"olm",                        // operator installed by OLM
 }
-var deploymentRE = regexp.MustCompile(`^(olm)?-?(operator)?-?(\w*)?-?(testing|production)?-?([0-9\.]*)$`)
+var deploymentRE = regexp.MustCompile(`^(operator|olm)?-?(\w*)?-?(testing|production)?-?([0-9\.]*)$`)
 
 // Parse the deployment name and sets fields accordingly.
 func Parse(deploymentName string) (*Deployment, error) {
@@ -693,20 +693,21 @@ func Parse(deploymentName string) (*Deployment, error) {
 	if matches == nil {
 		return nil, fmt.Errorf("unsupported deployment %s", deploymentName)
 	}
-	if matches[1] == "olm" {
+	switch matches[1] {
+	case "olm":
 		deployment.HasOLM = true
-	}
-	if matches[2] == "operator" {
+		deployment.HasOperator = true
+	case "operator":
 		deployment.HasOperator = true
 	}
-	if matches[3] != "" {
+	if matches[2] != "" {
 		deployment.HasDriver = true
-		deployment.Testing = matches[4] == "testing"
-		if err := deployment.Mode.Set(matches[3]); err != nil {
+		deployment.Testing = matches[3] == "testing"
+		if err := deployment.Mode.Set(matches[2]); err != nil {
 			return nil, fmt.Errorf("deployment name %s: %v", deploymentName, err)
 		}
 	}
-	deployment.Version = matches[5]
+	deployment.Version = matches[4]
 
 	return deployment, nil
 }
