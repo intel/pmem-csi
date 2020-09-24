@@ -49,7 +49,7 @@ var _ = deploy.DescribeForSome("driver", func(d *deploy.Deployment) bool {
 		deployment := d.GetDriverDeployment()
 		deployment = deploy.GetDeploymentCR(f, deployment.Name)
 
-		framework.ExpectNoError(validate.DriverDeploymentEventually(ctx, client, *k8sver, d.Namespace, deployment), "validate driver")
+		framework.ExpectNoError(validate.DriverDeploymentEventually(ctx, client, *k8sver, d.Namespace, deployment, true), "validate driver")
 	})
 
 	// Just very minimal testing at the moment.

@@ -36,7 +36,7 @@ import (
 // objects for a certain deployment spec. deploymentSpec should only have those fields
 // set which are not the defaults. This call will wait for the expected objects until
 // the context times out.
-func DriverDeploymentEventually(ctx context.Context, client client.Client, k8sver version.Version, namespace string, deployment api.Deployment) error {
+func DriverDeploymentEventually(ctx context.Context, client client.Client, k8sver version.Version, namespace string, deployment api.Deployment, initialCreation bool) error {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -44,37 +44,71 @@ func DriverDeploymentEventually(ctx context.Context, client client.Client, k8sve
 		return errors.New("deployment not an object that was stored in the API server, no UID")
 	}
 
+	// Track resource versions to detect modifications?
+	var resourceVersions map[string]string
+	if initialCreation {
+		resourceVersions = map[string]string{}
+	}
+
 	// TODO: once there is a better way to detect that the
 	// operator has finished updating the deployment, check for
 	// that here instead of repeatedly checking the objects.
 	// As it stands now, permanent differences will only be
 	// reported when the test times out.
-	ready := func() (err error) {
-		return DriverDeployment(client, k8sver, namespace, deployment)
+	ready := func() (final bool, err error) {
+		return DriverDeployment(client, k8sver, namespace, deployment, resourceVersions)
 	}
-	if err := ready(); err != nil {
+	if final, err := ready(); err != nil {
+		if final {
+			return err
+		}
+	loop:
 		for {
 			select {
 			case <-ticker.C:
-				err = ready()
+				final, err = ready()
 				if err == nil {
-					return nil
+					break loop
+				}
+				if final {
+					return err
 				}
 			case <-ctx.Done():
 				return fmt.Errorf("timed out waiting for deployment, last error: %v", err)
 			}
 		}
 	}
-	return nil
+
+	// Now wait a bit longer to see whether the objects change again - they shouldn't.
+	// The longer we wait, the more certainty we have that we have reached a stable state.
+	deadline, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	for {
+		select {
+		case <-ticker.C:
+			if _, err := ready(); err != nil {
+				return fmt.Errorf("objects were changed after reaching expected state: %v", err)
+			}
+		case <-deadline.Done():
+			return nil
+		}
+	}
 }
 
 // DriverDeployment compares all objects as deployed by the operator against the expected
 // objects for a certain deployment spec. deploymentSpec should only have those fields
 // set which are not the defaults. The caller must ensure that the operator is done
 // with creating objects.
-func DriverDeployment(client client.Client, k8sver version.Version, namespace string, deployment api.Deployment) error {
+//
+// resourceVersions is used to track which resource versions were encountered
+// for generated objects. If not nil, the version must not change (i.e. the operator
+// must not update the objects after creating them).
+//
+// A final error is returned when observing a problem that is not going to go away,
+// like an unexpected update of an object.
+func DriverDeployment(client client.Client, k8sver version.Version, namespace string, deployment api.Deployment, resourceVersions map[string]string) (final bool, finalErr error) {
 	if deployment.GetUID() == "" {
-		return errors.New("deployment not an object that was stored in the API server, no UID")
+		return true, errors.New("deployment not an object that was stored in the API server, no UID")
 	}
 
 	// The operator currently always uses the production image. We
@@ -85,16 +119,32 @@ func DriverDeployment(client client.Client, k8sver version.Version, namespace st
 	// Validate sub-objects. A sub-object is anything that has the deployment object as owner.
 	objects, err := listAllDeployedObjects(client, deployment)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	expectedObjects, err := deployments.LoadAndCustomizeObjects(k8sver, deployment.Spec.DeviceMode, namespace, deployment)
 	if err != nil {
-		return fmt.Errorf("customize expected objects: %v", err)
+		return true, fmt.Errorf("customize expected objects: %v", err)
 	}
 
 	var diffs []string
 	for _, actual := range objects {
+		// When the CR just got created, the operator should
+		// immediately create objects with the right content and then
+		// not update them again.
+		if resourceVersions != nil {
+			uid := string(actual.GetUID())
+			currentResourceVersion := actual.GetResourceVersion()
+			oldResourceVersion, ok := resourceVersions[uid]
+			if ok {
+				if oldResourceVersion != currentResourceVersion {
+					diffs = append(diffs, fmt.Sprintf("object was modified unnecessarily: %s", prettyPrintObjectID(actual)))
+					final = true
+				}
+			} else {
+				resourceVersions[uid] = currentResourceVersion
+			}
+		}
 		expected := findObject(expectedObjects, actual)
 		if expected == nil {
 			if actual.GetKind() == "Secret" {
@@ -164,10 +214,9 @@ func DriverDeployment(client client.Client, k8sver version.Version, namespace st
 		}
 	}
 	if diffs != nil {
-		return fmt.Errorf("deployed driver different from expected deployment:\n%s", strings.Join(diffs, "\n"))
+		finalErr = fmt.Errorf("deployed driver different from expected deployment:\n%s", strings.Join(diffs, "\n"))
 	}
-
-	return nil
+	return
 }
 
 func createObject(gvk schema.GroupVersionKind, name, namespace string) unstructured.Unstructured {
