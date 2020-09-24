@@ -91,7 +91,16 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
 	}
 
 	if foundInCache {
-		changes = d.Compare(oldDeployment)
+		// Cached deployment does not have defaults stored in it.
+		// So, reset those defaults before comparing otherwise
+		// those set defaults `d.Deployment` will be detected as
+		// changes.
+		cached := oldDeployment.DeepCopy()
+		if err := cached.EnsureDefaults(r.containerImage); err != nil {
+			r.evRecorder.Event(d, corev1.EventTypeWarning, api.EventReasonFailed, err.Error())
+			return true, err
+		}
+		changes = d.Compare(cached)
 	}
 
 	klog.Infof("Deployment: %q, state %q, changes %v, in cache %v", d.Name, d.Status.Phase, changes, foundInCache)
