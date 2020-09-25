@@ -61,8 +61,11 @@ var _ testsuites.TestSuite = &skewTestSuite{}
 var (
 	// The version skew tests run with combinations of the
 	// following volume parameters.
-	fsTypes       = []string{"", "ext4"}
-	volTypes      = []testpatterns.TestVolType{testpatterns.CSIInlineVolume, testpatterns.DynamicPV}
+	fsTypes = []string{"", "ext4"}
+	// CSIInlineVolume cannot be tested because the current cluster setup for the PMEM-CSI scheduler
+	// extender used NodeCacheSupported=true and PMEM-CSI 0.7.x doesn't support that. Immediate binding
+	// works.
+	volTypes      = []testpatterns.TestVolType{ /* testpatterns.CSIInlineVolume, */ testpatterns.DynamicPV}
 	volParameters = []map[string]string{
 		nil,
 		// We cannot test cache volumes because of https://github.com/intel/pmem-csi/issues/733:

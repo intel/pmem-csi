@@ -17,6 +17,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -324,6 +325,8 @@ func TestScheduler(t *testing.T) {
 		capacity clusterCapacity
 		// Nodes to check.
 		nodes []string
+		// Whether we pass v1.NodeList (false) or slice of node names (true).
+		nodeCacheCapable bool
 
 		// Results
 		expectedError    string
@@ -460,6 +463,18 @@ func TestScheduler(t *testing.T) {
 			},
 			expectedNodes: []string{nodeA, nodeB},
 		},
+		"nodeCacheCapable": {
+			pvcs: []*v1.PersistentVolumeClaim{
+				unboundPVC,
+			},
+			nodes: []string{nodeA, nodeB},
+			capacity: clusterCapacity{
+				nodeA: GiG,
+				nodeB: GiG,
+			},
+			nodeCacheCapable: true,
+			expectedNodes:    []string{nodeA, nodeB},
+		},
 		"one volume, two nodes, enough capacity on A": {
 			pvcs: []*v1.PersistentVolumeClaim{
 				unboundPVC,
@@ -514,10 +529,13 @@ func TestScheduler(t *testing.T) {
 		if pod == nil {
 			pod = makePod(scenario.pvcs, scenario.inline)
 		}
-		nodes := makeNodeList(scenario.nodes)
 		args := schedulerapi.ExtenderArgs{
-			Pod:   pod,
-			Nodes: nodes,
+			Pod: pod,
+		}
+		if scenario.nodeCacheCapable {
+			args.NodeNames = &scenario.nodes
+		} else {
+			args.Nodes = makeNodeList(scenario.nodes)
 		}
 		requestBody, err := json.Marshal(args)
 		require.NoError(t, err, "marshal request")
@@ -535,9 +553,16 @@ func TestScheduler(t *testing.T) {
 		require.NoError(t, err, "unmarshal response")
 		assert.Equal(t, scenario.expectedError, result.Error)
 		var names []string
-		if result.Nodes != nil {
-			names = nodeNames(result.Nodes.Items)
+		if scenario.nodeCacheCapable {
+			if result.NodeNames != nil {
+				names = *result.NodeNames
+			}
+		} else {
+			if result.Nodes != nil {
+				names = listNodeNames(result.Nodes.Items)
+			}
 		}
+		sort.Strings(names)
 		assert.Equal(t, scenario.expectedNodes, names)
 		failures := scenario.expectedFailures
 		if failures == nil && scenario.expectedError == "" {

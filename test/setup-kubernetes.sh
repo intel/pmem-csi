@@ -111,7 +111,7 @@ EOF
       "urlPrefix": "https://127.0.0.1:${TEST_SCHEDULER_EXTENDER_NODE_PORT}",
       "filterVerb": "filter",
       "prioritizeVerb": "prioritize",
-      "nodeCacheCapable": false,
+      "nodeCacheCapable": true,
       "weight": 1,
       "managedResources":
       [{
@@ -134,6 +134,7 @@ extenders:
 - urlPrefix: https://127.0.0.1:${TEST_SCHEDULER_EXTENDER_NODE_PORT}
   filterVerb: filter
   prioritizeVerb: prioritize
+  nodeCacheCapable: true
   weight: 1
   managedResources:
   - name: pmem-csi.intel.com/scheduler

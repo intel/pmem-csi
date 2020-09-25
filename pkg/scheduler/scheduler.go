@@ -128,7 +128,6 @@ func (s *scheduler) filter(w http.ResponseWriter, r *http.Request) {
 		s.log.Error(err, "JSON encoding")
 		w.WriteHeader(http.StatusInternalServerError)
 	} else {
-		s.log.V(5).Info("node filter", "result", string(response))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write(response)
@@ -140,16 +139,16 @@ func (s *scheduler) filter(w http.ResponseWriter, r *http.Request) {
 // complicated to implement and should better be handled generically for volumes
 // in Kubernetes.
 func (s *scheduler) doFilter(args schedulerapi.ExtenderArgs) (*schedulerapi.ExtenderFilterResult, error) {
-	var filteredNodes []v1.Node
+	var filteredNodes []string
 	failedNodes := make(schedulerapi.FailedNodesMap)
 	if args.Pod == nil ||
 		args.Pod.Name == "" ||
-		args.Nodes == nil {
+		(args.NodeNames == nil && args.Nodes == nil) {
 		return nil, errors.New("incomplete parameters")
 	}
 
 	log := s.log.WithValues("pod", args.Pod.Name)
-	log.V(5).Info("node filter request", "potential nodes", nodeNames(args.Nodes.Items))
+	log.V(5).Info("node filter", "request", args)
 	required, err := s.requiredStorage(args.Pod)
 	if err != nil {
 		return nil, fmt.Errorf("checking for unbound volumes: %v", err)
@@ -158,43 +157,58 @@ func (s *scheduler) doFilter(args schedulerapi.ExtenderArgs) (*schedulerapi.Exte
 
 	var mutex sync.Mutex
 	var waitgroup sync.WaitGroup
-	for _, node := range args.Nodes.Items {
+	var nodeNames []string
+	if args.NodeNames != nil {
+		nodeNames = *args.NodeNames
+	} else {
+		// Fallback for Extender.NodeCacheCapable == false:
+		// not recommended, but may still be used by users who followed the
+		// PMEM-CSI 0.7 setup instructions.
+		log.Info("NodeCacheCapable is false in Extender configuration, should be set to true.")
+		nodeNames = listNodeNames(args.Nodes.Items)
+	}
+	for _, nodeName := range nodeNames {
 		if required == 0 {
 			// Nothing to check.
-			filteredNodes = append(filteredNodes, node)
+			filteredNodes = append(filteredNodes, nodeName)
 			continue
 		}
 
 		// Check in parallel.
-		node := node
+		nodeName := nodeName
 		waitgroup.Add(1)
 		go func() {
-			fits, failReasons, err := s.nodeHasEnoughCapacity(required, node)
+			fits, failReasons, err := s.nodeHasEnoughCapacity(required, nodeName)
 			mutex.Lock()
 			defer mutex.Unlock()
 			defer waitgroup.Done()
 			switch {
 			case fits:
-				filteredNodes = append(filteredNodes, node)
+				filteredNodes = append(filteredNodes, nodeName)
 			case failReasons != nil:
-				failedNodes[node.Name] = strings.Join(failReasons, ",")
+				failedNodes[nodeName] = strings.Join(failReasons, ",")
 			case err != nil:
-				failedNodes[node.Name] = fmt.Sprintf("checking for capacity: %v", err)
+				failedNodes[nodeName] = fmt.Sprintf("checking for capacity: %v", err)
 			}
 		}()
 	}
 	waitgroup.Wait()
 
-	log.V(5).Info("node filter result",
-		"suitable nodes", nodeNames(filteredNodes),
-		"failed nodes", failedNodes)
-	return &schedulerapi.ExtenderFilterResult{
-		Nodes: &v1.NodeList{
-			Items: filteredNodes,
-		},
+	response := &schedulerapi.ExtenderFilterResult{
 		FailedNodes: failedNodes,
 		Error:       "",
-	}, nil
+	}
+	if args.NodeNames != nil {
+		response.NodeNames = &filteredNodes
+	} else {
+		// fallback response...
+		response.Nodes = &v1.NodeList{}
+		for _, node := range filteredNodes {
+			response.Nodes.Items = append(response.Nodes.Items, getNode(args.Nodes.Items, node))
+		}
+	}
+	log.V(5).Info("node filter", "response", response)
+	return response, nil
 }
 
 // requiredStorage sums up total size of all currently unbound
@@ -262,8 +276,8 @@ func (s *scheduler) requiredStorage(pod *v1.Pod) (int64, error) {
 
 // nodeHasEnoughCapacity determines whether a node has enough storage available. It either returns
 // true if yes, a list of explanations why not, or an error if checking failed.
-func (s *scheduler) nodeHasEnoughCapacity(required int64, node v1.Node) (bool, []string, error) {
-	available, err := s.capacity.NodeCapacity(node.Name)
+func (s *scheduler) nodeHasEnoughCapacity(required int64, nodeName string) (bool, []string, error) {
+	available, err := s.capacity.NodeCapacity(nodeName)
 	if err != nil {
 		return false, nil, fmt.Errorf("retrieve capacity: %v", err)
 	}
@@ -279,11 +293,20 @@ func (s *scheduler) nodeHasEnoughCapacity(required int64, node v1.Node) (bool, [
 	return true, nil, nil
 }
 
-func nodeNames(nodes []v1.Node) []string {
+func listNodeNames(nodes []v1.Node) []string {
 	var names []string
 	for _, node := range nodes {
 		names = append(names, node.Name)
 	}
 	sort.Strings(names)
 	return names
+}
+
+func getNode(nodes []v1.Node, nodeName string) v1.Node {
+	for _, node := range nodes {
+		if node.Name == nodeName {
+			return node
+		}
+	}
+	return v1.Node{}
 }
