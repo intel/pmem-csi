@@ -95,7 +95,15 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		if what == nil {
 			what = []interface{}{"validate driver"}
 		}
-		framework.ExpectNoErrorWithOffset(1, validate.DriverDeploymentEventually(ctx, client, k8sver, d.Namespace, deployment), what...)
+
+		// We cannot check for unexpected object modifications
+		// by the operator during E2E testing because the app
+		// controllers themselves will also modify the same
+		// objects with status changes. We can only test
+		// that during unit testing.
+		initialCreation := false
+
+		framework.ExpectNoErrorWithOffset(1, validate.DriverDeploymentEventually(ctx, client, k8sver, d.Namespace, deployment, initialCreation), what...)
 		framework.Logf("got expected driver deployment %s", deployment.Name)
 	}
 
@@ -197,7 +205,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			deployment2 = deploy.CreateDeploymentCR(f, deployment2)
 			defer deploy.DeleteDeploymentCR(f, deployment2.Name)
-			validateDriver(deployment1 /* TODO 2 */, "validate driver #2")
+			validateDriver(deployment1, true /* TODO 2 */, "validate driver #2")
 		})
 
 		It("shall support dots in the name", func() {
@@ -214,7 +222,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			deployment = deploy.CreateDeploymentCR(f, deployment)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-			validateDriver(deployment)
+			validateDriver(deployment, true)
 		})
 
 		It("driver deployment shall be running even after operator exit", func() {
@@ -223,7 +231,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			deployment = deploy.CreateDeploymentCR(f, deployment)
 
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-			validateDriver(deployment)
+			validateDriver(deployment, true)
 
 			// Stop the operator
 			stopOperator(c, d)
@@ -231,8 +239,13 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			defer startOperator(c, d)
 
 			// Ensure that the driver is running consistently
+			resourceVersions := map[string]string{}
 			Consistently(func() error {
-				return validate.DriverDeployment(client, k8sver, d.Namespace, deployment)
+				final, err := validate.DriverDeployment(client, k8sver, d.Namespace, deployment, resourceVersions)
+				if final {
+					framework.Failf("final error during driver validation after restarting: %v", err)
+				}
+				return err
 			}, "1m", "20s").ShouldNot(HaveOccurred(), "driver validation failure after restarting")
 		})
 
@@ -283,7 +296,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			// Deleting the existing secret should make the deployment succeed.
 			deleteSecret(sec.Name)
-			validateDriver(deployment)
+			validateDriver(deployment, true)
 		})
 	})
 
@@ -378,7 +391,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						deployment = deploy.CreateDeploymentCR(f, deployment)
 						defer deploy.DeleteDeploymentCR(f, deployment.Name)
 						deploy.WaitForPMEMDriver(c, deployment.Name, corev1.NamespaceDefault, false /* testing */)
-						validateDriver(deployment)
+						validateDriver(deployment, true)
 
 						// NOTE(avalluri): As the current operator does not support deploying
 						// the driver in 'testing' mode, we cannot directely access CSI
@@ -434,8 +447,10 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					validateDriver(deployment, "validate driver before update")
 
 					// We have to get a fresh copy before updating it because the
-					// operator should have modified the status.
-					deployment = deploy.GetDeploymentCR(f, deployment.Name)
+					// operator should have modified the status, and only the status.
+					modifiedDeployment := deploy.GetDeploymentCR(f, deployment.Name)
+					Expect(modifiedDeployment.Spec).To(Equal(deployment.Spec), "spec unmodified")
+					Expect(modifiedDeployment.Status.Phase).To(Equal(api.DeploymentPhaseRunning), "deployment phase")
 
 					restored := false
 					if restart {
@@ -447,15 +462,15 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						}()
 					}
 
-					testcase.Mutate(&deployment)
-					deployment = deploy.UpdateDeploymentCR(f, deployment)
+					testcase.Mutate(&modifiedDeployment)
+					deployment = deploy.UpdateDeploymentCR(f, modifiedDeployment)
 
 					if restart {
 						startOperator(c, d)
 						restored = true
 					}
 
-					validateDriver(deployment, "validate driver after update and restart")
+					validateDriver(modifiedDeployment, "validate driver after update and restart")
 				}
 
 				It("while running", func() {
