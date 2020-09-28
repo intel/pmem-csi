@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package deploy
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -19,7 +20,6 @@ import (
 	"strings"
 	"time"
 
-	pmemexec "github.com/intel/pmem-csi/pkg/exec"
 	"github.com/prometheus/common/expfmt"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -30,6 +30,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	pmemexec "github.com/intel/pmem-csi/pkg/exec"
 
 	"github.com/onsi/ginkgo"
 	"github.com/onsi/gomega"
@@ -93,7 +94,9 @@ func WaitForOLM(c *Cluster, namespace string) *v1.Pod {
 // - controller service is up and running
 // - all nodes have registered
 // - for testing deployments: TCP CSI endpoints are ready
-func WaitForPMEMDriver(c *Cluster, name, namespace string, testing bool) (metricsURL string) {
+//
+// "name" is the common prefix used for objects of the deployment.
+func WaitForPMEMDriver(c *Cluster, name string, d *Deployment) (metricsURL string) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	info := time.NewTicker(time.Minute)
@@ -128,13 +131,17 @@ func WaitForPMEMDriver(c *Cluster, name, namespace string, testing bool) (metric
 		defer cancel()
 
 		// The controller service must be defined.
-		port, err := c.GetServicePort(deadline, name+"-metrics", namespace)
+		port, err := c.GetServicePort(deadline, name+"-metrics", d.Namespace)
 		if err != nil {
-			return fmt.Errorf("get port for service %s-metrics in namespace %s: %v", name, namespace, err)
+			return fmt.Errorf("get port for service %s-metrics in namespace %s: %v", name, d.Namespace, err)
 		}
 
 		// We can connect to it and get metrics data.
-		metricsURL = fmt.Sprintf("http://%s:%d/metrics", c.NodeIP(0), port)
+		scheme := "http"
+		if d.Version == "0.7" {
+			scheme = "https"
+		}
+		metricsURL = fmt.Sprintf("%s://%s:%d/metrics", scheme, c.NodeIP(0), port)
 		client := &http.Client{
 			Transport: &tr,
 			Timeout:   timeout,
@@ -186,12 +193,12 @@ func WaitForPMEMDriver(c *Cluster, name, namespace string, testing bool) (metric
 		}
 
 		// Done for normal deployments.
-		if !testing {
+		if !d.Testing {
 			return nil
 		}
 
 		// For testing deployments, also ensure that the CSI endpoints can be reached.
-		nodeAddress, controllerAddress, err := LookupCSIAddresses(c, namespace)
+		nodeAddress, controllerAddress, err := LookupCSIAddresses(c, d.Namespace)
 		if err != nil {
 			return fmt.Errorf("look up CSI addresses: %v", err)
 		}
@@ -254,7 +261,7 @@ var containerdTaskError = regexp.MustCompile(`failed to (start|create) container
 func CheckPMEMDriver(c *Cluster, deployment *Deployment) {
 	pods, err := c.cs.CoreV1().Pods(deployment.Namespace).List(context.Background(),
 		metav1.ListOptions{
-			LabelSelector: fmt.Sprintf("%s in (%s)", deploymentLabel, deployment.Name),
+			LabelSelector: fmt.Sprintf("%s in (%s)", deploymentLabel, deployment.Label()),
 		},
 	)
 	framework.ExpectNoError(err, "list PMEM-CSI pods")
@@ -281,19 +288,20 @@ func CheckPMEMDriver(c *Cluster, deployment *Deployment) {
 // RemoveObjects deletes everything that might have been created for a
 // PMEM-CSI driver or operator installation (pods, daemonsets,
 // statefulsets, driver info, storage classes, etc.).
-func RemoveObjects(c *Cluster, deploymentName string) error {
+func RemoveObjects(c *Cluster, deployment *Deployment) error {
 	// Try repeatedly, in case that communication with the API server fails temporarily.
 	deadline, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	ticker := time.NewTicker(time.Second)
 
-	framework.Logf("deleting the %s PMEM-CSI deployment", deploymentName)
+	name := deployment.Name()
+	framework.Logf("deleting the %s PMEM-CSI deployment", name)
 	for _, h := range uninstallHooks {
-		h(deploymentName)
+		h(name)
 	}
 
 	filter := metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("%s in (%s)", deploymentLabel, deploymentName),
+		LabelSelector: fmt.Sprintf("%s in (%s)", deploymentLabel, deployment.Label()),
 	}
 	infoDelay := 5 * time.Second
 	infoTimestamp := time.Now().Add(infoDelay)
@@ -495,7 +503,7 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 		// check again whether all objects have been deleted.
 		select {
 		case <-deadline.Done():
-			return fmt.Errorf("timed out while trying to delete the %s PMEM-CSI deployment", deploymentName)
+			return fmt.Errorf("timed out while trying to delete the %s PMEM-CSI deployment", name)
 		case <-ticker.C:
 		}
 	}
@@ -504,10 +512,6 @@ func RemoveObjects(c *Cluster, deploymentName string) error {
 // Deployment contains some information about a some deployed PMEM-CSI component(s).
 // Those components can be a full driver installation and/or just the operator.
 type Deployment struct {
-	// Name string that all objects from the same deployment must
-	// have in the DeploymentLabel.
-	Name string
-
 	// HasDriver is true if the driver itself is running. The
 	// driver is reacting to the usual pmem-csi.intel.com driver
 	// name.
@@ -528,6 +532,10 @@ type Deployment struct {
 
 	// Testing is true when socat pods are available.
 	Testing bool
+
+	// A version of the format X.Y when installing an older
+	// release from the release-X.Y branch.
+	Version string
 }
 
 func (d Deployment) DeploymentMode() string {
@@ -535,6 +543,35 @@ func (d Deployment) DeploymentMode() string {
 		return "testing"
 	}
 	return "production"
+}
+
+// Name returns a string that encodes all attributes in the format expected by Parse.
+func (d Deployment) Name() string {
+	var parts []string
+	switch {
+	case d.HasOLM:
+		parts = append(parts, "olm")
+	case d.HasOperator:
+		parts = append(parts, "operator")
+	}
+	if d.HasDriver {
+		parts = append(parts, string(d.Mode))
+		parts = append(parts, d.DeploymentMode())
+	}
+	if d.Version != "" {
+		parts = append(parts, d.Version)
+	}
+	return strings.Join(parts, "-")
+}
+
+// Label returns the label used for objects belonging to the deployment.
+// It's the same as the name minus the version. The reason for not including
+// the version in the label value is that previous releases did not
+// have that either. We have to stay consistent with that for up- and downgrade
+// testing.
+func (d Deployment) Label() string {
+	d.Version = ""
+	return d.Name()
 }
 
 // FindDeployment checks whether there is a PMEM-CSI driver and/or
@@ -550,8 +587,8 @@ func FindDeployment(c *Cluster) (*Deployment, error) {
 	if err != nil {
 		return nil, err
 	}
-	if operator != nil && driver != nil && operator.Name != driver.Name {
-		return nil, fmt.Errorf("found two different deployments: %s and %s", operator.Name, driver.Name)
+	if operator != nil && driver != nil && operator.Name() != driver.Name() {
+		return nil, fmt.Errorf("found two different deployments: %s and %s", operator.Name(), driver.Name())
 	}
 	if operator != nil {
 		return operator, nil
@@ -561,6 +598,8 @@ func FindDeployment(c *Cluster) (*Deployment, error) {
 	}
 	return nil, nil
 }
+
+var imageVersion = regexp.MustCompile(`pmem-csi-driver(?:-test)?:v(\d+\.\d+)`)
 
 func findDriver(c *Cluster) (*Deployment, error) {
 	list, err := c.cs.AppsV1().StatefulSets("").List(context.Background(), metav1.ListOptions{LabelSelector: deploymentLabel})
@@ -577,6 +616,15 @@ func findDriver(c *Cluster) (*Deployment, error) {
 		return nil, fmt.Errorf("parse label of deployment %s: %v", list.Items[0].Name, err)
 	}
 	deployment.Namespace = list.Items[0].Namespace
+
+	// Derive the version from the image tag. The annotation doesn't include it.
+	for _, container := range list.Items[0].Spec.Template.Spec.Containers {
+		m := imageVersion.FindStringSubmatch(container.Image)
+		if m != nil {
+			deployment.Version = m[1]
+			break
+		}
+	}
 
 	// Currently we don't support parallel installations, so all
 	// objects must belong to each other.
@@ -628,14 +676,13 @@ var allDeployments = []string{
 	"operator",
 	"operator-lvm-production",
 	"operator-direct-production", // Uses kube-system, to ensure that deployment in a namespace also works.
-	"olm-operator",               // operator installed by the OLM
+	"olm",                        // operator installed by OLM
 }
-var deploymentRE = regexp.MustCompile(`^(olm)?-?(operator)?-?(\w*)?-?(testing|production)?$`)
+var deploymentRE = regexp.MustCompile(`^(operator|olm)?-?(\w*)?-?(testing|production)?-?([0-9\.]*)$`)
 
 // Parse the deployment name and sets fields accordingly.
 func Parse(deploymentName string) (*Deployment, error) {
 	deployment := &Deployment{
-		Name:      deploymentName,
 		Namespace: "default",
 	}
 	if deploymentName == "operator-direct-production" {
@@ -646,21 +693,32 @@ func Parse(deploymentName string) (*Deployment, error) {
 	if matches == nil {
 		return nil, fmt.Errorf("unsupported deployment %s", deploymentName)
 	}
-	if matches[1] == "olm" {
+	switch matches[1] {
+	case "olm":
 		deployment.HasOLM = true
-	}
-	if matches[2] == "operator" {
+		deployment.HasOperator = true
+	case "operator":
 		deployment.HasOperator = true
 	}
-	if matches[3] != "" {
+	if matches[2] != "" {
 		deployment.HasDriver = true
-		deployment.Testing = matches[4] == "testing"
-		if err := deployment.Mode.Set(matches[3]); err != nil {
+		deployment.Testing = matches[3] == "testing"
+		if err := deployment.Mode.Set(matches[2]); err != nil {
 			return nil, fmt.Errorf("deployment name %s: %v", deploymentName, err)
 		}
 	}
+	deployment.Version = matches[4]
 
 	return deployment, nil
+}
+
+// MustParse calls Parse and panics when the name is not valid.
+func MustParse(deploymentName string) *Deployment {
+	deployment, err := Parse(deploymentName)
+	if err != nil {
+		framework.Failf("internal error while parsing %s: %v", deploymentName, err)
+	}
+	return deployment
 }
 
 // EnsureDeployment registers a BeforeEach function which will ensure that when
@@ -671,10 +729,7 @@ func Parse(deploymentName string) (*Deployment, error) {
 // The driver should never restart. A restart would indicate some
 // (potentially intermittent) issue.
 func EnsureDeployment(deploymentName string) *Deployment {
-	deployment, err := Parse(deploymentName)
-	if err != nil {
-		framework.Failf("internal error while parsing %s: %v", deploymentName, err)
-	}
+	deployment := MustParse(deploymentName)
 
 	f := framework.NewDefaultFramework("cluster")
 	f.SkipNamespaceCreation = true
@@ -685,93 +740,11 @@ func EnsureDeployment(deploymentName string) *Deployment {
 			ginkgo.CurrentGinkgoTestDescription().FullTestText,
 			deployment.Namespace,
 		))
-		c, err := NewCluster(f.ClientSet, f.DynamicClient)
 
 		// Remember list of volumes before test, using out-of-band host commands (i.e. not CSI API).
 		prevVol = GetHostVolumes(deployment)
 
-		framework.ExpectNoError(err, "get cluster information")
-		running, err := FindDeployment(c)
-		framework.ExpectNoError(err, "check for PMEM-CSI components")
-		if running != nil {
-			if reflect.DeepEqual(deployment, running) {
-				framework.Logf("reusing existing %s PMEM-CSI components", deployment.Name)
-				// Do some sanity checks on the running deployment before the test.
-				if deployment.HasDriver {
-					WaitForPMEMDriver(c, "pmem-csi", deployment.Namespace, deployment.Testing)
-					CheckPMEMDriver(c, deployment)
-				}
-				if deployment.HasOperator {
-					WaitForOperator(c, deployment.Namespace)
-				}
-				if deployment.HasOLM {
-					WaitForOLM(c, "olm")
-				}
-				return
-			}
-			framework.Logf("have %s PMEM-CSI deployment, want %s -> delete existing deployment", running.Name, deployment.Name)
-
-			if running.HasOLM {
-				cmd := exec.Command("test/stop-operator.sh", "-olm")
-				cmd.Dir = os.Getenv("REPO_ROOT")
-				cmd.Env = append(os.Environ(),
-					"TEST_OPERATOR_NAMESPACE="+running.Namespace,
-					"TEST_OPERATOR_DEPLOYMENT="+running.Name)
-
-				output, err := pmemexec.Run(cmd)
-				framework.ExpectNoError(err, "delete operator deployment: %q\nOutput: %s", deployment.Name, output)
-			}
-			err := RemoveObjects(c, running.Name)
-			framework.ExpectNoError(err, "remove PMEM-CSI deployment")
-		}
-		framework.Logf("Deployment: %s, HasOLM: %v\n", deployment.Name, deployment.HasOLM)
-		if deployment.HasOLM {
-			cmd := exec.Command("test/start-stop-olm.sh", "start")
-			cmd.Dir = os.Getenv("REPO_ROOT")
-			output, err := pmemexec.Run(cmd)
-			framework.ExpectNoError(err, "create operator deployment: %q\nOutput: %s", deployment.Name, output)
-			WaitForOLM(c, "olm")
-		}
-
-		if deployment.HasOperator {
-			// At the moment, the only supported deployment method is via test/start-operator.sh.
-			cmdArgs := []string{}
-			if deployment.HasOLM {
-				cmdArgs = append(cmdArgs, "-olm")
-			}
-			cmd := exec.Command("test/start-operator.sh", cmdArgs...)
-			cmd.Dir = os.Getenv("REPO_ROOT")
-			cmd.Env = append(os.Environ(),
-				"TEST_OPERATOR_NAMESPACE="+deployment.Namespace,
-				"TEST_OPERATOR_DEPLOYMENT="+deployment.Name)
-			output, err := pmemexec.Run(cmd)
-			framework.ExpectNoError(err, "create operator deployment: %q\nOutput: %s", deployment.Name, output)
-
-			WaitForOperator(c, deployment.Namespace)
-		}
-		if deployment.HasDriver {
-			if deployment.HasOperator {
-				// Deploy driver through operator.
-				dep := deployment.GetDriverDeployment()
-				EnsureDeploymentCR(f, dep)
-			} else {
-				// Deploy with script.
-				cmd := exec.Command("test/setup-deployment.sh")
-				cmd.Dir = os.Getenv("REPO_ROOT")
-				cmd.Env = append(os.Environ(),
-					"TEST_DEPLOYMENT_QUIET=quiet",
-					"TEST_DEPLOYMENTMODE="+deployment.DeploymentMode(),
-					"TEST_DEVICEMODE="+string(deployment.Mode))
-				output, err := pmemexec.Run(cmd)
-				framework.ExpectNoError(err, "create %s PMEM-CSI deployment\nOutput: %s", deployment.Name, output)
-			}
-
-			// We check for a running driver the same way at the moment, by directly
-			// looking at the driver state. Long-term we want the operator to do that
-			// checking itself.
-			WaitForPMEMDriver(c, "pmem-csi", deployment.Namespace, deployment.Testing)
-			CheckPMEMDriver(c, deployment)
-		}
+		EnsureDeploymentNow(f, deployment)
 
 		for _, h := range installHooks {
 			h(deployment)
@@ -799,6 +772,135 @@ func EnsureDeployment(deploymentName string) *Deployment {
 	return deployment
 }
 
+// EnsureDeploymentNow checks the currently running driver and replaces it if necessary.
+func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
+	c, err := NewCluster(f.ClientSet, f.DynamicClient)
+	framework.ExpectNoError(err, "get cluster information")
+	running, err := FindDeployment(c)
+	framework.ExpectNoError(err, "check for PMEM-CSI components")
+	if running != nil {
+		if reflect.DeepEqual(deployment, running) {
+			framework.Logf("reusing existing %s PMEM-CSI components", deployment.Name())
+			// Do some sanity checks on the running deployment before the test.
+			if deployment.HasDriver {
+				WaitForPMEMDriver(c, "pmem-csi", deployment)
+				CheckPMEMDriver(c, deployment)
+			}
+			if deployment.HasOperator {
+				WaitForOperator(c, deployment.Namespace)
+			}
+			if deployment.HasOLM {
+				WaitForOLM(c, "olm")
+			}
+			return
+		}
+		framework.Logf("have %s PMEM-CSI deployment, want %s -> delete existing deployment", running.Name(), deployment.Name())
+
+		if running.HasOLM {
+			cmd := exec.Command("test/stop-operator.sh", "-olm")
+			cmd.Dir = os.Getenv("REPO_ROOT")
+			cmd.Env = append(os.Environ(),
+				"TEST_OPERATOR_NAMESPACE="+running.Namespace,
+				"TEST_OPERATOR_DEPLOYMENT="+running.Name())
+			_, err := pmemexec.Run(cmd)
+			framework.ExpectNoError(err, "delete operator deployment: %q", deployment.Name())
+		}
+		err := RemoveObjects(c, MustParse(running.Name()))
+		framework.ExpectNoError(err, "remove PMEM-CSI deployment")
+	}
+	if deployment.HasOLM {
+		cmd := exec.Command("test/start-stop-olm.sh", "start")
+		cmd.Dir = os.Getenv("REPO_ROOT")
+		_, err := pmemexec.Run(cmd)
+		framework.ExpectNoError(err, "create operator deployment: %q", deployment.Name())
+		WaitForOLM(c, "olm")
+	}
+
+	if deployment.HasOperator {
+		// At the moment, the only supported deployment method is via test/start-operator.sh.
+		cmdArgs := []string{}
+		if deployment.HasOLM {
+			cmdArgs = append(cmdArgs, "-olm")
+		}
+		cmd := exec.Command("test/start-operator.sh", cmdArgs...)
+		cmd.Dir = os.Getenv("REPO_ROOT")
+		cmd.Env = append(os.Environ(),
+			"TEST_OPERATOR_NAMESPACE="+deployment.Namespace,
+			"TEST_OPERATOR_DEPLOYMENT="+deployment.Name())
+		_, err := pmemexec.Run(cmd)
+		framework.ExpectNoError(err, "create operator deployment: %q", deployment.Name())
+		WaitForOperator(c, deployment.Namespace)
+	}
+	if deployment.HasDriver {
+		if deployment.HasOperator {
+			// Deploy driver through operator.
+			dep := deployment.GetDriverDeployment()
+			EnsureDeploymentCR(f, dep)
+		} else {
+			// Deploy with script.
+			root := os.Getenv("REPO_ROOT")
+			env := os.Environ()
+			if deployment.Version != "" {
+				// Find the latest dot release on the branch for which images are public.
+				// Most recent tag is listed first. We better avoid pulling over and over again
+				// to avoid throttling.
+				tags, err := pmemexec.RunCommand("git", "tag", "--sort=-version:refname")
+				scanner := bufio.NewScanner(strings.NewReader(tags))
+				var tag string
+				for scanner.Scan() {
+					tag = scanner.Text()
+					if strings.HasPrefix(tag, "v"+deployment.Version) {
+						if _, err := pmemexec.RunCommand("docker", "image", "inspect", "--format='exists'", "intel/pmem-csi-driver:"+tag); err == nil {
+							break
+						}
+						if _, err := pmemexec.RunCommand("docker", "image", "pull", "intel/pmem-csi-driver:"+tag); err == nil {
+							break
+						}
+					}
+				}
+				framework.Logf("using %s images for release-%s", tag, deployment.Version)
+
+				// Clean check out in _work/pmem-csi-release-<version>.
+				// Pulling from remote must be done before running the test.
+				workRoot := root + "/_work/pmem-csi-release-" + deployment.Version
+				err = os.RemoveAll(workRoot)
+				framework.ExpectNoError(err, "remove PMEM-CSI source code")
+				_, err = pmemexec.RunCommand("git", "clone", "--shared", root, workRoot)
+				framework.ExpectNoError(err, "clone repo", deployment.Version)
+				_, err = pmemexec.RunCommand("git", "-C", workRoot, "checkout", tag)
+				framework.ExpectNoError(err, "check out release-%s = %s of PMEM-CSI", deployment.Version, tag)
+				root = workRoot
+
+				// The release branch does not pull from Docker Hub by default,
+				// we have to select that explicitly.
+				env = append(env, "TEST_PMEM_REGISTRY=intel")
+
+				// The setup script expects to have
+				// the same _work as in the normal
+				// root.
+				err = os.Symlink("../../_work", workRoot+"/_work")
+				framework.ExpectNoError(err, "symlink the _work directory")
+			}
+			cmd := exec.Command("test/setup-deployment.sh")
+			cmd.Dir = root
+			env = append(env,
+				"REPO_ROOT="+root,
+				"TEST_DEPLOYMENT_QUIET=quiet",
+				"TEST_DEPLOYMENTMODE="+deployment.DeploymentMode(),
+				"TEST_DEVICEMODE="+string(deployment.Mode))
+			cmd.Env = env
+			_, err = pmemexec.Run(cmd)
+			framework.ExpectNoError(err, "create %s PMEM-CSI deployment", deployment.Name())
+		}
+
+		// We check for a running driver the same way at the moment, by directly
+		// looking at the driver state. Long-term we want the operator to do that
+		// checking itself.
+		WaitForPMEMDriver(c, "pmem-csi", deployment)
+		CheckPMEMDriver(c, deployment)
+	}
+}
+
 // GetDriverDeployment returns the spec for the driver deployment that is used
 // for deployments like operator-lvm-production.
 func (d *Deployment) GetDriverDeployment() api.Deployment {
@@ -812,12 +914,12 @@ func (d *Deployment) GetDriverDeployment() api.Deployment {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "pmem-csi",
 			Labels: map[string]string{
-				deploymentLabel: d.Name,
+				deploymentLabel: d.Label(),
 			},
 		},
 		Spec: api.DeploymentSpec{
 			Labels: map[string]string{
-				deploymentLabel: d.Name,
+				deploymentLabel: d.Label(),
 			},
 			// TODO: replace pmemcsidriver.DeviceMode with api.DeviceMode everywhere
 			// and remove this cast here.
@@ -833,7 +935,7 @@ func (d *Deployment) GetDriverDeployment() api.Deployment {
 // DeleteAllPods deletes all currently running pods that belong to the deployment.
 func (d Deployment) DeleteAllPods(c *Cluster) error {
 	listOptions := metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("%s in (%s)", deploymentLabel, d.Name),
+		LabelSelector: fmt.Sprintf("%s in (%s)", deploymentLabel, d.Label()),
 	}
 	pods, err := c.cs.CoreV1().Pods(d.Namespace).List(context.Background(), listOptions)
 	if err != nil {
@@ -906,10 +1008,7 @@ func RunAllTests(d *Deployment) bool {
 // pass the filter function.
 func DescribeForSome(what string, enabled func(d *Deployment) bool, f func(d *Deployment)) bool {
 	for _, deploymentName := range allDeployments {
-		deployment, err := Parse(deploymentName)
-		if err != nil {
-			framework.Failf("internal error while parsing %s: %v", deploymentName, err)
-		}
+		deployment := MustParse(deploymentName)
 		if enabled(deployment) {
 			Describe(deploymentName, deploymentName, what, f)
 		}

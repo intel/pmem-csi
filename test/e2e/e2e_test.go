@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"k8s.io/component-base/logs"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/framework/config"
 	"k8s.io/kubernetes/test/e2e/framework/testfiles"
@@ -36,6 +36,7 @@ import (
 	_ "github.com/intel/pmem-csi/test/e2e/operator"
 	_ "github.com/intel/pmem-csi/test/e2e/storage"
 	_ "github.com/intel/pmem-csi/test/e2e/tls"
+	_ "github.com/intel/pmem-csi/test/e2e/versionskew"
 
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 )

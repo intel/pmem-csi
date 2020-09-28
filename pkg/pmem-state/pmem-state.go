@@ -15,7 +15,7 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 // StateManager manages the driver persistent state, i.e, volumes information

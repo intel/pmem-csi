@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/resolver"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 )

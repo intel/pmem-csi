@@ -19,7 +19,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 	"k8s.io/utils/keymutex"
 
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
@@ -461,7 +461,7 @@ func (cs *masterController) GetCapacity(ctx context.Context, req *csi.GetCapacit
 		}
 		cap, err := cs.getNodeCapacity(ctx, node, req)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to get node(%s) capacity: %s", node, err.Error())
+			return nil, status.Errorf(codes.Internal, "failed to get node %s capacity: %s", node.NodeID, err.Error())
 		}
 		capacity = cap
 	} else {

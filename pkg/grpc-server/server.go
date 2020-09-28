@@ -14,7 +14,7 @@ import (
 	"github.com/intel/pmem-csi/pkg/pmem-grpc"
 	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 	"google.golang.org/grpc"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 type Service interface {

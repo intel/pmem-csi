@@ -233,7 +233,7 @@ _work/go-bindata:
 test: test-kustomize
 test-kustomize: $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
 $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT)): test-kustomize-%: _work/kustomize
-	if ! diff <($(call KUSTOMIZE_INVOCATION,$<,$*)) $*; then echo "$* was modified manually" && false; fi
+	@ if ! diff <($(call KUSTOMIZE_INVOCATION,$<,$*)) $*; then echo "$* was modified manually" && false; fi
 
 # Targets in the makefile can depend on check-go-version-<path to go binary>
 # to trigger a warning if the x.y version of that binary does not match

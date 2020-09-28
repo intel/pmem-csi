@@ -710,12 +710,13 @@ trust any root CA. The following kubeadm config file solves
 this together with enabling the scheduler configuration by
 bind-mounting the root certificate that was used to sign the certificate used
 by the scheduler extender into the location where the Go
-runtime will find it:
+runtime will find it. It works for Kubernetes <= 1.18:
 
 ``` ShellSession
 $ sudo mkdir -p /var/lib/scheduler/
 $ sudo cp _work/pmem-ca/ca.pem /var/lib/scheduler/ca.crt
 
+# https://github.com/kubernetes/kubernetes/blob/52d7614a8ca5b8aebc45333b6dc8fbf86a5e7ddf/staging/src/k8s.io/kube-scheduler/config/v1alpha1/types.go#L38-L107
 $ sudo sh -c 'cat >/var/lib/scheduler/scheduler-policy.cfg' <<EOF
 {
   "kind" : "Policy",
@@ -725,7 +726,7 @@ $ sudo sh -c 'cat >/var/lib/scheduler/scheduler-policy.cfg' <<EOF
       "urlPrefix": "https://<service name or IP>:<port>",
       "filterVerb": "filter",
       "prioritizeVerb": "prioritize",
-      "nodeCacheCapable": false,
+      "nodeCacheCapable": true,
       "weight": 1,
       "managedResources":
       [{
@@ -734,6 +735,65 @@ $ sudo sh -c 'cat >/var/lib/scheduler/scheduler-policy.cfg' <<EOF
       }]
     }]
 }
+EOF
+
+# https://github.com/kubernetes/kubernetes/blob/52d7614a8ca5b8aebc45333b6dc8fbf86a5e7ddf/staging/src/k8s.io/kube-scheduler/config/v1alpha1/types.go#L38-L107
+$ sudo sh -c 'cat >/var/lib/scheduler/scheduler-config.yaml' <<EOF
+apiVersion: kubescheduler.config.k8s.io/v1alpha1
+kind: KubeSchedulerConfiguration
+schedulerName: default-scheduler
+algorithmSource:
+  policy:
+    file:
+      path: /var/lib/scheduler/scheduler-policy.cfg
+clientConnection:
+  # This is where kubeadm puts it.
+  kubeconfig: /etc/kubernetes/scheduler.conf
+EOF
+
+$ cat >kubeadm.config <<EOF
+apiVersion: kubeadm.k8s.io/v1beta1
+kind: ClusterConfiguration
+scheduler:
+  extraVolumes:
+    - name: config
+      hostPath: /var/lib/scheduler
+      mountPath: /var/lib/scheduler
+      readOnly: true
+    - name: cluster-root-ca
+      hostPath: /var/lib/scheduler/ca.crt
+      mountPath: /etc/ssl/certs/ca.crt
+      readOnly: true
+  extraArgs:
+    config: /var/lib/scheduler/scheduler-config.yaml
+EOF
+
+$ kubeadm init --config=kubeadm.config
+```
+
+In Kubernetes 1.19, the configuration API of the scheduler
+changed. The corresponding command for Kubernetes >= 1.19 are:
+
+``` ShellSession
+$ sudo mkdir -p /var/lib/scheduler/
+$ sudo cp _work/pmem-ca/ca.pem /var/lib/scheduler/ca.crt
+
+# https://github.com/kubernetes/kubernetes/blob/1afc53514032a44d091ae4a9f6e092171db9fe10/staging/src/k8s.io/kube-scheduler/config/v1beta1/types.go#L44-L96
+$ sudo sh -c 'cat >/var/lib/scheduler/scheduler-config.yaml' <<EOF
+apiVersion: kubescheduler.config.k8s.io/v1beta1
+kind: KubeSchedulerConfiguration
+clientConnection:
+  # This is where kubeadm puts it.
+  kubeconfig: /etc/kubernetes/scheduler.conf
+extenders:
+- urlPrefix: https://127.0.0.1:<service name or IP>:<port>
+  filterVerb: filter
+  prioritizeVerb: prioritize
+  nodeCacheCapable: true
+  weight: 1
+  managedResources:
+  - name: pmem-csi.intel.com/scheduler
+    ignoredByScheduler: true
 EOF
 
 $ cat >kubeadm.config <<EOF

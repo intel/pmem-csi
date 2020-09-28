@@ -32,7 +32,7 @@ import (
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 	"k8s.io/kubectl/pkg/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -584,6 +584,30 @@ func (d *PmemCSIDriver) getControllerProvisionerRole() *rbacv1.Role {
 					"get", "watch", "list", "delete", "update", "create",
 				},
 			},
+			// As in the upstream external-provisioner 2.0.0 rbac.yaml,
+			// permissions for CSIStorageCapacity support get enabled unconditionally,
+			// just in case.
+			rbacv1.PolicyRule{
+				APIGroups: []string{"storage.k8s.io"},
+				Resources: []string{"csistoragecapacities"},
+				Verbs: []string{
+					"get", "list", "watch", "create", "update", "patch", "delete",
+				},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs: []string{
+					"get",
+				},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"apps"},
+				Resources: []string{"replicasets"},
+				Verbs: []string{
+					"get",
+				},
+			},
 		},
 	}
 }
@@ -622,33 +646,40 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRole() *rbacv1.ClusterRol
 				APIGroups: []string{""},
 				Resources: []string{"persistentvolumes"},
 				Verbs: []string{
-					"get", "watch", "list", "delete", "create",
+					"get", "list", "watch", "create", "delete",
 				},
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
 				Resources: []string{"persistentvolumeclaims"},
 				Verbs: []string{
-					"get", "watch", "list", "update",
+					"get", "list", "watch", "update",
 				},
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"storage.k8s.io"},
 				Resources: []string{"storageclasses"},
 				Verbs: []string{
-					"get", "watch", "list",
+					"get", "list", "watch",
 				},
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
 				Resources: []string{"events"},
 				Verbs: []string{
-					"watch", "list", "create", "update", "patch",
+					"list", "watch", "create", "update", "patch",
 				},
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"snapshot.storage.k8s.io"},
-				Resources: []string{"volumesnapshots", "volumesnapshotcontents"},
+				Resources: []string{"volumesnapshots"},
+				Verbs: []string{
+					"get", "list",
+				},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"snapshot.storage.k8s.io"},
+				Resources: []string{"volumesnapshotcontents"},
 				Verbs: []string{
 					"get", "list",
 				},

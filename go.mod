@@ -36,7 +36,7 @@ require (
 	k8s.io/apimachinery v0.19.1-rc.0
 	k8s.io/client-go v1.19.0
 	k8s.io/component-base v0.19.0
-	k8s.io/klog v1.0.0
+	k8s.io/klog/v2 v2.2.0
 	k8s.io/kube-scheduler v0.19.0
 	k8s.io/kubectl v0.19.0
 	k8s.io/kubernetes v1.19.0

@@ -14,7 +14,7 @@ import (
 	"os/exec"
 	"sync"
 
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 // RunCommand executes the command with logging through klog, with

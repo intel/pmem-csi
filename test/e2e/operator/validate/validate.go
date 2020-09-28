@@ -193,12 +193,26 @@ func DriverDeployment(client client.Client, k8sver version.Version, namespace st
 			}
 		}
 
-		// The spec needs to be identical.
-		expectedSpec := expected.Object["spec"]
-		actualSpec := actual.Object["spec"]
-		specDiff := compareSpec(expected.GetKind(), expectedSpec, actualSpec)
-		if specDiff != nil {
-			diffs = append(diffs, fmt.Sprintf("spec content for %s does not match:\n   %s", prettyPrintObjectID(*expected), strings.Join(specDiff, "\n   ")))
+		// Certain top-level fields must be identical.
+		fields := map[string]bool{}
+		for field := range expected.Object {
+			fields[field] = true
+		}
+		for field := range actual.Object {
+			fields[field] = true
+		}
+		for field := range fields {
+			switch field {
+			case "metadata", "status":
+				// Verified above or may vary.
+				continue
+			}
+			expectedField := expected.Object[field]
+			actualField := actual.Object[field]
+			diff := compare(expected.GetKind(), field, expectedField, actualField)
+			if diff != nil {
+				diffs = append(diffs, fmt.Sprintf("%s content for %s does not match:\n   %s", field, prettyPrintObjectID(*expected), strings.Join(diff, "\n   ")))
+			}
 		}
 	}
 	gvk := schema.GroupVersionKind{
@@ -274,53 +288,58 @@ func summarizeData(data []byte) string {
 //
 // Those defaults are used when the original object didn't have a field value.
 // "ignore" is a special value which let's the comparison skip the field.
-var defaultSpecValues = parseDefaultSpecValues()
+var defaultValues = parseDefaultValues()
 
-func parseDefaultSpecValues() map[string]interface{} {
+func parseDefaultValues() map[string]interface{} {
 	var defaults map[string]interface{}
 	defaultsApps := `
-  revisionHistoryLimit: 10
-  podManagementPolicy: OrderedReady
-  selector:
-    matchLabels:
-      pmem-csi.intel.com/deployment: ignore # labels are tested separately
-  template:
-    metadata:
-      labels:
+  spec:
+    revisionHistoryLimit: 10
+    podManagementPolicy: OrderedReady
+    selector:
+      matchLabels:
         pmem-csi.intel.com/deployment: ignore # labels are tested separately
-    spec:
-      dnsPolicy: ClusterFirst
-      restartPolicy: Always
-      serviceAccount: ignore # redundant field, always returned by apiserver in addition to serviceAccountName
-      schedulerName: default-scheduler
-      terminationGracePeriodSeconds: 30
-      containers:
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
-        imagePullPolicy: IfNotPresent
-        ports:
-          protocol: TCP
-      volumes:
-        secret:
-          defaultMode: 420`
+    template:
+      metadata:
+        labels:
+          pmem-csi.intel.com/deployment: ignore # labels are tested separately
+      spec:
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        serviceAccount: ignore # redundant field, always returned by apiserver in addition to serviceAccountName
+        schedulerName: default-scheduler
+        terminationGracePeriodSeconds: 30
+        containers:
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent
+          ports:
+            protocol: TCP
+        volumes:
+          secret:
+            defaultMode: 420`
 
 	defaultsYAML := `
 Service:
-  clusterIP: ignore
-  externalTrafficPolicy: Cluster
-  ports:
-    protocol: TCP
-    nodePort: ignore
-  selector:
-    pmem-csi.intel.com/deployment: ignore # labels are tested separately
-  sessionAffinity: None
-  type: ClusterIP
+  spec:
+    clusterIP: ignore
+    externalTrafficPolicy: Cluster
+    ports:
+      protocol: TCP
+      nodePort: ignore
+    selector:
+      pmem-csi.intel.com/deployment: ignore # labels are tested separately
+    sessionAffinity: None
+    type: ClusterIP
+ServiceAccount:
+  secrets: ignore
 DaemonSet:` + defaultsApps + `
-  updateStrategy: ignore
+    updateStrategy: ignore
 StatefulSet:` + defaultsApps + `
-  updateStrategy: ignore
+    updateStrategy: ignore
 CSIDriver:
-  storageCapacity: false
+  spec:
+    storageCapacity: false
 `
 
 	err := yaml.UnmarshalStrict([]byte(defaultsYAML), &defaults)
@@ -330,16 +349,18 @@ CSIDriver:
 	return defaults
 }
 
-// compareSpec is like reflect.DeepEqual, except that it reports back all changes
+// compare is like reflect.DeepEqual, except that it reports back all changes
 // in a diff-like format, with one entry per added, removed or different field.
 // In addition, it fills in default values in the expected spec if they are missing
 // before comparing against the actual value. This makes it possible to
 // compare the on-disk YAML files which are typically not complete against
 // objects from the apiserver which have all defaults filled in.
-func compareSpec(kind string, expected, actual interface{}) []string {
-	defaults := defaultSpecValues[kind]
-	path := "spec"
-	return compareSpecRecursive(path, defaults, expected, actual)
+func compare(kind string, field string, expected, actual interface{}) []string {
+	defaults := defaultValues[kind]
+	if defaultsMap, ok := defaults.(map[interface{}]interface{}); ok {
+		defaults = defaultsMap[field]
+	}
+	return compareSpecRecursive(field, defaults, expected, actual)
 }
 
 func compareSpecRecursive(path string, defaults, expected, actual interface{}) (diffs []string) {

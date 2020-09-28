@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 var coverage = flag.String("coverprofile", "", "write a coverage profile to a unique file (* in name replaced with random string, otherwise appended)")

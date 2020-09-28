@@ -38,7 +38,7 @@ import (
 	"google.golang.org/grpc/status"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -390,14 +390,6 @@ func (csid *csiDriver) Run() error {
 		// Here we want to shut down cleanly, i.e. let running
 		// gRPC calls complete.
 		klog.V(3).Infof("Caught signal %s, terminating.", sig)
-		if csid.cfg.Mode == Node {
-			klog.V(3).Info("Unregistering node...")
-			if err := csid.unregisterNodeController(); err != nil {
-				klog.Errorf("Failed to unregister node: %v", err)
-				return err
-			}
-		}
-
 	case <-ctx.Done():
 		// The scheduler HTTP server must have failed (to start).
 		// We quit in that case.
@@ -433,21 +425,6 @@ func (csid *csiDriver) registerNodeController() error {
 	go waitAndWatchConnection(conn, req)
 
 	return nil
-}
-
-func (csid *csiDriver) unregisterNodeController() error {
-	req := &registry.UnregisterControllerRequest{
-		NodeId: csid.cfg.NodeID,
-	}
-	conn, err := pmemgrpc.Connect(csid.cfg.RegistryEndpoint, csid.clientTLSConfig)
-	if err != nil {
-		return err
-	}
-
-	client := registry.NewRegistryClient(conn)
-	_, err = client.UnregisterController(context.Background(), req)
-
-	return err
 }
 
 // startScheduler starts the scheduler extender if it is enabled. It
