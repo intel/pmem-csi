@@ -151,6 +151,8 @@ spec:
               # This must match to the operator container name.
               # The operator uses it to find its image.
               value: "pmem-csi-operator"
+            - name: GODEBUG
+              value: x509ignoreCN=0
           volumeMounts:
           - name: tmp
             mountPath: /tmp

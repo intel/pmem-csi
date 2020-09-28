@@ -140,6 +140,8 @@ spec:
               fieldPath: metadata.name
         - name: OPERATOR_NAME
           value: pmem-csi-operator
+        - name: GODEBUG
+          value: x509ignoreCN=0
         image: intel/pmem-csi-driver:canary
         imagePullPolicy: IfNotPresent
         name: pmem-csi-operator

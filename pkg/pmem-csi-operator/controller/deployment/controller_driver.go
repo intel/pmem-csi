@@ -1000,6 +1000,10 @@ func (d *PmemCSIDriver) getControllerContainer() corev1.Container {
 				Name:  "PMEM_CSI_DRIVER_NAME",
 				Value: d.GetName(),
 			},
+			{
+				Name:  "GODEBUG",
+				Value: "x509ignoreCN=0",
+			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -1059,6 +1063,10 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 			{
 				Name:  "TERMINATION_LOG_PATH",
 				Value: "/tmp/termination-log",
+			},
+			{
+				Name:  "GODEBUG",
+				Value: "x509ignoreCN=0",
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
