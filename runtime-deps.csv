@@ -6,4 +6,3 @@ grpc-go,https://github.com/grpc/grpc-go,
 kubernetes,https://github.com/kubernetes/kubernetes,9641
 kubernetes-sigs/controller-runtime,https://github.com/kubernetes-sigs/controller-runtime,
 operator-sdk,https://github.com/operator-framework/operator-sdk,
-pkg/errors,https://github.com/pkg/errors,
