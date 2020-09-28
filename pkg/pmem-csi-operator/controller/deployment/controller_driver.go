@@ -402,11 +402,11 @@ func (d *PmemCSIDriver) getSecrets() ([]apiruntime.Object, error) {
 			return nil, err
 		}
 		ncCert = pmemtls.EncodeCert(cert)
-	} else {
-		// check if the provided certificates are valid
-		if err := validateCertificates(caCert, registryPrKey, registryCert, ncPrKey, ncCert); err != nil {
-			return nil, fmt.Errorf("validate CA certificates: %v", err)
-		}
+	}
+
+	// Check if the provided or generated certificates are valid.
+	if err := validateCertificates(caCert, registryPrKey, registryCert, ncPrKey, ncCert); err != nil {
+		return nil, fmt.Errorf("validate CA certificates: %v", err)
 	}
 
 	// Instead of waiting for next GC cycle, initiate garbage collector manually
