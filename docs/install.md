@@ -17,6 +17,71 @@
 - [PMEM-CSI Deployment CRD](#pmem-csi-deployment-crd)
 - [Filing issues and contributing](#filing-issues-and-contributing)
 
+## Overview
+
+This section summarizes the steps that may be needed during the entire
+lifecycle of PMEM in a cluster, starting with the initial preparations and
+ending with decommissioning the hardware. The other sections explain
+each step in more detail.
+
+When setting up a cluster, the administrator must install the PMEM
+hardware on nodes and configure some or all of those instances of PMEM for usage by
+PMEM-CSI ([prerequisites](#prerequisites)]. Nodes where PMEM-CSI is
+supposed to run must have a certain [label in
+Kubernetes](#installation-and-setup).
+
+The administrator must install PMEM-CSI, using [the PMEM-CSI
+operator](#install-using-the-operator) (recommended) or with [scripts
+and YAML files in the source code](#install-from-source). A PMEM-CSI
+installation can only use [direct device
+mode](/docs/design.md#direct-device-mode) or [LVM
+device mode](/docs/design.md#direct-device-mode). It is possible to install
+PMEM-CSI twice on the same cluster with different modes, with these restrictions:
+
+- The driver names must be different.
+- The installations must run on different nodes by using different node
+  labels, or the "usage" parameter of the LVM mode driver installation
+  one a node must be so that it leaves spaces available for the direct mode
+  driver installation on that same node.
+
+The administrator must decide which storage classes shall be available
+to users of the cluster. A storage class references a driver
+installation by name, which indirectly determines the device mode. A
+storage class also chooses which filesystem is used (xfs or ext4) and
+enables [Kata Containers support](#kata-containers-support).
+
+Optionally, the administrator can enable [the scheduler
+extensions](#enable-scheduler-extensions) (recommended) and monitoring
+of resource usage via the [metrics support](#metrics-support).
+
+When using the operator, existing PMEM-CSI installations can be
+upgraded seamlessly by installing a newer version of the
+operator. Downgrading by installing an older version is also
+supported, but may need manual work which will be documented in the
+release notes.
+
+When using YAML files, the only reliable way of up- or downgrading is
+to remove the installation and install anew.
+
+Users can then create PMEM volumes via [volume
+claims](#expose-persistent-and-cache-volumes-to-applications) that
+reference the storage classes or via [ephemeral inline
+volumes](#ephemeral-inline-volumes).
+
+A node should only be removed from a cluster after ensuring that there
+is no pod running on it which uses PMEM and that there is no
+persistent volume (`PV`) on it. This can be checked via `kubectl get
+-o yaml pv` and looking for a `nodeAffinity` entry that references the
+node or via metrics data for the node. When removing a node or even
+the entire PMEM-CSI driver installation too soon, attempts to remove
+pods or volumes via the Kubernetes API will fail. Administrators can
+recover from that by force-deleting PVs for which the underlying
+hardware has already been removed.
+
+By default, PMEM-CSI wipes volumes after usage
+([`eraseAfter`](#kubernetes-csi-specific)), so shredding PMEM hardware
+after decomissioning it is optional.
+
 ## Prerequisites
 
 ### Software required
