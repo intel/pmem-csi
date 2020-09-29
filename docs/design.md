@@ -252,8 +252,8 @@ Controller([RegistryServer](#node-registry-server),
 NodeControllers([NodeControllerServer](#node-controller-server)) is
 protected by mutual TLS. Both client and server must identify
 themselves and the certificate they present must be trusted. The
-common name in each certificate is used to identify the different
-components. The following common names have a special meaning:
+host name in each certificate is used to identify the different
+components. The following host names have a special meaning:
 
 - `pmem-registry` is used by the [RegistryServer](#node-registry-server).
 - `pmem-node-controller` is used by [NodeControllerServers](#node-controller-server)

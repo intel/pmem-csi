@@ -154,16 +154,25 @@ func serverConfig(certPool *x509.CertPool, peerCert *tls.Certificate, peerName s
 						// All names allowed.
 						return nil
 					}
+
 					if len(verifiedChains) == 0 ||
 						len(verifiedChains[0]) == 0 {
 						return errors.New("no valid certificate")
 					}
-					commonName := verifiedChains[0][0].Subject.CommonName
-					klog.Infof("VerifyPeerCertificate: CN=%s", commonName)
-					if commonName != peerName {
-						return fmt.Errorf("expected CN %q, got %q", peerName, commonName)
+
+					for _, name := range verifiedChains[0][0].DNSNames {
+						klog.Infof("VerifyPeerCertificate: DNSName=%s", name)
+						if name == peerName {
+							return nil
+						}
 					}
-					return nil
+					// For backword compatibility - using CN as hostName
+					commonName := verifiedChains[0][0].Subject.CommonName
+					if commonName == peerName {
+						klog.Warningf("Use of CommonName certificates is deprecated; Use a SAN certificate instead.")
+						return nil
+					}
+					return fmt.Errorf("certificate is not signed for %q hostname", peerName)
 				},
 			}
 			if peerName != "" {

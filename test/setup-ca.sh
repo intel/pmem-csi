@@ -15,9 +15,10 @@ if [ $cfssl_found -eq 0 ]; then
 fi
 
 # Generate CA certificates.
-<<EOF cfssl -loglevel=3 gencert -initca - | cfssljson -bare ca
+<<EOF cfssl gencert -initca - | cfssljson -bare ca
 {
     "CN": "$CA",
+    "hosts": [ "$CA" ],
     "key": {
         "algo": "rsa",
         "size": 2048
@@ -29,7 +30,7 @@ EOF
 DEFAULT_CNS="pmem-registry pmem-node-controller"
 CNS="${DEFAULT_CNS} ${EXTRA_CNS:=""}"
 for name in ${CNS}; do
-  <<EOF cfssl -loglevel=3 gencert -ca=ca.pem -ca-key=ca-key.pem - | cfssljson -bare $name
+  <<EOF cfssl gencert -ca=ca.pem -ca-key=ca-key.pem - | cfssljson -bare $name
 {
     "CN": "$name",
     "hosts": [

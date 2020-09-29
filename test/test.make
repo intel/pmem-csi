@@ -217,8 +217,9 @@ _work/%/.ca-stamp: test/setup-ca.sh _work/.setupcfssl-stamp
 
 _work/.setupcfssl-stamp:
 	rm -rf _work/bin
-	curl -L https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 -o _work/bin/cfssl --create-dirs
-	curl -L https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64 -o _work/bin/cfssljson --create-dirs
+	curl -L https://github.com/cloudflare/cfssl/releases/download/v1.4.1/cfssl_1.4.1_linux_amd64 -o _work/bin/cfssl --create-dirs
+	curl -L https://github.com/cloudflare/cfssl/releases/download/v1.4.1/cfssljson_1.4.1_linux_amd64 -o _work/bin/cfssljson --create-dirs
+
 	chmod a+x _work/bin/cfssl _work/bin/cfssljson
 	touch $@
 
