@@ -94,7 +94,8 @@ func checkTLS(f *framework.Framework, server string) {
 	// Install and patch nmap.
 	pmempod.RunInPod(f, os.Getenv("REPO_ROOT")+"/test/e2e/tls", []string{"nmap-ssl-enum-ciphers.patch"},
 		strings.Join([]string{
-			fmt.Sprintf("https_proxy=%s swupd bundle-add nmap patch >&2", os.Getenv("HTTPS_PROXY")),
+			fmt.Sprintf("https_proxy=%s DEBIAN_FRONTEND=noninteractive apt-get update >&2", os.Getenv("HTTPS_PROXY")),
+			fmt.Sprintf("https_proxy=%s DEBIAN_FRONTEND=noninteractive apt-get install -y nmap patch >&2", os.Getenv("HTTPS_PROXY")),
 			"patch /usr/share/nmap/scripts/ssl-enum-ciphers.nse <nmap-ssl-enum-ciphers.patch",
 		},
 			" && "),
