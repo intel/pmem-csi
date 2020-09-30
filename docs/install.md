@@ -242,37 +242,34 @@ it is ready to handle PMEM-CSI `Deployment` objects in the `pmem-csi.intel.com`
 API group. Refer to the [Deployment CRD API](#PMEM-CSI-Deployment-CRD) for
 a complete list of supported properties.
 
-Here is an example driver deployment created with a custom resource:
+Here is a minimal example driver deployment created with a custom resource:
 
 ``` console
 $ kubectl create -f - <<EOF
 apiVersion: pmem-csi.intel.com/v1alpha1
 kind: Deployment
 metadata:
-  name: pmem-deployment
+  name: pmem-csi.intel.com
 spec:
-  pmemPercentage: 50
   deviceMode: lvm
-  controllerResources:
-    requests:
-      cpu: "200m"
-      memory: "100Mi"
-  nodeResources:
-    requests:
-      cpu: "200m"
-      memory: "100Mi"
+  nodeSelector:
+    storage: pmem
 EOF
 ```
+
+This uses the same `pmem-csi.intel.com` driver name as the YAML files
+in [`deploy`](/deploy) and the node label from the [hardware
+installation and setup section](#installation-and-setup).
 
 Once the above deployment installation is successful, we can see all the driver
 pods in `Running` state:
 ``` console
 $ kubectl get deployments.pmem-csi.intel.com
 NAME                 AGE
-pmem-deployment      50s
+pmem-csi.intel.com   50s
 
-$ kubectl describe deployment.pmem-csi.intel.com pmem-deployment
-Name:         pmem-deployment
+$ kubectl describe deployment.pmem-csi.intel.com/pmem-csi.intel.com
+Name:         pmem-csi.intel.com
 Namespace:    default
 Labels:       <none>
 Annotations:  <none>
@@ -282,7 +279,7 @@ Metadata:
   Creation Timestamp:  2020-01-23T13:40:32Z
   Generation:          1
   Resource Version:    3596387
-  Self Link:           /apis/pmem-csi.intel.com/v1alpha1/deployments/pmem-deployment
+  Self Link:           /apis/pmem-csi.intel.com/v1alpha1/deployments/pmem-csi.intel.com
   UID:                 454b5961-5aa2-41c3-b774-29fe932ae236
 Spec:
   Controller Resources:
@@ -306,10 +303,10 @@ Events:
 
 $ kubectl get po
 NAME                               READY   STATUS    RESTARTS   AGE
-pmem-deployment-controller-0       2/2     Running   0          51s
-pmem-deployment-node-4x7cv         2/2     Running   0          50s
-pmem-deployment-node-6grt6         2/2     Running   0          50s
-pmem-deployment-node-msgds         2/2     Running   0          51s
+pmem-csi-intel-com-controller-0    2/2     Running   0          51s
+pmem-csi-intel-com-node-4x7cv      2/2     Running   0          50s
+pmem-csi-intel-com-node-6grt6      2/2     Running   0          50s
+pmem-csi-intel-com-node-msgds      2/2     Running   0          51s
 pmem-csi-operator-749c7c7c69-k5k8n 1/1     Running   0          3m
 ```
 
