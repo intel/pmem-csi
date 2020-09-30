@@ -446,13 +446,13 @@ func validateCertificates(caCert, regKey, regCert, ncKey, ncCert []byte) error {
 	server := grpcserver.NewNonBlockingGRPCServer()
 	path := path.Join(tmp, "socket")
 	if err := server.Start("unix://"+path, regCfg, nil); err != nil {
-		return err
+		return fmt.Errorf("registry certificate: %w", err)
 	}
 	defer server.ForceStop()
 
 	conn, err := tls.Dial("unix", path, clientCfg)
 	if err != nil {
-		return err
+		return fmt.Errorf("node certificate: %w", err)
 	}
 
 	conn.Close()

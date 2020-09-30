@@ -17,7 +17,6 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/pem"
 	"math/big"
 )
@@ -196,9 +195,7 @@ func NewCACertificate(key *rsa.PrivateKey) (*x509.Certificate, error) {
 		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		IsCA:                  true,
 		BasicConstraintsValid: true,
-		Subject: pkix.Name{
-			CommonName: "pmem-csi operator root certificate authority",
-		},
+		DNSNames:              []string{"pmem-csi", "ca"},
 	}
 	certBytes, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, key.Public(), key)
 	*tmpl = x509.Certificate{}
@@ -232,9 +229,7 @@ func (ca *CA) generateCertificate(cn string, notBefore, notAfter time.Time, key 
 		NotAfter:     notAfter,
 		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		Subject: pkix.Name{
-			CommonName: cn,
-		},
+		DNSNames:     []string{cn},
 	}
 
 	certBytes, err := x509.CreateCertificate(rand.Reader, tmpl, ca.cert, key, ca.prKey)

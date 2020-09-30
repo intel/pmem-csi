@@ -138,6 +138,6 @@ func TestPmemTLS(t *testing.T) {
 		isValid := cert.NotAfter.Equal(validity) || cert.NotAfter.After(validity)
 		assert.Equal(t, isValid, true, "invalid certificate validity(%v) expected least %v", cert.NotAfter, validity)
 
-		assert.Equal(t, cert.Subject.CommonName, "test-cert", "mismatched common name")
+		assert.Contains(t, cert.DNSNames, "test-cert", "mismatched common name")
 	})
 }
