@@ -805,7 +805,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 			_, err := pmemexec.Run(cmd)
 			framework.ExpectNoError(err, "delete operator deployment: %q", deployment.Name())
 		}
-		err := RemoveObjects(c, MustParse(running.Name()))
+		err := RemoveObjects(c, running)
 		framework.ExpectNoError(err, "remove PMEM-CSI deployment")
 	}
 	if deployment.HasOLM {
