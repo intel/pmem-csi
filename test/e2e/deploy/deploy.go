@@ -778,6 +778,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 	framework.ExpectNoError(err, "get cluster information")
 	running, err := FindDeployment(c)
 	framework.ExpectNoError(err, "check for PMEM-CSI components")
+	framework.Logf("want %s PMEM-CSI deployment = %+v", deployment.Name(), *deployment)
 	if running != nil {
 		if reflect.DeepEqual(deployment, running) {
 			framework.Logf("reusing existing %s PMEM-CSI components", deployment.Name())
