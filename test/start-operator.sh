@@ -61,8 +61,8 @@ function deploy_using_olm() {
   fi
   # Patch operator deployment with appropriate label(pmem-csi.intel.com/deployment=<<deployment-name>>)
   # OLM overwrites the deployment labels but the underneath ReplicaSet carries these labels.
-  if [ "${TEST_OPERATOR_DEPLOYMENT}" != "" ]; then
-    sed -i -r "/labels:$/{N; s|(\n\s+)(.*)|\1pmem-csi.intel.com/deployment: ${TEST_OPERATOR_DEPLOYMENT}\1\2| }" ${CSV_FILE}
+  if [ "${TEST_OPERATOR_DEPLOYMENT_LABEL}" != "" ]; then
+    sed -i -r "/labels:$/{N; s|(\n\s+)(.*)|\1pmem-csi.intel.com/deployment: ${TEST_OPERATOR_DEPLOYMENT_LABEL}\1\2| }" ${CSV_FILE}
   fi
 
   NAMESPACE=""
@@ -101,7 +101,7 @@ EOF
 resources:
 - operator.yaml
 commonLabels:
-  pmem-csi.intel.com/deployment: ${TEST_OPERATOR_DEPLOYMENT}
+  pmem-csi.intel.com/deployment: ${TEST_OPERATOR_DEPLOYMENT_LABEL}
 EOF
 
   ${SSH} "cat >>'$tmpdir/kustomization.yaml'" <<EOF

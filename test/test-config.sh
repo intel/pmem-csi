@@ -107,7 +107,7 @@ fi
 
 # A value for the pmem-csi.intel.com/deployment label that is
 # set for all objects created by test/start-operator.sh.
-: ${TEST_OPERATOR_DEPLOYMENT:=operator}
+: ${TEST_OPERATOR_DEPLOYMENT_LABEL:=operator}
 
 # TLS certificates installed by test/setup-deployment.sh.
 : ${TEST_CA:=_work/pmem-ca/ca.pem}

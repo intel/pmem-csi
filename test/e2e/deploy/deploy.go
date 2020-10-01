@@ -801,7 +801,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 			cmd.Dir = os.Getenv("REPO_ROOT")
 			cmd.Env = append(os.Environ(),
 				"TEST_OPERATOR_NAMESPACE="+running.Namespace,
-				"TEST_OPERATOR_DEPLOYMENT="+running.Name())
+				"TEST_OPERATOR_DEPLOYMENT_LABEL="+running.Label())
 			_, err := pmemexec.Run(cmd)
 			framework.ExpectNoError(err, "delete operator deployment: %q", deployment.Name())
 		}
@@ -826,7 +826,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 		cmd.Dir = os.Getenv("REPO_ROOT")
 		cmd.Env = append(os.Environ(),
 			"TEST_OPERATOR_NAMESPACE="+deployment.Namespace,
-			"TEST_OPERATOR_DEPLOYMENT="+deployment.Name())
+			"TEST_OPERATOR_DEPLOYMENT_LABEL="+deployment.Label())
 		_, err := pmemexec.Run(cmd)
 		framework.ExpectNoError(err, "create operator deployment: %q", deployment.Name())
 		WaitForOperator(c, deployment.Namespace)
