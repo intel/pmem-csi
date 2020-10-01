@@ -112,6 +112,8 @@ spec:
           value: /tmp/termination-log
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
+        - name: GODEBUG
+          value: x509ignoreCN=0
       - name: external-provisioner
         image: k8s.gcr.io/sig-storage/csi-provisioner:v1.X.Y
         imagePullPolicy: IfNotPresent
@@ -192,6 +194,8 @@ spec:
           value: pmem-csi.intel.com
         - name: TERMINATION_LOG_PATH
           value: /tmp/termination-log
+        - name: GODEBUG
+          value: x509ignoreCN=0
         volumeMounts:
         - name: mountpoint-dir
           mountPath: /var/lib/kubelet/plugins/kubernetes.io/csi

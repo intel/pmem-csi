@@ -9,7 +9,6 @@ import (
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
 	"github.com/kubernetes-csi/csi-lib-utils/metrics"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -185,7 +184,7 @@ func (rs *RegistryServer) RegisterController(ctx context.Context, req *registry.
 				delete(rs.nodeClients, req.NodeId)
 				pmemNodes.Set(float64(len(rs.nodeClients)))
 				rs.mutex.Unlock()
-				return nil, errors.Wrap(err, "failed to register node")
+				return nil, fmt.Errorf("failed to register node: %w", err)
 			}
 		}
 	}

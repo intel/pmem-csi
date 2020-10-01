@@ -135,7 +135,7 @@ RUNTIME_DEPS += LC_ALL=C LANG=C sort -u
 .PHONY: run_tests
 test: run_tests
 RUN_TESTS = TEST_WORK=$(abspath _work) \
-	$(TEST_CMD) -timeout 0 $(filter-out %/pmem-device-manager,$(TEST_PKGS))
+	env GODEBUG=x509ignoreCN=0 $(TEST_CMD) -timeout 0 $(filter-out %/pmem-device-manager,$(TEST_PKGS))
 RUN_TEST_DEPS = _work/pmem-ca/.ca-stamp _work/evil-ca/.ca-stamp check-go-version-$(GO_BINARY)
 
 run_tests: $(RUN_TEST_DEPS)

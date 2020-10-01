@@ -402,11 +402,11 @@ func (d *PmemCSIDriver) getSecrets() ([]apiruntime.Object, error) {
 			return nil, err
 		}
 		ncCert = pmemtls.EncodeCert(cert)
-	} else {
-		// check if the provided certificates are valid
-		if err := validateCertificates(caCert, registryPrKey, registryCert, ncPrKey, ncCert); err != nil {
-			return nil, fmt.Errorf("validate CA certificates: %v", err)
-		}
+	}
+
+	// Check if the provided or generated certificates are valid.
+	if err := validateCertificates(caCert, registryPrKey, registryCert, ncPrKey, ncCert); err != nil {
+		return nil, fmt.Errorf("validate CA certificates: %v", err)
 	}
 
 	// Instead of waiting for next GC cycle, initiate garbage collector manually
@@ -1000,6 +1000,10 @@ func (d *PmemCSIDriver) getControllerContainer() corev1.Container {
 				Name:  "PMEM_CSI_DRIVER_NAME",
 				Value: d.GetName(),
 			},
+			{
+				Name:  "GODEBUG",
+				Value: "x509ignoreCN=0",
+			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -1059,6 +1063,10 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 			{
 				Name:  "TERMINATION_LOG_PATH",
 				Value: "/tmp/termination-log",
+			},
+			{
+				Name:  "GODEBUG",
+				Value: "x509ignoreCN=0",
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{

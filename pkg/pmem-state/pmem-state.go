@@ -14,7 +14,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 )
 
@@ -66,7 +65,7 @@ func (fs *fileState) Create(id string, data interface{}) error {
 	// Create new file for synchronous writes
 	fp, err := os.OpenFile(file, os.O_WRONLY|os.O_SYNC|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
-		return errors.Wrapf(err, "file-state: failed to create metadata storage file %s", file)
+		return fmt.Errorf("file-state: failed to create metadata storage file %q: %w", file, err)
 	}
 
 	if err := json.NewEncoder(fp).Encode(data); err != nil {
@@ -75,11 +74,11 @@ func (fs *fileState) Create(id string, data interface{}) error {
 		if e := os.Remove(file); e != nil {
 			klog.Warningf("file-state: fail to remove file %s: %s", file, e.Error())
 		}
-		return errors.Wrap(err, "file-state: failed to encode metadata")
+		return fmt.Errorf("file-state: failed to encode metadata: %w", err)
 	}
 
 	if err := fp.Close(); err != nil {
-		return errors.Wrapf(err, "file-state: failed to close metadata storage file %s", file)
+		return fmt.Errorf("file-state: failed to close metadata storage file %q: %w", file, err)
 	}
 
 	return fs.syncStateDir()
@@ -92,7 +91,7 @@ func (fs *fileState) Delete(id string) error {
 
 	file := path.Join(fs.location, id+".json")
 	if err := os.Remove(file); err != nil && err != os.ErrNotExist {
-		return errors.Wrapf(err, "file-state: failed to delete file %s", file)
+		return fmt.Errorf("file-state: failed to delete file %q: %w", file, err)
 	}
 
 	return fs.syncStateDir()
@@ -109,7 +108,7 @@ func (fs *fileState) GetAll() ([]string, error) {
 	files, err := ioutil.ReadDir(fs.location)
 	fs.stateDirLock.Unlock()
 	if err != nil {
-		return nil, errors.Wrapf(err, "file-state: failed to read metadata from %s", fs.location)
+		return nil, fmt.Errorf("file-state: failed to read metadata from %q: %w", fs.location, err)
 	}
 
 	ids := []string{}
@@ -144,12 +143,12 @@ func (fs *fileState) readFileData(file string, dataPtr interface{}) error {
 
 	fp, err := os.OpenFile(file, os.O_RDONLY|os.O_SYNC, 0) //nolint: gosec
 	if err != nil {
-		return errors.Wrapf(err, "file-state: failed to open file %s", file)
+		return fmt.Errorf("file-state: failed to open file %q: %w", file, err)
 	}
 	defer fp.Close() //nolint: errcheck
 
 	if err := json.NewDecoder(fp).Decode(dataPtr); err != nil {
-		return errors.Wrapf(err, "file-state: failed to decode metadata from file %s", file)
+		return fmt.Errorf("file-state: failed to decode metadata from file %q: %w", file, err)
 	}
 
 	return nil
@@ -161,12 +160,12 @@ func (fs *fileState) syncStateDir() error {
 	defer fs.stateDirLock.Unlock()
 
 	if fp, err := os.Open(fs.location); err != nil {
-		rErr = errors.Wrap(err, "file-state: failed to open state directory for syncing")
+		rErr = fmt.Errorf("file-state: failed to open state directory for syncing: %w", err)
 	} else if err := fp.Sync(); err != nil {
 		fp.Close() //nolint: errcheck
-		rErr = errors.Wrap(err, "file-state: fsync failure on state directroy")
+		rErr = fmt.Errorf("file-state: fsync failure on state directory: %w", err)
 	} else if err := fp.Close(); err != nil {
-		rErr = errors.Wrap(err, "file-state: failed to close state directory after sync")
+		rErr = fmt.Errorf("file-state: failed to close state directory after sync: %w", err)
 	}
 
 	return rErr

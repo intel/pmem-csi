@@ -256,6 +256,8 @@ spec:
           value: /tmp/termination-log
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
+        - name: GODEBUG
+          value: x509ignoreCN=0
         image: intel/pmem-csi-driver:canary
         imagePullPolicy: IfNotPresent
         name: pmem-driver
@@ -356,6 +358,8 @@ spec:
           value: pmem-csi.intel.com
         - name: TERMINATION_LOG_PATH
           value: /tmp/termination-log
+        - name: GODEBUG
+          value: x509ignoreCN=0
         image: intel/pmem-csi-driver:canary
         imagePullPolicy: IfNotPresent
         name: pmem-driver
