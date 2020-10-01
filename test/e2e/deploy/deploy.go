@@ -1057,7 +1057,9 @@ func Describe(deployment, describe, what string, f func(d *Deployment)) bool {
 // DefineTests must be called to register all tests defined so far via Describe.
 func DefineTests() {
 	for deploymentName, group := range tests {
+		deploymentName := deploymentName
 		for describe, funcs := range group {
+			funcs := funcs
 			ginkgo.Describe(describe, func() {
 				deployment := EnsureDeployment(deploymentName)
 				for _, f := range funcs {
