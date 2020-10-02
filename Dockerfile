@@ -39,7 +39,7 @@ LABEL description="PMEM CSI Driver"
 RUN ${APT_GET} update && \
     mkdir -p /usr/local/share && \
     bash -c 'set -o pipefail; ${APT_GET} install -y --no-install-recommends file xfsprogs e2fsprogs lvm2 ndctl \
-       $(if [ "$BIN_SUFFIX" = "-test" ]; then echo fio; fi) | tee --append /usr/local/share/package-install.log' && \
+       | tee --append /usr/local/share/package-install.log' && \
     rm -rf /var/cache/*
 
 # Image in which PMEM-CSI binaries get built.
