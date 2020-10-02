@@ -107,6 +107,14 @@ RUN cd /usr/local/share/package-sources && \
          ;; \
     esac; \
     done && \
+    echo "INFO: all additional packages:" && \
+    for pkg in $(grep ^Get: /usr/local/share/package-install.log | cut -d ' ' -f 5); do \
+        if source=$(apt-cache show $pkg | grep '^Source: '); then \
+            echo "$source" | sed -e 's/^Source: \([^ ]*\).*/    \1'" ($pkg)/"; \
+        else \
+            echo "    $pkg"; \
+        fi; \
+    done | sort -u; \
     rm -rf /var/cache/*
 
 # Here we choose explicitly which binaries we want in the image and in
