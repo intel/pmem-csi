@@ -778,6 +778,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 	framework.ExpectNoError(err, "get cluster information")
 	running, err := FindDeployment(c)
 	framework.ExpectNoError(err, "check for PMEM-CSI components")
+	framework.Logf("want %s PMEM-CSI deployment = %+v", deployment.Name(), *deployment)
 	if running != nil {
 		if reflect.DeepEqual(deployment, running) {
 			framework.Logf("reusing existing %s PMEM-CSI components", deployment.Name())
@@ -801,11 +802,11 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 			cmd.Dir = os.Getenv("REPO_ROOT")
 			cmd.Env = append(os.Environ(),
 				"TEST_OPERATOR_NAMESPACE="+running.Namespace,
-				"TEST_OPERATOR_DEPLOYMENT="+running.Name())
+				"TEST_OPERATOR_DEPLOYMENT_LABEL="+running.Label())
 			_, err := pmemexec.Run(cmd)
 			framework.ExpectNoError(err, "delete operator deployment: %q", deployment.Name())
 		}
-		err := RemoveObjects(c, MustParse(running.Name()))
+		err := RemoveObjects(c, running)
 		framework.ExpectNoError(err, "remove PMEM-CSI deployment")
 	}
 	if deployment.HasOLM {
@@ -826,7 +827,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 		cmd.Dir = os.Getenv("REPO_ROOT")
 		cmd.Env = append(os.Environ(),
 			"TEST_OPERATOR_NAMESPACE="+deployment.Namespace,
-			"TEST_OPERATOR_DEPLOYMENT="+deployment.Name())
+			"TEST_OPERATOR_DEPLOYMENT_LABEL="+deployment.Label())
 		_, err := pmemexec.Run(cmd)
 		framework.ExpectNoError(err, "create operator deployment: %q", deployment.Name())
 		WaitForOperator(c, deployment.Namespace)
