@@ -38,7 +38,6 @@ LABEL description="PMEM CSI Driver"
 # fio - only included in testing images
 RUN ${APT_GET} update && \
     mkdir -p /usr/local/share && \
-    bash -c 'set -o pipefail; ${APT_GET} upgrade -y --no-install-recommends | tee --append /usr/local/share/package-install.log' && \
     bash -c 'set -o pipefail; ${APT_GET} install -y --no-install-recommends file xfsprogs e2fsprogs lvm2 ndctl \
        $(if [ "$BIN_SUFFIX" = "-test" ]; then echo fio; fi) | tee --append /usr/local/share/package-install.log' && \
     rm -rf /var/cache/*
