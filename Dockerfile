@@ -37,13 +37,14 @@ LABEL description="PMEM CSI Driver"
 # ndctl - pulls in the necessary library, useful by itself
 # fio - only included in testing images
 RUN ${APT_GET} update && \
-    ${APT_GET} upgrade -y --no-install-recommends && \
-    ${APT_GET} install -y --no-install-recommends file xfsprogs e2fsprogs lvm2 ndctl \
-       $(if [ "$BIN_SUFFIX" = "-test" ]; then echo fio; fi) && \
+    mkdir -p /usr/local/share && \
+    bash -c 'set -o pipefail; ${APT_GET} install -y --no-install-recommends file xfsprogs e2fsprogs lvm2 ndctl \
+       | tee --append /usr/local/share/package-install.log' && \
     rm -rf /var/cache/*
 
 # Image in which PMEM-CSI binaries get built.
 FROM build as binaries
+ARG APT_GET="env DEBIAN_FRONTEND=noninteractive apt-get"
 
 # build pmem-csi-driver
 ARG VERSION="unknown"
@@ -56,6 +57,65 @@ ARG BIN_SUFFIX
 # populated, then this argument can be set to -mod=vendor. "make
 # build-images" does both automatically.
 ARG GOFLAGS=
+
+# Some of the licenses might require us to distribute source code.
+# We cannot just point to the upstream download locations because those might
+# disappear. We could host a copy at a location under our control,
+# but keeping that in sync with the published container images
+# would be tricky. So what we do instead is copy the source code
+# which has this requirement into the image.
+#
+# Here we determine which packages were added to the runtime image,
+# then get the source code of packages under a copyleft license.
+#
+# The check for "copyleft" is crude (= search for MPL/GPL/LGPL)
+# and intentionally errs on the side of including source code
+# even when the copyright file just mentions those words in some
+# other context.
+#
+# Some known cases of non-copyleft source are therefore skipped
+# directly.
+#
+# Copying the source code intentionally comes before building
+# PMEM-CSI, because then the result is typically cached when
+# a developer builds images repeatedly.
+#
+# The following warning can be ignored:
+#   "Download is performed unsandboxed as root as file ... couldn't be accessed by user '_apt'"
+
+COPY --from=runtime /usr/local/share/package-install.log /usr/local/share/package-install.log
+COPY --from=runtime /usr/share/doc /tmp/runtime-doc
+RUN sed -i -e 's/^deb \(.*\)/deb \1\ndeb-src \1/' /etc/apt/sources.list
+RUN mkdir -p /usr/local/share/package-sources
+RUN cd /usr/local/share/package-sources && \
+    ${APT_GET} update && \
+    grep ^Get: /usr/local/share/package-install.log | cut -d ' ' -f 5,7 | \
+    while read pkg version; do \
+       if ! [ -f /tmp/runtime-doc/$pkg/copyright ]; then \
+           echo "ERROR: missing copyright file for $pkg"; exit 1; \
+       fi; \
+       case $pkg in \
+          libpython*|python*|libsqlite3*) echo "INFO: not downloading source of $pkg, it is known to be under a non-copyleft license";; \
+          *) \
+         if matches=$(grep -B5 -w -e MPL -e GPL -e LGPL /tmp/runtime-doc/$pkg/copyright); then \
+             echo "INFO: downloading source of $pkg because of the following licenses:"; \
+             echo "$matches" | sed -e 's/^/    /'; \
+             ${APT_GET} source --download-only $pkg=$version || exit 1; \
+         else \
+             echo "INFO: not downloading source of $pkg, found no copyleft license"; \
+         fi; \
+         ;; \
+    esac; \
+    done && \
+    echo "INFO: all additional packages:" && \
+    for pkg in $(grep ^Get: /usr/local/share/package-install.log | cut -d ' ' -f 5); do \
+        if source=$(apt-cache show $pkg | grep '^Source: '); then \
+            echo "$source" | sed -e 's/^Source: \([^ ]*\).*/    \1'" ($pkg)/"; \
+        else \
+            echo "    $pkg"; \
+        fi; \
+    done | sort -u; \
+    rm -rf /var/cache/*
 
 # Here we choose explicitly which binaries we want in the image and in
 # which flavor (production or testing). The actual binary name in the
@@ -73,12 +133,7 @@ RUN set -x && \
     cp /go/LICENSE /usr/local/share/package-licenses/go.LICENSE && \
     cp LICENSE /usr/local/share/package-licenses/PMEM-CSI.LICENSE
 
-# Some of the licenses might require us to distribute source code.
-# We cannot just point to the upstream repos because those might
-# disappear. We could host a copy at a location under our control,
-# but keeping that in sync with the published container images
-# would be tricky. So what we do instead is copy the (small!)
-# source code which has this requirement into the image.
+# Now also copy copyleft source code that was used during the build of our binaries.
 RUN set -x && \
     mkdir -p /usr/local/share/package-sources && \
     for license in $(grep -l -r -w -e MPL -e GPL -e LGPL /usr/local/share/package-licenses | sed -e 's;^/usr/local/share/package-licenses/;;'); do \
@@ -87,7 +142,8 @@ RUN set -x && \
               exit 1; \
         fi; \
     done; \
-    ls -l /usr/local/share/package-sources
+    ls -l /usr/local/share/package-sources; \
+    du -h /usr/local/share/package-sources
 
 # The actual pmem-csi-driver image.
 FROM runtime as pmem
