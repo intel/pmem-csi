@@ -78,7 +78,7 @@ The following table lists the features that are stable:
 
 Feature | Introduced in
 --------|--------------
-[LVM mode](docs/design.html#lvm-device-mode) | [v0.5.0]
+[LVM mode](docs/design.html#lvm-device-mode) | [v0.5.0](https://github.com/intel/pmem-csi/releases/tag/v0.5.0)
 [Direct mode](https://intel.github.io/pmem-csi/latest/docs/design.html#direct-device-mode) | [v0.5.0](https://github.com/intel/pmem-csi/releases/tag/v0.5.0)
 [Persistent volumes](https://intel.github.io/pmem-csi/latest/docs/design.html#volume-persistency) | [v0.5.0](https://github.com/intel/pmem-csi/releases/tag/v0.5.0)
 [CSI Ephemeral volumes](https://intel.github.io/pmem-csi/latest/docs/design.html#volume-persistency) | [v0.6.0](https://github.com/intel/pmem-csi/releases/tag/v0.6.0)
