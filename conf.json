@@ -6,7 +6,7 @@
         "Thumbs.db",
         ".DS_Store",
         ".tox",
-	    "_work",
+        "_work",
         "deploy/kustomize",
         "third-party",
         "test/test-config.d",
@@ -15,7 +15,8 @@
     "extensions": [
         "recommonmark",
         "sphinx_markdown_tables",
-	    "sphinx_copybutton"
+        "sphinx_md",
+        "sphinx_copybutton"
     ],
     "copybutton_prompt_text": "$ ",
     "html_theme": "sphinx_rtd_theme",
