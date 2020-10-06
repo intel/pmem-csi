@@ -79,15 +79,11 @@ The following table lists the features that are stable:
 Feature | Introduced in
 --------|--------------
 [LVM mode](docs/design.html#lvm-device-mode) | [v0.5.0]
-[Direct mode](https://intel.github.io/pmem-csi/latest/docs/design.html#direct-device-mode) | [v0.5.0]
-[Persistent volumes](https://intel.github.io/pmem-csi/latest/docs/design.html#volume-persistency) | [v0.5.0]
-[CSI Ephemeral volumes](https://intel.github.io/pmem-csi/latest/docs/design.html#volume-persistency) | [v0.6.0]
-[Raw block volumes](https://intel.github.io/pmem-csi/latest/docs/install.html#raw-block-volumes) | [v0.6.0]
-[Capacity-aware pod scheduling](https://intel.github.io/pmem-csi/latest/docs/design.html#capacity-aware-pod-scheduling) | [v0.7.0]
-
-[v0.5.0]: https://github.com/intel/pmem-csi/releases/tag/v0.5.0
-[v0.6.0]: https://github.com/intel/pmem-csi/releases/tag/v0.6.0
-[v0.7.0]: https://github.com/intel/pmem-csi/releases/tag/v0.7.0
+[Direct mode](https://intel.github.io/pmem-csi/latest/docs/design.html#direct-device-mode) | [v0.5.0](https://github.com/intel/pmem-csi/releases/tag/v0.5.0)
+[Persistent volumes](https://intel.github.io/pmem-csi/latest/docs/design.html#volume-persistency) | [v0.5.0](https://github.com/intel/pmem-csi/releases/tag/v0.5.0)
+[CSI Ephemeral volumes](https://intel.github.io/pmem-csi/latest/docs/design.html#volume-persistency) | [v0.6.0](https://github.com/intel/pmem-csi/releases/tag/v0.6.0)
+[Raw block volumes](https://intel.github.io/pmem-csi/latest/docs/install.html#raw-block-volumes) | [v0.6.0](https://github.com/intel/pmem-csi/releases/tag/v0.6.0)
+[Capacity-aware pod scheduling](https://intel.github.io/pmem-csi/latest/docs/design.html#capacity-aware-pod-scheduling) | [v0.7.0](https://github.com/intel/pmem-csi/releases/tag/v0.7.0)
 
 Release notes are prepared only for major new releases (like v0.6.0)
 but not for automatic updates (like v0.6.1). For more information on
