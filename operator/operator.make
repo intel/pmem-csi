@@ -44,32 +44,33 @@ endif
 MANIFESTS_DIR=deploy/kustomize/olm-catalog
 CATALOG_DIR=deploy/olm-catalog
 BUNDLE_DIR=deploy/bundle
-SHORT_VERSION=$(shell echo $(VERSION) | cut -f1,2 -d'.')
+
 KUBECONFIG := $(shell echo $(PWD)/_work/$(CLUSTER)/kube.config)
-# Defaults to 0.7.0 release to generate catalog to use for e2e tests
-VERSION := 0.7.0
+
+PATCH_VERSIONS := sed -i -e 's;X.Y.Z;$(MAJOR_MINOR_PATCH_VERSION);g' -e 's;X.Y;$(MAJOR_MINOR_VERSION);g'
+OPERATOR_OUTPUT_DIR := $(CATALOG_DIR)/$(MAJOR_MINOR_PATCH_VERSION)
 
 # Generate CRD and add kustomization support
 operator-generate-crd: controller-gen
-	@echo "Generating CRD ..."
+	@echo "Generating CRD in $(MANIFESTS_DIR)/crd ..."
 	$(CONTROLLER_GEN) crd:trivialVersions=true,crdVersions=v1beta1 paths=./pkg/apis/... output:dir=$(MANIFESTS_DIR)/crd/
 	@echo "resources: [pmem-csi.intel.com_deployments.yaml]" > $(MANIFESTS_DIR)/crd/kustomization.yaml
 
 # Generate packagemanifests using operator-sdk.
 operator-generate-catalog: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) _work/kustomize operator-generate-crd
-	@echo "Generating base catalog ..."
-	@_work/kustomize build --load_restrictor=none $(MANIFESTS_DIR) | $< generate packagemanifests --version $(VERSION) \
+	@echo "Generating base catalog in $(OPERATOR_OUTPUT_DIR) ..."
+	@_work/kustomize build --load_restrictor=none $(MANIFESTS_DIR) | $< generate packagemanifests --version $(MAJOR_MINOR_PATCH_VERSION) \
 		--kustomize-dir $(MANIFESTS_DIR) --output-dir $(CATALOG_DIR)
-	@sed -i -e 's;X.Y.Z;$(VERSION);g' -e 's;X.Y;$(SHORT_VERSION);g' $(CATALOG_DIR)/$(VERSION)/pmem-csi-operator.clusterserviceversion.yaml
+	@$(PATCH_VERSIONS) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
 	$(MAKE) operator-clean-crd
 
 # Generate OLM bundle. OperatorHub/OLM still does not support bundle format
 # but soon it will move from 'packagemanifests' to 'bundles'.
 operator-generate-bundle: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) _work/kustomize operator-generate-crd
-	@echo "Generating operator bundle ..."
+	@echo "Generating operator bundle in $(OPERATOR_OUTPUT_DIR) ..."
 	@_work/kustomize build --load_restrictor=none $(MANIFESTS_DIR) | $< generate bundle  --version=$(VERSION) \
         --kustomize-dir=$(MANIFESTS_DIR) --output-dir=$(BUNDLE_DIR)
-	@sed -i -e 's;X.Y.Z;$(VERSION);g' -e 's;X.Y;$(SHORT_VERSION);g' $(CATALOG_DIR)/$(VERSION)/pmem-csi-operator.clusterserviceversion.yaml
+	@$(PATCH_VERSIONS) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
 
 operator-clean-crd:
 	rm -rf $(MANIFESTS_DIR)/crd

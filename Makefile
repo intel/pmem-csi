@@ -24,8 +24,15 @@ OUTPUT_DIR=_output
 .DELETE_ON_ERROR:
 
 ifeq ($(VERSION), )
-VERSION=$(shell git describe --long --dirty --tags --match='v*')
+VERSION:=$(shell git describe --long --dirty --tags --match='v*')
 endif
+
+# VERSION is of the format vX.Y.Z[-<number of commits>-<short hash>|<suffix>].
+# For the SDK we need just X.Y.Z.
+MAJOR_MINOR_PATCH_VERSION:=$(shell echo $(VERSION) | cut -f1 -d'-' | sed -e 's/^v//')
+
+# Sometimes just X.Y is needed.
+MAJOR_MINOR_VERSION:=$(shell echo $(MAJOR_MINOR_PATCH_VERSION) | sed -e 's/\([0-9]*\.[0-9]*\)\..*/\1/')
 
 # Sanitize proxy settings (accept upper and lower case, set and export upper
 # case) and add local machine to no_proxy because some tests may use a

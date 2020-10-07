@@ -618,10 +618,15 @@ func findDriver(c *Cluster) (*Deployment, error) {
 	deployment.Namespace = list.Items[0].Namespace
 
 	// Derive the version from the image tag. The annotation doesn't include it.
+	// If the version matches what we are currently testing, then we skip
+	// the version (i.e. "current version" == "no explicit version").
 	for _, container := range list.Items[0].Spec.Template.Spec.Containers {
 		m := imageVersion.FindStringSubmatch(container.Image)
 		if m != nil {
-			deployment.Version = m[1]
+			m2 := imageVersion.FindStringSubmatch(os.Getenv("PMEM_CSI_IMAGE"))
+			if m2 == nil || m2[1] != m[1] {
+				deployment.Version = m[1]
+			}
 			break
 		}
 	}
