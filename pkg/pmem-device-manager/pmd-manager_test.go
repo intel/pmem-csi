@@ -60,9 +60,9 @@ func runTests(mode string) {
 			vg, err = createTestVGS(vgname, vgsize)
 			Expect(err).Should(BeNil(), "Failed to create volume group")
 
-			dm, err = NewPmemDeviceManagerLVMForVGs([]string{vg.name})
+			dm, err = newPmemDeviceManagerLVMForVGs([]string{vg.name})
 		} else {
-			dm, err = NewPmemDeviceManagerNdctl(100)
+			dm, err = newPmemDeviceManagerNdctl(100)
 			if err != nil && strings.Contains(err.Error(), "/sys mounted read-only") {
 				Skip("/sys mounted read-only, cannot test direct mode")
 			}

@@ -1,0 +1,13 @@
+bases:
+- ../kubernetes-base-direct
+
+commonLabels:
+  pmem-csi.intel.com/deployment: fake-production
+
+patchesJson6902:
+- target:
+    group: apps
+    version: v1
+    kind: DaemonSet
+    name: pmem-csi-node
+  path: fake-device-mode-patch.yaml

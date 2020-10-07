@@ -24,7 +24,7 @@ type DeviceMode string
 // Set sets the value
 func (mode *DeviceMode) Set(value string) error {
 	switch value {
-	case string(DeviceModeLVM), string(DeviceModeDirect):
+	case string(DeviceModeLVM), string(DeviceModeDirect), string(DeviceModeFake):
 		*mode = DeviceMode(value)
 	case "ndctl":
 		// For backwards-compatibility.
@@ -45,6 +45,11 @@ const (
 	DeviceModeLVM DeviceMode = "lvm"
 	// DeviceModeDirect represents 'direct' device manager
 	DeviceModeDirect DeviceMode = "direct"
+	// DeviceModeFake represents a device manager for testing:
+	// volume creation and deletion is just recorded in memory,
+	// without any actual backing store. Such fake volumes cannot
+	// be used for pods.
+	DeviceModeFake DeviceMode = "fake"
 )
 
 // NOTE(avalluri): Due to below errors we stop setting

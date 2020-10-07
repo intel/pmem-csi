@@ -1,16 +1,28 @@
 package pmdmanager
 
 import (
+	"fmt"
+
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 )
 
-//PmemDeviceInfo represents a block device
+const (
+	FakeDevicePathPrefix = "/dev/pmem-csi-fake"
+)
+
+// PmemDeviceInfo represents a volume created by PMEM-CSI.
 type PmemDeviceInfo struct {
-	//VolumeId is name of the block device
+	// VolumeId is a unique identifier created by PMEM-CSI for the volume.
+	// It is returned by CreateDevice and passed into NodeStageVolume
+	// and NodePublishVolume.
 	VolumeId string
-	//Path actual device path
+
+	// Path is the actual device path (for example, /dev/pmem0.1).
+	// As a special case, if the path starts with FakeDevicePathPrefix,
+	// then the volume doesn't have a backing store.
 	Path string
-	//Size size allocated for block device
+
+	// Size allocated for block device in bytes.
 	Size uint64
 }
 
@@ -52,4 +64,18 @@ type PmemDeviceManager interface {
 
 	// ListDevices returns all the block devices information that was created by this device manager
 	ListDevices() ([]*PmemDeviceInfo, error)
+}
+
+// New creates a new device manager for the given mode and percentage.
+func New(mode api.DeviceMode, pmemPercentage uint) (PmemDeviceManager, error) {
+	switch mode {
+	case api.DeviceModeFake:
+		return newFake(pmemPercentage)
+	case api.DeviceModeLVM:
+		return newPmemDeviceManagerLVM(pmemPercentage)
+	case api.DeviceModeDirect:
+		return newPmemDeviceManagerNdctl(pmemPercentage)
+	default:
+		return nil, fmt.Errorf("unsupported device mode %q", mode)
+	}
 }

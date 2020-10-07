@@ -184,6 +184,9 @@ KUSTOMIZE += deploy/common/pmem-storageclass-cache.yaml=deploy/kustomize/storage
 KUSTOMIZE += deploy/common/pmem-storageclass-late-binding.yaml=deploy/kustomize/storageclass-late-binding
 KUSTOMIZE += deploy/operator/pmem-csi-operator.yaml=deploy/kustomize/operator
 
+# Special one-off deployment with device mode = fake.
+KUSTOMIZE += deploy/kubernetes-1.19/pmem-csi-fake.yaml=deploy/kustomize/kubernetes-base-fake
+
 KUSTOMIZE_OUTPUT := $(foreach item,$(KUSTOMIZE),$(firstword $(subst =, ,$(item))))
 
 # This function takes the name of a .yaml output file and returns the
