@@ -3,3 +3,4 @@ sphinx_rtd_theme
 recommonmark
 sphinx-markdown-tables
 sphinx-copybutton == 0.2.11
+sphinx-md
