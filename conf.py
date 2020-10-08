@@ -13,6 +13,9 @@ from sphinx.highlighting import lexers
 #
 #############
 
+def setup(app):
+    app.add_css_file("override.css")
+
 class copyAllConsole (BashSessionLexer):
     name = 'ShellSession'
 
