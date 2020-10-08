@@ -46,18 +46,6 @@ RUN ${APT_GET} update && \
 FROM build as binaries
 ARG APT_GET="env DEBIAN_FRONTEND=noninteractive apt-get"
 
-# build pmem-csi-driver
-ARG VERSION="unknown"
-ADD . /src/pmem-csi
-ENV PKG_CONFIG_PATH=/usr/lib/pkgconfig/
-WORKDIR /src/pmem-csi
-ARG BIN_SUFFIX
-
-# If "docker build" is invoked with the "vendor" directory correctly
-# populated, then this argument can be set to -mod=vendor. "make
-# build-images" does both automatically.
-ARG GOFLAGS=
-
 # Some of the licenses might require us to distribute source code.
 # We cannot just point to the upstream download locations because those might
 # disappear. We could host a copy at a location under our control,
@@ -116,6 +104,18 @@ RUN cd /usr/local/share/package-sources && \
         fi; \
     done | sort -u; \
     rm -rf /var/cache/*
+
+# build pmem-csi-driver
+ARG VERSION="unknown"
+ADD . /src/pmem-csi
+ENV PKG_CONFIG_PATH=/usr/lib/pkgconfig/
+WORKDIR /src/pmem-csi
+ARG BIN_SUFFIX
+
+# If "docker build" is invoked with the "vendor" directory correctly
+# populated, then this argument can be set to -mod=vendor. "make
+# build-images" does both automatically.
+ARG GOFLAGS=
 
 # Here we choose explicitly which binaries we want in the image and in
 # which flavor (production or testing). The actual binary name in the
