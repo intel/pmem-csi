@@ -9,7 +9,7 @@
     - [Branching](#branching)
     - [Tagging](#tagging)
     - [Release checklist](#release-checklist)
-    - [Release PMEM-CSI operator](#release-PMEM-CSI-operator)
+    - [Release PMEM-CSI operator](#release-pmem-csi-operator)
 - [APIs](#apis)
     - [CSI API](#csi-api)
     - [Network ports](#network-ports)
@@ -167,7 +167,7 @@ $ git clone https://github.com/operator-framework/community-operators.git
 * Copy generated catalog files. Commit the changes and submit a pull request to
  [community-operators](https://github.com/operator-framework/community-operators) repository.
 ```console
-$ cp -r <PMEM-CSI_ROOT>/deploy/olm-catalog/ <COMMUNITY-OPERATORS_ROOT>/upstream-community-operators/pmem-csi-operator/
+$ cp -r <PMEM-CSI_ROOT>/deploy/olm-catalog/* <COMMUNITY-OPERATORS_ROOT>/upstream-community-operators/pmem-csi-operator/
 $ cd <COMMUNITY-OPERATORS_ROOT>
 $ git add upstream-community-operators/pmem-csi-operator/
 $ git commit -s -m "Updating PMEM-CSI Operator to version <X.Y.Z>"
