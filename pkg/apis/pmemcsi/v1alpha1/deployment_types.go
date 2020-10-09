@@ -417,6 +417,78 @@ func (d *Deployment) GetHyphenedName() string {
 	return strings.ReplaceAll(d.GetName(), ".", "-")
 }
 
+// RegistrySecretName returns the name of the registry
+// Secret object used by the deployment
+func (d *Deployment) RegistrySecretName() string {
+	return d.GetHyphenedName() + "-registry-secrets"
+}
+
+// NodeSecretName returns the name of the node-controller
+// Secret object used by the deployment
+func (d *Deployment) NodeSecretName() string {
+	return d.GetHyphenedName() + "-node-secrets"
+}
+
+// CSIDriverName returns the name of the CSIDriver
+// object name for the deployment
+func (d *Deployment) CSIDriverName() string {
+	return d.GetName()
+}
+
+// ControllerServiceName returns the name of the controller
+// Service object used by the deployment
+func (d *Deployment) ControllerServiceName() string {
+	return d.GetHyphenedName() + "-controller"
+}
+
+// MetricsServiceName returns the name of the controller metrics
+// Service object used by the deployment
+func (d *Deployment) MetricsServiceName() string {
+	return d.GetHyphenedName() + "-metrics"
+}
+
+// ServiceAccountName returns the name of the ServiceAccount
+// object used by the deployment
+func (d *Deployment) ServiceAccountName() string {
+	return d.GetHyphenedName() + "-controller"
+}
+
+// ProvisionerRoleName returns the name of the provisioner's
+// RBAC Role object name used by the deployment
+func (d *Deployment) ProvisionerRoleName() string {
+	return d.GetHyphenedName() + "-external-provisioner-cfg"
+}
+
+// ProvisionerRoleBindingName returns the name of the provisioner's
+// RoleBinding object name used by the deployment
+func (d *Deployment) ProvisionerRoleBindingName() string {
+	return d.GetHyphenedName() + "-csi-provisioner-role-cfg"
+}
+
+// ProvisionerClusterRoleName returns the name of the
+// provisioner's ClusterRole object name used by the deployment
+func (d *Deployment) ProvisionerClusterRoleName() string {
+	return d.GetHyphenedName() + "-external-provisioner-runner"
+}
+
+// ProvisionerClusterRoleBindingName returns the name of the
+// provisioner ClusterRoleBinding object name used by the deployment
+func (d *Deployment) ProvisionerClusterRoleBindingName() string {
+	return d.GetHyphenedName() + "-csi-provisioner-role"
+}
+
+// NodeDriverName returns the name of the driver
+// DaemonSet object name used by the deployment
+func (d *Deployment) NodeDriverName() string {
+	return d.GetHyphenedName() + "-node"
+}
+
+// ControllerDriverName returns the name of the controller
+// StatefulSet object name used by the deployment
+func (d *Deployment) ControllerDriverName() string {
+	return d.GetHyphenedName() + "-controller"
+}
+
 // GetOwnerReference returns self owner reference could be used by other object
 // to add this deployment to it's owner reference list.
 func (d *Deployment) GetOwnerReference() metav1.OwnerReference {
@@ -430,6 +502,32 @@ func (d *Deployment) GetOwnerReference() metav1.OwnerReference {
 		BlockOwnerDeletion: &blockOwnerDeletion,
 		Controller:         &isController,
 	}
+}
+
+// HaveCertificatesConfigured checks if the configured deployment
+// certificate fields are valid. Returns
+// - true with nil error if provided certificates are valid.
+// - false with nil error if no certificates are provided.
+// - false with appropriate error if invalid/incomplete certificates provided.
+func (d *Deployment) HaveCertificatesConfigured() (bool, error) {
+	// Encoded private keys and certificates
+	caCert := d.Spec.CACert
+	registryPrKey := d.Spec.RegistryPrivateKey
+	ncPrKey := d.Spec.NodeControllerPrivateKey
+	registryCert := d.Spec.RegistryCert
+	ncCert := d.Spec.NodeControllerCert
+
+	// sanity check
+	if caCert == nil {
+		if registryCert != nil || ncCert != nil {
+			return false, fmt.Errorf("incomplete deployment configuration: missing root CA certificate by which the provided certificates are signed")
+		}
+		return false, nil
+	} else if registryCert == nil || registryPrKey == nil || ncCert == nil || ncPrKey == nil {
+		return false, fmt.Errorf("incomplete deployment configuration: certificates and corresponding private keys must be provided")
+	}
+
+	return true, nil
 }
 
 func compareResources(rsA *corev1.ResourceRequirements, rsB *corev1.ResourceRequirements) bool {

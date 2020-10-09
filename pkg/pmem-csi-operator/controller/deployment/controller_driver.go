@@ -67,194 +67,531 @@ var AllObjectTypes = []schema.GroupVersionKind{
 type PmemCSIDriver struct {
 	*api.Deployment
 	// operators namespace used for creating sub-resources
-	namespace string
-
+	namespace  string
 	k8sVersion version.Version
 }
 
-// Reconcile reconciles the driver deployment
-func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) (bool, error) {
-	changes := map[api.DeploymentChange]struct{}{}
-
-	oldDeployment, foundInCache := r.deployments[d.Name]
-	if !foundInCache {
-		/* New deployment */
-		r.evRecorder.Event(d, corev1.EventTypeNormal, api.EventReasonNew, "Processing new driver deployment")
-	}
-
-	copy := d.DeepCopy()
-
-	if err := d.EnsureDefaults(r.containerImage); err != nil {
-		d.Deployment.Status.Phase = api.DeploymentPhaseFailed
-		r.evRecorder.Event(d, corev1.EventTypeWarning, api.EventReasonFailed, err.Error())
-		return true, err
-	}
-
-	if foundInCache {
-		// Cached deployment does not have defaults stored in it.
-		// So, reset those defaults before comparing otherwise
-		// those set defaults `d.Deployment` will be detected as
-		// changes.
-		cached := oldDeployment.DeepCopy()
-		if err := cached.EnsureDefaults(r.containerImage); err != nil {
-			r.evRecorder.Event(d, corev1.EventTypeWarning, api.EventReasonFailed, err.Error())
-			return true, err
-		}
-		changes = d.Compare(cached)
-	}
-
-	klog.Infof("Deployment: %q, state %q, changes %v, in cache %v", d.Name, d.Status.Phase, changes, foundInCache)
-
-	requeue, err := d.reconcileDeploymentChanges(r, changes, foundInCache)
-	// Some clients(fake client used in tests) do not support patching status reliably
-	// and updates even spec changes. So, revert any spec changes(like deployment defaults) we made.
-	// Those are not supposed to get saved on the API server.
-	d.Deployment.Spec = copy.Spec
-	if err == nil {
-		// If everything ok, update local cache
-		r.deployments[d.Name] = d.Deployment
-
-		// TODO: wait for functional driver before entering "running" phase.
-		// For now we go straight to it.
-		d.Status.Phase = api.DeploymentPhaseRunning
-		r.evRecorder.Event(d, corev1.EventTypeNormal, api.EventReasonRunning, "Driver deployment successful")
-	} else if d.Status.Phase == api.DeploymentPhaseNew {
-		d.Status.Phase = api.DeploymentPhaseFailed
-		r.evRecorder.Event(d, corev1.EventTypeWarning, api.EventReasonFailed, err.Error())
-	}
-
-	return requeue, err
+type ObjectPatch struct {
+	obj   apiruntime.Object
+	patch client.Patch
 }
 
-// reconcileDeploymentChanges examines the changes and updates the appropriate objects.
-// In case of foundInCache is false, all the objects gets refreshed/updated.
-func (d *PmemCSIDriver) reconcileDeploymentChanges(r *ReconcileDeployment, changes map[api.DeploymentChange]struct{}, foundInCache bool) (bool, error) {
-	updateController := false
-	updateNodeDriver := false
-	updateSecrets := false
-	updateAll := false // Update all objects of the deployment
+func NewObjectPatch(obj, copy apiruntime.Object) *ObjectPatch {
+	return &ObjectPatch{
+		obj:   obj,
+		patch: client.MergeFrom(copy),
+	}
+}
 
-	if !foundInCache {
-		// Running deployment not found in cache, possibly result of operator
-		// restart, refresh all objects.
-		updateAll = true
+// IsNew checks if the object is a new object, i.e, the it is not
+// yet stored with the APIServer.
+func (op ObjectPatch) IsNew() bool {
+	if op.obj != nil {
+		// We ignore only possible error - client.errNotObject
+		// and treat it's as new object
+		if o, err := meta.Accessor(op.obj); err == nil {
+			// An object registered with API serve will have
+			// a non-empty(zero) resource version
+			return o.GetResourceVersion() == ""
+		}
+	}
+	return false
+}
+
+// Diff returns the raw data representing the differences between
+// original object and the changed/patch object.
+func (op ObjectPatch) Diff() ([]byte, error) {
+	data, err := op.patch.Data(op.obj)
+	if err != nil {
+		return nil, err
 	}
 
-	for c := range changes {
+	// No changes
+	if string(data) == "{}" {
+		return nil, nil
+	}
+	return data, nil
+}
+
+// Apply sends the changes to API Server
+// Creates new object if not existing, otherwise patches it with changes
+func (op *ObjectPatch) Apply(c client.Client, labels map[string]string) error {
+	objMeta, err := meta.Accessor(op.obj)
+	if err != nil {
+		return fmt.Errorf("internal error %T: %v", op.obj, err)
+	}
+
+	// NOTE(avalluri): Set labels just before creating/patching.
+	// Setting them before creating the client.Patch makes
+	// they get lost from the final diff.
+	objMeta.SetLabels(labels)
+
+	if op.IsNew() {
+		// For unknown reason client.Create() clearing off the
+		// GVK on obj, So restore it manually.
+		gvk := op.obj.GetObjectKind().GroupVersionKind()
+		klog.Infof("Create: %T/%s", op.obj, objMeta.GetName())
+		err := c.Create(context.TODO(), op.obj)
+		op.obj.GetObjectKind().SetGroupVersionKind(gvk)
+		return err
+	}
+	klog.Infof("Update: %T/%s", op.obj, objMeta.GetName())
+	data, err := op.Diff()
+	if err != nil {
+		return err
+	}
+	// NOTE(avalluri): Fake client used in tests can not handle the
+	// empty diff case, It treats every Patch() call as an update
+	// and that results in change in objects's resourceVersion.
+	if len(data) == 0 {
+		return nil
+	}
+
+	return c.Patch(context.TODO(), op.obj, op.patch)
+}
+
+// Reconcile reconciles the driver deployment
+func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) error {
+
+	if err := d.EnsureDefaults(r.containerImage); err != nil {
+		return err
+	}
+
+	klog.Infof("Deployment: %q, state %q ", d.Name, d.Status.Phase)
+	var allObjects []apiruntime.Object
+	redeployAll := func() error {
+		var o apiruntime.Object
 		var err error
-		switch c {
-		case api.ControllerResources, api.ProvisionerImage:
-			updateController = true
-		case api.NodeResources, api.NodeRegistrarImage:
-			updateNodeDriver = true
-		case api.DriverImage, api.LogLevel, api.PullPolicy:
-			updateController = true
-			updateNodeDriver = true
-		case api.DriverMode:
-			updateNodeDriver = true
-		case api.NodeSelector:
-			updateNodeDriver = true
-		case api.PMEMPercentage:
-			updateNodeDriver = true
-		case api.Labels:
-			updateAll = true
-		case api.CACertificate, api.RegistryCertificate, api.NodeControllerCertificate:
-			updateSecrets = true
-		case api.KubeletDir:
-			updateNodeDriver = true
-		}
-
+		s, err := d.redeploySecrets(r)
 		if err != nil {
-			klog.Warningf("Incompatible change of deployment occurred: %v", err)
+			return err
+		}
+		for _, o := range s {
+			allObjects = append(allObjects, o)
+		}
+		if o, err = d.redeployProvisionerRole(r); err != nil {
+			return fmt.Errorf("failed to update RBAC role: %v", err)
+		}
+		allObjects = append(allObjects, o)
+		if o, err = d.redeployProvisionerRoleBinding(r); err != nil {
+			return fmt.Errorf("failed to update RBAC role bindings: %v", err)
+		}
+		allObjects = append(allObjects, o)
+		if o, err = d.redeployProvisionerClusterRole(r); err != nil {
+			return fmt.Errorf("failed to update RBAC cluster role: %v", err)
+		}
+		allObjects = append(allObjects, o)
+		if o, err = d.redeployProvisionerClusterRoleBinding(r); err != nil {
+			return fmt.Errorf("failed to update RBAC cluster role bindings: %v", err)
+		}
+		allObjects = append(allObjects, o)
+		if o, err = d.redeployServiceAccount(r); err != nil {
+			return fmt.Errorf("failed to update service account: %v", err)
+		}
+		allObjects = append(allObjects, o)
+		if o, err = d.redeployControllerService(r); err != nil {
+			return fmt.Errorf("failed to update controller service: %v", err)
+		}
+		allObjects = append(allObjects, o)
+		if o, err = d.redeployMetricsService(r); err != nil {
+			return fmt.Errorf("failed to update controller service: %v", err)
+		}
+		allObjects = append(allObjects, o)
+		if o, err = d.redeployCSIDriver(r); err != nil {
+			return fmt.Errorf("failed to update CSI driver: %v", err)
+		}
+		allObjects = append(allObjects, o)
+		if o, err = d.redeployControllerDriver(r); err != nil {
+			return fmt.Errorf("failed to update controller driver: %v", err)
+		}
+		allObjects = append(allObjects, o)
+		if o, err = d.redeployNodeDriver(r); err != nil {
+			return fmt.Errorf("failed to update node driver: %v", err)
+		}
+		allObjects = append(allObjects, o)
+		return nil
+	}
+
+	if err := redeployAll(); err != nil {
+		return err
+	}
+
+	klog.Infof("Deployed '%d' objects.", len(allObjects))
+	// FIXME(avalluri): Limit the obsolete object deletion either only on version upgrades
+	// or on operator restart.
+	if err := d.deleteObsoleteObjects(r, allObjects); err != nil {
+		return fmt.Errorf("Delete obsolete objects failed with error: %v", err)
+	}
+
+	return nil
+}
+
+// getSubObject retrieves the latest revision of given object type from the API server
+// And checks if that object is owned by the current deployment CR
+func (d *PmemCSIDriver) getSubObject(r *ReconcileDeployment, obj apiruntime.Object) error {
+	objMeta, err := meta.Accessor(obj)
+	if err != nil {
+		return fmt.Errorf("internal error %T: %v", obj, err)
+	}
+
+	klog.Infof("Get: %T/%s", obj, objMeta.GetName())
+	if err := r.Get(obj); err != nil {
+		if errors.IsNotFound(err) {
+			klog.Infof("Not found: %T/%s", obj, objMeta.GetName())
+			return nil
+		}
+		return err
+	}
+	ownerRef := d.GetOwnerReference()
+	if !isOwnedBy(objMeta, &ownerRef) {
+		return fmt.Errorf("'%s' of type %T is not owned by '%s'", objMeta.GetName(), obj, ownerRef.Name)
+	}
+
+	return nil
+}
+
+// updateSubObject writes the object changes to the API server.
+func (d *PmemCSIDriver) updateSubObject(r *ReconcileDeployment, op *ObjectPatch) error {
+	return op.Apply(r.client, d.Spec.Labels)
+}
+
+type redeployObject struct {
+	object     func() apiruntime.Object
+	modify     func(apiruntime.Object) error
+	postUpdate func(apiruntime.Object) error
+}
+
+// redeploy resets/patches the object returned by ro.object()
+// with the updated data. The caller must set appropriate callabacks.
+// Here are the redeploy steps:
+//  1. Get the object by calling ro.object() which needs redeploying.
+//  2. Retrieve the latest data saved at APIServer for that object.
+//  3. Create an ObjectPatch for that object to record the changes from this point.
+//  4. Call ro.modify() to modify the object's data.
+//  5. Call ObjectPatch.Apply() to submit the chanages to the APIServer.
+//  6. If the update in step-5 was success, then call the ro.postUpdate() callback
+//     to run any post update steps.
+func (d *PmemCSIDriver) redeploy(r *ReconcileDeployment, ro redeployObject) (apiruntime.Object, error) {
+	o := ro.object()
+	if o == nil {
+		return nil, fmt.Errorf("nil object")
+	}
+	if err := d.getSubObject(r, o); err != nil {
+		return nil, err
+	}
+	op := NewObjectPatch(o, o.DeepCopyObject())
+	if err := ro.modify(o); err != nil {
+		return nil, err
+	}
+	if err := d.updateSubObject(r, op); err != nil {
+		return nil, err
+	}
+	if ro.postUpdate != nil {
+		if err := ro.postUpdate(o); err != nil {
+			return nil, err
+		}
+	}
+	return o, nil
+}
+
+// redeploySecrets ensures that the secrets get (re)deployed that are
+// required for running the driver.
+//
+// First it checks if the deployment is configured with the needed certificates.
+// If provided, validate and (re)create secrets using them.
+// Else, provision new certificates(only if no existing secrets found) and deploy.
+//
+// We cannot use d.redeploy() as secrets needs to be provisioned if not preset.
+// This special case cannot be fit into generice redeploy logic.
+func (d *PmemCSIDriver) redeploySecrets(r *ReconcileDeployment) ([]*corev1.Secret, error) {
+	rs := &corev1.Secret{
+		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: d.getObjectMeta(d.RegistrySecretName(), false),
+	}
+	if err := d.getSubObject(r, rs); err != nil {
+		return nil, err
+	}
+	rop := NewObjectPatch(rs, rs.DeepCopy())
+
+	ns := &corev1.Secret{
+		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: d.getObjectMeta(d.NodeSecretName(), false),
+	}
+	if err := d.getSubObject(r, ns); err != nil {
+		return nil, err
+	}
+	nop := NewObjectPatch(ns, ns.DeepCopy())
+
+	update := func() error {
+		d.getRegistrySecrets(rs)
+		if err := d.updateSubObject(r, rop); err != nil {
+			return fmt.Errorf("failed to update registry secrets: %w", err)
+		}
+
+		d.getNodeSecrets(ns)
+		if err := d.updateSubObject(r, nop); err != nil {
+			return fmt.Errorf("failed to update node secrets: %w", err)
+		}
+		return nil
+	}
+
+	certsProvided, err := d.HaveCertificatesConfigured()
+	if err != nil {
+		return nil, err
+	}
+
+	updateSecrets := false
+	if certsProvided {
+		// Use  provided certificates
+		if err := d.validateCertificates(); err != nil {
+			return nil, err
+		}
+		updateSecrets = true
+	} else if rop.IsNew() || nop.IsNew() {
+		// Provision new self-signed certificates if not already present
+		if err := d.provisionCertificates(); err != nil {
+			return nil, err
+		}
+		updateSecrets = true
+	}
+
+	if updateSecrets {
+		if err := update(); err != nil {
+			return nil, err
 		}
 	}
 
-	objects := []apiruntime.Object{}
+	return []*corev1.Secret{rs, ns}, nil
+}
 
-	// Force update all deployment objects
-	if updateAll {
-		klog.Infof("Updating all objects for deployment %q", d.Name)
-		objs, err := d.getDeploymentObjects()
+// redeployNodeDriver deploys the node daemon set and records its status on to CR status.
+func (d *PmemCSIDriver) redeployNodeDriver(r *ReconcileDeployment) (apiruntime.Object, error) {
+	return d.redeploy(r, redeployObject{
+		object: func() apiruntime.Object {
+			return &appsv1.DaemonSet{
+				TypeMeta:   metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+				ObjectMeta: d.getObjectMeta(d.NodeDriverName(), false),
+			}
+		},
+		modify: func(o apiruntime.Object) error {
+			d.getNodeDaemonSet(o.(*appsv1.DaemonSet))
+			return nil
+		},
+	})
+}
+
+// redeployControllerDriver deploys the controller stateful set and records its status on to CR status.
+func (d *PmemCSIDriver) redeployControllerDriver(r *ReconcileDeployment) (apiruntime.Object, error) {
+	return d.redeploy(r, redeployObject{
+		object: func() apiruntime.Object {
+			return &appsv1.StatefulSet{
+				TypeMeta:   metav1.TypeMeta{Kind: "StatefulSet", APIVersion: "apps/v1"},
+				ObjectMeta: d.getObjectMeta(d.ControllerDriverName(), false),
+			}
+		},
+		modify: func(o apiruntime.Object) error {
+			d.getControllerStatefulSet(o.(*appsv1.StatefulSet))
+			return nil
+		},
+	})
+}
+
+func (d *PmemCSIDriver) redeployControllerService(r *ReconcileDeployment) (apiruntime.Object, error) {
+	return d.redeploy(r, redeployObject{
+		object: func() apiruntime.Object {
+			return &corev1.Service{
+				TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+				ObjectMeta: d.getObjectMeta(d.ControllerServiceName(), false),
+			}
+		},
+		modify: func(o apiruntime.Object) error {
+			d.getControllerService(o.(*corev1.Service))
+			return nil
+		},
+	})
+}
+
+func (d *PmemCSIDriver) redeployMetricsService(r *ReconcileDeployment) (apiruntime.Object, error) {
+	return d.redeploy(r, redeployObject{
+		object: func() apiruntime.Object {
+			return &corev1.Service{
+				TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+				ObjectMeta: d.getObjectMeta(d.MetricsServiceName(), false),
+			}
+		},
+		modify: func(o apiruntime.Object) error {
+			d.getMetricsService(o.(*corev1.Service))
+			return nil
+		},
+	})
+}
+
+func (d *PmemCSIDriver) redeployCSIDriver(r *ReconcileDeployment) (apiruntime.Object, error) {
+	return d.redeploy(r, redeployObject{
+		object: func() apiruntime.Object {
+			return &storagev1beta1.CSIDriver{
+				TypeMeta:   metav1.TypeMeta{Kind: "CSIDriver", APIVersion: "storage.k8s.io/v1beta1"},
+				ObjectMeta: d.getObjectMeta(d.CSIDriverName(), true),
+			}
+		},
+		modify: func(o apiruntime.Object) error {
+			d.getCSIDriver(o.(*storagev1beta1.CSIDriver))
+			return nil
+		},
+	})
+}
+
+func (d *PmemCSIDriver) redeployProvisionerRole(r *ReconcileDeployment) (apiruntime.Object, error) {
+	return d.redeploy(r, redeployObject{
+		object: func() apiruntime.Object {
+			return &rbacv1.Role{
+				TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: d.getObjectMeta(d.ProvisionerRoleName(), false),
+			}
+		},
+		modify: func(o apiruntime.Object) error {
+			d.getControllerProvisionerRole(o.(*rbacv1.Role))
+			return nil
+		},
+	})
+}
+
+func (d *PmemCSIDriver) redeployProvisionerRoleBinding(r *ReconcileDeployment) (apiruntime.Object, error) {
+	return d.redeploy(r, redeployObject{
+		object: func() apiruntime.Object {
+			return &rbacv1.RoleBinding{
+				TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: d.getObjectMeta(d.ProvisionerRoleBindingName(), false),
+			}
+		},
+		modify: func(o apiruntime.Object) error {
+			d.getControllerProvisionerRoleBinding(o.(*rbacv1.RoleBinding))
+			return nil
+		},
+	})
+}
+
+func (d *PmemCSIDriver) redeployProvisionerClusterRole(r *ReconcileDeployment) (apiruntime.Object, error) {
+	return d.redeploy(r, redeployObject{
+		object: func() apiruntime.Object {
+			return &rbacv1.ClusterRole{
+				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: d.getObjectMeta(d.ProvisionerClusterRoleName(), true),
+			}
+		},
+		modify: func(o apiruntime.Object) error {
+			d.getControllerProvisionerClusterRole(o.(*rbacv1.ClusterRole))
+			return nil
+		},
+	})
+}
+
+func (d *PmemCSIDriver) redeployProvisionerClusterRoleBinding(r *ReconcileDeployment) (apiruntime.Object, error) {
+	return d.redeploy(r, redeployObject{
+		object: func() apiruntime.Object {
+			return &rbacv1.ClusterRoleBinding{
+				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: d.getObjectMeta(d.ProvisionerClusterRoleBindingName(), true),
+			}
+		},
+		modify: func(o apiruntime.Object) error {
+			d.getControllerProvisionerClusterRoleBinding(o.(*rbacv1.ClusterRoleBinding))
+			return nil
+		},
+	})
+}
+
+func (d *PmemCSIDriver) redeployServiceAccount(r *ReconcileDeployment) (apiruntime.Object, error) {
+	return d.redeploy(r, redeployObject{
+		object: func() apiruntime.Object {
+			return &corev1.ServiceAccount{
+				TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+				ObjectMeta: d.getObjectMeta(d.ServiceAccountName(), false),
+			}
+		},
+		modify: func(o apiruntime.Object) error {
+			// nothing to customize for service account
+			return nil
+		},
+	})
+}
+
+// HandleEvent handles the delete/update events received on sub-objects
+func (d *PmemCSIDriver) HandleEvent(meta metav1.Object, obj apiruntime.Object, r *ReconcileDeployment) error {
+	switch obj.(type) {
+	case *corev1.Secret:
+		klog.Infof("Redeploying driver secrets")
+		if _, err := d.redeploySecrets(r); err != nil {
+			return fmt.Errorf("failed to redeploy %q secrets: %v", meta.GetName(), err)
+		}
+	case *appsv1.DaemonSet:
+		klog.Infof("Redeploying node driver")
+		org := d.DeepCopy()
+		if _, err := d.redeployNodeDriver(r); err != nil {
+			return fmt.Errorf("failed to redeploy node driver: %v", err)
+		}
+		if err := r.PatchDeploymentStatus(d.Deployment, client.MergeFrom(org)); err != nil {
+			return fmt.Errorf("failed to update deployment CR status: %v", err)
+		}
+	case *appsv1.StatefulSet:
+		klog.Infof("Redeploying controller driver")
+		org := d.DeepCopy()
+		if _, err := d.redeployControllerDriver(r); err != nil {
+			return fmt.Errorf("failed to redeploy controller driver: %v", err)
+		}
+		if err := r.PatchDeploymentStatus(d.Deployment, client.MergeFrom(org)); err != nil {
+			return fmt.Errorf("failed to update deployment CR status: %v", err)
+		}
+	case *rbacv1.Role:
+		klog.Infof("Redeploying provisioner RBAC role: %q", meta.GetName())
+		if _, err := d.redeployProvisionerRole(r); err != nil {
+			return fmt.Errorf("failed to redeploy %q provisioner role: %v", meta.GetName(), err)
+		}
+	case *rbacv1.ClusterRole:
+		klog.Infof("Redeploying provisioner cluster role: %q", meta.GetName())
+		if _, err := d.redeployProvisionerClusterRole(r); err != nil {
+			return fmt.Errorf("failed to redeploy %q cluster role: %v", meta.GetName(), err)
+		}
+	case *rbacv1.RoleBinding:
+		klog.Infof("Redeploying provisioner role binding")
+		if _, err := d.redeployProvisionerRoleBinding(r); err != nil {
+			return fmt.Errorf("failed to redeploy %q role binding: %v", meta.GetName(), err)
+		}
+	case *rbacv1.ClusterRoleBinding:
+		klog.Infof("Redeploying provisioner cluster role binding: %q", meta.GetName())
+		if _, err := d.redeployProvisionerClusterRoleBinding(r); err != nil {
+			return fmt.Errorf("failed to redeploy %q cluster role binding: %v", meta.GetName(), err)
+		}
+	case *corev1.ServiceAccount:
+		klog.Infof("Redeploying service account")
+		if _, err := d.redeployServiceAccount(r); err != nil {
+			return fmt.Errorf("failed to redeploy %q service account: %v", meta.GetName(), err)
+		}
+	case *corev1.Service:
+		var err error
+		klog.Infof("Redeploying service: %s", meta.GetName())
+		if meta.GetName() == d.ControllerServiceName() {
+			_, err = d.redeployControllerService(r)
+		} else if meta.GetName() == d.MetricsServiceName() {
+			_, err = d.redeployMetricsService(r)
+		}
 		if err != nil {
-			return true, err
+			return fmt.Errorf("failed to redeploy %q service: %v", meta.GetName(), err)
 		}
-		objects = append(objects, objs...)
-
-		// If not found cache might be result of operator restart
-		// check if this deployment has any objects to be deleted
-		if !foundInCache {
-			if err := d.deleteObsoleteObjects(r, objs); err != nil {
-				klog.Infof("Failed to delete obsolete objects: %v", err)
-				return true, err
-			}
+	case *storagev1beta1.CSIDriver:
+		klog.Infof("Redeploying %q CSIDriver", meta.GetName())
+		if _, err := d.redeployCSIDriver(r); err != nil {
+			return fmt.Errorf("failed to redeploy %q CSIDriver: %v", meta.GetName(), err)
 		}
-	} else {
-		if updateSecrets {
-			objs, err := d.getSecrets()
-			if err != nil {
-				return true, err
-			}
-			objects = append(objects, objs...)
-		}
-		if updateController {
-			klog.Infof("Updating controller driver for deployment %q", d.Name)
-			objects = append(objects, d.getControllerStatefulSet())
-		}
-		if updateNodeDriver {
-			klog.Infof("Updating node driver for deployment %q", d.Name)
-			objects = append(objects, d.getNodeDaemonSet())
-		}
+	default:
+		klog.Infof("Ignoring event on '%s' of type %T", meta.GetName(), obj)
 	}
 
-	for _, obj := range objects {
-		// Services needs special treatment as they have some immutable field(s)
-		// So, we cannot refresh the existing one with new service object.
-		if s, ok := obj.(*corev1.Service); ok {
-			existingService := &corev1.Service{
-				TypeMeta:   s.TypeMeta,
-				ObjectMeta: s.ObjectMeta,
-			}
-			err := r.Get(existingService)
-			if err != nil {
-				if !errors.IsNotFound(err) {
-					return true, err
-				}
-				// Create the missing service now
-				klog.Infof("'%s' service not found, creating new one", s.GetName())
-				if err := r.Create(s); err != nil {
-					return true, err
-				}
-				continue
-			}
-
-			existingService.Spec.Ports = []corev1.ServicePort{}
-			for _, p := range s.Spec.Ports {
-				existingService.Spec.Ports = append(existingService.Spec.Ports, p)
-			}
-			existingService.Spec.Selector = s.Spec.Selector
-			if len(s.Labels) > 0 {
-				if existingService.Labels == nil {
-					existingService.Labels = map[string]string{}
-				}
-				for key, value := range s.Labels {
-					existingService.Labels[key] = value
-				}
-			}
-			klog.Infof("updating service '%s' service ports and selector", s.GetName())
-			if err := r.Update(existingService); err != nil {
-				return true, err
-			}
-		} else {
-			if err := r.UpdateOrCreate(obj); err != nil {
-				return true, err
-			}
-		}
-	}
-
-	return false, nil
+	return nil
 }
 
 func objectIsObsolete(objList []apiruntime.Object, toFind unstructured.Unstructured) (bool, error) {
+	klog.V(5).Infof("Checking if %q of type %q is obsolete...", toFind.GetName(), toFind.GetObjectKind().GroupVersionKind())
 	for i := range objList {
 		metaObj, err := meta.Accessor(objList[i])
 		if err != nil {
@@ -280,6 +617,11 @@ func (d *PmemCSIDriver) isOwnerOf(obj unstructured.Unstructured) bool {
 }
 
 func (d *PmemCSIDriver) deleteObsoleteObjects(r *ReconcileDeployment, newObjects []apiruntime.Object) error {
+	for _, obj := range newObjects {
+		metaObj, _ := meta.Accessor(obj)
+		klog.V(5).Infof("==>%q type %q", metaObj.GetName(), obj.GetObjectKind().GroupVersionKind())
+	}
+
 	for _, gvk := range AllObjectTypes {
 		list := &unstructured.UnstructuredList{}
 		list.SetGroupVersionKind(gvk)
@@ -287,7 +629,7 @@ func (d *PmemCSIDriver) deleteObsoleteObjects(r *ReconcileDeployment, newObjects
 			Namespace: d.namespace,
 		}
 
-		klog.Infof("Fetching '%s' list with options: %v", gvk, opts.Namespace)
+		klog.V(5).Infof("Fetching '%s' list with options: %v", gvk, opts.Namespace)
 		if err := r.client.List(context.TODO(), list, opts); err != nil {
 			return err
 		}
@@ -303,6 +645,8 @@ func (d *PmemCSIDriver) deleteObsoleteObjects(r *ReconcileDeployment, newObjects
 			if !obsolete {
 				continue
 			}
+			klog.Infof("Deleting %q of type '%s' because it is an obsolete object.", obj.GetName(), obj.GetObjectKind().GroupVersionKind())
+
 			o, err := scheme.Scheme.New(obj.GetObjectKind().GroupVersionKind())
 			if err != nil {
 				return err
@@ -322,101 +666,61 @@ func (d *PmemCSIDriver) deleteObsoleteObjects(r *ReconcileDeployment, newObjects
 	return nil
 }
 
-// getDeploymentObjects returns all objects that are part of a driver deployment.
-func (d *PmemCSIDriver) getDeploymentObjects() ([]apiruntime.Object, error) {
-	objects, err := d.getSecrets()
-	if err != nil {
-		return nil, err
-	}
-
-	objects = append(objects,
-		d.getCSIDriver(),
-		d.getControllerServiceAccount(),
-		d.getControllerProvisionerRole(),
-		d.getControllerProvisionerRoleBinding(),
-		d.getControllerProvisionerClusterRole(),
-		d.getControllerProvisionerClusterRoleBinding(),
-		d.getControllerService(),
-		d.getMetricsService(),
-		d.getControllerStatefulSet(),
-		d.getNodeDaemonSet(),
-	)
-
-	return objects, nil
+func (d *PmemCSIDriver) getRegistrySecrets(secret *corev1.Secret) {
+	d.getSecret(secret, "registry-secrets", d.Spec.CACert, d.Spec.RegistryPrivateKey, d.Spec.RegistryCert)
 }
 
-func (d *PmemCSIDriver) getSecrets() ([]apiruntime.Object, error) {
-	// Encoded private keys and certificates
-	caCert := d.Spec.CACert
-	registryPrKey := d.Spec.RegistryPrivateKey
-	ncPrKey := d.Spec.NodeControllerPrivateKey
-	registryCert := d.Spec.RegistryCert
-	ncCert := d.Spec.NodeControllerCert
+func (d *PmemCSIDriver) getNodeSecrets(secret *corev1.Secret) {
+	d.getSecret(secret, "node-secrets", d.Spec.CACert, d.Spec.NodeControllerPrivateKey, d.Spec.NodeControllerCert)
+}
 
-	// sanity check
-	if caCert == nil {
-		if registryCert != nil || ncCert != nil {
-			return nil, fmt.Errorf("incomplete deployment configuration: missing root CA certificate by which the provided certificates are signed")
-		}
-	} else if registryCert == nil || registryPrKey == nil || ncCert == nil || ncPrKey == nil {
-		return nil, fmt.Errorf("incomplete deployment configuration: certificates and corresponding private keys must be provided")
+func (d *PmemCSIDriver) provisionCertificates() error {
+	var prKey *rsa.PrivateKey
+
+	klog.Infof("Provisioning new certificates for deployment '%s'", d.Name)
+	ca, err := pmemtls.NewCA(nil, nil)
+	if err != nil {
+		return fmt.Errorf("failed to initialize CA: %v", err)
+	}
+	d.Spec.CACert = ca.EncodedCertificate()
+
+	if d.Spec.RegistryPrivateKey != nil {
+		prKey, err = pmemtls.DecodeKey(d.Spec.RegistryPrivateKey)
+	} else {
+		prKey, err = pmemtls.NewPrivateKey()
+		d.Spec.RegistryPrivateKey = pmemtls.EncodeKey(prKey)
+	}
+	if err != nil {
+		return err
 	}
 
-	if caCert == nil {
-		var prKey *rsa.PrivateKey
+	cert, err := ca.GenerateCertificate("pmem-registry", prKey.Public())
+	if err != nil {
+		return fmt.Errorf("failed to generate registry certificate: %v", err)
+	}
+	d.Spec.RegistryCert = pmemtls.EncodeCert(cert)
 
-		ca, err := pmemtls.NewCA(nil, nil)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize CA: %v", err)
-		}
-		caCert = ca.EncodedCertificate()
-
-		if registryPrKey != nil {
-			prKey, err = pmemtls.DecodeKey(registryPrKey)
-		} else {
-			prKey, err = pmemtls.NewPrivateKey()
-			registryPrKey = pmemtls.EncodeKey(prKey)
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		cert, err := ca.GenerateCertificate("pmem-registry", prKey.Public())
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate registry certificate: %v", err)
-		}
-		registryCert = pmemtls.EncodeCert(cert)
-
-		if ncPrKey == nil {
-			prKey, err = pmemtls.NewPrivateKey()
-			ncPrKey = pmemtls.EncodeKey(prKey)
-		} else {
-			prKey, err = pmemtls.DecodeKey(ncPrKey)
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		cert, err = ca.GenerateCertificate("pmem-node-controller", prKey.Public())
-		if err != nil {
-			return nil, err
-		}
-		ncCert = pmemtls.EncodeCert(cert)
+	if d.Spec.NodeControllerPrivateKey == nil {
+		prKey, err = pmemtls.NewPrivateKey()
+		d.Spec.NodeControllerPrivateKey = pmemtls.EncodeKey(prKey)
+	} else {
+		prKey, err = pmemtls.DecodeKey(d.Spec.NodeControllerPrivateKey)
+	}
+	if err != nil {
+		return err
 	}
 
-	// Check if the provided or generated certificates are valid.
-	if err := validateCertificates(caCert, registryPrKey, registryCert, ncPrKey, ncCert); err != nil {
-		return nil, fmt.Errorf("validate CA certificates: %v", err)
+	cert, err = ca.GenerateCertificate("pmem-node-controller", prKey.Public())
+	if err != nil {
+		return err
 	}
+	d.Spec.NodeControllerCert = pmemtls.EncodeCert(cert)
 
 	// Instead of waiting for next GC cycle, initiate garbage collector manually
 	// so that the unneeded CA key, certificate get removed.
 	defer runtime.GC()
 
-	return []apiruntime.Object{
-		d.getSecret("registry-secrets", caCert, registryPrKey, registryCert),
-		d.getSecret("node-secrets", caCert, ncPrKey, ncCert),
-	}, nil
+	return nil
 }
 
 // validateCertificates ensures that the given keys and certificates are valid
@@ -424,7 +728,7 @@ func (d *PmemCSIDriver) getSecrets() ([]apiruntime.Object, error) {
 // a tls client connection to that sever using the provided keys and certificates.
 // As we use mutual-tls, testing one server is enough to make sure that the provided
 // certificates works
-func validateCertificates(caCert, regKey, regCert, ncKey, ncCert []byte) error {
+func (d *PmemCSIDriver) validateCertificates() error {
 	tmp, err := ioutil.TempDir("", "pmem-csi-validate-certs-*")
 	if err != nil {
 		return err
@@ -432,12 +736,12 @@ func validateCertificates(caCert, regKey, regCert, ncKey, ncCert []byte) error {
 	defer os.RemoveAll(tmp)
 
 	// Registry server config
-	regCfg, err := pmemgrpc.ServerTLS(caCert, regCert, regKey, "pmem-node-controller")
+	regCfg, err := pmemgrpc.ServerTLS(d.Spec.CACert, d.Spec.RegistryCert, d.Spec.RegistryPrivateKey, "pmem-node-controller")
 	if err != nil {
 		return err
 	}
 
-	clientCfg, err := pmemgrpc.ClientTLS(caCert, ncCert, ncKey, "pmem-registry")
+	clientCfg, err := pmemgrpc.ClientTLS(d.Spec.CACert, d.Spec.NodeControllerCert, d.Spec.NodeControllerPrivateKey, "pmem-registry")
 	if err != nil {
 		return err
 	}
@@ -460,20 +764,13 @@ func validateCertificates(caCert, regKey, regCert, ncKey, ncCert []byte) error {
 	return nil
 }
 
-func (d *PmemCSIDriver) getCSIDriver() *storagev1beta1.CSIDriver {
+func (d *PmemCSIDriver) getCSIDriver(csiDriver *storagev1beta1.CSIDriver) {
 	attachRequired := false
 	podInfoOnMount := true
 
-	csiDriver := &storagev1beta1.CSIDriver{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "CSIDriver",
-			APIVersion: "storage.k8s.io/v1beta1",
-		},
-		ObjectMeta: d.getObjectMeta(d.GetName(), true),
-		Spec: storagev1beta1.CSIDriverSpec{
-			AttachRequired: &attachRequired,
-			PodInfoOnMount: &podInfoOnMount,
-		},
+	csiDriver.Spec = storagev1beta1.CSIDriverSpec{
+		AttachRequired: &attachRequired,
+		PodInfoOnMount: &podInfoOnMount,
 	}
 
 	// Volume lifecycle modes are supported only after k8s v1.16
@@ -483,457 +780,369 @@ func (d *PmemCSIDriver) getCSIDriver() *storagev1beta1.CSIDriver {
 			storagev1beta1.VolumeLifecycleEphemeral,
 		}
 	}
-
-	return csiDriver
 }
 
-func (d *PmemCSIDriver) getSecret(cn string, ca, encodedKey, encodedCert []byte) *corev1.Secret {
-	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Secret",
-			APIVersion: "v1",
-		},
-		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-"+cn, false),
-		Type:       corev1.SecretTypeTLS,
-		Data: map[string][]byte{
-			// Same names as in the example secrets and in the v1 API.
-			"ca.crt":  ca,          // no standard name for this one
-			"tls.key": encodedKey,  // v1.TLSPrivateKeyKey
-			"tls.crt": encodedCert, // v1.TLSCertKey
-		},
+func (d *PmemCSIDriver) getSecret(secret *corev1.Secret, cn string, ca, encodedKey, encodedCert []byte) {
+	secret.Type = corev1.SecretTypeTLS
+	secret.Data = map[string][]byte{
+		// Same names as in the example secrets and in the v1 API.
+		"ca.crt":  ca,          // no standard name for this one
+		"tls.key": encodedKey,  // v1.TLSPrivateKeyKey
+		"tls.crt": encodedCert, // v1.TLSCertKey
 	}
 }
 
-func (d *PmemCSIDriver) getControllerService() *corev1.Service {
-	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Service",
-			APIVersion: "v1",
-		},
-		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-controller", false),
-		Spec: corev1.ServiceSpec{
-			Type: corev1.ServiceTypeClusterIP,
-			Ports: []corev1.ServicePort{
-				corev1.ServicePort{
-					Port: controllerServicePort,
-					TargetPort: intstr.IntOrString{
-						IntVal: controllerServicePort,
-					},
-				},
-			},
-			Selector: map[string]string{
-				"app": d.GetHyphenedName() + "-controller",
-			},
-		},
+func (d *PmemCSIDriver) getService(service *corev1.Service, t corev1.ServiceType, port int32) {
+	service.Spec.Type = t
+	if service.Spec.Ports == nil {
+		service.Spec.Ports = append(service.Spec.Ports, corev1.ServicePort{})
+	}
+	service.Spec.Ports[0].Port = port
+	service.Spec.Ports[0].TargetPort = intstr.IntOrString{
+		IntVal: port,
+	}
+	service.Spec.Selector = map[string]string{
+		"app": d.GetHyphenedName() + "-controller",
 	}
 }
 
-func (d *PmemCSIDriver) getMetricsService() *corev1.Service {
-	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Service",
-			APIVersion: "v1",
-		},
-		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-metrics", false),
-		Spec: corev1.ServiceSpec{
-			Type: corev1.ServiceTypeNodePort,
-			Ports: []corev1.ServicePort{
-				corev1.ServicePort{
-					Port: controllerMetricsPort,
-					TargetPort: intstr.IntOrString{
-						IntVal: controllerMetricsPort,
-					},
-				},
-			},
-			Selector: map[string]string{
-				"app": d.GetHyphenedName() + "-controller",
-			},
-		},
-	}
+func (d *PmemCSIDriver) getControllerService(service *corev1.Service) {
+	d.getService(service, corev1.ServiceTypeClusterIP, controllerServicePort)
 }
 
-func (d *PmemCSIDriver) getControllerServiceAccount() *corev1.ServiceAccount {
-	return &corev1.ServiceAccount{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ServiceAccount",
-			APIVersion: "v1",
-		},
-		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-controller", false),
-	}
+func (d *PmemCSIDriver) getMetricsService(service *corev1.Service) {
+	d.getService(service, corev1.ServiceTypeNodePort, controllerMetricsPort)
 }
 
-func (d *PmemCSIDriver) getControllerProvisionerRole() *rbacv1.Role {
-	return &rbacv1.Role{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Role",
-			APIVersion: "rbac.authorization.k8s.io/v1",
+func (d *PmemCSIDriver) getControllerProvisionerRole(role *rbacv1.Role) {
+	role.Rules = []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"endpoints"},
+			Verbs: []string{
+				"get", "watch", "list", "delete", "update", "create",
+			},
 		},
-		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-external-provisioner-cfg", false),
-		Rules: []rbacv1.PolicyRule{
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"endpoints"},
-				Verbs: []string{
-					"get", "watch", "list", "delete", "update", "create",
-				},
+		{
+			APIGroups: []string{"coordination.k8s.io"},
+			Resources: []string{"leases"},
+			Verbs: []string{
+				"get", "watch", "list", "delete", "update", "create",
 			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"coordination.k8s.io"},
-				Resources: []string{"leases"},
-				Verbs: []string{
-					"get", "watch", "list", "delete", "update", "create",
-				},
+		},
+		// As in the upstream external-provisioner 2.0.0 rbac.yaml,
+		// permissions for CSIStorageCapacity support get enabled unconditionally,
+		// just in case.
+		{
+			APIGroups: []string{"storage.k8s.io"},
+			Resources: []string{"csistoragecapacities"},
+			Verbs: []string{
+				"get", "list", "watch", "create", "update", "patch", "delete",
 			},
-			// As in the upstream external-provisioner 2.0.0 rbac.yaml,
-			// permissions for CSIStorageCapacity support get enabled unconditionally,
-			// just in case.
-			rbacv1.PolicyRule{
-				APIGroups: []string{"storage.k8s.io"},
-				Resources: []string{"csistoragecapacities"},
-				Verbs: []string{
-					"get", "list", "watch", "create", "update", "patch", "delete",
-				},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"pods"},
+			Verbs: []string{
+				"get",
 			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"pods"},
-				Verbs: []string{
-					"get",
-				},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"apps"},
-				Resources: []string{"replicasets"},
-				Verbs: []string{
-					"get",
-				},
+		},
+		{
+			APIGroups: []string{"apps"},
+			Resources: []string{"replicasets"},
+			Verbs: []string{
+				"get",
 			},
 		},
 	}
 }
 
-func (d *PmemCSIDriver) getControllerProvisionerRoleBinding() *rbacv1.RoleBinding {
-	return &rbacv1.RoleBinding{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "RoleBinding",
-			APIVersion: "rbac.authorization.k8s.io/v1",
+func (d *PmemCSIDriver) getControllerProvisionerRoleBinding(rb *rbacv1.RoleBinding) {
+	rb.Subjects = []rbacv1.Subject{
+		{
+			Kind:      "ServiceAccount",
+			Name:      d.GetHyphenedName() + "-controller",
+			Namespace: d.namespace,
 		},
-		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-csi-provisioner-role-cfg", false),
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      d.GetHyphenedName() + "-controller",
-				Namespace: d.namespace,
-			},
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "Role",
-			Name:     d.GetHyphenedName() + "-external-provisioner-cfg",
-		},
+	}
+	rb.RoleRef = rbacv1.RoleRef{
+		APIGroup: "rbac.authorization.k8s.io",
+		Kind:     "Role",
+		Name:     d.GetHyphenedName() + "-external-provisioner-cfg",
 	}
 }
 
-func (d *PmemCSIDriver) getControllerProvisionerClusterRole() *rbacv1.ClusterRole {
-	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ClusterRole",
-			APIVersion: "rbac.authorization.k8s.io/v1",
+func (d *PmemCSIDriver) getControllerProvisionerClusterRole(cr *rbacv1.ClusterRole) {
+	cr.Rules = []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"persistentvolumes"},
+			Verbs: []string{
+				"get", "list", "watch", "create", "delete",
+			},
 		},
-		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-external-provisioner-runner", true),
-		Rules: []rbacv1.PolicyRule{
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"persistentvolumes"},
-				Verbs: []string{
-					"get", "list", "watch", "create", "delete",
-				},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"persistentvolumeclaims"},
+			Verbs: []string{
+				"get", "list", "watch", "update",
 			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"persistentvolumeclaims"},
-				Verbs: []string{
-					"get", "list", "watch", "update",
-				},
+		},
+		{
+			APIGroups: []string{"storage.k8s.io"},
+			Resources: []string{"storageclasses"},
+			Verbs: []string{
+				"get", "list", "watch",
 			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"storage.k8s.io"},
-				Resources: []string{"storageclasses"},
-				Verbs: []string{
-					"get", "list", "watch",
-				},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"events"},
+			Verbs: []string{
+				"list", "watch", "create", "update", "patch",
 			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"events"},
-				Verbs: []string{
-					"list", "watch", "create", "update", "patch",
-				},
+		},
+		{
+			APIGroups: []string{"snapshot.storage.k8s.io"},
+			Resources: []string{"volumesnapshots"},
+			Verbs: []string{
+				"get", "list",
 			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"snapshot.storage.k8s.io"},
-				Resources: []string{"volumesnapshots"},
-				Verbs: []string{
-					"get", "list",
-				},
+		},
+		{
+			APIGroups: []string{"snapshot.storage.k8s.io"},
+			Resources: []string{"volumesnapshotcontents"},
+			Verbs: []string{
+				"get", "list",
 			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"snapshot.storage.k8s.io"},
-				Resources: []string{"volumesnapshotcontents"},
-				Verbs: []string{
-					"get", "list",
-				},
+		},
+		{
+			APIGroups: []string{"storage.k8s.io"},
+			Resources: []string{"csinodes"},
+			Verbs: []string{
+				"get", "list", "watch",
 			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"storage.k8s.io"},
-				Resources: []string{"csinodes"},
-				Verbs: []string{
-					"get", "list", "watch",
-				},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"nodes"},
-				Verbs: []string{
-					"get", "list", "watch",
-				},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"nodes"},
+			Verbs: []string{
+				"get", "list", "watch",
 			},
 		},
 	}
 }
 
-func (d *PmemCSIDriver) getControllerProvisionerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "ClusterRoleBinding",
-			APIVersion: "rbac.authorization.k8s.io/v1",
+func (d *PmemCSIDriver) getControllerProvisionerClusterRoleBinding(crb *rbacv1.ClusterRoleBinding) {
+	crb.Subjects = []rbacv1.Subject{
+		{
+			Kind:      "ServiceAccount",
+			Name:      d.ServiceAccountName(),
+			Namespace: d.namespace,
 		},
-		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-csi-provisioner-role", true),
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      d.GetHyphenedName() + "-controller",
-				Namespace: d.namespace,
-			},
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     d.GetHyphenedName() + "-external-provisioner-runner",
-		},
+	}
+	crb.RoleRef = rbacv1.RoleRef{
+		APIGroup: "rbac.authorization.k8s.io",
+		Kind:     "ClusterRole",
+		Name:     d.ProvisionerClusterRoleName(),
 	}
 }
 
-func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
+func (d *PmemCSIDriver) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 	replicas := int32(1)
 	true := true
 	pmemcsiUser := int64(1000)
-	ss := &appsv1.StatefulSet{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "StatefulSet",
-			APIVersion: "apps/v1",
+
+	ss.Spec = appsv1.StatefulSetSpec{
+		Replicas: &replicas,
+		Selector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"app": d.GetHyphenedName() + "-controller",
+			},
 		},
-		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-controller", false),
-		Spec: appsv1.StatefulSetSpec{
-			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": d.GetHyphenedName() + "-controller",
+		ServiceName: d.GetHyphenedName() + "-controller",
+		Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: joinMaps(
+					d.Spec.Labels,
+					map[string]string{
+						"app":                        d.GetHyphenedName() + "-controller",
+						"pmem-csi.intel.com/webhook": "ignore",
+					}),
+				Annotations: map[string]string{
+					"pmem-csi.intel.com/scrape": "containers",
 				},
 			},
-			ServiceName: d.GetHyphenedName() + "-controller",
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: joinMaps(
-						d.Spec.Labels,
-						map[string]string{
-							"app":                        d.GetHyphenedName() + "-controller",
-							"pmem-csi.intel.com/webhook": "ignore",
-						}),
-					Annotations: map[string]string{
-						"pmem-csi.intel.com/scrape": "containers",
-					},
+			Spec: corev1.PodSpec{
+				SecurityContext: &corev1.PodSecurityContext{
+					// Controller pod must run as non-root user
+					RunAsNonRoot: &true,
+					RunAsUser:    &pmemcsiUser,
 				},
-				Spec: corev1.PodSpec{
-					SecurityContext: &corev1.PodSecurityContext{
-						// Controller pod must run as non-root user
-						RunAsNonRoot: &true,
-						RunAsUser:    &pmemcsiUser,
-					},
-					ServiceAccountName: d.GetHyphenedName() + "-controller",
-					Containers: []corev1.Container{
-						d.getControllerContainer(),
-						d.getProvisionerContainer(),
-					},
-					Affinity: &corev1.Affinity{
-						NodeAffinity: &corev1.NodeAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
-								NodeSelectorTerms: []corev1.NodeSelectorTerm{
-									{
-										MatchExpressions: []corev1.NodeSelectorRequirement{
-											// By default, the controller will run anywhere in the cluster.
-											// If that isn't desired, the "pmem-csi.intel.com/controller" label
-											// can be set to "no" or "false" for a node to prevent the controller
-											// from running there.
-											//
-											// This is used during testing as a workaround for a particular issue
-											// on Clear Linux where network configuration randomly fails such that
-											// the driver which runs on the same node as the controller cannot
-											// connect to the controller (https://github.com/intel/pmem-csi/issues/555).
-											//
-											// It may also be useful for other purposes, in particular for deployment
-											// through the operator: it has the same rule and currently no other API for
-											// setting affinity.
-											{
-												Key:      "pmem-csi.intel.com/controller",
-												Operator: corev1.NodeSelectorOpNotIn,
-												Values:   []string{"no", "false"},
-											},
+				ServiceAccountName: d.GetHyphenedName() + "-controller",
+				Containers: []corev1.Container{
+					d.getControllerContainer(),
+					d.getProvisionerContainer(),
+				},
+				Affinity: &corev1.Affinity{
+					NodeAffinity: &corev1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+							NodeSelectorTerms: []corev1.NodeSelectorTerm{
+								{
+									MatchExpressions: []corev1.NodeSelectorRequirement{
+										// By default, the controller will run anywhere in the cluster.
+										// If that isn't desired, the "pmem-csi.intel.com/controller" label
+										// can be set to "no" or "false" for a node to prevent the controller
+										// from running there.
+										//
+										// This is used during testing as a workaround for a particular issue
+										// on Clear Linux where network configuration randomly fails such that
+										// the driver which runs on the same node as the controller cannot
+										// connect to the controller (https://github.com/intel/pmem-csi/issues/555).
+										//
+										// It may also be useful for other purposes, in particular for deployment
+										// through the operator: it has the same rule and currently no other API for
+										// setting affinity.
+										{
+											Key:      "pmem-csi.intel.com/controller",
+											Operator: corev1.NodeSelectorOpNotIn,
+											Values:   []string{"no", "false"},
 										},
 									},
 								},
 							},
 						},
 					},
-					Tolerations: []corev1.Toleration{
-						{
-							// Allow this pod to run on a master node.
-							Key:    "node-role.kubernetes.io/master",
-							Effect: "NoSchedule",
+				},
+				Tolerations: []corev1.Toleration{
+					{
+						// Allow this pod to run on a master node.
+						Key:    "node-role.kubernetes.io/master",
+						Effect: "NoSchedule",
+					},
+				},
+				Volumes: []corev1.Volume{
+					{
+						Name: "plugin-socket-dir",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
 						},
 					},
-					Volumes: []corev1.Volume{
-						{
-							Name: "plugin-socket-dir",
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
+					{
+						Name: "registry-cert",
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: d.GetHyphenedName() + "-registry-secrets",
 							},
 						},
-						{
-							Name: "registry-cert",
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: d.GetHyphenedName() + "-registry-secrets",
-								},
-							},
-						},
-						{
-							Name: "tmp-dir",
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
+					},
+					{
+						Name: "tmp-dir",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
 						},
 					},
 				},
 			},
 		},
 	}
-
-	return ss
 }
 
-func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
+func (d *PmemCSIDriver) getNodeDaemonSet(ds *appsv1.DaemonSet) {
 	directoryOrCreate := corev1.HostPathDirectoryOrCreate
-	ds := &appsv1.DaemonSet{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "DaemonSet",
-			APIVersion: "apps/v1",
+	ds.Spec = appsv1.DaemonSetSpec{
+		Selector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"app": d.GetHyphenedName() + "-node",
+			},
 		},
-		ObjectMeta: d.getObjectMeta(d.GetHyphenedName()+"-node", false),
-		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": d.GetHyphenedName() + "-node",
+		Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Labels: joinMaps(
+					d.Spec.Labels,
+					map[string]string{
+						"app":                        d.GetHyphenedName() + "-node",
+						"pmem-csi.intel.com/webhook": "ignore",
+					}),
+				Annotations: map[string]string{
+					"pmem-csi.intel.com/scrape": "containers",
 				},
 			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: joinMaps(
-						d.Spec.Labels,
-						map[string]string{
-							"app":                        d.GetHyphenedName() + "-node",
-							"pmem-csi.intel.com/webhook": "ignore",
-						}),
-					Annotations: map[string]string{
-						"pmem-csi.intel.com/scrape": "containers",
-					},
+			Spec: corev1.PodSpec{
+				NodeSelector: d.Spec.NodeSelector,
+				Containers: []corev1.Container{
+					d.getNodeDriverContainer(),
+					d.getNodeRegistrarContainer(),
 				},
-				Spec: corev1.PodSpec{
-					NodeSelector: d.Spec.NodeSelector,
-					Containers: []corev1.Container{
-						d.getNodeDriverContainer(),
-						d.getNodeRegistrarContainer(),
+				Volumes: []corev1.Volume{
+					{
+						Name: "socket-dir",
+						VolumeSource: corev1.VolumeSource{
+							HostPath: &corev1.HostPathVolumeSource{
+								Path: d.Spec.KubeletDir + "/plugins/" + d.GetName(),
+								Type: &directoryOrCreate,
+							},
+						},
 					},
-					Volumes: []corev1.Volume{
-						{
-							Name: "socket-dir",
-							VolumeSource: corev1.VolumeSource{
-								HostPath: &corev1.HostPathVolumeSource{
-									Path: d.Spec.KubeletDir + "/plugins/" + d.GetName(),
-									Type: &directoryOrCreate,
-								},
+					{
+						Name: "registration-dir",
+						VolumeSource: corev1.VolumeSource{
+							HostPath: &corev1.HostPathVolumeSource{
+								Path: d.Spec.KubeletDir + "/plugins_registry/",
+								Type: &directoryOrCreate,
 							},
 						},
-						{
-							Name: "registration-dir",
-							VolumeSource: corev1.VolumeSource{
-								HostPath: &corev1.HostPathVolumeSource{
-									Path: d.Spec.KubeletDir + "/plugins_registry/",
-									Type: &directoryOrCreate,
-								},
+					},
+					{
+						Name: "mountpoint-dir",
+						VolumeSource: corev1.VolumeSource{
+							HostPath: &corev1.HostPathVolumeSource{
+								Path: d.Spec.KubeletDir + "/plugins/kubernetes.io/csi",
+								Type: &directoryOrCreate,
 							},
 						},
-						{
-							Name: "mountpoint-dir",
-							VolumeSource: corev1.VolumeSource{
-								HostPath: &corev1.HostPathVolumeSource{
-									Path: d.Spec.KubeletDir + "/plugins/kubernetes.io/csi",
-									Type: &directoryOrCreate,
-								},
+					},
+					{
+						Name: "pods-dir",
+						VolumeSource: corev1.VolumeSource{
+							HostPath: &corev1.HostPathVolumeSource{
+								Path: d.Spec.KubeletDir + "/pods",
+								Type: &directoryOrCreate,
 							},
 						},
-						{
-							Name: "pods-dir",
-							VolumeSource: corev1.VolumeSource{
-								HostPath: &corev1.HostPathVolumeSource{
-									Path: d.Spec.KubeletDir + "/pods",
-									Type: &directoryOrCreate,
-								},
+					},
+					{
+						Name: "node-cert",
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: d.GetHyphenedName() + "-node-secrets",
 							},
 						},
-						{
-							Name: "node-cert",
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: d.GetHyphenedName() + "-node-secrets",
-								},
+					},
+					{
+						Name: "pmem-state-dir",
+						VolumeSource: corev1.VolumeSource{
+							HostPath: &corev1.HostPathVolumeSource{
+								Path: "/var/lib/" + d.GetName(),
+								Type: &directoryOrCreate,
 							},
 						},
-						{
-							Name: "pmem-state-dir",
-							VolumeSource: corev1.VolumeSource{
-								HostPath: &corev1.HostPathVolumeSource{
-									Path: "/var/lib/" + d.GetName(),
-									Type: &directoryOrCreate,
-								},
+					},
+					{
+						Name: "dev-dir",
+						VolumeSource: corev1.VolumeSource{
+							HostPath: &corev1.HostPathVolumeSource{
+								Path: "/dev",
+								Type: &directoryOrCreate,
 							},
 						},
-						{
-							Name: "dev-dir",
-							VolumeSource: corev1.VolumeSource{
-								HostPath: &corev1.HostPathVolumeSource{
-									Path: "/dev",
-									Type: &directoryOrCreate,
-								},
-							},
-						},
-						{
-							Name: "sys-dir",
-							VolumeSource: corev1.VolumeSource{
-								HostPath: &corev1.HostPathVolumeSource{
-									Path: "/sys",
-									Type: &directoryOrCreate,
-								},
+					},
+					{
+						Name: "sys-dir",
+						VolumeSource: corev1.VolumeSource{
+							HostPath: &corev1.HostPathVolumeSource{
+								Path: "/sys",
+								Type: &directoryOrCreate,
 							},
 						},
 					},
@@ -941,8 +1150,6 @@ func (d *PmemCSIDriver) getNodeDaemonSet() *appsv1.DaemonSet {
 			},
 		},
 	}
-
-	return ds
 }
 
 func (d *PmemCSIDriver) getControllerCommand() []string {
@@ -1190,6 +1397,7 @@ func (d *PmemCSIDriver) getMetricsPorts(port int32) []corev1.ContainerPort {
 		{
 			Name:          "metrics",
 			ContainerPort: port,
+			Protocol:      "TCP",
 		},
 	}
 }
@@ -1200,7 +1408,6 @@ func (d *PmemCSIDriver) getObjectMeta(name string, isClusterResource bool) metav
 		OwnerReferences: []metav1.OwnerReference{
 			d.GetOwnerReference(),
 		},
-		Labels: d.Spec.Labels,
 	}
 	if !isClusterResource {
 		meta.Namespace = d.namespace
