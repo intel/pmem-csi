@@ -229,6 +229,12 @@ by the operator.
 operator's self-signed CA instead must provide the certificates generated
 from a trusted certificate authority.
 
+- **Install the PMEM-CSI Deployment CRD**
+
+``` console
+$ kubectl create -f https://github.com/intel/pmem-csi/raw/devel/deploy/crd/pmem-csi.intel.com_deployments.yaml
+```
+
 - **Install the PMEM-CSI operator**
 
 ``` console

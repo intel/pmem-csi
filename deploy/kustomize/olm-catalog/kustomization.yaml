@@ -1,9 +1,9 @@
 bases:
-- ./crd # this would be generated using: make operator-generate-crd
 - ../operator
 
 resources:
 - ../../common/pmem-csi.intel.com_v1alpha1_deployment_cr.yaml
+- ../../crd/pmem-csi.intel.com_deployments.yaml
 
 images:
 - name: intel/pmem-csi-driver
