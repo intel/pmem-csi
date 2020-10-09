@@ -346,6 +346,7 @@ func (d *PmemCSIDriver) redeploySecrets(r *ReconcileDeployment) ([]*corev1.Secre
 		if err := d.validateCertificates(); err != nil {
 			return nil, err
 		}
+		d.SetCondition(api.CertsVerified, corev1.ConditionTrue, "Driver certificates validated.")
 		updateSecrets = true
 	} else if rop.IsNew() || nop.IsNew() {
 		// Provision new self-signed certificates if not already present
@@ -360,6 +361,7 @@ func (d *PmemCSIDriver) redeploySecrets(r *ReconcileDeployment) ([]*corev1.Secre
 			return nil, err
 		}
 	}
+	d.SetCondition(api.CertsReady, corev1.ConditionTrue, "Driver certificates are available.")
 
 	return []*corev1.Secret{rs, ns}, nil
 }
@@ -377,6 +379,22 @@ func (d *PmemCSIDriver) redeployNodeDriver(r *ReconcileDeployment) (apiruntime.O
 			d.getNodeDaemonSet(o.(*appsv1.DaemonSet))
 			return nil
 		},
+		postUpdate: func(o apiruntime.Object) error {
+			ds := o.(*appsv1.DaemonSet)
+			// Update node driver status is status object
+			status := "NotReady"
+			reason := "Unknown"
+			if ds.Status.NumberAvailable == 0 {
+				reason = "Node daemon set has not started yet."
+			} else if ds.Status.NumberReady == ds.Status.NumberAvailable {
+				status = "Ready"
+				reason = fmt.Sprintf("All %d node driver pod(s) running successfully", ds.Status.NumberAvailable)
+			} else {
+				reason = fmt.Sprintf("%d out of %d driver pods are ready", ds.Status.NumberReady, ds.Status.NumberAvailable)
+			}
+			d.SetDriverStatus(api.NodeDriver, status, reason)
+			return nil
+		},
 	})
 }
 
@@ -391,6 +409,23 @@ func (d *PmemCSIDriver) redeployControllerDriver(r *ReconcileDeployment) (apirun
 		},
 		modify: func(o apiruntime.Object) error {
 			d.getControllerStatefulSet(o.(*appsv1.StatefulSet))
+			return nil
+		},
+		postUpdate: func(o apiruntime.Object) error {
+			ss := o.(*appsv1.StatefulSet)
+			// Update controller status is status object
+			status := "NotReady"
+			reason := "Unknown"
+			if ss.Status.Replicas == 0 {
+				reason = "Controller stateful set has not started yet."
+			} else if ss.Status.ReadyReplicas == ss.Status.Replicas {
+				status = "Ready"
+				reason = fmt.Sprintf("%d instance(s) of controller driver is running successfully", ss.Status.ReadyReplicas)
+			} else {
+				reason = fmt.Sprintf("Waiting for stateful set to be ready: %d of %d replicas are ready",
+					ss.Status.ReadyReplicas, ss.Status.Replicas)
+			}
+			d.SetDriverStatus(api.ControllerDriver, status, reason)
 			return nil
 		},
 	})

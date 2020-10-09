@@ -333,12 +333,14 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 	if err := d.Reconcile(r); err != nil {
 		klog.Infof("Reconcile error: %v", err)
 		dep.Status.Phase = pmemcsiv1alpha1.DeploymentPhaseFailed
+		dep.Status.Reason = err.Error()
 		r.evRecorder.Event(dep, corev1.EventTypeWarning, pmemcsiv1alpha1.EventReasonFailed, err.Error())
 
 		return reconcile.Result{Requeue: true, RequeueAfter: requeueDelayOnError}, err
 	}
 
 	dep.Status.Phase = pmemcsiv1alpha1.DeploymentPhaseRunning
+	dep.Status.Reason = "All driver components are deployed successfully"
 	r.evRecorder.Event(dep, corev1.EventTypeNormal, pmemcsiv1alpha1.EventReasonRunning, "Driver deployment successful")
 
 	return reconcile.Result{}, nil

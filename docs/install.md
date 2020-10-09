@@ -284,36 +284,73 @@ pmem-deployment      lvm                                 Running  50s
 
 $ kubectl describe deployment.pmem-csi.intel.com/pmem-csi.intel.com
 Name:         pmem-csi.intel.com
-Namespace:    default
+Namespace:
 Labels:       <none>
 Annotations:  <none>
 API Version:  pmem-csi.intel.com/v1alpha1
 Kind:         Deployment
 Metadata:
-  Creation Timestamp:  2020-01-23T13:40:32Z
+  Creation Timestamp:  2020-10-07T07:31:58Z
   Generation:          1
-  Resource Version:    3596387
-  Self Link:           /apis/pmem-csi.intel.com/v1alpha1/deployments/pmem-csi.intel.com
-  UID:                 454b5961-5aa2-41c3-b774-29fe932ae236
+  Managed Fields:
+    API Version:  pmem-csi.intel.com/v1alpha1
+    Fields Type:  FieldsV1
+    fieldsV1:
+      f:spec:
+        .:
+        f:deviceMode:
+        f:nodeSelector:
+          .:
+          f:storage:
+    Manager:      kubectl-create
+    Operation:    Update
+    Time:         2020-10-07T07:31:58Z
+    API Version:  pmem-csi.intel.com/v1alpha1
+    Fields Type:  FieldsV1
+    fieldsV1:
+      f:status:
+        .:
+        f:conditions:
+        f:driverComponents:
+        f:lastUpdated:
+        f:phase:
+    Manager:         pmem-csi-operator
+    Operation:       Update
+    Time:            2020-10-07T07:32:22Z
+  Resource Version:  1235740
+  Self Link:         /apis/pmem-csi.intel.com/v1alpha1/deployments/pmem-csi.intel.com
+  UID:               d8635490-53fa-4eec-970d-cd4c76f53b23
 Spec:
-  Controller Resources:
-    Requests:
-      Cpu:      200m
-      Memory:   100Mi
   Device Mode:  lvm
-  Image:        localhost/pmem-csi-driver:canary
-  Node Resources:
-    Requests:
-      Cpu:     200m
-      Memory:  100Mi
+  Node Selector:
+    Storage:  pmem
 Status:
-  Phase:  Running
+  Conditions:
+    Last Update Time:  2020-10-07T07:32:00Z
+    Reason:            Driver certificates are available.
+    Status:            True
+    Type:              CertsReady
+    Last Update Time:  2020-10-07T07:32:02Z
+    Reason:            Driver deployed successfully.
+    Status:            True
+    Type:              DriverDeployed
+  Driver Components:
+    Component:     Controller
+    Last Updated:  2020-10-08T07:45:13Z
+    Reason:        1 instance(s) of controller driver is running successfully
+    Status:        Ready
+    Component:     Node
+    Last Updated:  2020-10-08T07:45:11Z
+    Reason:        All 3 node driver pod(s) running successfully
+    Status:        Ready
+  Last Updated:    2020-10-07T07:32:21Z
+  Phase:           Running
+  Reason:          All driver components are deployed successfully
 Events:
-  Type    Reason         Age                From               Message
-  ----    ------         ----               ----               -------
-  Normal  NewDeployment  34s                pmem-csi-operator  Processing new driver deployment
-  Normal  Running        2s (x10 over 26s)  pmem-csi-operator  Driver deployment successful
-
+  Type    Reason         Age   From               Message
+  ----    ------         ----  ----               -------
+  Normal  NewDeployment  58s   pmem-csi-operator  Processing new driver deployment
+  Normal  Running        39s   pmem-csi-operator  Driver deployment successful
 
 $ kubectl get po
 NAME                               READY   STATUS    RESTARTS   AGE
@@ -1190,21 +1227,47 @@ active volumes.
 
 #### DeploymentStatus
 
-A PMEM-CSI Deployment's `status` field is a `DeploymentStatus` object, which has
-a `phase` field. The phase of a Deployment is high-level summary of where the
-Deployment is in it's lifecycle.
+A PMEM-CSI Deployment's `status` field is a `DeploymentStatus` object, which
+carries the detailed state of the driver deployment. It is comprised of [deployment
+conditions](#deployment-conditions), [driver component status](#driver-component-status),
+and a `phase` field. The phase of a Deployment is a high-level summary
+of where the Deployment is in its lifecycle.
 
 The possible `phase` values and their meaning are as below:
 
 | Value | Meaning |
 |---|---|
 | empty string | A new deployment. |
-| Initializing | All the direct sub-resources of the `Deployment` are created, but some indirect ones (like pods controlled by a daemon set) may still be missing. |
 | Running | The operator has determined that the driver is usable<sup>1</sup>.  |
-| Failed | For some reason the state of the `Deployment` failed and cannot be progressed<sup>2</sup>. |
+| Failed | For some reason the state of the `Deployment` failed and cannot be progressed. The failure reason is placed in the `DeploymentStatus.Reason` field. |
 
 <sup>1</sup> This check has not been implemented yet. Instead, the deployment goes straight to `Running` after creating sub-resources.
-<sup>2</sup> Failure reason is supposed to be carried by one of additional `DeploymentStatus` field, but not implemented yet.
+
+#### Deployment Conditions
+
+PMEM-CSI `DeploymentStatus` has an array of `conditions` through which the
+PMEM-CSI Deployment has or has not passed. Below are the possible condition
+types and their meanings:
+
+| Condition type | Meaning |
+|---|---|
+| CertsReady | Driver certificates/secrets are available. |
+| CertsVerified | Verified that the provided certificates are valid. |
+| DriverDeployed | All the componentes required for the PMEM-CSI deployment have been deployed. |
+
+#### Driver component status
+
+PMEM-CSI `DeploymentStatus` has an array of `components` of type `DriverStatus`
+in which the operator records the brief driver components status. This is
+useful to know if all the driver instances of a deployment are ready.
+Below are the fields and their meanings of `DriverStatus`:
+
+| Field | Meaning |
+| --- | --- |
+| component | Represents the driver component type; one of `Controller` or `Node`. |
+| status | Represents the state of the component; one of `Ready` or `NotReady`. Component becomes `Ready` if all the instances of the driver component are running. Otherwise, `NotReady`. |
+| reason | A brief message that explains why the component is in this state. |
+| lastUpdateTime | Time at which the status updated. |
 
 #### Deployment Events
 

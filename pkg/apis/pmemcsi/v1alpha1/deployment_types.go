@@ -59,6 +59,7 @@ const (
 //   Related issue : https://github.com/kubernetes-sigs/controller-tools/issues/478
 // Fails setting min/max for integers: https://github.com/helm/helm/issues/5806
 
+// +k8s:deepcopy-gen=true
 // DeploymentSpec defines the desired state of Deployment
 type DeploymentSpec struct {
 	// Important: Run "make operator-generate-k8s" to regenerate code after modifying this file
@@ -113,13 +114,79 @@ type DeploymentSpec struct {
 	KubeletDir string `json:"kubeletDir,omitempty"`
 }
 
+// DeploymentConditionType type for representing a deployment status condition
+type DeploymentConditionType string
+
+const (
+	// CertsVerified means the provided deployment secrets are verified and valid for usage
+	CertsVerified DeploymentConditionType = "CertsVerified"
+	// CertsReady means secrests/certificates required for running the PMEM-CSI driver
+	// are ready and the deployment could progress further
+	CertsReady DeploymentConditionType = "CertsReady"
+	// DriverDeployed means that the all the sub-resources required for the deployment CR
+	// got created
+	DriverDeployed DeploymentConditionType = "DriverDeployed"
+)
+
+// +k8s:deepcopy-gen=true
+type DeploymentCondition struct {
+	// Type of condition.
+	Type DeploymentConditionType `json:"type"`
+	// Status of the condition, one of True, False, Unknown.
+	Status corev1.ConditionStatus `json:"status"`
+	// Message human readable text that explain why this condition is in this state
+	// +optional
+	Reason string `json:"reason,omitempty"`
+	// Last time the condition was probed.
+	// +optional
+	LastUpdateTime metav1.Time `json:"lastUpdateTime,omitempty"`
+}
+
+type DriverType int
+
+const (
+	ControllerDriver DriverType = iota
+	NodeDriver
+)
+
+func (t DriverType) String() string {
+	switch t {
+	case ControllerDriver:
+		return "Controller"
+	case NodeDriver:
+		return "Node"
+	}
+	return ""
+}
+
+// +k8s:deepcopy-gen=true
+type DriverStatus struct {
+	// DriverComponent represents type of the driver: controller or node
+	DriverComponent string `json:"component"`
+	// Status represents the state of the component; one of `Ready` or `NotReady`.
+	// Component becomes `Ready` if all the instances(Pods) of the driver component
+	// are in running state. Otherwise, `NotReady`.
+	Status string `json:"status"`
+	// Reason represents the human readable text that explains why the
+	// driver is in this state.
+	Reason string `json:"reason"`
+	// LastUpdated time of the driver status
+	LastUpdated metav1.Time `json:"lastUpdated,omitempty"`
+}
+
+// +k8s:deepcopy-gen=true
+
 // DeploymentStatus defines the observed state of Deployment
 type DeploymentStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make operator-generate-k8s" to regenerate code after modifying this file
 
 	// Phase indicates the state of the deployment
-	Phase DeploymentPhase `json:"phase,omitempty"`
+	Phase  DeploymentPhase `json:"phase,omitempty"`
+	Reason string          `json:"reason,omitempty"`
+	// Conditions
+	Conditions []DeploymentCondition `json:"conditions,omitempty"`
+	Components []DriverStatus        `json:"driverComponents,omitempty"`
 	// LastUpdated time of the deployment status
 	LastUpdated metav1.Time `json:"lastUpdated,omitempty"`
 }
@@ -215,8 +282,6 @@ type DeploymentPhase string
 const (
 	// DeploymentPhaseNew indicates a new deployment
 	DeploymentPhaseNew DeploymentPhase = ""
-	// DeploymentPhaseInitializing indicates deployment initialization is in progress
-	DeploymentPhaseInitializing DeploymentPhase = "Initializing"
 	// DeploymentPhaseRunning indicates that the deployment was successful
 	DeploymentPhaseRunning DeploymentPhase = "Running"
 	// DeploymentPhaseFailed indicates that the deployment was failed
@@ -266,6 +331,35 @@ func (c DeploymentChange) String() string {
 		NodeControllerKey:         "nodeControllerKey",
 		KubeletDir:                "kubeletDir",
 	}[c]
+}
+
+func (d *Deployment) SetCondition(t DeploymentConditionType, state corev1.ConditionStatus, reason string) {
+	for _, c := range d.Status.Conditions {
+		if c.Type == t {
+			c.Status = state
+			c.Reason = reason
+			c.LastUpdateTime = metav1.Now()
+			return
+		}
+	}
+	d.Status.Conditions = append(d.Status.Conditions, DeploymentCondition{
+		Type:           t,
+		Status:         state,
+		Reason:         reason,
+		LastUpdateTime: metav1.Now(),
+	})
+}
+
+func (d *Deployment) SetDriverStatus(t DriverType, status, reason string) {
+	if d.Status.Components == nil {
+		d.Status.Components = make([]DriverStatus, 2)
+	}
+	d.Status.Components[t] = DriverStatus{
+		DriverComponent: t.String(),
+		Status:          status,
+		Reason:          reason,
+		LastUpdated:     metav1.Now(),
+	}
 }
 
 // EnsureDefaults make sure that the deployment object has all defaults set properly
