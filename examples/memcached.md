@@ -393,14 +393,14 @@ to account for filesystem overhead:
 $ kubectl create ns demo
 namespace/demo created
 
-$ cat <<EOF >memcached.conf
-memory-file = /data/memcached-memory-file
-memory-limit = 450
-EOF
+$ echo "memory-file = /data/memcached-memory-file" >memcached.conf
+$ echo "memory-limit = 450" >>memcached.conf
 
 $ kubectl create configmap -n demo mc-pmem-conf --from-file=memcached.conf
 configmap/mc-pmem-conf created
+```
 
+``` ShellSession
 $ kubectl create -f - <<EOF
 apiVersion: kubedb.com/v1alpha1
 kind: Memcached
@@ -429,8 +429,6 @@ spec:
       volumeAttributes:
         size: 500Mi
 EOF
-
-memcached.kubedb.com/memcd-pmem created
 ```
 
 The resulting pods then have one additional data volume:
