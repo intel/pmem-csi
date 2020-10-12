@@ -244,7 +244,7 @@ a complete list of supported properties.
 
 Here is a minimal example driver deployment created with a custom resource:
 
-``` console
+``` ShellSession
 $ kubectl create -f - <<EOF
 apiVersion: pmem-csi.intel.com/v1alpha1
 kind: Deployment
