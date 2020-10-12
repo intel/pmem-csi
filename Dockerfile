@@ -40,6 +40,8 @@ RUN ${APT_GET} update && \
     mkdir -p /usr/local/share && \
     bash -c 'set -o pipefail; ${APT_GET} install -y --no-install-recommends file xfsprogs e2fsprogs lvm2 ndctl \
        | tee --append /usr/local/share/package-install.log' && \
+    dpkg --purge --ignore-depends=xfsprogs python3 python3-minimal libpython3-stdlib libpython3.7-minimal libpython3.7-stdlib python3.7 python3.7-minimal && \
+    sed -i 's/, python3:any//' /var/lib/dpkg/status && \
     rm -rf /var/cache/*
 
 # Image in which PMEM-CSI binaries get built.
