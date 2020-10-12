@@ -22,7 +22,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -371,69 +370,6 @@ func (r *ReconcileDeployment) Get(obj runtime.Object) error {
 		return fmt.Errorf("internal error %T: %v", obj, err)
 	}
 	return r.client.Get(context.TODO(), key, obj)
-}
-
-// Create create new Kubernetes object
-func (r *ReconcileDeployment) Create(obj runtime.Object) error {
-	metaObj, err := meta.Accessor(obj)
-	if err != nil {
-		return fmt.Errorf("internal error %T: %v", obj, err)
-	}
-	klog.Infof("Creating: '%s/%s' of type %T", metaObj.GetNamespace(), metaObj.GetName(), obj)
-	return r.client.Create(context.TODO(), obj)
-}
-
-// Update updates existing Kubernetes object. The object must be a modified copy of the existing object in the apiserver.
-func (r *ReconcileDeployment) Update(obj runtime.Object) error {
-	metaObj, err := meta.Accessor(obj)
-	if err != nil {
-		return fmt.Errorf("internal error %T: %v", obj, err)
-	}
-	klog.Infof("Updating '%s/%s' of type '%T'", metaObj.GetNamespace(), metaObj.GetName(), obj)
-	return r.client.Update(context.TODO(), obj)
-}
-
-// UpdateOrCreate updates the spec of an existing object or, if it does not exist yet, creates it.
-func (r *ReconcileDeployment) UpdateOrCreate(obj runtime.Object) error {
-	metaObj, err := meta.Accessor(obj)
-	if err != nil {
-		return fmt.Errorf("internal error %T: %v", obj, err)
-	}
-	existing := obj.DeepCopyObject()
-	err = r.Get(existing)
-	if err != nil && !errors.IsNotFound(err) {
-		return err
-	}
-	if err == nil {
-		metaExisting, err := meta.Accessor(existing)
-		if err != nil {
-			return fmt.Errorf("internal error %T: %v", existing, err)
-		}
-
-		ownerRef := metaObj.GetOwnerReferences()[0]
-		if !isOwnedBy(metaExisting, &ownerRef) {
-			return fmt.Errorf("'%s' of type %T is not owned by '%s'", metaObj.GetName(), obj, ownerRef.Name)
-		}
-
-		// Copy metadata from existing object
-		metaObj.SetGenerateName(metaExisting.GetGenerateName())
-		metaObj.SetSelfLink(metaExisting.GetSelfLink())
-		metaObj.SetUID(metaExisting.GetUID())
-		metaObj.SetResourceVersion(metaExisting.GetResourceVersion())
-		metaObj.SetGeneration(metaExisting.GetGeneration())
-		metaObj.SetCreationTimestamp(metaExisting.GetCreationTimestamp())
-		metaObj.SetAnnotations(metaExisting.GetAnnotations())
-		metaObj.SetFinalizers(metaExisting.GetFinalizers())
-		metaObj.SetClusterName(metaExisting.GetClusterName())
-		metaObj.SetManagedFields(metaExisting.GetManagedFields())
-		metaObj.SetLabels(joinMaps(metaExisting.GetLabels(), metaObj.GetLabels()))
-
-		klog.Infof("Updating '%s/%s' of type '%T'", metaObj.GetNamespace(), metaObj.GetName(), obj)
-		return r.client.Update(context.TODO(), obj)
-	}
-	// Fall back to creating the object.
-	klog.Infof("Creating '%s/%s' of type '%T'", metaObj.GetNamespace(), metaObj.GetName(), obj)
-	return r.client.Create(context.TODO(), obj)
 }
 
 // Delete delete existing Kubernetes object

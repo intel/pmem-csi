@@ -7,10 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package v1alpha1
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -288,51 +286,6 @@ const (
 	DeploymentPhaseFailed DeploymentPhase = "Failed"
 )
 
-// DeploymentChange type declaration for changes between two deployments
-type DeploymentChange int
-
-const (
-	DriverMode = iota + 1
-	DriverImage
-	PullPolicy
-	LogLevel
-	ProvisionerImage
-	NodeRegistrarImage
-	ControllerResources
-	NodeResources
-	NodeSelector
-	PMEMPercentage
-	Labels
-	CACertificate
-	RegistryCertificate
-	RegistryKey
-	NodeControllerCertificate
-	NodeControllerKey
-	KubeletDir
-)
-
-func (c DeploymentChange) String() string {
-	return map[DeploymentChange]string{
-		DriverMode:                "deviceMode",
-		DriverImage:               "image",
-		PullPolicy:                "imagePullPolicy",
-		LogLevel:                  "logLevel",
-		ProvisionerImage:          "provisionerImage",
-		NodeRegistrarImage:        "nodeRegistrarImage",
-		ControllerResources:       "controllerResources",
-		NodeResources:             "nodeResources",
-		NodeSelector:              "nodeSelector",
-		PMEMPercentage:            "pmemPercentage",
-		Labels:                    "labels",
-		CACertificate:             "caCert",
-		RegistryCertificate:       "registryCert",
-		RegistryKey:               "registryKey",
-		NodeControllerCertificate: "nodeControllerCert",
-		NodeControllerKey:         "nodeControllerKey",
-		KubeletDir:                "kubeletDir",
-	}[c]
-}
-
 func (d *Deployment) SetCondition(t DeploymentConditionType, state corev1.ConditionStatus, reason string) {
 	for _, c := range d.Status.Conditions {
 		if c.Type == t {
@@ -433,74 +386,6 @@ func (d *Deployment) EnsureDefaults(operatorImage string) error {
 	}
 
 	return nil
-}
-
-// Compare compares 'other' deployment spec with current deployment and returns
-// the all the changes. If len(changes) == 0 represents both deployment spec
-// are equivalent.
-func (d *Deployment) Compare(other *Deployment) map[DeploymentChange]struct{} {
-	changes := map[DeploymentChange]struct{}{}
-	if d == nil || other == nil {
-		return changes
-	}
-
-	if d.Spec.DeviceMode != other.Spec.DeviceMode {
-		changes[DriverMode] = struct{}{}
-	}
-	if d.Spec.Image != other.Spec.Image {
-		changes[DriverImage] = struct{}{}
-	}
-	if d.Spec.PullPolicy != other.Spec.PullPolicy {
-		changes[PullPolicy] = struct{}{}
-	}
-	if d.Spec.LogLevel != other.Spec.LogLevel {
-		changes[LogLevel] = struct{}{}
-	}
-	if d.Spec.ProvisionerImage != other.Spec.ProvisionerImage {
-		changes[ProvisionerImage] = struct{}{}
-	}
-	if d.Spec.NodeRegistrarImage != other.Spec.NodeRegistrarImage {
-		changes[NodeRegistrarImage] = struct{}{}
-	}
-	if !compareResources(d.Spec.ControllerResources, other.Spec.ControllerResources) {
-		changes[ControllerResources] = struct{}{}
-	}
-	if !compareResources(d.Spec.NodeResources, other.Spec.NodeResources) {
-		changes[NodeResources] = struct{}{}
-	}
-
-	if !reflect.DeepEqual(d.Spec.NodeSelector, other.Spec.NodeSelector) {
-		changes[NodeSelector] = struct{}{}
-	}
-
-	if d.Spec.PMEMPercentage != other.Spec.PMEMPercentage {
-		changes[PMEMPercentage] = struct{}{}
-	}
-
-	if !reflect.DeepEqual(d.Spec.Labels, other.Spec.Labels) {
-		changes[Labels] = struct{}{}
-	}
-
-	if bytes.Compare(d.Spec.CACert, other.Spec.CACert) != 0 {
-		changes[CACertificate] = struct{}{}
-	}
-	if bytes.Compare(d.Spec.RegistryCert, other.Spec.RegistryCert) != 0 {
-		changes[RegistryCertificate] = struct{}{}
-	}
-	if bytes.Compare(d.Spec.NodeControllerCert, other.Spec.NodeControllerCert) != 0 {
-		changes[NodeControllerCertificate] = struct{}{}
-	}
-	if bytes.Compare(d.Spec.RegistryPrivateKey, other.Spec.RegistryPrivateKey) != 0 {
-		changes[RegistryKey] = struct{}{}
-	}
-	if bytes.Compare(d.Spec.NodeControllerPrivateKey, other.Spec.NodeControllerPrivateKey) != 0 {
-		changes[NodeControllerKey] = struct{}{}
-	}
-	if d.Spec.KubeletDir != other.Spec.KubeletDir {
-		changes[KubeletDir] = struct{}{}
-	}
-
-	return changes
 }
 
 // GetHyphenedName returns the name of the deployment with dots replaced by hyphens.
@@ -622,24 +507,4 @@ func (d *Deployment) HaveCertificatesConfigured() (bool, error) {
 	}
 
 	return true, nil
-}
-
-func compareResources(rsA *corev1.ResourceRequirements, rsB *corev1.ResourceRequirements) bool {
-	if rsA == nil {
-		return rsB == nil
-	}
-	if rsB == nil {
-		return false
-	}
-	if rsA == nil && rsB != nil {
-		return false
-	}
-	if !rsA.Limits.Cpu().Equal(*rsB.Limits.Cpu()) ||
-		!rsA.Limits.Memory().Equal(*rsB.Limits.Memory()) ||
-		!rsA.Requests.Cpu().Equal(*rsB.Requests.Cpu()) ||
-		!rsA.Requests.Memory().Equal(*rsB.Requests.Memory()) {
-		return false
-	}
-
-	return true
 }
