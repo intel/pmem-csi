@@ -1,17 +1,22 @@
 # Generated with "make kustomize", do not edit!
 
 apiVersion: v1
+kind: Namespace
+metadata:
+  name: pmem-csi
+---
+apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: pmem-csi-operator
-  namespace: default
+  namespace: pmem-csi
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   creationTimestamp: null
   name: pmem-csi-operator
-  namespace: default
+  namespace: pmem-csi
 rules:
 - apiGroups:
   - ""
@@ -48,6 +53,19 @@ rules:
   - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pmem-csi-operator-event
+  namespace: pmem-csi
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - '*'
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: pmem-csi-operator
@@ -78,7 +96,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: pmem-csi-operator
-  namespace: default
+  namespace: pmem-csi
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -86,7 +104,21 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: pmem-csi-operator
-  namespace: default
+  namespace: pmem-csi
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pmem-csi-operator-event
+  namespace: pmem-csi
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pmem-csi-operator-event
+subjects:
+- kind: ServiceAccount
+  name: pmem-csi-operator
+  namespace: pmem-csi
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -99,13 +131,13 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: pmem-csi-operator
-  namespace: default
+  namespace: pmem-csi
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: pmem-csi-operator-service
-  namespace: default
+  namespace: pmem-csi
 spec:
   ports:
   - port: 9443
@@ -117,7 +149,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: pmem-csi-operator
-  namespace: default
+  namespace: pmem-csi
 spec:
   replicas: 1
   selector:
@@ -182,10 +214,11 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: pmem-csi-operator-selfsigned
+  namespace: pmem-csi
 spec:
   dnsNames:
-  - pmem-csi-operator-service.default.svc
-  - pmem-csi-operator-service.default.svc.cluster.local
+  - pmem-csi-operator-service.pmem-csi.svc
+  - pmem-csi-operator-service.pmem-csi.svc.cluster.local
   issuerRef:
     kind: Issuer
     name: self-signed-issuer
@@ -195,5 +228,6 @@ apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
   name: self-signed-issuer
+  namespace: pmem-csi
 spec:
   selfSigned: {}

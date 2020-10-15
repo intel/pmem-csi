@@ -1,0 +1,7 @@
+# replace an object's namespace to default
+# this supposed to patch the objects whose namespace
+# is explicitly in default namespace even if the operator
+# deployed in non-default namespace.
+- op: replace
+  path: /metadata/namespace
+  value: default

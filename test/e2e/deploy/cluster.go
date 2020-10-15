@@ -116,7 +116,7 @@ func (c *Cluster) WaitForAppInstance(app, ip, namespace string) *v1.Pod {
 		defer cancel()
 		pod, err = c.GetAppInstance(ctx, app, ip, namespace)
 		return err == nil && pod.Status.Phase == v1.PodRunning
-	}, "3m").Should(BeTrue(), "%s app running on host %s", app, ip)
+	}, "3m").Should(BeTrue(), "%s app running on host %s in '%s' namespace", app, ip, namespace)
 	return pod
 }
 

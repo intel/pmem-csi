@@ -32,7 +32,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2epv "k8s.io/kubernetes/test/e2e/framework/pv"
 	runtime "sigs.k8s.io/controller-runtime/pkg/client"
@@ -62,11 +64,13 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 	return d.HasOperator && !d.HasDriver
 }, func(d *deploy.Deployment) {
 	var (
-		c      *deploy.Cluster
-		ctx    context.Context
-		cancel func()
-		client runtime.Client
-		k8sver version.Version
+		c          *deploy.Cluster
+		ctx        context.Context
+		cancel     func()
+		client     runtime.Client
+		k8sver     version.Version
+		evWatcher  watch.Interface
+		evCaptured map[types.UID]map[string]struct{}
 	)
 
 	f := framework.NewDefaultFramework("operator")
@@ -87,6 +91,22 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		Expect(err).ShouldNot(HaveOccurred(), "get Kubernetes version")
 		k8sver = *ver
 
+		evWatcher, err = f.ClientSet.CoreV1().Events("").Watch(context.TODO(), metav1.ListOptions{})
+		Expect(err).ShouldNot(HaveOccurred(), "get events watcher")
+		evCaptured = map[types.UID]map[string]struct{}{}
+		go func() {
+			for watchEvent := range evWatcher.ResultChan() {
+				ev, ok := watchEvent.Object.(*corev1.Event)
+				if !ok || ev.Source.Component != "pmem-csi-operator" {
+					continue
+				}
+				if _, ok := evCaptured[ev.InvolvedObject.UID]; !ok {
+					evCaptured[ev.InvolvedObject.UID] = map[string]struct{}{}
+				}
+				evCaptured[ev.InvolvedObject.UID][ev.Reason] = struct{}{}
+			}
+		}()
+
 		// All tests are expected to complete in 5 minutes.
 		// We need to set up the global variables indirectly to avoid a warning about cancel not being called.
 		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -94,6 +114,8 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 	})
 
 	AfterEach(func() {
+		evWatcher.Stop()
+		evCaptured = nil
 		cancel()
 	})
 
@@ -124,6 +146,30 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		for _, c := range actual {
 			ExpectWithOffset(2, expected[c.Type]).Should(BeEquivalentTo(c.Status))
 		}
+	}
+
+	validateEvents := func(dep *api.Deployment, expectedEvents []string, what ...interface{}) {
+		if what == nil {
+			what = []interface{}{"validate events"}
+		}
+		expected := map[string]struct{}{}
+		for _, r := range expectedEvents {
+			expected[r] = struct{}{}
+		}
+		Eventually(func() bool {
+			reasons := map[string]struct{}{}
+			ok := false
+			if reasons, ok = evCaptured[dep.UID]; !ok {
+				// No event captured for this object
+				return false
+			}
+			for r := range reasons {
+				if _, ok := expected[r]; ok {
+					delete(expected, r)
+				}
+			}
+			return len(expected) == 0
+		}, 2*time.Minute, time.Second, what, ": ", expected)
 	}
 
 	ensureObjectRecovered := func(obj apiruntime.Object) {
@@ -187,6 +233,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					api.CertsReady:     corev1.ConditionTrue,
 					api.DriverDeployed: corev1.ConditionTrue,
 				})
+				validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonRunning})
 			})
 		}
 
@@ -288,10 +335,12 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			deployment1 = deploy.CreateDeploymentCR(f, deployment1)
 			defer deploy.DeleteDeploymentCR(f, deployment1.Name)
 			validateDriver(deployment1, "validate driver #1")
+			validateEvents(&deployment1, []string{api.EventReasonNew, api.EventReasonRunning})
 
 			deployment2 = deploy.CreateDeploymentCR(f, deployment2)
 			defer deploy.DeleteDeploymentCR(f, deployment2.Name)
-			validateDriver(deployment1, true /* TODO 2 */, "validate driver #2")
+			validateDriver(deployment2, true /* TODO 2 */, "validate driver #2")
+			validateEvents(&deployment2, []string{api.EventReasonNew, api.EventReasonRunning})
 		})
 
 		It("shall support dots in the name", func() {
@@ -314,6 +363,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				api.CertsVerified:  corev1.ConditionTrue,
 				api.DriverDeployed: corev1.ConditionTrue,
 			})
+			validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonRunning})
 		})
 
 		It("driver deployment shall be running even after operator exit", func() {
@@ -388,10 +438,12 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				out := deploy.GetDeploymentCR(f, deployment.Name)
 				return out.Status.Phase == api.DeploymentPhaseFailed
 			}, "3m", "1s").Should(BeTrue(), "deployment should fail %q", deployment.Name)
+			validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonFailed})
 
 			// Deleting the existing secret should make the deployment succeed.
 			deleteSecret(sec.Name)
 			validateDriver(deployment, true)
+			validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonRunning})
 		})
 	})
 
@@ -403,7 +455,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			},
 			"use volume": func(from, to api.DeviceMode, depName string, pvc *corev1.PersistentVolumeClaim) {
 				// Switch back to original device mode
-				switchDeploymentMode(c, f, depName, from)
+				switchDeploymentMode(c, f, depName, d.Namespace, from)
 
 				// Now try using the volume
 				app := &corev1.Pod{
@@ -491,7 +543,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						defer deploy.DeleteDeploymentCR(f, deployment.Name)
 						deploy.WaitForPMEMDriver(c, deployment.Name,
 							&deploy.Deployment{
-								Namespace: corev1.NamespaceDefault,
+								Namespace: d.Namespace,
 							})
 						validateDriver(deployment, true)
 
@@ -518,7 +570,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						framework.Logf("PVC '%s', Volume Ref: %s", pvc.Name, pvc.Spec.VolumeName)
 
 						// Switch device mode
-						deployment = switchDeploymentMode(c, f, deployment.Name, to)
+						deployment = switchDeploymentMode(c, f, deployment.Name, d.Namespace, to)
 
 						postSwitch(from, to, driverName, pvc)
 
@@ -924,12 +976,12 @@ func startOperator(c *deploy.Cluster, d *deploy.Deployment) {
 	framework.Logf("Operator is restored!")
 }
 
-func switchDeploymentMode(c *deploy.Cluster, f *framework.Framework, depName string, mode api.DeviceMode) api.Deployment {
+func switchDeploymentMode(c *deploy.Cluster, f *framework.Framework, depName, ns string, mode api.DeviceMode) api.Deployment {
 	podNames := []string{}
 
 	for i := 1; i < c.NumNodes(); i++ {
 		Eventually(func() error {
-			pod, err := c.GetAppInstance(context.Background(), depName+"-node", c.NodeIP(i), corev1.NamespaceDefault)
+			pod, err := c.GetAppInstance(context.Background(), depName+"-node", c.NodeIP(i), ns)
 			if err != nil {
 				return err
 			}
@@ -945,7 +997,7 @@ func switchDeploymentMode(c *deploy.Cluster, f *framework.Framework, depName str
 	// Wait till all the existing daemonset pods restarted
 	for _, pod := range podNames {
 		Eventually(func() bool {
-			_, err := f.ClientSet.CoreV1().Pods(corev1.NamespaceDefault).Get(context.Background(), pod, metav1.GetOptions{})
+			_, err := f.ClientSet.CoreV1().Pods(ns).Get(context.Background(), pod, metav1.GetOptions{})
 			if err != nil && errors.IsNotFound(err) {
 				return true
 			}
@@ -956,7 +1008,7 @@ func switchDeploymentMode(c *deploy.Cluster, f *framework.Framework, depName str
 
 	deploy.WaitForPMEMDriver(c, depName,
 		&deploy.Deployment{
-			Namespace: corev1.NamespaceDefault,
+			Namespace: ns,
 		})
 
 	return deployment

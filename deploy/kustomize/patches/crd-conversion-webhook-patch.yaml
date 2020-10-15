@@ -5,7 +5,7 @@
   # So, in post CSV generation(make operator-generate-catalog) we replace
   # this '.' with '/'
   path: /metadata/annotations/cert-manager.io.inject-ca-from
-  value: default/pmem-csi-operator-selfsigned
+  value: pmem-csi/pmem-csi-operator-selfsigned
 
 # Configure CRD conversion webhook
 - op: add
@@ -18,6 +18,6 @@
         #caBundle: Cg==
         service:
           name: pmem-csi-operator-service
-          namespace: default # should match with the operator namespace
+          namespace: pmem-csi # should match with the operator namespace
           port: 9443
           path: /convert

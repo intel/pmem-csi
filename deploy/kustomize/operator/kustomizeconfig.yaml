@@ -1,0 +1,4 @@
+varReference:
+- kind: RoleBinding
+  group: rbac.authorization.k8s.io
+  path: subjects/namespace

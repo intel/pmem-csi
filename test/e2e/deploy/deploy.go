@@ -696,6 +696,11 @@ func Parse(deploymentName string) (*Deployment, error) {
 	deployment := &Deployment{
 		Namespace: "default",
 	}
+	if deploymentName == "operator" {
+		// Run the operator tests in a dedicated namespace
+		// to cover the non-default namespace usecase
+		deployment.Namespace = "operator-test"
+	}
 	if deploymentName == "operator-direct-production" {
 		deployment.Namespace = "kube-system"
 	}
