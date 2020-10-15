@@ -19,7 +19,6 @@ import (
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	"github.com/intel/pmem-csi/pkg/k8sutil"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
-	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment"
 
 	//"github.com/intel/pmem-csi/pkg/pmem-operator/version"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
@@ -30,6 +29,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+
+	// import deployment to ensure that the deployment reconciler get initialized.
+	_ "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment"
 )
 
 func printVersion() {
@@ -65,12 +67,6 @@ func Main() int {
 	err = leader.Become(ctx, "pmem-csi-operator-lock")
 	if err != nil {
 		pmemcommon.ExitError("Failed to become leader: ", err)
-		return 1
-	}
-
-	klog.Info("Registering Deployment CRD.")
-	if err := deployment.EnsureCRDInstalled(cfg); err != nil {
-		pmemcommon.ExitError("Failed to install deployment CRD: ", err)
 		return 1
 	}
 
@@ -143,11 +139,6 @@ func Main() int {
 	if len(activeList) != 0 {
 		klog.Infof("There are active PMEM-CSI deployments (%v), hence not deleting the CRD.", activeList)
 		return 0
-	}
-
-	if err := deployment.DeleteCRD(cfg); err != nil {
-		pmemcommon.ExitError("Failed to delete deployment CRD: ", err)
-		return 1
 	}
 
 	return 0

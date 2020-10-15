@@ -63,9 +63,9 @@ func runGoTest(f *framework.Framework, pkg string) {
 
 	By(fmt.Sprintf("Running in PMEM-CSI pod %s", pmem.Name))
 	pod.RunInPod(f, root,
-		[]string{"_work/test.test", "_work/evil-ca", "_work/pmem-ca"},
+		[]string{"_work/test.test", "_work/evil-ca", "_work/pmem-ca", "deploy/crd/"},
 		"if _work/test.test -h 2>&1 | grep -q ginkgo; then "+
-			"TEST_WORK=_work _work/test.test -test.v -ginkgo.v; else "+
-			"TEST_WORK=_work _work/test.test -test.v; fi",
+			"TEST_WORK=_work REPO_ROOT=. _work/test.test -test.v -ginkgo.v; else "+
+			"TEST_WORK=_work REPO_ROOT=. _work/test.test -test.v; fi",
 		pmem.Namespace, pmem.Name, "pmem-driver")
 }

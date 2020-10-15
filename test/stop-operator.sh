@@ -49,6 +49,9 @@ function delete_operator() {
 
   echo "Deleting operator deployment: ${deploy}"
   cat ${deploy} | ${KUBECTL} delete -f -
+
+  echo "Deleting CRD..."
+  ${SSH} kubectl delete crd deployments.pmem-csi.intel.com
 }
 
 deploy_method=yaml
