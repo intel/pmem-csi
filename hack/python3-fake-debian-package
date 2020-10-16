@@ -1,0 +1,12 @@
+# This file is used with equivs-build to create a fake python3
+# package that then gets installed to satisfy the xfsprogs
+# dependency on Python3.
+
+Section: misc
+Priority: optional
+Standards-Version: 3.9.2
+
+Package: python3
+Version: 100:100.0
+Provides: python3:any
+Description: fake Python3 package

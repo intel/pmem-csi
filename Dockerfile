@@ -15,11 +15,16 @@ ARG CACHEBUST
 # tools and recommended packages. But this image gets pushed to a registry by the CI as a cache,
 # so it still makes sense to keep this layer small by removing /var/cache.
 RUN ${APT_GET} update && \
-    ${APT_GET} install -y gcc libndctl-dev make git curl iproute2 pkg-config xfsprogs e2fsprogs parted openssh-client python3 python3-venv && \
+    ${APT_GET} install -y gcc libndctl-dev make git curl iproute2 pkg-config xfsprogs e2fsprogs parted openssh-client python3 python3-venv equivs && \
     rm -rf /var/cache/*
 RUN curl -L https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz | tar -zxf - -C / && \
     mkdir -p /usr/local/bin/ && \
     for i in /go/bin/*; do ln -s $i /usr/local/bin/; done
+
+ADD hack/python3-fake-debian-package .
+
+# Creates python3_100.0_all.deb
+RUN equivs-build python3-fake-debian-package
 
 # Clean image for deploying PMEM-CSI.
 FROM ${LINUX_BASE} as runtime
@@ -28,6 +33,8 @@ ARG CACHEBUST
 ARG BIN_SUFFIX
 LABEL maintainers="Intel"
 LABEL description="PMEM CSI Driver"
+
+COPY --from=build python3_100.0_all.deb /var/cache/python3_100.0_all.deb
 
 # Update and install the minimal amount of additional packages that
 # are needed at runtime:
@@ -38,6 +45,7 @@ LABEL description="PMEM CSI Driver"
 # fio - only included in testing images
 RUN ${APT_GET} update && \
     mkdir -p /usr/local/share && \
+    dpkg -i /var/cache/python3_100.0_all.deb && \
     bash -c 'set -o pipefail; ${APT_GET} install -y --no-install-recommends file xfsprogs e2fsprogs lvm2 ndctl \
        | tee --append /usr/local/share/package-install.log' && \
     rm -rf /var/cache/*
