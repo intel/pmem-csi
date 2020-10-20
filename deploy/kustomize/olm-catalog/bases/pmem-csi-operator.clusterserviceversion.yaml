@@ -9,12 +9,13 @@ metadata:
     description: An operator for deploying and managing the PMEM-CSI driver
     repository: https://github.com/intel/pmem-csi/tree/release-X.Y
     support: Intel
-    createAt: 2020-06-25 10:50Z
+    createdAt: 2020-06-25 10:50Z
+    certified: "false"
+    capabilities: Seamless Upgrades
 spec:
   displayName: Operator for PMEM-CSI driver
   provider:
     name: Intel® Corporation
-    url: https://intel.com
   installModes:
   - supported: true
     type: OwnNamespace
@@ -39,6 +40,7 @@ spec:
     name: Patrick Ohly
   - email: amarnath.valluri@intel.com
     name: Amarnath Valluri
+  maturity: alpha
   customresourcedefinitions:
     owned:
     - kind: Deployment
