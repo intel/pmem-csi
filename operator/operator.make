@@ -47,7 +47,7 @@ BUNDLE_DIR=deploy/bundle
 
 KUBECONFIG := $(shell echo $(PWD)/_work/$(CLUSTER)/kube.config)
 
-PATCH_VERSIONS := sed -i -e 's;X.Y.Z;$(MAJOR_MINOR_PATCH_VERSION);g' -e 's;X.Y;$(MAJOR_MINOR_VERSION);g'
+PATCH_VERSIONS := sed -i -e 's;X\.Y\.Z;$(MAJOR_MINOR_PATCH_VERSION);g' -e 's;X\.Y;$(MAJOR_MINOR_VERSION);g'
 OPERATOR_OUTPUT_DIR := $(CATALOG_DIR)/$(MAJOR_MINOR_PATCH_VERSION)
 
 # Generate CRD and add kustomization support
