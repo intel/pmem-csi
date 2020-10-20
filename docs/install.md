@@ -1143,7 +1143,7 @@ The current API for PMEM-CSI `Deployment` resources is:
 |---|---|---|---|
 | image | string | PMEM-CSI docker image name used for the deployment | the same image as the operator<sup>1</sup> |
 | provisionerImage | string | [CSI provisioner](https://kubernetes-csi.github.io/docs/external-provisioner.html) docker image name | latest [external provisioner](https://kubernetes-csi.github.io/docs/external-provisioner.html) stable release image<sup>2</sup> |
-| registrarImage | string | [CSI node driver registrar](https://github.com/kubernetes-csi/node-driver-registrar) docker image name | latest [node driver registrar](https://kubernetes-csi.github.io/docs/node-driver-registrar.html) stable release image<sup>2</sup> |
+| nodeRegistrarImage | string | [CSI node driver registrar](https://github.com/kubernetes-csi/node-driver-registrar) docker image name | latest [node driver registrar](https://kubernetes-csi.github.io/docs/node-driver-registrar.html) stable release image<sup>2</sup> |
 | pullPolicy | string | Docker image pull policy. either one of `Always`, `Never`, `IfNotPresent` | `IfNotPresent` |
 | logLevel | integer | PMEM-CSI driver logging level | 3 |
 | deviceMode | string | Device management mode to use. Supports one of `lvm` or `direct` | `lvm`
