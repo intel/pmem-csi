@@ -71,7 +71,7 @@ function deploy_using_olm() {
   fi
 
   # Deploy the operator
-  ${BINDIR}/operator-sdk run packagemanifests --version ${VERSION} ${NAMESPACE} --timeout 3m ${TMP_CATALOG_DIR}
+  ${BINDIR}/operator-sdk run packagemanifests --version ${VERSION} ${NAMESPACE} --install-mode OwnNamespace --timeout 3m ${TMP_CATALOG_DIR}
 }
 
 function deploy_using_yaml() {
