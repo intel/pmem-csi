@@ -49,6 +49,7 @@ CRD_DIR=deploy/crd
 KUBECONFIG := $(shell echo $(PWD)/_work/$(CLUSTER)/kube.config)
 
 PATCH_VERSIONS := sed -i -e 's;X\.Y\.Z;$(MAJOR_MINOR_PATCH_VERSION);g' -e 's;X\.Y;$(MAJOR_MINOR_VERSION);g'
+PATCH_DATE := sed -i -e 's;\(.*createdAt: \).*;\1$(shell date +%FT%TZ);g'
 OPERATOR_OUTPUT_DIR := $(CATALOG_DIR)/$(MAJOR_MINOR_PATCH_VERSION)
 
 # Generate CRD and add kustomization support
@@ -64,6 +65,7 @@ operator-generate-catalog: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) _work/
 	@_work/kustomize build --load_restrictor=none $(MANIFESTS_DIR) | $< generate packagemanifests --version $(MAJOR_MINOR_PATCH_VERSION) \
 		--kustomize-dir $(MANIFESTS_DIR) --output-dir $(CATALOG_DIR)
 	@$(PATCH_VERSIONS) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
+	@$(PATCH_DATE) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
 
 # Generate OLM bundle. OperatorHub/OLM still does not support bundle format
 # but soon it will move from 'packagemanifests' to 'bundles'.
@@ -72,6 +74,7 @@ operator-generate-bundle: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) _work/k
 	@_work/kustomize build --load_restrictor=none $(MANIFESTS_DIR) | $< generate bundle  --version=$(VERSION) \
         --kustomize-dir=$(MANIFESTS_DIR) --output-dir=$(BUNDLE_DIR)
 	@$(PATCH_VERSIONS) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
+	@$(PATCH_DATE) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
 
 operator-clean-crd:
 	rm -rf $(CRD_DIR)
