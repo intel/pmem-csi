@@ -498,16 +498,14 @@ func prettyPrintObjectID(object unstructured.Unstructured) string {
 func listAllDeployedObjects(c client.Client, deployment api.Deployment) ([]unstructured.Unstructured, error) {
 	objects := []unstructured.Unstructured{}
 
-	for _, gvk := range operatordeployment.AllObjectTypes {
-		list := &unstructured.UnstructuredList{}
-		list.SetGroupVersionKind(gvk)
+	for _, list := range operatordeployment.AllObjectLists() {
 		opts := &client.ListOptions{
 			Namespace: deployment.Namespace,
 		}
 		// Filtering by owner doesn't work, so we have to use brute-force and look at all
 		// objects.
 		if err := c.List(context.Background(), list, opts); err != nil {
-			return objects, fmt.Errorf("list %s: %v", gvk, err)
+			return objects, fmt.Errorf("list %s: %v", list.GetObjectKind(), err)
 		}
 	outer:
 		for _, object := range list.Items {

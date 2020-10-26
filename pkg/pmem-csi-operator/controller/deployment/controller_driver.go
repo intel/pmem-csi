@@ -21,6 +21,7 @@ import (
 	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	"github.com/intel/pmem-csi/pkg/version"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -45,23 +46,60 @@ const (
 	provisionerMetricsPort = 10011
 )
 
+func typeMeta(gv schema.GroupVersion, kind string) metav1.TypeMeta {
+	return metav1.TypeMeta{
+		APIVersion: gv.String(),
+		Kind:       kind,
+	}
+}
+
+// A list of all currently created objects. This must be kept in sync
+// with the code in Reconcile(). When removing a type here, it must be
+// copied to obsoleteObjects below.
+//
+// The RBAC rules in deploy/kustomize/operator/operator.yaml must
+// allow all of the operations (creation, patching, etc.).
+var currentObjects = []apiruntime.Object{
+	&rbacv1.ClusterRole{TypeMeta: typeMeta(rbacv1.SchemeGroupVersion, "ClusterRole")},
+	&rbacv1.ClusterRoleBinding{TypeMeta: typeMeta(rbacv1.SchemeGroupVersion, "ClusterRoleBinding")},
+	&storagev1beta1.CSIDriver{TypeMeta: typeMeta(storagev1beta1.SchemeGroupVersion, "CSIDriver")},
+	&appsv1.DaemonSet{TypeMeta: typeMeta(appsv1.SchemeGroupVersion, "DaemonSet")},
+	&rbacv1.Role{TypeMeta: typeMeta(rbacv1.SchemeGroupVersion, "Role")},
+	&rbacv1.RoleBinding{TypeMeta: typeMeta(rbacv1.SchemeGroupVersion, "RoleBinding")},
+	&corev1.Secret{TypeMeta: typeMeta(corev1.SchemeGroupVersion, "Secret")},
+	&corev1.Service{TypeMeta: typeMeta(corev1.SchemeGroupVersion, "Service")},
+	&corev1.ServiceAccount{TypeMeta: typeMeta(corev1.SchemeGroupVersion, "ServiceAccount")},
+	&appsv1.StatefulSet{TypeMeta: typeMeta(appsv1.SchemeGroupVersion, "StatefulSet")},
+}
+
+// A list of objects that may have been created by a previous release
+// of the operator. This is relevant when updating from such an older
+// release to the current one, because the current one must remove
+// obsolete objects.
+//
+// The RBAC rules in deploy/kustomize/operator/operator.yaml must
+// allow listing and removing of these objects.
+var obsoleteObjects = []apiruntime.Object{
+	&corev1.ConfigMap{TypeMeta: typeMeta(corev1.SchemeGroupVersion, "ConfigMap")}, // included only for testing purposes
+}
+
 // A list of all object types potentially created by the operator,
 // in this or any previous release. In other words, this list may grow,
-// but never shrink, because a newer release needs to delete objects
-// created by an older release.
-// This list also must be kept in sync with the operator RBAC rules.
-var AllObjectTypes = []schema.GroupVersionKind{
-	rbacv1.SchemeGroupVersion.WithKind("RoleList"),
-	rbacv1.SchemeGroupVersion.WithKind("ClusterRoleList"),
-	rbacv1.SchemeGroupVersion.WithKind("RoleBindingList"),
-	rbacv1.SchemeGroupVersion.WithKind("ClusterRoleBindingList"),
-	corev1.SchemeGroupVersion.WithKind("ServiceAccountList"),
-	corev1.SchemeGroupVersion.WithKind("SecretList"),
-	corev1.SchemeGroupVersion.WithKind("ServiceList"),
-	corev1.SchemeGroupVersion.WithKind("ConfigMapList"),
-	appsv1.SchemeGroupVersion.WithKind("DaemonSetList"),
-	appsv1.SchemeGroupVersion.WithKind("StatefulSetList"),
-	storagev1beta1.SchemeGroupVersion.WithKind("CSIDriverList"),
+// but never shrink.
+var allObjects = append(currentObjects[:], obsoleteObjects...)
+
+// Returns a slice with a new unstructured.UnstructuredList for each object
+// in allObjects.
+func AllObjectLists() []*unstructured.UnstructuredList {
+	var lists []*unstructured.UnstructuredList
+	for _, obj := range allObjects {
+		gvk := obj.GetObjectKind().GroupVersionKind()
+		gvk.Kind += "List"
+		list := &unstructured.UnstructuredList{}
+		list.SetGroupVersionKind(gvk)
+		lists = append(lists, list)
+	}
+	return lists
 }
 
 type PmemCSIDriver struct {
@@ -150,7 +188,9 @@ func (op *ObjectPatch) Apply(c client.Client, labels map[string]string) error {
 	return c.Patch(context.TODO(), op.obj, op.patch)
 }
 
-// Reconcile reconciles the driver deployment
+// Reconcile reconciles the driver deployment. When adding new
+// objects, extend also currentObjects above and the RBAC rules in
+// deploy/kustomize/operator/operator.yaml.
 func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) error {
 
 	if err := d.EnsureDefaults(r.containerImage); err != nil {
@@ -657,14 +697,12 @@ func (d *PmemCSIDriver) deleteObsoleteObjects(r *ReconcileDeployment, newObjects
 		klog.V(5).Infof("==>%q type %q", metaObj.GetName(), obj.GetObjectKind().GroupVersionKind())
 	}
 
-	for _, gvk := range AllObjectTypes {
-		list := &unstructured.UnstructuredList{}
-		list.SetGroupVersionKind(gvk)
+	for _, list := range AllObjectLists() {
 		opts := &client.ListOptions{
 			Namespace: d.namespace,
 		}
 
-		klog.V(5).Infof("Fetching '%s' list with options: %v", gvk, opts.Namespace)
+		klog.V(5).Infof("Fetching '%s' list with options: %v", list.GetObjectKind(), opts.Namespace)
 		if err := r.client.List(context.TODO(), list, opts); err != nil {
 			return err
 		}

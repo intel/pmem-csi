@@ -18,10 +18,7 @@ import (
 	"github.com/intel/pmem-csi/pkg/k8sutil"
 	pmemcontroller "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
 	"github.com/intel/pmem-csi/pkg/version"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -166,24 +163,7 @@ func add(mgr manager.Manager, r *ReconcileDeployment) error {
 		},
 	}
 
-	// All possible object types for a Deployment CR
-	// that would requires redeploying on change
-	// NOTE: This list must be kept in sync with the objects
-	// created by PmemCSIDriver.Reconcile() in controller_driver.go
-	subresources := []runtime.Object{
-		&rbacv1.ClusterRole{},
-		&rbacv1.ClusterRoleBinding{},
-		&storagev1beta1.CSIDriver{},
-		&appsv1.DaemonSet{},
-		&rbacv1.Role{},
-		&rbacv1.RoleBinding{},
-		&corev1.Secret{},
-		&corev1.Service{},
-		&corev1.ServiceAccount{},
-		&appsv1.StatefulSet{},
-	}
-
-	for _, resource := range subresources {
+	for _, resource := range currentObjects {
 		if err := c.Watch(&source.Kind{Type: resource}, &handler.EnqueueRequestForOwner{
 			IsController: true,
 			OwnerType:    &pmemcsiv1alpha1.Deployment{},
