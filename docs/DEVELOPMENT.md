@@ -148,6 +148,9 @@ Jenkinsfile ensures that.
   and promotion of the resulting images to [Docker
   Hub](https://hub.docker.com/r/intel/pmem-csi-driver/tags?page=1&ordering=last_updated).
 * Publish the GitHub release.
+* Run `hack/merge-release.sh` on the "devel" branch and push the
+  fabricated merge commit. This documents that "devel" is at least
+  as recent as the new release.
 
 ### Release PMEM-CSI operator
 
