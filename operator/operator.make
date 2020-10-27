@@ -41,6 +41,17 @@ else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
 
+OPERATOR_COURIER_VERSION=2.1.10
+OPERATOR_COURIER_IMAGE_TAG=operator-courier:$(OPERATOR_COURIER_VERSION)
+
+_work/operator-courier-$(OPERATOR_COURIER_VERSION):
+	curl -L https://github.com/operator-framework/operator-courier/archive/v$(OPERATOR_COURIER_VERSION).tar.gz | tar -zx -C ./_work
+
+operator-courier-image: _work/operator-courier-$(OPERATOR_COURIER_VERSION)
+ifeq (, $(shell docker images --quiet $(OPERATOR_COURIER_IMAGE_TAG)))
+	@cd $< && docker build -f Dockerfile -t $(OPERATOR_COURIER_IMAGE_TAG) .
+endif
+
 MANIFESTS_DIR=deploy/kustomize/olm-catalog
 CATALOG_DIR=deploy/olm-catalog
 BUNDLE_DIR=deploy/bundle
@@ -65,6 +76,16 @@ operator-generate-catalog: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) _work/
 	@$(PATCH_VERSIONS) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
 	$(MAKE) operator-clean-crd
 	@$(PATCH_DATE) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
+	$(MAKE) operator-validate-catalog
+
+VALIDATE_CATALOG = \
+	OUT="$(shell docker run -v $(abspath $(CATALOG_DIR)):/catalog $(OPERATOR_COURIER_IMAGE_TAG) operator-courier verify --ui_validate_io /catalog 2>&1)" ; \
+	echo "$$OUT" | grep -q "^WARNING:"; \
+	if [ $$? -eq 0 ] ; then echo $$OUT ; false; fi
+
+operator-validate-catalog: operator-courier-image
+	@$(VALIDATE_CATALOG)
+
 
 # Generate OLM bundle. OperatorHub/OLM still does not support bundle format
 # but soon it will move from 'packagemanifests' to 'bundles'.
