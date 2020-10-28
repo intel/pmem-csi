@@ -15,7 +15,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
-	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/kubernetes/scheme"
 )
@@ -204,7 +204,7 @@ spec:
 			_, _, err = deserializer.Decode(data, nil, crd)
 			Expect(err).ShouldNot(HaveOccurred(), "decode crd file")
 
-			crdProp := crd.Spec.Validation.OpenAPIV3Schema
+			crdProp := crd.Spec.Versions[0].Schema.OpenAPIV3Schema
 			Expect(crdProp).ShouldNot(BeNil(), "Nil CRD schmea")
 			Expect(crdProp.Type).Should(BeEquivalentTo("object"), "Deployment JSON schema type mismatch")
 			spec, ok := crdProp.Properties["spec"]
