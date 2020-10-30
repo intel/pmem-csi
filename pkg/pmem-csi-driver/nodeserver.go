@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/keymutex"
 	"k8s.io/utils/mount"
 
 	pmemerr "github.com/intel/pmem-csi/pkg/errors"
@@ -64,6 +65,7 @@ type nodeServer struct {
 
 var _ csi.NodeServer = &nodeServer{}
 var _ grpcserver.Service = &nodeServer{}
+var volumeMutex = keymutex.NewHashed(-1)
 
 func NewNodeServer(cs *nodeControllerServer, mountDirectory string) *nodeServer {
 	return &nodeServer{

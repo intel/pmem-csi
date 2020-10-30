@@ -17,15 +17,10 @@ import (
 )
 
 func TestParameters(t *testing.T) {
-	five := uint(5)
 	yes := true
-	no := false
-	cache := PersistencyCache
 	normal := PersistencyNormal
-	foo := "foo"
 	gig := "1Gi"
 	gigNum := int64(1 * 1024 * 1024 * 1024)
-	name := "joe"
 
 	tests := []struct {
 		name       string
@@ -34,54 +29,6 @@ func TestParameters(t *testing.T) {
 		parameters Volume
 		err        string
 	}{
-		{
-			name:   "createvolume",
-			origin: CreateVolumeOrigin,
-			stringmap: VolumeContext{
-				CacheSize:        "5",
-				EraseAfter:       "false",
-				PersistencyModel: "cache",
-			},
-			parameters: Volume{
-				CacheSize:   &five,
-				EraseAfter:  &no,
-				Persistency: &cache,
-			},
-		},
-		{
-			name:   "bad-volumeid",
-			origin: CreateVolumeOrigin,
-			stringmap: VolumeContext{
-				VolumeID: foo,
-			},
-			err: `parameter "_id" invalid in this context`,
-		},
-		{
-			name:   "good-volumeid",
-			origin: CreateVolumeInternalOrigin,
-			stringmap: VolumeContext{
-				VolumeID: "foo",
-			},
-			parameters: Volume{
-				VolumeID: &foo,
-			},
-		},
-		{
-			name:   "createvolumeinternal",
-			origin: CreateVolumeInternalOrigin,
-			stringmap: VolumeContext{
-				CacheSize:        "5",
-				EraseAfter:       "false",
-				PersistencyModel: "cache",
-				VolumeID:         "foo",
-			},
-			parameters: Volume{
-				CacheSize:   &five,
-				EraseAfter:  &no,
-				Persistency: &cache,
-				VolumeID:    &foo,
-			},
-		},
 		{
 			name:   "ephemeral",
 			origin: EphemeralVolumeOrigin,
@@ -95,68 +42,15 @@ func TestParameters(t *testing.T) {
 				Size:       &gigNum,
 			},
 		},
-		{
-			name:   "publishpersistent",
-			origin: PersistentVolumeOrigin,
-			stringmap: VolumeContext{
-				CacheSize:        "5",
-				EraseAfter:       "false",
-				PersistencyModel: "cache",
-
-				Name:                     name,
-				"csi.storage.k8s.io/foo": "bar",
-				ProvisionerID:            "provisioner XYZ",
-			},
-			parameters: Volume{
-				CacheSize:   &five,
-				EraseAfter:  &no,
-				Persistency: &cache,
-				Name:        &name,
-			},
-		},
-		{
-			name:   "node",
-			origin: NodeVolumeOrigin,
-			stringmap: VolumeContext{
-				CacheSize:        "5",
-				EraseAfter:       "false",
-				PersistencyModel: "cache",
-				Size:             gig,
-				Name:             name,
-			},
-			parameters: Volume{
-				CacheSize:   &five,
-				EraseAfter:  &no,
-				Persistency: &cache,
-				Size:        &gigNum,
-				Name:        &name,
-			},
-		},
 
 		// Various parameters which are not allowed in this context.
 		{
 			name:   "invalid-parameter-create",
 			origin: CreateVolumeOrigin,
 			stringmap: VolumeContext{
-				VolumeID: "volume-id-chosen-by-attacker",
+				Size: "100",
 			},
-			err: "parameter \"_id\" invalid in this context",
-		},
-		{
-			name:   "invalid-parameter-create-internal",
-			origin: CreateVolumeInternalOrigin,
-			stringmap: VolumeContext{
-				Ephemeral: "false",
-			},
-			err: "parameter \"csi.storage.k8s.io/ephemeral\" invalid in this context",
-		},
-		{
-			name:   "invalid-ephemeral-context",
-			origin: EphemeralVolumeOrigin,
-			stringmap: VolumeContext{
-				CacheSize: gig,
-			},
-			err: "parameter \"cacheSize\" invalid in this context",
+			err: "parameter \"size\" invalid in this context",
 		},
 		{
 			name:   "invalid-persistent-context",
@@ -170,9 +64,9 @@ func TestParameters(t *testing.T) {
 			name:   "invalid-node-context",
 			origin: NodeVolumeOrigin,
 			stringmap: VolumeContext{
-				VolumeID: "volume-id",
+				"foo": "bar",
 			},
-			err: "parameter \"_id\" invalid in this context",
+			err: "parameter \"foo\" invalid in this context",
 		},
 
 		// Parse errors for size.
@@ -219,8 +113,7 @@ func TestParameters(t *testing.T) {
 						value = "normal"
 					}
 				}
-				if key != VolumeID &&
-					key != ProvisionerID &&
+				if key != ProvisionerID &&
 					!strings.HasPrefix(key, PodInfoPrefix) {
 					result[key] = value
 				}

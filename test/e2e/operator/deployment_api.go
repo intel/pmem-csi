@@ -232,7 +232,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				defer deploy.DeleteDeploymentCR(f, deployment.Name)
 				validateDriver(deployment)
 				validateConditions(deployment.Name, map[api.DeploymentConditionType]corev1.ConditionStatus{
-					api.CertsReady:     corev1.ConditionTrue,
 					api.DriverDeployed: corev1.ConditionTrue,
 				})
 				validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonRunning})
@@ -355,7 +354,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					corev1.ResourceMemory: resource.MustParse("200Mi"),
 				},
 			}
-			testcases.SetTLSOrDie(spec)
 
 			deployment = deploy.UpdateDeploymentCR(f, deployment)
 
@@ -387,14 +385,10 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 		It("shall be able to use custom CA certificates", func() {
 			deployment := getDeployment("test-deployment-with-certificates")
-			testcases.SetTLSOrDie(&deployment.Spec)
-
 			deployment = deploy.CreateDeploymentCR(f, deployment)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 			validateDriver(deployment, true)
 			validateConditions(deployment.Name, map[api.DeploymentConditionType]corev1.ConditionStatus{
-				api.CertsReady:     corev1.ConditionTrue,
-				api.CertsVerified:  corev1.ConditionTrue,
 				api.DriverDeployed: corev1.ConditionTrue,
 			})
 			validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonRunning})
@@ -408,7 +402,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 			validateDriver(deployment, true)
 			validateConditions(deployment.Name, map[api.DeploymentConditionType]corev1.ConditionStatus{
-				api.CertsReady:     corev1.ConditionTrue,
 				api.DriverDeployed: corev1.ConditionTrue,
 			})
 
@@ -703,9 +696,14 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						ObjectMeta: metav1.ObjectMeta{Name: dep.NodeSecretName(), Namespace: d.Namespace},
 					}
 				},
-				"service account": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"provisioner service account": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					return &corev1.ServiceAccount{
-						ObjectMeta: metav1.ObjectMeta{Name: dep.ServiceAccountName(), Namespace: d.Namespace},
+						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerServiceAccountName(), Namespace: d.Namespace},
+					}
+				},
+				"webhooks service account": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+					return &corev1.ServiceAccount{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksServiceAccountName(), Namespace: d.Namespace},
 					}
 				},
 				"controller service": func(dep *api.PmemCSIDeployment) apiruntime.Object {
@@ -716,6 +714,26 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				"metrics service": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					return &corev1.Service{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.MetricsServiceName(), Namespace: d.Namespace},
+					}
+				},
+				"webhooks role": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+					return &rbacv1.Role{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksRoleName(), Namespace: d.Namespace},
+					}
+				},
+				"webhooks role binding": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+					return &rbacv1.RoleBinding{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksRoleBindingName(), Namespace: d.Namespace},
+					}
+				},
+				"webhooks cluster role": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+					return &rbacv1.ClusterRole{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksClusterRoleName()},
+					}
+				},
+				"webhooks cluster role binding": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+					return &rbacv1.ClusterRoleBinding{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksClusterRoleBindingName()},
 					}
 				},
 				"provisioner role": func(dep *api.PmemCSIDeployment) apiruntime.Object {

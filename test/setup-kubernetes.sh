@@ -165,6 +165,9 @@ apiServer:
 controllerManager:
   extraArgs:
     feature-gates: ${TEST_FEATURE_GATES}
+    # Let the kube-controller-manager run as fast as it can.
+    kube-api-burst: \"100000\"
+    kube-api-qps: \"100000\"
 scheduler:
   extraVolumes:
     - name: config

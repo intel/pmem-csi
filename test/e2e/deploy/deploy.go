@@ -184,20 +184,6 @@ func WaitForPMEMDriver(c *Cluster, name string, d *Deployment) (metricsURL strin
 		}
 		version = *label.Value
 
-		pmemNodes, ok := metrics["pmem_nodes"]
-		if !ok {
-			return fmt.Errorf("expected pmem_nodes not found in metrics: %v", metrics)
-		}
-
-		if len(pmemNodes.Metric) != 1 {
-			return fmt.Errorf("expected pmem_nodes to have one metric, got: %v", pmemNodes.Metric)
-		}
-		nodesMetric := pmemNodes.Metric[0]
-		actualNodes := int(*nodesMetric.Gauge.Value)
-		if actualNodes != c.NumNodes()-1 {
-			return fmt.Errorf("only %d of %d nodes have registered", actualNodes, c.NumNodes()-1)
-		}
-
 		// Done for normal deployments.
 		if !d.Testing {
 			return nil
@@ -684,10 +670,11 @@ var allDeployments = []string{
 	"lvm-production",
 	"direct-testing",
 	"direct-production",
-	"operator",
-	"operator-lvm-production",
-	"operator-direct-production", // Uses kube-system, to ensure that deployment in a namespace also works.
-	"olm",                        // operator installed by OLM
+	// TODO: add distributed provisioning to operator
+	// "operator",
+	// "operator-lvm-production",
+	// "operator-direct-production", // Uses kube-system, to ensure that deployment in a namespace also works.
+	// "olm",                        // operator installed by OLM
 }
 var deploymentRE = regexp.MustCompile(`^(operator|olm)?-?(\w*)?-?(testing|production)?-?([0-9\.]*)$`)
 
@@ -902,8 +889,10 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 			}
 			cmd := exec.Command("test/setup-deployment.sh")
 			cmd.Dir = root
+			flavor := ""
 			env = append(env,
 				"REPO_ROOT="+root,
+				"TEST_KUBERNETES_FLAVOR="+flavor,
 				"TEST_DEPLOYMENT_QUIET=quiet",
 				"TEST_DEPLOYMENTMODE="+deployment.DeploymentMode(),
 				"TEST_DRIVER_NAMESPACE="+deployment.Namespace,
@@ -987,13 +976,8 @@ func LookupCSIAddresses(c *Cluster, namespace string) (nodeAddress, controllerAd
 	// node service will fail.
 	nodeAddress = c.NodeServiceAddress(1, SocatPort)
 
-	// The cluster controller service can be reached via
-	// any node, what matters is the service port.
-	port, err := c.GetServicePort(context.Background(), "pmem-csi-controller-testing", namespace)
-	if err != nil {
-		return "", "", fmt.Errorf("get PMEM-CSI controller service port: %v", err)
-	}
-	controllerAddress = c.NodeServiceAddress(0, port)
+	// Also use that same node as controller.
+	controllerAddress = nodeAddress
 
 	return
 }

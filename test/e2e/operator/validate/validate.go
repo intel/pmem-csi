@@ -147,25 +147,6 @@ func DriverDeployment(client client.Client, k8sver version.Version, namespace st
 		}
 		expected := findObject(expectedObjects, actual)
 		if expected == nil {
-			if actual.GetKind() == "Secret" {
-				// Custom comparison against expected
-				// content of secrets, which aren't
-				// part of the reference objects.
-				switch actual.GetName() {
-				case deployment.GetHyphenedName() + "-registry-secrets":
-					diffs = append(diffs, compareSecrets(actual,
-						deployment.Spec.CACert,
-						deployment.Spec.RegistryPrivateKey,
-						deployment.Spec.RegistryCert)...)
-					continue
-				case deployment.GetHyphenedName() + "-node-secrets":
-					diffs = append(diffs, compareSecrets(actual,
-						deployment.Spec.CACert,
-						deployment.Spec.NodeControllerPrivateKey,
-						deployment.Spec.NodeControllerCert)...)
-					continue
-				}
-			}
 			diffs = append(diffs, fmt.Sprintf("unexpected object was deployed: %s", prettyPrintObjectID(actual)))
 			continue
 		}

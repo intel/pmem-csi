@@ -89,21 +89,6 @@ type DeploymentSpec struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=text;json
 	LogFormat LogFormat `json:"logFormat,omitempty"`
-	// RegistryCert encoded certificate signed by a CA for registry server authentication
-	// If not provided, provisioned one by the operator using self-signed CA
-	RegistryCert []byte `json:"registryCert,omitempty"`
-	// RegistryPrivateKey encoded private key used for registry server certificate
-	// If not provided, provisioned one by the operator
-	RegistryPrivateKey []byte `json:"registryKey,omitempty"`
-	// NodeControllerCert encoded certificate signed by a CA for node controller server authentication
-	// If not provided, provisioned one by the operator using self-signed CA
-	NodeControllerCert []byte `json:"nodeControllerCert,omitempty"`
-	// NodeControllerPrivateKey encoded private key used for node controller server certificate
-	// If not provided, provisioned one by the operator
-	NodeControllerPrivateKey []byte `json:"nodeControllerKey,omitempty"`
-	// CACert encoded root certificate of the CA by which the registry and node controller certificates are signed
-	// If not provided operator uses a self-signed CA certificate
-	CACert []byte `json:"caCert,omitempty"`
 	// NodeSelector node labels to use for selection of driver node
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 	// PMEMPercentage represents the percentage of space to be used by the driver in each PMEM region
@@ -122,11 +107,6 @@ type DeploymentSpec struct {
 type DeploymentConditionType string
 
 const (
-	// CertsVerified means the provided deployment secrets are verified and valid for usage
-	CertsVerified DeploymentConditionType = "CertsVerified"
-	// CertsReady means secrests/certificates required for running the PMEM-CSI driver
-	// are ready and the deployment could progress further
-	CertsReady DeploymentConditionType = "CertsReady"
 	// DriverDeployed means that the all the sub-resources required for the deployment CR
 	// got created
 	DriverDeployed DeploymentConditionType = "DriverDeployed"
@@ -251,8 +231,9 @@ const (
 	// The sidecar versions must be kept in sync with the
 	// deploy/kustomize YAML files!
 
-	defaultProvisionerImageName = "k8s.gcr.io/sig-storage/csi-provisioner"
-	defaultProvisionerImageTag  = "v2.0.2"
+	// TODO: use released image
+	defaultProvisionerImageName = "gcr.io/k8s-staging-sig-storage/csi-provisioner"
+	defaultProvisionerImageTag  = "canary"
 	// DefaultProvisionerImage default external provisioner image to use
 	DefaultProvisionerImage = defaultProvisionerImageName + ":" + defaultProvisionerImageTag
 
@@ -497,9 +478,39 @@ func (d *PmemCSIDeployment) MetricsServiceName() string {
 	return d.GetHyphenedName() + "-metrics"
 }
 
-// ServiceAccountName returns the name of the ServiceAccount
-// object used by the deployment
-func (d *PmemCSIDeployment) ServiceAccountName() string {
+// WebhooksServiceAccountName returns the name of the service account
+// used by the StatefulSet with the webhooks.
+func (d *PmemCSIDeployment) WebhooksServiceAccountName() string {
+	return d.GetHyphenedName() + "-webhooks"
+}
+
+// WebhooksRoleName returns the name of the webhooks'
+// RBAC Role object name used by the deployment
+func (d *PmemCSIDeployment) WebhooksRoleName() string {
+	return d.GetHyphenedName() + "-webhooks-cfg"
+}
+
+// WebhooksRoleBindingName returns the name of the webhooks'
+// RoleBinding object name used by the deployment
+func (d *PmemCSIDeployment) WebhooksRoleBindingName() string {
+	return d.GetHyphenedName() + "-webhooks-role-cfg"
+}
+
+// WebhooksClusterRoleName returns the name of the
+// webhooks' ClusterRole object name used by the deployment
+func (d *PmemCSIDeployment) WebhooksClusterRoleName() string {
+	return d.GetHyphenedName() + "-webhooks-runner"
+}
+
+// WebhooksClusterRoleBindingName returns the name of the
+// webhooks' ClusterRoleBinding object name used by the deployment
+func (d *PmemCSIDeployment) WebhooksClusterRoleBindingName() string {
+	return d.GetHyphenedName() + "-webhooks-role"
+}
+
+// NodeServiceAccountName returns the name of the service account
+// used by the DaemonSet with the external-provisioner
+func (d *PmemCSIDeployment) ProvisionerServiceAccountName() string {
 	return d.GetHyphenedName() + "-controller"
 }
 
@@ -552,30 +563,4 @@ func (d *PmemCSIDeployment) GetOwnerReference() metav1.OwnerReference {
 		BlockOwnerDeletion: &blockOwnerDeletion,
 		Controller:         &isController,
 	}
-}
-
-// HaveCertificatesConfigured checks if the configured deployment
-// certificate fields are valid. Returns
-// - true with nil error if provided certificates are valid.
-// - false with nil error if no certificates are provided.
-// - false with appropriate error if invalid/incomplete certificates provided.
-func (d *PmemCSIDeployment) HaveCertificatesConfigured() (bool, error) {
-	// Encoded private keys and certificates
-	caCert := d.Spec.CACert
-	registryPrKey := d.Spec.RegistryPrivateKey
-	ncPrKey := d.Spec.NodeControllerPrivateKey
-	registryCert := d.Spec.RegistryCert
-	ncCert := d.Spec.NodeControllerCert
-
-	// sanity check
-	if caCert == nil {
-		if registryCert != nil || ncCert != nil {
-			return false, fmt.Errorf("incomplete deployment configuration: missing root CA certificate by which the provided certificates are signed")
-		}
-		return false, nil
-	} else if registryCert == nil || registryPrKey == nil || ncCert == nil || ncPrKey == nil {
-		return false, fmt.Errorf("incomplete deployment configuration: certificates and corresponding private keys must be provided")
-	}
-
-	return true, nil
 }

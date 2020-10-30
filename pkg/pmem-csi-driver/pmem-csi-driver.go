@@ -24,18 +24,12 @@ import (
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
-	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
 	pmemstate "github.com/intel/pmem-csi/pkg/pmem-state"
-	"github.com/intel/pmem-csi/pkg/registryserver"
 	"github.com/intel/pmem-csi/pkg/scheduler"
 	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/connectivity"
-	"google.golang.org/grpc/status"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
@@ -55,7 +49,7 @@ type DriverMode string
 
 func (mode *DriverMode) Set(value string) error {
 	switch value {
-	case string(Controller), string(Node):
+	case string(Node), string(Webhooks):
 		*mode = DriverMode(value)
 	default:
 		// The flag package will add the value to the final output, no need to do it here.
@@ -71,10 +65,10 @@ func (mode *DriverMode) String() string {
 // The mode strings are part of the metrics API (-> csi_controller,
 // csi_node as subsystem), do not change them!
 const (
-	//Controller definition for controller driver mode
-	Controller DriverMode = "controller"
-	//Node definition for noder driver mode
+	// Node driver with support for provisioning.
 	Node DriverMode = "node"
+	// Just the webhooks, using metrics instead of gRPC over TCP.
+	Webhooks DriverMode = "webhooks"
 )
 
 var (
@@ -104,25 +98,14 @@ type Config struct {
 	NodeID string
 	//Endpoint exported csi driver endpoint
 	Endpoint string
-	//TestEndpoint adds the controller service to the server listening on Endpoint.
-	//Only needed for testing.
-	TestEndpoint bool
 	//Mode mode fo the driver
 	Mode DriverMode
-	//RegistryEndpoint exported registry server endpoint
-	RegistryEndpoint string
 	//CAFile Root certificate authority certificate file
 	CAFile string
 	//CertFile certificate for server authentication
 	CertFile string
 	//KeyFile server private key file
 	KeyFile string
-	//ClientCertFile certificate for client side authentication
-	ClientCertFile string
-	//ClientKeyFile client private key
-	ClientKeyFile string
-	//ControllerEndpoint exported node controller endpoint
-	ControllerEndpoint string
 	//DeviceManager device manager to use
 	DeviceManager api.DeviceMode
 	//Directory where to persist the node driver state
@@ -142,17 +125,11 @@ type Config struct {
 }
 
 type csiDriver struct {
-	cfg             Config
-	serverTLSConfig *tls.Config
-	clientTLSConfig *tls.Config
-	gatherers       prometheus.Gatherers
+	cfg       Config
+	gatherers prometheus.Gatherers
 }
 
 func GetCSIDriver(cfg Config) (*csiDriver, error) {
-	var serverConfig *tls.Config
-	var clientConfig *tls.Config
-	var err error
-
 	if cfg.DriverName == "" {
 		return nil, errors.New("driver name configuration option missing")
 	}
@@ -162,47 +139,8 @@ func GetCSIDriver(cfg Config) (*csiDriver, error) {
 	if cfg.Mode == Node && cfg.NodeID == "" {
 		return nil, errors.New("node ID configuration option missing")
 	}
-	if cfg.Mode == Controller && cfg.RegistryEndpoint == "" {
-		return nil, errors.New("registry endpoint configuration option missing")
-	}
-	if cfg.Mode == Node && cfg.ControllerEndpoint == "" {
-		return nil, errors.New("internal controller endpoint configuration option missing")
-	}
 	if cfg.Mode == Node && cfg.StateBasePath == "" {
 		cfg.StateBasePath = "/var/lib/" + cfg.DriverName
-	}
-	if cfg.Endpoint == cfg.RegistryEndpoint {
-		return nil, fmt.Errorf("CSI and registry endpoints must be different, both are: %q", cfg.Endpoint)
-	}
-	if cfg.Endpoint == cfg.ControllerEndpoint {
-		return nil, fmt.Errorf("CSI and internal control endpoints must be different, both are: %q", cfg.Endpoint)
-	}
-
-	peerName := "pmem-registry"
-	if cfg.Mode == Controller {
-		//When driver running in Controller mode, we connect to node controllers
-		//so use appropriate peer name
-		peerName = "pmem-node-controller"
-	}
-
-	if cfg.CertFile != "" && cfg.KeyFile != "" {
-		serverConfig, err = pmemgrpc.LoadServerTLS(cfg.CAFile, cfg.CertFile, cfg.KeyFile, peerName)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	/* if no client certificate details provided use same server certificate to connect to peer server */
-	if cfg.ClientCertFile == "" {
-		cfg.ClientCertFile = cfg.CertFile
-		cfg.ClientKeyFile = cfg.KeyFile
-	}
-
-	if cfg.ClientCertFile != "" && cfg.ClientKeyFile != "" {
-		clientConfig, err = pmemgrpc.LoadClientTLS(cfg.CAFile, cfg.ClientCertFile, cfg.ClientKeyFile, peerName)
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	DriverTopologyKey = cfg.DriverName + "/node"
@@ -212,9 +150,7 @@ func GetCSIDriver(cfg Config) (*csiDriver, error) {
 	buildInfo.With(prometheus.Labels{"version": cfg.Version}).Set(1)
 
 	return &csiDriver{
-		cfg:             cfg,
-		serverTLSConfig: serverConfig,
-		clientTLSConfig: clientConfig,
+		cfg: cfg,
 		// We use the default Prometheus registry here in addition to
 		// any custom CSIMetricsManager.  Therefore we also return all
 		// data that is registered globally, including (but not
@@ -227,12 +163,6 @@ func GetCSIDriver(cfg Config) (*csiDriver, error) {
 }
 
 func (csid *csiDriver) Run() error {
-	// Create GRPC servers
-	ids, err := NewIdentityServer(csid.cfg.DriverName, csid.cfg.Version)
-	if err != nil {
-		return err
-	}
-
 	s := grpcserver.NewNonBlockingGRPCServer()
 	// Ensure that the server is stopped before we return.
 	defer func() {
@@ -242,33 +172,24 @@ func (csid *csiDriver) Run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// On the csi.sock endpoint we gather statistics for incoming
-	// CSI method calls like any other CSI driver.
-	cmm := metrics.NewCSIMetricsManagerWithOptions(csid.cfg.DriverName,
-		metrics.WithProcessStartTime(false),
-		metrics.WithSubsystem(metrics.SubsystemPlugin),
-	)
-	csid.gatherers = append(csid.gatherers, cmm.GetRegistry())
-
 	switch csid.cfg.Mode {
-	case Controller:
-		rs := registryserver.New(csid.clientTLSConfig, csid.cfg.DriverName)
-		csid.gatherers = append(csid.gatherers, rs.GetMetricsGatherer())
-		cs := NewMasterControllerServer(rs)
-
-		if err := s.Start(csid.cfg.Endpoint, nil, cmm, ids, cs); err != nil {
-			return err
+	case Webhooks:
+		namespace := os.Getenv("POD_NAMESPACE")
+		if namespace == "" {
+			return errors.New("POD_NAMESPACE env variable is not set")
 		}
-		if err := s.Start(csid.cfg.RegistryEndpoint, csid.serverTLSConfig, nil /* no metrics gathering for registry at the moment */, rs); err != nil {
-			return err
+		// Just the scheduler extender!
+		if csid.cfg.schedulerListen == "" {
+			return errors.New("webhooks mode needs a scheduler listen address")
 		}
-
-		// Also run scheduler extender?
-		if csid.cfg.schedulerListen != "" {
-			c := scheduler.CapacityViaRegistry(rs)
-			if _, err := csid.startScheduler(ctx, cancel, c); err != nil {
-				return err
-			}
+		factory := informers.NewSharedInformerFactoryWithOptions(csid.cfg.client, resyncPeriod,
+			informers.WithNamespace(namespace),
+		)
+		podLister := factory.Core().V1().Pods().Lister()
+		c := scheduler.CapacityViaMetrics(namespace, csid.cfg.DriverName, podLister)
+		factory.Start(ctx.Done())
+		if _, err := csid.startScheduler(ctx, cancel, c); err != nil {
+			return err
 		}
 	case Node:
 		dm, err := pmdmanager.New(csid.cfg.DeviceManager, csid.cfg.PmemPercentage)
@@ -279,31 +200,21 @@ func (csid *csiDriver) Run() error {
 		if err != nil {
 			return err
 		}
+
+		// On the csi.sock endpoint we gather statistics for incoming
+		// CSI method calls like any other CSI driver.
+		cmm := metrics.NewCSIMetricsManagerWithOptions(csid.cfg.DriverName,
+			metrics.WithProcessStartTime(false),
+			metrics.WithSubsystem(metrics.SubsystemPlugin),
+		)
+		csid.gatherers = append(csid.gatherers, cmm.GetRegistry())
+
+		// Create GRPC servers
+		ids := NewIdentityServer(csid.cfg.DriverName, csid.cfg.Version)
 		cs := NewNodeControllerServer(csid.cfg.NodeID, dm, sm)
 		ns := NewNodeServer(cs, filepath.Clean(csid.cfg.StateBasePath)+"/mount")
 
-		// Internal CSI calls are tracked on the server side
-		// with a custom "pmem_csi_node" subsystem. The
-		// corresponding client calls use "pmem_csi_controller" with
-		// a tag that identifies the node that is being called.
-		cmmInternal := metrics.NewCSIMetricsManagerWithOptions(csid.cfg.DriverName,
-			metrics.WithProcessStartTime(false),
-			metrics.WithSubsystem("pmem_csi_node"),
-			// Always add the instance label to allow correlating with
-			// the controller calls.
-			metrics.WithLabels(map[string]string{registryserver.NodeLabel: csid.cfg.NodeID}),
-		)
-		csid.gatherers = append(csid.gatherers, cmmInternal.GetRegistry())
-		if err := s.Start(csid.cfg.ControllerEndpoint, csid.serverTLSConfig, cmmInternal, cs); err != nil {
-			return err
-		}
-		if err := csid.registerNodeController(); err != nil {
-			return err
-		}
-		services := []grpcserver.Service{ids, ns}
-		if csid.cfg.TestEndpoint {
-			services = append(services, cs)
-		}
+		services := []grpcserver.Service{ids, ns, cs}
 		if err := s.Start(csid.cfg.Endpoint, nil, cmm, services...); err != nil {
 			return err
 		}
@@ -336,33 +247,6 @@ func (csid *csiDriver) Run() error {
 	}
 	s.Stop()
 	s.Wait()
-
-	return nil
-}
-
-func (csid *csiDriver) registerNodeController() error {
-	var err error
-	var conn *grpc.ClientConn
-
-	for {
-		klog.V(3).Infof("Connecting to registry server at: %s\n", csid.cfg.RegistryEndpoint)
-		conn, err = pmemgrpc.Connect(csid.cfg.RegistryEndpoint, csid.clientTLSConfig)
-		if err == nil {
-			break
-		}
-		klog.Warningf("Failed to connect registry server: %s, retrying after %v seconds...", err.Error(), retryTimeout.Seconds())
-		time.Sleep(retryTimeout)
-	}
-
-	req := &registry.RegisterControllerRequest{
-		NodeId:   csid.cfg.NodeID,
-		Endpoint: csid.cfg.ControllerEndpoint,
-	}
-
-	if err := register(context.Background(), conn, req); err != nil {
-		return err
-	}
-	go waitAndWatchConnection(conn, req)
 
 	return nil
 }
@@ -458,50 +342,4 @@ func (csid *csiDriver) startHTTPSServer(ctx context.Context, cancel func(), list
 	}()
 
 	return tcpListener.Addr().String(), nil
-}
-
-// waitAndWatchConnection Keeps watching for connection changes, and whenever the
-// connection state changed from lost to ready, it re-register the node controller with registry server.
-func waitAndWatchConnection(conn *grpc.ClientConn, req *registry.RegisterControllerRequest) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	connectionLost := false
-
-	for {
-		s := conn.GetState()
-		if s == connectivity.Ready {
-			if connectionLost {
-				klog.V(4).Info("ReConnected.")
-				if err := register(ctx, conn, req); err != nil {
-					klog.Warning(err)
-				}
-			}
-		} else {
-			connectionLost = true
-			klog.V(4).Info("Connection state: ", s)
-		}
-		conn.WaitForStateChange(ctx, s)
-	}
-}
-
-// register Tries to register with RegistryServer in endless loop till,
-// either the registration succeeds or RegisterController() returns only possible InvalidArgument error.
-func register(ctx context.Context, conn *grpc.ClientConn, req *registry.RegisterControllerRequest) error {
-	client := registry.NewRegistryClient(conn)
-	for {
-		klog.V(3).Info("Registering controller...")
-		if _, err := client.RegisterController(ctx, req); err != nil {
-			if s, ok := status.FromError(err); ok && s.Code() == codes.InvalidArgument {
-				return fmt.Errorf("Registration failed: %s", s.Message())
-			}
-			klog.Warningf("Failed to register: %s, retrying after %v seconds...", err.Error(), retryTimeout.Seconds())
-			time.Sleep(retryTimeout)
-		} else {
-			break
-		}
-	}
-	klog.V(4).Info("Registration success")
-
-	return nil
 }

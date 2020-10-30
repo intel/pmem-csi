@@ -8,20 +8,11 @@ package deployment
 
 import (
 	"context"
-	"crypto/rsa"
-	"crypto/tls"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"path"
 	"reflect"
-	"runtime"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
-	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	"github.com/intel/pmem-csi/pkg/logger"
-	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
-	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	"github.com/intel/pmem-csi/pkg/version"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -214,18 +205,9 @@ func (d *pmemCSIDeployment) reconcile(ctx context.Context, r *ReconcileDeploymen
 	l.V(3).Info("start", "deployment", d.Name, "phase", d.Status.Phase)
 	var allObjects []apiruntime.Object
 	redeployAll := func() error {
-		var o apiruntime.Object
-		var err error
-		s, err := d.redeploySecrets(ctx, r)
-		if err != nil {
-			return err
-		}
-		for _, o := range s {
-			allObjects = append(allObjects, o)
-		}
-
 		for name, handler := range subObjectHandlers {
-			if o, err = d.redeploy(ctx, r, handler); err != nil {
+			o, err := d.redeploy(ctx, r, handler)
+			if err != nil {
 				return fmt.Errorf("failed to update %s: %v", name, err)
 			}
 			allObjects = append(allObjects, o)
@@ -318,80 +300,6 @@ func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment
 		}
 	}
 	return o, nil
-}
-
-// redeploySecrets ensures that the secrets get (re)deployed that are
-// required for running the driver.
-//
-// First it checks if the deployment is configured with the needed certificates.
-// If provided, validate and (re)create secrets using them.
-// Else, provision new certificates(only if no existing secrets found) and deploy.
-//
-// We cannot use d.redeploy() as secrets needs to be provisioned if not preset.
-// This special case cannot be fit into generice redeploy logic.
-func (d *pmemCSIDeployment) redeploySecrets(ctx context.Context, r *ReconcileDeployment) ([]*corev1.Secret, error) {
-	rs := &corev1.Secret{
-		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: d.getObjectMeta(d.RegistrySecretName(), false),
-	}
-	if err := d.getSubObject(ctx, r, rs); err != nil {
-		return nil, err
-	}
-	rop := newObjectPatch(rs, rs.DeepCopy())
-
-	ns := &corev1.Secret{
-		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: d.getObjectMeta(d.NodeSecretName(), false),
-	}
-	if err := d.getSubObject(ctx, r, ns); err != nil {
-		return nil, err
-	}
-	nop := newObjectPatch(ns, ns.DeepCopy())
-
-	update := func() error {
-		d.getRegistrySecrets(rs)
-		if err := d.updateSubObject(ctx, r, rop); err != nil {
-			return fmt.Errorf("failed to update registry secrets: %w", err)
-		}
-
-		d.getNodeSecrets(ns)
-		if err := d.updateSubObject(ctx, r, nop); err != nil {
-			return fmt.Errorf("failed to update node secrets: %w", err)
-		}
-		return nil
-	}
-
-	certsProvided, err := d.HaveCertificatesConfigured()
-	if err != nil {
-		return nil, err
-	}
-
-	updateSecrets := false
-	if certsProvided {
-		// Use  provided certificates
-		if err := d.validateCertificates(); err != nil {
-			d.SetCondition(api.CertsVerified, corev1.ConditionFalse, err.Error())
-			return nil, err
-		}
-		d.SetCondition(api.CertsVerified, corev1.ConditionTrue, "Driver certificates validated.")
-		updateSecrets = true
-	} else if rop.isNew() || nop.isNew() {
-		// Provision new self-signed certificates if not already present
-		if err := d.provisionCertificates(ctx); err != nil {
-			d.SetCondition(api.CertsReady, corev1.ConditionFalse, err.Error())
-			return nil, err
-		}
-		updateSecrets = true
-	}
-
-	if updateSecrets {
-		if err := update(); err != nil {
-			return nil, err
-		}
-	}
-	d.SetCondition(api.CertsReady, corev1.ConditionTrue, "Driver certificates are available.")
-
-	return []*corev1.Secret{rs, ns}, nil
 }
 
 var subObjectHandlers = map[string]redeployObject{
@@ -493,6 +401,58 @@ var subObjectHandlers = map[string]redeployObject{
 			return nil
 		},
 	},
+	"webhooks role": {
+		objType: reflect.TypeOf(&rbacv1.Role{}),
+		object: func(d *pmemCSIDeployment) apiruntime.Object {
+			return &rbacv1.Role{
+				TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: d.getObjectMeta(d.WebhooksRoleName(), false),
+			}
+		},
+		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+			d.getWebhooksRole(o.(*rbacv1.Role))
+			return nil
+		},
+	},
+	"webhooks role binding": {
+		objType: reflect.TypeOf(&rbacv1.RoleBinding{}),
+		object: func(d *pmemCSIDeployment) apiruntime.Object {
+			return &rbacv1.RoleBinding{
+				TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: d.getObjectMeta(d.WebhooksRoleBindingName(), false),
+			}
+		},
+		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+			d.getWebhooksRoleBinding(o.(*rbacv1.RoleBinding))
+			return nil
+		},
+	},
+	"webhooks cluster role": {
+		objType: reflect.TypeOf(&rbacv1.ClusterRole{}),
+		object: func(d *pmemCSIDeployment) apiruntime.Object {
+			return &rbacv1.ClusterRole{
+				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: d.getObjectMeta(d.WebhooksClusterRoleName(), true),
+			}
+		},
+		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+			d.getWebhooksClusterRole(o.(*rbacv1.ClusterRole))
+			return nil
+		},
+	},
+	"webhooks cluster role binding": {
+		objType: reflect.TypeOf(&rbacv1.ClusterRoleBinding{}),
+		object: func(d *pmemCSIDeployment) apiruntime.Object {
+			return &rbacv1.ClusterRoleBinding{
+				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: d.getObjectMeta(d.WebhooksClusterRoleBindingName(), true),
+			}
+		},
+		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+			d.getWebhooksClusterRoleBinding(o.(*rbacv1.ClusterRoleBinding))
+			return nil
+		},
+	},
 	"provisioner role": {
 		objType: reflect.TypeOf(&rbacv1.Role{}),
 		object: func(d *pmemCSIDeployment) apiruntime.Object {
@@ -545,12 +505,12 @@ var subObjectHandlers = map[string]redeployObject{
 			return nil
 		},
 	},
-	"service account": {
+	"provisioner service account": {
 		objType: reflect.TypeOf(&corev1.ServiceAccount{}),
 		object: func(d *pmemCSIDeployment) apiruntime.Object {
 			return &corev1.ServiceAccount{
 				TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-				ObjectMeta: d.getObjectMeta(d.ServiceAccountName(), false),
+				ObjectMeta: d.getObjectMeta(d.ProvisionerServiceAccountName(), false),
 			}
 		},
 		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
@@ -585,13 +545,6 @@ func (d *pmemCSIDeployment) handleEvent(ctx context.Context, metaData metav1.Obj
 		}
 		if err := r.patchDeploymentStatus(d.PmemCSIDeployment, client.MergeFrom(org)); err != nil {
 			return fmt.Errorf("failed to update deployment CR status: %v", err)
-		}
-	}
-
-	if objType == v1SecretPtr {
-		l.V(3).Info("redeploying", "name", "driver secrets", "object", logger.KObjWithType(metaData))
-		if _, err := d.redeploySecrets(ctx, r); err != nil {
-			return fmt.Errorf("failed to redeploy %q secrets: %v", metaData.GetName(), err)
 		}
 	}
 
@@ -674,105 +627,6 @@ func (d *pmemCSIDeployment) deleteObsoleteObjects(ctx context.Context, r *Reconc
 	return nil
 }
 
-func (d *pmemCSIDeployment) getRegistrySecrets(secret *corev1.Secret) {
-	d.getSecret(secret, "registry-secrets", d.Spec.CACert, d.Spec.RegistryPrivateKey, d.Spec.RegistryCert)
-}
-
-func (d *pmemCSIDeployment) getNodeSecrets(secret *corev1.Secret) {
-	d.getSecret(secret, "node-secrets", d.Spec.CACert, d.Spec.NodeControllerPrivateKey, d.Spec.NodeControllerCert)
-}
-
-func (d *pmemCSIDeployment) provisionCertificates(ctx context.Context) error {
-	l := logger.Get(ctx).WithName("provisionCertificates")
-	var prKey *rsa.PrivateKey
-
-	l.V(3).Info("provisioning new certificates")
-	ca, err := pmemtls.NewCA(nil, nil)
-	if err != nil {
-		return fmt.Errorf("failed to initialize CA: %v", err)
-	}
-	d.Spec.CACert = ca.EncodedCertificate()
-
-	if d.Spec.RegistryPrivateKey != nil {
-		prKey, err = pmemtls.DecodeKey(d.Spec.RegistryPrivateKey)
-	} else {
-		prKey, err = pmemtls.NewPrivateKey()
-		d.Spec.RegistryPrivateKey = pmemtls.EncodeKey(prKey)
-	}
-	if err != nil {
-		return err
-	}
-
-	cert, err := ca.GenerateCertificate("pmem-registry", prKey.Public())
-	if err != nil {
-		return fmt.Errorf("failed to generate registry certificate: %v", err)
-	}
-	d.Spec.RegistryCert = pmemtls.EncodeCert(cert)
-
-	if d.Spec.NodeControllerPrivateKey == nil {
-		prKey, err = pmemtls.NewPrivateKey()
-		d.Spec.NodeControllerPrivateKey = pmemtls.EncodeKey(prKey)
-	} else {
-		prKey, err = pmemtls.DecodeKey(d.Spec.NodeControllerPrivateKey)
-	}
-	if err != nil {
-		return err
-	}
-
-	cert, err = ca.GenerateCertificate("pmem-node-controller", prKey.Public())
-	if err != nil {
-		return err
-	}
-	d.Spec.NodeControllerCert = pmemtls.EncodeCert(cert)
-
-	// Instead of waiting for next GC cycle, initiate garbage collector manually
-	// so that the unneeded CA key, certificate get removed.
-	defer runtime.GC()
-
-	return nil
-}
-
-// validateCertificates ensures that the given keys and certificates are valid
-// to start PMEM-CSI driver by running a mutual-tls registry server and initiating
-// a tls client connection to that sever using the provided keys and certificates.
-// As we use mutual-tls, testing one server is enough to make sure that the provided
-// certificates works
-func (d *pmemCSIDeployment) validateCertificates() error {
-	tmp, err := ioutil.TempDir("", "pmem-csi-validate-certs-*")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(tmp)
-
-	// Registry server config
-	regCfg, err := pmemgrpc.ServerTLS(d.Spec.CACert, d.Spec.RegistryCert, d.Spec.RegistryPrivateKey, "pmem-node-controller")
-	if err != nil {
-		return err
-	}
-
-	clientCfg, err := pmemgrpc.ClientTLS(d.Spec.CACert, d.Spec.NodeControllerCert, d.Spec.NodeControllerPrivateKey, "pmem-registry")
-	if err != nil {
-		return err
-	}
-
-	// start a registry server
-	server := grpcserver.NewNonBlockingGRPCServer()
-	path := path.Join(tmp, "socket")
-	if err := server.Start("unix://"+path, regCfg, nil); err != nil {
-		return fmt.Errorf("registry certificate: %w", err)
-	}
-	defer server.ForceStop()
-
-	conn, err := tls.Dial("unix", path, clientCfg)
-	if err != nil {
-		return fmt.Errorf("node certificate: %w", err)
-	}
-
-	conn.Close()
-
-	return nil
-}
-
 func (d *pmemCSIDeployment) getCSIDriver(csiDriver *storagev1beta1.CSIDriver) {
 	attachRequired := false
 	podInfoOnMount := true
@@ -823,6 +677,67 @@ func (d *pmemCSIDeployment) getMetricsService(service *corev1.Service) {
 	d.getService(service, corev1.ServiceTypeNodePort, controllerMetricsPort)
 }
 
+func (d *pmemCSIDeployment) getWebhooksRole(role *rbacv1.Role) {
+	role.Rules = []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"pods"},
+			Verbs: []string{
+				"get", "watch", "list",
+			},
+		},
+	}
+}
+
+func (d *pmemCSIDeployment) getWebhooksRoleBinding(rb *rbacv1.RoleBinding) {
+	rb.Subjects = []rbacv1.Subject{
+		{
+			Kind:      "ServiceAccount",
+			Name:      d.WebhooksServiceAccountName(),
+			Namespace: d.namespace,
+		},
+	}
+	rb.RoleRef = rbacv1.RoleRef{
+		APIGroup: "rbac.authorization.k8s.io",
+		Kind:     "Role",
+		Name:     d.WebhooksRoleName(),
+	}
+}
+
+func (d *pmemCSIDeployment) getWebhooksClusterRole(cr *rbacv1.ClusterRole) {
+	cr.Rules = []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"persistentvolumeclaims"},
+			Verbs: []string{
+				"get", "list", "watch",
+			},
+		},
+		{
+			APIGroups: []string{"storage.k8s.io"},
+			Resources: []string{"storageclasses"},
+			Verbs: []string{
+				"get", "list", "watch",
+			},
+		},
+	}
+}
+
+func (d *pmemCSIDeployment) getWebhooksClusterRoleBinding(crb *rbacv1.ClusterRoleBinding) {
+	crb.Subjects = []rbacv1.Subject{
+		{
+			Kind:      "ServiceAccount",
+			Name:      d.WebhooksServiceAccountName(),
+			Namespace: d.namespace,
+		},
+	}
+	crb.RoleRef = rbacv1.RoleRef{
+		APIGroup: "rbac.authorization.k8s.io",
+		Kind:     "ClusterRole",
+		Name:     d.WebhooksClusterRoleName(),
+	}
+}
+
 func (d *pmemCSIDeployment) getControllerProvisionerRole(role *rbacv1.Role) {
 	role.Rules = []rbacv1.PolicyRule{
 		{
@@ -870,14 +785,14 @@ func (d *pmemCSIDeployment) getControllerProvisionerRoleBinding(rb *rbacv1.RoleB
 	rb.Subjects = []rbacv1.Subject{
 		{
 			Kind:      "ServiceAccount",
-			Name:      d.GetHyphenedName() + "-controller",
+			Name:      d.ProvisionerServiceAccountName(),
 			Namespace: d.namespace,
 		},
 	}
 	rb.RoleRef = rbacv1.RoleRef{
 		APIGroup: "rbac.authorization.k8s.io",
 		Kind:     "Role",
-		Name:     d.GetHyphenedName() + "-external-provisioner-cfg",
+		Name:     d.ProvisionerRoleName(),
 	}
 }
 
@@ -946,7 +861,7 @@ func (d *pmemCSIDeployment) getControllerProvisionerClusterRoleBinding(crb *rbac
 	crb.Subjects = []rbacv1.Subject{
 		{
 			Kind:      "ServiceAccount",
-			Name:      d.ServiceAccountName(),
+			Name:      d.ProvisionerServiceAccountName(),
 			Namespace: d.namespace,
 		},
 	}
@@ -969,7 +884,7 @@ func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 				"app": d.GetHyphenedName() + "-controller",
 			},
 		},
-		ServiceName: d.GetHyphenedName() + "-controller",
+		ServiceName: d.WebhooksServiceAccountName(),
 		Template: corev1.PodTemplateSpec{
 			ObjectMeta: metav1.ObjectMeta{
 				Labels: joinMaps(
@@ -991,37 +906,6 @@ func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 				ServiceAccountName: d.GetHyphenedName() + "-controller",
 				Containers: []corev1.Container{
 					d.getControllerContainer(),
-					d.getProvisionerContainer(),
-				},
-				Affinity: &corev1.Affinity{
-					NodeAffinity: &corev1.NodeAffinity{
-						RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
-							NodeSelectorTerms: []corev1.NodeSelectorTerm{
-								{
-									MatchExpressions: []corev1.NodeSelectorRequirement{
-										// By default, the controller will run anywhere in the cluster.
-										// If that isn't desired, the "pmem-csi.intel.com/controller" label
-										// can be set to "no" or "false" for a node to prevent the controller
-										// from running there.
-										//
-										// This is used during testing as a workaround for a particular issue
-										// on Clear Linux where network configuration randomly fails such that
-										// the driver which runs on the same node as the controller cannot
-										// connect to the controller (https://github.com/intel/pmem-csi/issues/555).
-										//
-										// It may also be useful for other purposes, in particular for deployment
-										// through the operator: it has the same rule and currently no other API for
-										// setting affinity.
-										{
-											Key:      "pmem-csi.intel.com/controller",
-											Operator: corev1.NodeSelectorOpNotIn,
-											Values:   []string{"no", "false"},
-										},
-									},
-								},
-							},
-						},
-					},
 				},
 				Tolerations: []corev1.Toleration{
 					{
@@ -1032,23 +916,12 @@ func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 				},
 				Volumes: []corev1.Volume{
 					{
-						Name: "plugin-socket-dir",
-						VolumeSource: corev1.VolumeSource{
-							EmptyDir: &corev1.EmptyDirVolumeSource{},
-						},
-					},
-					{
-						Name: "registry-cert",
+						Name: "webhook-cert",
 						VolumeSource: corev1.VolumeSource{
 							Secret: &corev1.SecretVolumeSource{
+								// TODO: replace name, create secret via cert-manager
 								SecretName: d.GetHyphenedName() + "-registry-secrets",
 							},
-						},
-					},
-					{
-						Name: "tmp-dir",
-						VolumeSource: corev1.VolumeSource{
-							EmptyDir: &corev1.EmptyDirVolumeSource{},
 						},
 					},
 				},
@@ -1078,10 +951,12 @@ func (d *pmemCSIDeployment) getNodeDaemonSet(ds *appsv1.DaemonSet) {
 				},
 			},
 			Spec: corev1.PodSpec{
-				NodeSelector: d.Spec.NodeSelector,
+				ServiceAccountName: d.ProvisionerServiceAccountName(),
+				NodeSelector:       d.Spec.NodeSelector,
 				Containers: []corev1.Container{
 					d.getNodeDriverContainer(),
 					d.getNodeRegistrarContainer(),
+					d.getProvisionerContainer(),
 				},
 				Volumes: []corev1.Volume{
 					{
@@ -1117,14 +992,6 @@ func (d *pmemCSIDeployment) getNodeDaemonSet(ds *appsv1.DaemonSet) {
 							HostPath: &corev1.HostPathVolumeSource{
 								Path: d.Spec.KubeletDir + "/pods",
 								Type: &directoryOrCreate,
-							},
-						},
-					},
-					{
-						Name: "node-cert",
-						VolumeSource: corev1.VolumeSource{
-							Secret: &corev1.SecretVolumeSource{
-								SecretName: d.GetHyphenedName() + "-node-secrets",
 							},
 						},
 					},
@@ -1166,14 +1033,12 @@ func (d *pmemCSIDeployment) getControllerCommand() []string {
 		"/usr/local/bin/pmem-csi-driver",
 		fmt.Sprintf("-v=%d", d.Spec.LogLevel),
 		"-logging-format=" + string(d.Spec.LogFormat),
-		"-mode=controller",
-		"-endpoint=unix:///csi/csi-controller.sock",
-		fmt.Sprintf("-registryEndpoint=tcp://0.0.0.0:%d", controllerServicePort),
-		"-nodeid=$(KUBE_NODE_NAME)",
+		"-mode=webhooks",
+		"-schedulerListen=:8000",
+		"-drivername=$(PMEM_CSI_DRIVER_NAME)",
 		"-caFile=/certs/ca.crt",
 		"-certFile=/certs/tls.crt",
 		"-keyFile=/certs/tls.key",
-		"-drivername=$(PMEM_CSI_DRIVER_NAME)",
 		fmt.Sprintf("-metricsListen=:%d", controllerMetricsPort),
 	}
 }
@@ -1187,12 +1052,6 @@ func (d *pmemCSIDeployment) getNodeDriverCommand() []string {
 		"-mode=node",
 		"-endpoint=unix:///csi/csi.sock",
 		"-nodeid=$(KUBE_NODE_NAME)",
-		fmt.Sprintf("-controllerEndpoint=tcp://$(KUBE_POD_IP):%d", nodeControllerPort),
-		// User controller service name(== deployment name) as registry endpoint.
-		fmt.Sprintf("-registryEndpoint=tcp://%s-controller:%d", d.GetHyphenedName(), controllerServicePort),
-		"-caFile=/certs/ca.crt",
-		"-certFile=/certs/tls.crt",
-		"-keyFile=/certs/tls.key",
 		"-statePath=/var/lib/$(PMEM_CSI_DRIVER_NAME)",
 		"-drivername=$(PMEM_CSI_DRIVER_NAME)",
 		fmt.Sprintf("-pmemPercentage=%d", d.Spec.PMEMPercentage),
@@ -1209,44 +1068,32 @@ func (d *pmemCSIDeployment) getControllerContainer() corev1.Container {
 		Command:         d.getControllerCommand(),
 		Env: []corev1.EnvVar{
 			{
-				Name: "KUBE_NODE_NAME",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						APIVersion: "v1",
-						FieldPath:  "spec.nodeName",
-					},
-				},
-			},
-			{
 				Name:  "TERMINATION_LOG_PATH",
-				Value: "/tmp/termination-log",
+				Value: "/dev/termination-log",
 			},
 			{
 				Name:  "PMEM_CSI_DRIVER_NAME",
 				Value: d.GetName(),
 			},
 			{
-				Name:  "GODEBUG",
-				Value: "x509ignoreCN=0",
+				Name: "POD_NAMESPACE",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						APIVersion: "v1",
+						FieldPath:  "metadata.namespace",
+					},
+				},
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      "registry-cert",
+				Name:      "webhook-cert",
 				MountPath: "/certs",
-			},
-			{
-				Name:      "plugin-socket-dir",
-				MountPath: "/csi",
-			},
-			{
-				Name:      "tmp-dir",
-				MountPath: "/tmp",
 			},
 		},
 		Ports:                  d.getMetricsPorts(controllerMetricsPort),
 		Resources:              *d.Spec.ControllerDriverResources,
-		TerminationMessagePath: "/tmp/termination-log",
+		TerminationMessagePath: "/dev/termination-log",
 		SecurityContext: &corev1.SecurityContext{
 			ReadOnlyRootFilesystem: &true,
 		},
@@ -1273,25 +1120,12 @@ func (d *pmemCSIDeployment) getNodeDriverContainer() corev1.Container {
 				},
 			},
 			{
-				Name: "KUBE_POD_IP",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						APIVersion: "v1",
-						FieldPath:  "status.podIP",
-					},
-				},
-			},
-			{
 				Name:  "PMEM_CSI_DRIVER_NAME",
 				Value: d.GetName(),
 			},
 			{
 				Name:  "TERMINATION_LOG_PATH",
 				Value: "/tmp/termination-log",
-			},
-			{
-				Name:  "GODEBUG",
-				Value: "x509ignoreCN=0",
 			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
@@ -1304,10 +1138,6 @@ func (d *pmemCSIDeployment) getNodeDriverContainer() corev1.Container {
 				Name:             "pods-dir",
 				MountPath:        d.Spec.KubeletDir + "/pods",
 				MountPropagation: &bidirectional,
-			},
-			{
-				Name:      "node-cert",
-				MountPath: "/certs",
 			},
 			{
 				Name:      "dev-dir",
@@ -1350,14 +1180,28 @@ func (d *pmemCSIDeployment) getProvisionerContainer() corev1.Container {
 			fmt.Sprintf("-v=%d", d.Spec.LogLevel),
 			"--csi-address=/csi/csi-controller.sock",
 			"--feature-gates=Topology=true",
+			"--node-deployment=true",
 			"--strict-topology=true",
+			"--immediate-topology=false",
+			// TODO (?): make this configurable?
 			"--timeout=5m",
 			"--default-fstype=ext4",
 			fmt.Sprintf("--metrics-address=:%d", provisionerMetricsPort),
 		},
+		Env: []corev1.EnvVar{
+			{
+				Name: "KUBE_NODE_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						APIVersion: "v1",
+						FieldPath:  "spec.nodeName",
+					},
+				},
+			},
+		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      "plugin-socket-dir",
+				Name:      "socket-dir",
 				MountPath: "/csi",
 			},
 		},

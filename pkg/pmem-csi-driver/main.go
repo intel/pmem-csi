@@ -22,7 +22,7 @@ import (
 
 var (
 	config = Config{
-		Mode:          Controller,
+		Mode:          Node,
 		DeviceManager: api.DeviceModeLVM,
 	}
 	showVersion = flag.Bool("version", false, "Show release version and exit")
@@ -35,13 +35,10 @@ func init() {
 	flag.StringVar(&config.DriverName, "drivername", "pmem-csi.intel.com", "name of the driver")
 	flag.StringVar(&config.NodeID, "nodeid", "nodeid", "node id")
 	flag.StringVar(&config.Endpoint, "endpoint", "unix:///tmp/pmem-csi.sock", "PMEM CSI endpoint")
-	flag.StringVar(&config.RegistryEndpoint, "registryEndpoint", "tcp://pmem-csi-controller:10000", "endpoint for internal registry server (controller listens, node connects)")
-	flag.Var(&config.Mode, "mode", "driver run mode: controller or node")
-	flag.StringVar(&config.CAFile, "caFile", "", "Root CA certificate file to use for verifying connections")
-	flag.StringVar(&config.CertFile, "certFile", "", "SSL certificate file to use for authenticating client connections(RegistryServer/NodeControllerServer)")
-	flag.StringVar(&config.KeyFile, "keyFile", "", "Private key file associated to certificate")
-	flag.StringVar(&config.ClientCertFile, "clientCertFile", "", "Client SSL certificate file to use for authenticating peer connections, defaults to 'certFile'")
-	flag.StringVar(&config.ClientKeyFile, "clientKeyFile", "", "Client private key associated to client certificate, defaults to 'keyFile'")
+	flag.Var(&config.Mode, "mode", "driver run mode")
+	flag.StringVar(&config.CAFile, "caFile", "ca.pem", "Root CA certificate file to use for verifying connections")
+	flag.StringVar(&config.CertFile, "certFile", "pmem-registry.pem", "SSL certificate file to use for authenticating client connections")
+	flag.StringVar(&config.KeyFile, "keyFile", "pmem-registry-key.pem", "Private key file associated to certificate")
 
 	/* metrics options */
 	flag.StringVar(&config.metricsListen, "metricsListen", "", "listen address (like :8001) for prometheus metrics endpoint, disabled by default")
@@ -51,8 +48,6 @@ func init() {
 	flag.StringVar(&config.schedulerListen, "schedulerListen", "", "controller: listen address (like :8000) for scheduler extender and mutating webhook, disabled by default")
 
 	/* Node mode options */
-	flag.StringVar(&config.ControllerEndpoint, "controllerEndpoint", "tcp://:10001", "node: internal node controller endpoint")
-	flag.BoolVar(&config.TestEndpoint, "testEndpoint", false, "node: also expose controller interface via CSI endpoint (for testing only)")
 	flag.Var(&config.DeviceManager, "deviceManager", "node: device manager to use to manage pmem devices, supported types: 'lvm' or 'direct' (= 'ndctl')")
 	flag.StringVar(&config.StateBasePath, "statePath", "", "node: directory path where to persist the state of the driver, defaults to /var/lib/<drivername>")
 	flag.UintVar(&config.PmemPercentage, "pmemPercentage", 100, "node: percentage of space to be used by the driver in each PMEM region")
@@ -71,7 +66,7 @@ func Main() int {
 	klog.V(3).Info("Version: ", version)
 
 	if config.schedulerListen != "" {
-		if config.Mode != Controller {
+		if config.Mode != Webhooks {
 			pmemcommon.ExitError("scheduler listening", errors.New("only supported in the controller"))
 			return 1
 		}

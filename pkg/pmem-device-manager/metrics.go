@@ -8,8 +8,6 @@ package pmdmanager
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
-
-	"github.com/intel/pmem-csi/pkg/registryserver"
 )
 
 var (
@@ -35,6 +33,10 @@ var (
 	)
 )
 
+// NodeLabel is a label used for Prometheus which identifies the
+// node that the controller talks to.
+const NodeLabel = "node"
+
 // CapacityCollector is a wrapper around a PMEM device manager which
 // takes GetCapacity values and turns them into metrics data.
 type CapacityCollector struct {
@@ -44,8 +46,8 @@ type CapacityCollector struct {
 // MustRegister adds the collector to the registry, using labels to tag each sample with node and driver name.
 func (cc CapacityCollector) MustRegister(reg prometheus.Registerer, nodeName, driverName string) {
 	labels := prometheus.Labels{
-		registryserver.NodeLabel: nodeName,
-		"driver_name":            driverName, // same label name as in csi-lib-utils for CSI gRPC calls
+		NodeLabel:     nodeName,
+		"driver_name": driverName, // same label name as in csi-lib-utils for CSI gRPC calls
 	}
 	prometheus.WrapRegistererWith(labels, reg).MustRegister(cc)
 }

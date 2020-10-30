@@ -13,7 +13,6 @@ require (
 	github.com/go-logr/logr v0.3.0
 	github.com/go-logr/zapr v0.2.0 // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
-	github.com/golang/protobuf v1.4.2
 	github.com/google/go-cmp v0.5.2
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/uuid v1.1.2
@@ -29,6 +28,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/operator-framework/operator-lib v0.2.0
 	github.com/prometheus/client_golang v1.7.1
+	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.14.0
 	github.com/prometheus/procfs v0.2.0 // indirect
 	github.com/stretchr/testify v1.6.1

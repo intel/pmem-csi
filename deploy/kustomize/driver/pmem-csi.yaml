@@ -5,6 +5,87 @@ metadata:
   namespace: default
 ---
 apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    pmem-csi.intel.com/deployment: lvm-testing
+  name: pmem-csi-webhooks
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    pmem-csi.intel.com/deployment: lvm-testing
+  name: pmem-csi-webhooks-cfg
+  namespace: default
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - watch
+  - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    pmem-csi.intel.com/deployment: lvm-testing
+  name: pmem-csi-webhooks-runner
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumeclaims
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - storageclasses
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    pmem-csi.intel.com/deployment: lvm-testing
+  name: pmem-csi-webhooks-role-cfg
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pmem-csi-webhooks-cfg
+subjects:
+- kind: ServiceAccount
+  name: pmem-csi-webhooks
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    pmem-csi.intel.com/deployment: lvm-testing
+  name: pmem-csi-webhooks-role
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pmem-csi-webhooks-runner
+subjects:
+- kind: ServiceAccount
+  name: pmem-csi-webhooks
+  namespace: default
+---
+# TODO: is this service still needed?
+apiVersion: v1
 kind: Service
 metadata:
   name: pmem-csi-controller
@@ -50,30 +131,7 @@ spec:
         runAsNonRoot: true
         # UID 1000 is defined in Dockerfile
         runAsUser: 1000
-      serviceAccountName: pmem-csi-controller
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              # By default, the controller will run anywhere in the cluster.
-              # If that isn't desired, the "pmem-csi.intel.com/controller" label
-              # can be set to "no" or "false" for a node to prevent the controller
-              # from running there.
-              #
-              # This is used during testing as a workaround for a particular issue
-              # on Clear Linux where network configuration randomly fails such that
-              # the driver which runs on the same node as the controller cannot
-              # connect to the controller (https://github.com/intel/pmem-csi/issues/555).
-              #
-              # It may also be useful for other purposes, in particular for deployment
-              # through the operator: it has the same rule and currently no other API for
-              # setting affinity.
-              - key: pmem-csi.intel.com/controller
-                operator: NotIn
-                values:
-                - "no"
-                - "false"
+      serviceAccountName: pmem-csi-webhooks
       # Allow this pod to run on a master node.
       tolerations:
       - key: "node-role.kubernetes.io/master"
@@ -82,66 +140,37 @@ spec:
       - name: pmem-driver
         image: intel/pmem-csi-driver:canary
         imagePullPolicy: IfNotPresent
-        command: [
-                 "/usr/local/bin/pmem-csi-driver",
-                 "-v=3",
-                 "-logging-format=text",
-                 "-mode=controller",
-                 "-endpoint=unix:///csi/csi-controller.sock",
-                 "-registryEndpoint=tcp://0.0.0.0:10000",
-                 "-nodeid=$(KUBE_NODE_NAME)",
-                 "-caFile=/certs/ca.crt",
-                 "-certFile=/certs/tls.crt",
-                 "-keyFile=/certs/tls.key",
-                 "-drivername=$(PMEM_CSI_DRIVER_NAME)",
-               ]
+        command:
+        - /usr/local/bin/pmem-csi-driver
+        - -v=3
+        - -logging-format=text
+        - -mode=webhooks
+        - -schedulerListen=:8000
+        - -drivername=$(PMEM_CSI_DRIVER_NAME)
+        - -caFile=/certs/ca.crt
+        - -certFile=/certs/tls.crt
+        - -keyFile=/certs/tls.key
         securityContext:
           readOnlyRootFilesystem: true
-        # Passing /dev to container may cause container creation error because
-        # termination-log is located on /dev/ by default, re-locate to /tmp
-        terminationMessagePath: /tmp/termination-log
+        terminationMessagePath: /dev/termination-log
         volumeMounts:
-        - name: registry-cert
+        - name: webhook-cert
           mountPath: /certs
-        - name: plugin-socket-dir
-          mountPath: /csi
-        - name: tmp-dir
-          mountPath: /tmp
         env:
-        - name: KUBE_NODE_NAME
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: spec.nodeName
         - name: TERMINATION_LOG_PATH
-          value: /tmp/termination-log
+          value: /dev/termination-log
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
-        - name: GODEBUG
-          value: x509ignoreCN=0
-      - name: external-provisioner
-        image: k8s.gcr.io/sig-storage/csi-provisioner:v1.X.Y
-        imagePullPolicy: IfNotPresent
-        args:
-        - -v=3
-        - --csi-address=/csi/csi-controller.sock
-        - --feature-gates=Topology=true
-        - --strict-topology=true
-        - --timeout=5m
-        - --default-fstype=ext4 # see https://github.com/kubernetes-csi/external-provisioner/issues/328#issuecomment-714801581
-        securityContext:
-          readOnlyRootFilesystem: true
-        volumeMounts:
-        - name: plugin-socket-dir
-          mountPath: /csi
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
       volumes:
-      - name: plugin-socket-dir
-        emptyDir:
-      - name: registry-cert
+      - name: webhook-cert
         secret:
+          # This is the traditional name from existing scripts.
+          # TODO: replace with cert-manager and remove test/setup-ca[-kubernetes].sh
           secretName: pmem-csi-registry-secrets
-      - name: tmp-dir
-        emptyDir: {}
 ---
 kind: DaemonSet
 apiVersion: apps/v1
@@ -158,28 +187,23 @@ spec:
         app: pmem-csi-node
         pmem-csi.intel.com/webhook: ignore
     spec:
+      serviceAccountName: pmem-csi-controller
       nodeSelector:
         storage: pmem
       containers:
       - name: pmem-driver
         image: intel/pmem-csi-driver:canary
         imagePullPolicy: IfNotPresent
-        command: [
-                  "/usr/local/bin/pmem-csi-driver",
-                  "-v=3",
-                  "-logging-format=text",
-                  "-mode=node",
-                  "-endpoint=unix:///csi/csi.sock",
-                  "-nodeid=$(KUBE_NODE_NAME)",
-                  "-controllerEndpoint=tcp://$(KUBE_POD_IP):10001",
-                  "-registryEndpoint=tcp://pmem-csi-controller:10000",
-                  "-caFile=/certs/ca.crt",
-                  "-certFile=/certs/tls.crt",
-                  "-keyFile=/certs/tls.key",
-                  "-statePath=/var/lib/$(PMEM_CSI_DRIVER_NAME)",
-                  "-drivername=$(PMEM_CSI_DRIVER_NAME)",
-                  "-pmemPercentage=100",
-              ]
+        command:
+        - /usr/local/bin/pmem-csi-driver
+        - -v=3
+        - -logging-format=text
+        - -mode=node
+        - -endpoint=unix:///csi/csi.sock
+        - -nodeid=$(KUBE_NODE_NAME)
+        - -statePath=/var/lib/$(PMEM_CSI_DRIVER_NAME)
+        - -drivername=$(PMEM_CSI_DRIVER_NAME)
+        - -pmemPercentage=100
         # Passing /dev to container may cause container creation error because
         # termination-log is located on /dev/ by default, re-locate to /tmp
         terminationMessagePath: /tmp/termination-log
@@ -192,17 +216,10 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: spec.nodeName
-        - name: KUBE_POD_IP
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: status.podIP
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
         - name: TERMINATION_LOG_PATH
           value: /tmp/termination-log
-        - name: GODEBUG
-          value: x509ignoreCN=0
         volumeMounts:
         - name: mountpoint-dir
           mountPath: /var/lib/kubelet/plugins/kubernetes.io/csi
@@ -210,8 +227,6 @@ spec:
         - name: pods-dir
           mountPath: /var/lib/kubelet/pods
           mountPropagation: Bidirectional
-        - name: node-cert
-          mountPath: /certs
         - name : dev-dir
           mountPath: /dev
         - name: sys-dir
@@ -232,10 +247,10 @@ spec:
       - name: driver-registrar
         image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v1.X.Y
         imagePullPolicy: IfNotPresent
-        args: [
-            "-v=3",
-            "--kubelet-registration-path=/var/lib/kubelet/plugins/$(PMEM_CSI_DRIVER_NAME)/csi.sock",
-            "--csi-address=/csi/csi.sock" ]
+        args:
+        - -v=3
+        - --kubelet-registration-path=/var/lib/kubelet/plugins/$(PMEM_CSI_DRIVER_NAME)/csi.sock
+        - --csi-address=/csi/csi.sock
         securityContext:
           readOnlyRootFilesystem: true
         volumeMounts:
@@ -249,6 +264,30 @@ spec:
         env:
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
+      - name: external-provisioner
+        image: gcr.io/k8s-staging-sig-storage/csi-provisioner:canary
+        imagePullPolicy: IfNotPresent
+        args:
+        - -v=3
+        - --csi-address=/csi/csi.sock
+        - --feature-gates=Topology=true
+        - --node-deployment=true
+        - --strict-topology=true
+        - --immediate-topology=false
+        - --timeout=5m
+        - --default-fstype=ext4 # see https://github.com/kubernetes-csi/external-provisioner/issues/328#issuecomment-714801581
+        securityContext:
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - name: socket-dir
+          mountPath: /csi
+        env:
+        # Needed by external-provisioner when using --node-deployment.
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
       volumes:
         - name: socket-dir
           hostPath:
@@ -276,9 +315,6 @@ spec:
           hostPath:
             path: /var/lib/kubelet/pods
             type: DirectoryOrCreate
-        - name: node-cert
-          secret:
-            secretName: pmem-csi-node-secrets
         - name: pmem-state-dir
           hostPath:
             # This state directory must always be the same, regardless of the CSI driver name,

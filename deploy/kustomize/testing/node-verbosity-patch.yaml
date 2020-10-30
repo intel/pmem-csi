@@ -1,0 +1,12 @@
+# Raise log verbosity level to 5 in the DaemonSet.
+- op: add
+  path: /spec/template/spec/containers/0/command/-
+  value: "-v=5"
+
+- op: add
+  path: /spec/template/spec/containers/1/args/-
+  value: "-v=5"
+
+- op: add
+  path: /spec/template/spec/containers/2/args/-
+  value: "-v=5"

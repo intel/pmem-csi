@@ -55,12 +55,6 @@ spec:
           spec:
             description: DeploymentSpec defines the desired state of Deployment
             properties:
-              caCert:
-                description: CACert encoded root certificate of the CA by which the
-                  registry and node controller certificates are signed If not provided
-                  operator uses a self-signed CA certificate
-                format: byte
-                type: string
               controllerDriverResources:
                 description: ControllerDriverResources Compute resources required
                   by driver container running on master node
@@ -118,18 +112,6 @@ spec:
               logLevel:
                 description: LogLevel number for the log verbosity
                 type: integer
-              nodeControllerCert:
-                description: NodeControllerCert encoded certificate signed by a CA
-                  for node controller server authentication If not provided, provisioned
-                  one by the operator using self-signed CA
-                format: byte
-                type: string
-              nodeControllerKey:
-                description: NodeControllerPrivateKey encoded private key used for
-                  node controller server certificate If not provided, provisioned
-                  one by the operator
-                format: byte
-                type: string
               nodeDriverResources:
                 description: NodeDriverResources Compute resources required by driver
                   container running on worker nodes
@@ -232,17 +214,6 @@ spec:
                       to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
                     type: object
                 type: object
-              registryCert:
-                description: RegistryCert encoded certificate signed by a CA for registry
-                  server authentication If not provided, provisioned one by the operator
-                  using self-signed CA
-                format: byte
-                type: string
-              registryKey:
-                description: RegistryPrivateKey encoded private key used for registry
-                  server certificate If not provided, provisioned one by the operator
-                format: byte
-                type: string
             type: object
           status:
             description: DeploymentStatus defines the observed state of Deployment

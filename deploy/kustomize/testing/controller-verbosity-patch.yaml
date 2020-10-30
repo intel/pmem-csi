@@ -1,0 +1,4 @@
+# Raise log verbosity level to 5 in first container.
+- op: add
+  path: /spec/template/spec/containers/0/command/-
+  value: "-v=5"

@@ -115,16 +115,13 @@ Accept: */*
 						if strings.HasPrefix(container.Name, "pmem") {
 							Expect(stdout).To(ContainSubstring("go_threads "), name)
 							Expect(stdout).To(ContainSubstring("process_open_fds "), name)
-							Expect(stdout).To(ContainSubstring("csi_plugin_operations_seconds "), name)
-							if strings.HasPrefix(pod.Name, "pmem-csi-controller") {
-								Expect(stdout).To(ContainSubstring("pmem_nodes "), name)
-								Expect(stdout).To(ContainSubstring("pmem_csi_controller_operations_seconds "), name)
-							} else {
+							if !strings.HasPrefix(pod.Name, "pmem-csi-controller") {
+								// Only the node driver implements CSI and manages volumes.
+								Expect(stdout).To(ContainSubstring("csi_plugin_operations_seconds "), name)
 								Expect(stdout).To(ContainSubstring("pmem_amount_available "), name)
 								Expect(stdout).To(ContainSubstring("pmem_amount_managed "), name)
 								Expect(stdout).To(ContainSubstring("pmem_amount_max_volume_size "), name)
 								Expect(stdout).To(ContainSubstring("pmem_amount_total "), name)
-								Expect(stdout).To(ContainSubstring("pmem_csi_node_operations_seconds "), name)
 							}
 						} else {
 							Expect(stdout).To(ContainSubstring("csi_sidecar_operations_seconds "), name)
