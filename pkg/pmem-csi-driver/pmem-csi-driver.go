@@ -207,17 +207,10 @@ func (dm deviceManagerCollector) Collect(ch chan<- prometheus.Metric) {
 var _ prometheus.Collector = deviceManagerCollector{}
 
 func GetCSIDriver(cfg Config) (*csiDriver, error) {
-	validModes := map[DriverMode]struct{}{
-		Controller: struct{}{},
-		Node:       struct{}{},
-	}
 	var serverConfig *tls.Config
 	var clientConfig *tls.Config
 	var err error
 
-	if _, ok := validModes[cfg.Mode]; !ok {
-		return nil, fmt.Errorf("Invalid driver mode: %s", string(cfg.Mode))
-	}
 	if cfg.DriverName == "" {
 		return nil, errors.New("driver name configuration option missing")
 	}
