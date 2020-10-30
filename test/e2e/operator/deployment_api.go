@@ -14,6 +14,7 @@ import (
 	"time"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	"github.com/intel/pmem-csi/pkg/exec"
 	"github.com/intel/pmem-csi/pkg/k8sutil"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment/testcases"
 	"github.com/intel/pmem-csi/pkg/version"
@@ -159,6 +160,34 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				validateDriver(deployment)
 			})
 		}
+
+		It("get deployment shall list expected fields", func() {
+			lblKey := "storage"
+			lblValue := "unknown-node"
+			deployment := getDeployment("test-get-deployment-fields")
+			// Only values that are visible in Deployment CR are shown in `kubectl get`
+			// but, not the default values chosen by the operator.
+			// So provide the values that are expected to list.
+			deployment.Spec.DeviceMode = api.DeviceModeDirect
+			deployment.Spec.PullPolicy = corev1.PullNever
+			deployment.Spec.Image = dummyImage
+			deployment.Spec.NodeSelector = map[string]string{
+				lblKey: lblValue,
+			}
+
+			deployment = deploy.CreateDeploymentCR(f, deployment)
+			defer deploy.DeleteDeploymentCR(f, deployment.Name)
+			validateDriver(deployment, "validate driver")
+
+			d := deploy.GetDeploymentCR(f, deployment.Name)
+
+			// Run in-cluster kubectl from master node
+			ssh := os.Getenv("REPO_ROOT") + "/_work/" + os.Getenv("CLUSTER") + "/ssh.0"
+			out, err := exec.RunCommand(ssh, "kubectl", "get", "deployments.pmem-csi.intel.com", "--no-headers")
+			Expect(err).ShouldNot(HaveOccurred(), "kubectl get: %v", out)
+			Expect(out).Should(MatchRegexp(`%s\s+%s\s+.*"?%s"?:"?%s"?.*\s+%s\s+%s\s+[0-9]+(s|m)`,
+				d.Name, d.Spec.DeviceMode, lblKey, lblValue, d.Spec.Image, d.Status.Phase), "fields mismatch")
+		})
 
 		It("driver image shall default to operator image", func() {
 			deployment := getDeployment("test-deployment-driver-image")
