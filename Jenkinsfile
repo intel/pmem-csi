@@ -484,7 +484,7 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
                   ${env.BUILD_CONTAINER} \
                   bash -c 'set -x; \
                            loggers=; \
-                           atexit () { set -x; kill \$loggers; kill \$( ps --no-header -o %p ); }; \
+                           atexit () { set -x; kill \$loggers; }; \
                            trap atexit EXIT; \
                            make stop && \
                            make start && \
