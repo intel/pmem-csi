@@ -22,6 +22,7 @@ import (
 	"k8s.io/klog/v2"
 	"k8s.io/utils/mount"
 
+	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	"github.com/intel/pmem-csi/pkg/imagefile"
@@ -150,7 +151,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		// 1) No Volume found with given volume id
 		// 2) No provisioner info found in VolumeContext "storage.kubernetes.io/csiProvisionerIdentity"
 		// 3) No StagingPath in the request
-		if device, err = ns.cs.dm.GetDevice(req.VolumeId); err != nil && !errors.Is(err, pmdmanager.ErrDeviceNotFound) {
+		if device, err = ns.cs.dm.GetDevice(req.VolumeId); err != nil && !errors.Is(err, pmemerr.DeviceNotFound) {
 			return nil, status.Errorf(codes.Internal, "failed to get device details for volume id '%s': %v", req.VolumeId, err)
 		}
 		_, ok := req.GetVolumeContext()[volumeProvisionerIdentity]
@@ -181,7 +182,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		volumeParameters = v
 
 		if device, err = ns.cs.dm.GetDevice(req.VolumeId); err != nil {
-			if errors.Is(err, pmdmanager.ErrDeviceNotFound) {
+			if errors.Is(err, pmemerr.DeviceNotFound) {
 				return nil, status.Errorf(codes.NotFound, "no device found with volume id %q: %v", req.VolumeId, err)
 			}
 			return nil, status.Errorf(codes.Internal, "failed to get device details for volume id %q: %v", req.VolumeId, err)
@@ -487,7 +488,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 
 	device, err := ns.cs.dm.GetDevice(req.VolumeId)
 	if err != nil {
-		if errors.Is(err, pmdmanager.ErrDeviceNotFound) {
+		if errors.Is(err, pmemerr.DeviceNotFound) {
 			return nil, status.Errorf(codes.NotFound, "no device found with volume id %q: %v", req.VolumeId, err)
 		}
 		return nil, status.Errorf(codes.Internal, "failed to get device details for volume id %q: %v", req.VolumeId, err)
@@ -544,7 +545,7 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	// so we look up the current device by volumeID and see is that device
 	// mounted on staging target path
 	if _, err := ns.cs.dm.GetDevice(req.VolumeId); err != nil {
-		if errors.Is(err, pmdmanager.ErrDeviceNotFound) {
+		if errors.Is(err, pmemerr.DeviceNotFound) {
 			return nil, status.Errorf(codes.NotFound, "no device found with volume id '%s': %s", req.VolumeId, err.Error())
 		}
 		return nil, status.Errorf(codes.Internal, "failed to get device details for volume id '%s': %s", req.VolumeId, err.Error())

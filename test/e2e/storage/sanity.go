@@ -484,6 +484,12 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			v.remove(vol, name)
 		})
 
+		It("CreateVolume should return ResourceExhausted", func() {
+			v.namePrefix = "resource-exhausted"
+
+			v.create(1024*1024*1024*1024*1024, nodeID, codes.ResourceExhausted)
+		})
+
 		It("stress test", func() {
 			// The load here consists of n workers which
 			// create and test volumes in parallel until
@@ -858,7 +864,7 @@ func (v volume) getTargetPath() string {
 	return v.sc.TargetPath
 }
 
-func (v volume) create(sizeInBytes int64, nodeID string) (string, *csi.Volume) {
+func (v volume) create(sizeInBytes int64, nodeID string, expectedStatus ...codes.Code) (string, *csi.Volume) {
 	var err error
 	name := sanity.UniqueString(v.namePrefix)
 
@@ -901,13 +907,26 @@ func (v volume) create(sizeInBytes int64, nodeID string) (string, *csi.Volume) {
 		}
 	}
 	var vol *csi.CreateVolumeResponse
-	err = v.retry(func() error {
-		vol, err = v.cc.CreateVolume(
-			v.ctx, req,
-		)
-		return err
-	}, "CreateVolume")
+	if len(expectedStatus) > 0 {
+		// Expected to fail, no retries.
+		vol, err = v.cc.CreateVolume(v.ctx, req)
+	} else {
+		// With retries.
+		err = v.retry(func() error {
+			vol, err = v.cc.CreateVolume(
+				v.ctx, req,
+			)
+			return err
+		}, "CreateVolume")
+	}
 	v.cl.MaybeRegisterVolume(name, vol, err)
+	if len(expectedStatus) > 0 {
+		framework.ExpectError(err, create)
+		status, ok := status.FromError(err)
+		Expect(ok).To(BeTrue(), "have gRPC status error")
+		Expect(status.Code()).To(Equal(expectedStatus[0]), "expected gRPC status code")
+		return name, nil
+	}
 	framework.ExpectNoError(err, create)
 	Expect(vol).NotTo(BeNil())
 	Expect(vol.GetVolume()).NotTo(BeNil())

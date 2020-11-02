@@ -19,6 +19,7 @@ import (
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 
+	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
@@ -97,7 +98,7 @@ func NewNodeControllerServer(nodeID string, dm pmdmanager.PmemDeviceManager, sm 
 
 				if _, err := dm.GetDevice(id); err == nil {
 					found = true
-				} else if !errors.Is(err, pmdmanager.ErrDeviceNotFound) {
+				} else if !errors.Is(err, pmemerr.DeviceNotFound) {
 					klog.Warningf("Failed to fetch device for state volume '%s'(volume mode: '%s'): %v", id, v.GetDeviceMode(), err)
 					// Let's ignore this volume
 					continue
@@ -263,7 +264,11 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 		asked = 1
 	}
 	if err := cs.dm.CreateDevice(volumeID, uint64(asked)); err != nil {
-		statusErr = status.Errorf(codes.Internal, "Node CreateVolume: device creation failed: %v", err)
+		code := codes.Internal
+		if errors.Is(err, pmemerr.NotEnoughSpace) {
+			code = codes.ResourceExhausted
+		}
+		statusErr = status.Errorf(code, "Node CreateVolume: device creation failed: %v", err)
 		return
 	}
 	// TODO(?): determine and return actual size here?
@@ -316,7 +321,7 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 	}
 
 	if err := dm.DeleteDevice(req.VolumeId, p.GetEraseAfter()); err != nil {
-		if errors.Is(err, pmdmanager.ErrDeviceInUse) {
+		if errors.Is(err, pmemerr.DeviceInUse) {
 			return nil, status.Errorf(codes.FailedPrecondition, err.Error())
 		}
 		return nil, status.Errorf(codes.Internal, "Failed to delete volume: %s", err.Error())

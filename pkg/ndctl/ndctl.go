@@ -8,10 +8,11 @@ package ndctl
 import "C"
 
 import (
-	"errors"
 	"fmt"
 
 	"k8s.io/klog/v2"
+
+	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 )
 
 const (
@@ -21,10 +22,6 @@ const (
 	mib2 uint64 = mib * 2
 	gib  uint64 = mib * 1024
 	tib  uint64 = gib * 1024
-)
-
-var (
-	ErrNotExist = errors.New("namespace not found")
 )
 
 //CreateNamespaceOpts options to create a namespace
@@ -109,7 +106,7 @@ func (ctx *Context) GetNamespaceByName(name string) (*Namespace, error) {
 			}
 		}
 	}
-	return nil, ErrNotExist
+	return nil, pmemerr.DeviceNotFound
 }
 
 //GetActiveNamespaces returns list of all active namespaces in all regions

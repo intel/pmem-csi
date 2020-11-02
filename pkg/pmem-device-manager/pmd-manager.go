@@ -1,33 +1,7 @@
 package pmdmanager
 
 import (
-	"errors"
-	"os"
-
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
-)
-
-var (
-	// ErrInvalid invalid argument passed
-	ErrInvalid = os.ErrInvalid
-
-	// ErrPermission no permission to complete the task
-	ErrPermission = os.ErrPermission
-
-	// ErrDeviceExists device with given id already exists
-	ErrDeviceExists = errors.New("device exists")
-
-	// ErrDeviceNotFound device does not exists
-	ErrDeviceNotFound = errors.New("device not found")
-
-	// ErrDeviceInUse device is in use
-	ErrDeviceInUse = errors.New("device in use")
-
-	// ErrDeviceNotReady device not ready yet
-	ErrDeviceNotReady = errors.New("device not ready")
-
-	// ErrNotEnoughSpace no space to create the device
-	ErrNotEnoughSpace = errors.New("not enough space")
 )
 
 //PmemDeviceInfo represents a block device
@@ -64,7 +38,7 @@ type PmemDeviceManager interface {
 	GetCapacity() (Capacity, error)
 
 	// CreateDevice creates a new block device with give name, size and namespace mode
-	// Possible errors: ErrNotEnoughSpace, ErrInvalid, ErrDeviceExists
+	// Possible errors: ErrNotEnoughSpace, ErrDeviceExists
 	CreateDevice(name string, size uint64) error
 
 	// GetDevice returns the block device information for given name
@@ -73,7 +47,7 @@ type PmemDeviceManager interface {
 
 	// DeleteDevice deletes an existing block device with give name.
 	// If 'flush' is 'true', then the device data is zeroed before deleting the device
-	// Possible errors: ErrDeviceInUse, ErrPermission
+	// Possible errors: ErrDeviceInUse
 	DeleteDevice(name string, flush bool) error
 
 	// ListDevices returns all the block devices information that was created by this device manager
