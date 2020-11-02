@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/mount"
@@ -112,7 +113,7 @@ func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64) error {
 	// Avoid device filling with garbage entries by returning error.
 	// Overall, no point having more than one namespace with same name.
 	if _, err := getDevice(ndctx, volumeId); err == nil {
-		return ErrDeviceExists
+		return pmemerr.DeviceExists
 	}
 
 	// libndctl needs to store meta data and will use some of the allocated
@@ -158,13 +159,13 @@ func (pmem *pmemNdctl) DeleteDevice(volumeId string, flush bool) error {
 
 	device, err := getDevice(ndctx, volumeId)
 	if err != nil {
-		if errors.Is(err, ErrDeviceNotFound) {
+		if errors.Is(err, pmemerr.DeviceNotFound) {
 			return nil
 		}
 		return err
 	}
 	if err := clearDevice(device, flush); err != nil {
-		if errors.Is(err, ErrDeviceNotFound) {
+		if errors.Is(err, pmemerr.DeviceNotFound) {
 			return nil
 		}
 		return err
@@ -205,10 +206,7 @@ func (pmem *pmemNdctl) ListDevices() ([]*PmemDeviceInfo, error) {
 func getDevice(ndctx *ndctl.Context, volumeId string) (*PmemDeviceInfo, error) {
 	ns, err := ndctx.GetNamespaceByName(volumeId)
 	if err != nil {
-		if errors.Is(err, ndctl.ErrNotExist) {
-			return nil, ErrDeviceNotFound
-		}
-		return nil, fmt.Errorf("error getting device %q: %v", volumeId, err)
+		return nil, fmt.Errorf("error getting device %q: %w", volumeId, err)
 	}
 
 	return namespaceToPmemInfo(ns), nil

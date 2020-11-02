@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
@@ -132,7 +133,7 @@ func (lvm *pmemLvm) CreateDevice(volumeId string, size uint64) error {
 	// Avoid device filling with garbage entries by returning error.
 	// Overall, no point having more than one namespace with same volumeId.
 	if _, err := lvm.getDevice(volumeId); err == nil {
-		return ErrDeviceExists
+		return pmemerr.DeviceExists
 	}
 	vgs, err := getVolumeGroups(lvm.volumeGroups)
 	if err != nil {
@@ -177,7 +178,7 @@ func (lvm *pmemLvm) CreateDevice(volumeId string, size uint64) error {
 			}
 		}
 	}
-	return ErrNotEnoughSpace
+	return pmemerr.NotEnoughSpace
 }
 
 func (lvm *pmemLvm) DeleteDevice(volumeId string, flush bool) error {
@@ -188,13 +189,13 @@ func (lvm *pmemLvm) DeleteDevice(volumeId string, flush bool) error {
 	var device *PmemDeviceInfo
 
 	if device, err = lvm.getDevice(volumeId); err != nil {
-		if errors.Is(err, ErrDeviceNotFound) {
+		if errors.Is(err, pmemerr.DeviceNotFound) {
 			return nil
 		}
 		return err
 	}
 	if err := clearDevice(device, flush); err != nil {
-		if errors.Is(err, ErrDeviceNotFound) {
+		if errors.Is(err, pmemerr.DeviceNotFound) {
 			// Remove device from cache
 			delete(lvm.devices, volumeId)
 			return nil
@@ -236,7 +237,7 @@ func (lvm *pmemLvm) getDevice(volumeId string) (*PmemDeviceInfo, error) {
 		return dev, nil
 	}
 
-	return nil, ErrDeviceNotFound
+	return nil, pmemerr.DeviceNotFound
 }
 
 func getUncachedDevice(volumeId string, volumeGroup string) (*PmemDeviceInfo, error) {
@@ -249,7 +250,7 @@ func getUncachedDevice(volumeId string, volumeGroup string) (*PmemDeviceInfo, er
 		return dev, nil
 	}
 
-	return nil, ErrDeviceNotFound
+	return nil, pmemerr.DeviceNotFound
 }
 
 // listDevices Lists available logical devices in given volume groups
