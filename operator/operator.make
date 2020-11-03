@@ -90,15 +90,26 @@ operator-validate-catalog: operator-courier-image
 
 # Generate OLM bundle. OperatorHub/OLM still does not support bundle format
 # but soon it will move from 'packagemanifests' to 'bundles'.
+# TODO: this seems unused and/or broken. Remove it?
 operator-generate-bundle: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) _work/kustomize operator-generate-crd
 	@echo "Generating operator bundle in $(OPERATOR_OUTPUT_DIR) ..."
-	@_work/kustomize build --load_restrictor=none $(MANIFESTS_DIR) | $< generate bundle  --version=$(VERSION) \
+	@_work/kustomize build --load_restrictor=none $(MANIFESTS_DIR) | $< generate bundle  --version=$(MAJOR_MINOR_PATCH_VERSION) \
         --kustomize-dir=$(MANIFESTS_DIR) --output-dir=$(BUNDLE_DIR)
 	@$(PATCH_VERSIONS) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
 	@$(PATCH_DATE) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
+
+.PHONY: operator-generate
+operator-generate: operator-generate-crd operator-generate-catalog
 
 operator-clean-crd:
 	rm -rf $(CRD_DIR)
 
 operator-clean-catalog:
 	rm -rf $(CATALOG_DIR)
+
+test: test-operator-generate
+.PHONY: test-operator-generate
+test-operator-generate: operator-generate
+	if ! git diff deploy; then \
+		echo >&2 "ERROR: deploy directory content was modified by `make operator-generate`"; \
+	fi

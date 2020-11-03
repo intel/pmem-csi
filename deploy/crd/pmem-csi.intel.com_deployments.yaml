@@ -180,64 +180,12 @@ spec:
           status:
             description: DeploymentStatus defines the observed state of Deployment
             properties:
-              conditions:
-                description: Conditions
-                items:
-                  properties:
-                    lastUpdateTime:
-                      description: Last time the condition was probed.
-                      format: date-time
-                      type: string
-                    reason:
-                      description: Message human readable text that explain why this
-                        condition is in this state
-                      type: string
-                    status:
-                      description: Status of the condition, one of True, False, Unknown.
-                      type: string
-                    type:
-                      description: Type of condition.
-                      type: string
-                  required:
-                  - status
-                  - type
-                  type: object
-                type: array
-              driverComponents:
-                items:
-                  properties:
-                    component:
-                      description: 'DriverComponent represents type of the driver:
-                        controller or node'
-                      type: string
-                    lastUpdated:
-                      description: LastUpdated time of the driver status
-                      format: date-time
-                      type: string
-                    reason:
-                      description: Reason represents the human readable text that
-                        explains why the driver is in this state.
-                      type: string
-                    status:
-                      description: Status represents the state of the component; one
-                        of `Ready` or `NotReady`. Component becomes `Ready` if all
-                        the instances(Pods) of the driver component are in running
-                        state. Otherwise, `NotReady`.
-                      type: string
-                  required:
-                  - component
-                  - reason
-                  - status
-                  type: object
-                type: array
               lastUpdated:
                 description: LastUpdated time of the deployment status
                 format: date-time
                 type: string
               phase:
                 description: Phase indicates the state of the deployment
-                type: string
-              reason:
                 type: string
             type: object
         type: object
