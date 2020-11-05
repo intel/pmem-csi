@@ -117,11 +117,14 @@ for deploy in ${DEPLOY[@]}; do
     # 2. deploy/common
     # 3. deploy/kustomize directly
     path="${DEPLOYMENT_DIRECTORY}/${deploy}"
+    paths="$path"
     if ! [ -e "$path" ]; then
         path="${REPO_DIRECTORY}/deploy/common/${deploy}"
+        paths+=" $path"
     fi
     if ! [ -e "$path" ]; then
         path="${REPO_DIRECTORY}/deploy/kustomize/${deploy}"
+        paths+=" $path"
     fi
     if [ -f "$path" ]; then
         ${KUBECTL} apply -f - <"$path"
@@ -271,7 +274,7 @@ EOF
                 ;;
             *)
                 # Should be there, fail.
-                echo >&2 "$path is missing."
+                echo >&2 "$paths are all missing."
                 exit 1
                 ;;
         esac
