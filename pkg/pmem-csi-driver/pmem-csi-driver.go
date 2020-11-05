@@ -45,6 +45,10 @@ const (
 	connectionTimeout time.Duration = 10 * time.Second
 	retryTimeout      time.Duration = 10 * time.Second
 	requestTimeout    time.Duration = 10 * time.Second
+
+	// Resyncing should never be needed for correct operation,
+	// so this is so high that it shouldn't matter in practice.
+	resyncPeriod = 10000 * time.Hour
 )
 
 type DriverMode string
@@ -85,27 +89,6 @@ var (
 			Help: "A metric with a constant '1' value labeled by version.",
 		},
 		[]string{"version"},
-	)
-
-	pmemMaxDesc = prometheus.NewDesc(
-		"pmem_amount_max_volume_size",
-		"The size of the largest PMEM volume that can be created.",
-		nil, nil,
-	)
-	pmemAvailableDesc = prometheus.NewDesc(
-		"pmem_amount_available",
-		"Remaining amount of PMEM on the host that can be used for new volumes.",
-		nil, nil,
-	)
-	pmemManagedDesc = prometheus.NewDesc(
-		"pmem_amount_managed",
-		"Amount of PMEM on the host that is managed by PMEM-CSI.",
-		nil, nil,
-	)
-	pmemTotalDesc = prometheus.NewDesc(
-		"pmem_amount_total",
-		"Total amount of PMEM on the host.",
-		nil, nil,
 	)
 )
 
@@ -164,47 +147,6 @@ type csiDriver struct {
 	clientTLSConfig *tls.Config
 	gatherers       prometheus.Gatherers
 }
-
-// deviceManagerCollector is a wrapper around a PMEM device manager which
-// takes GetCapacity values and turns them into metrics data.
-type deviceManagerCollector struct {
-	pmdmanager.PmemDeviceManager
-}
-
-// Describe implements prometheus.Collector.Describe.
-func (dm deviceManagerCollector) Describe(ch chan<- *prometheus.Desc) {
-	prometheus.DescribeByCollect(dm, ch)
-}
-
-// Collect implements prometheus.Collector.Collect.
-func (dm deviceManagerCollector) Collect(ch chan<- prometheus.Metric) {
-	capacity, err := dm.GetCapacity()
-	if err != nil {
-		return
-	}
-	ch <- prometheus.MustNewConstMetric(
-		pmemMaxDesc,
-		prometheus.GaugeValue,
-		float64(capacity.MaxVolumeSize),
-	)
-	ch <- prometheus.MustNewConstMetric(
-		pmemAvailableDesc,
-		prometheus.GaugeValue,
-		float64(capacity.Available),
-	)
-	ch <- prometheus.MustNewConstMetric(
-		pmemManagedDesc,
-		prometheus.GaugeValue,
-		float64(capacity.Managed),
-	)
-	ch <- prometheus.MustNewConstMetric(
-		pmemTotalDesc,
-		prometheus.GaugeValue,
-		float64(capacity.Total),
-	)
-}
-
-var _ prometheus.Collector = deviceManagerCollector{}
 
 func GetCSIDriver(cfg Config) (*csiDriver, error) {
 	var serverConfig *tls.Config
@@ -322,8 +264,11 @@ func (csid *csiDriver) Run() error {
 		}
 
 		// Also run scheduler extender?
-		if _, err := csid.startScheduler(ctx, cancel, rs); err != nil {
-			return err
+		if csid.cfg.schedulerListen != "" {
+			c := scheduler.CapacityViaRegistry(rs)
+			if _, err := csid.startScheduler(ctx, cancel, c); err != nil {
+				return err
+			}
 		}
 	case Node:
 		dm, err := pmdmanager.New(csid.cfg.DeviceManager, csid.cfg.PmemPercentage)
@@ -364,9 +309,7 @@ func (csid *csiDriver) Run() error {
 		}
 
 		// Also collect metrics data via the device manager.
-		prometheus.WrapRegistererWith(prometheus.Labels{registryserver.NodeLabel: csid.cfg.NodeID}, prometheus.DefaultRegisterer).MustRegister(
-			deviceManagerCollector{dm},
-		)
+		pmdmanager.CapacityCollector{PmemDeviceCapacity: dm}.MustRegister(prometheus.DefaultRegisterer, csid.cfg.NodeID, csid.cfg.DriverName)
 	default:
 		return fmt.Errorf("Unsupported device mode '%v", csid.cfg.Mode)
 	}
@@ -428,18 +371,13 @@ func (csid *csiDriver) registerNodeController() error {
 // logs errors and cancels the context when it runs into a problem,
 // either during the startup phase (blocking) or later at runtime (in
 // a go routine).
-func (csid *csiDriver) startScheduler(ctx context.Context, cancel func(), rs *registryserver.RegistryServer) (string, error) {
-	if csid.cfg.schedulerListen == "" {
-		return "", nil
-	}
-
-	resyncPeriod := 1 * time.Hour
+func (csid *csiDriver) startScheduler(ctx context.Context, cancel func(), c scheduler.Capacity) (string, error) {
 	factory := informers.NewSharedInformerFactory(csid.cfg.client, resyncPeriod)
 	pvcLister := factory.Core().V1().PersistentVolumeClaims().Lister()
 	scLister := factory.Storage().V1().StorageClasses().Lister()
 	sched, err := scheduler.NewScheduler(
 		csid.cfg.DriverName,
-		scheduler.CapacityViaRegistry(rs),
+		c,
 		csid.cfg.client,
 		pvcLister,
 		scLister,

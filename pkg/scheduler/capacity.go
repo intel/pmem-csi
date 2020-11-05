@@ -15,17 +15,17 @@ import (
 	"github.com/intel/pmem-csi/pkg/registryserver"
 )
 
-type capacity struct {
+type capacityFromRegistry struct {
 	rs *registryserver.RegistryServer
 }
 
 func CapacityViaRegistry(rs *registryserver.RegistryServer) Capacity {
-	return capacity{rs}
+	return capacityFromRegistry{rs}
 }
 
 // NodeCapacity implements the necessary method for the NodeCapacity interface based
 // on a registry server.
-func (c capacity) NodeCapacity(nodeName string) (int64, error) {
+func (c capacityFromRegistry) NodeCapacity(nodeName string) (int64, error) {
 	conn, err := c.rs.ConnectToNodeController(nodeName)
 	if err != nil {
 		return 0, fmt.Errorf("connect to PMEM-CSI on node %q: %v", nodeName, err)
