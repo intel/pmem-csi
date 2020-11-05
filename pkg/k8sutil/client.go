@@ -8,6 +8,7 @@ package k8sutil
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 
@@ -15,8 +16,30 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 )
+
+// NewClient connects to an API server either through KUBECONFIG (if set) or
+// through the in-cluster env variables.
+func NewClient() (kubernetes.Interface, error) {
+	var config *rest.Config
+	var err error
+
+	if kubeconfig := os.Getenv("KUBECONFIG"); kubeconfig != "" {
+		config, err = clientcmd.BuildConfigFromFlags("" /* master */, kubeconfig)
+	} else {
+		config, err = rest.InClusterConfig()
+	}
+	if err != nil {
+		return nil, fmt.Errorf("create Kubernetes REST config: %v", err)
+	}
+	client, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("create Kubernetes client: %v", err)
+	}
+	return client, nil
+}
 
 // NewInClusterClient connects code that runs inside a Kubernetes pod to the
 // API server.

@@ -75,7 +75,7 @@ func Main() int {
 			pmemcommon.ExitError("scheduler listening", errors.New("only supported in the controller"))
 			return 1
 		}
-		c, err := k8sutil.NewInClusterClient()
+		c, err := k8sutil.NewClient()
 		if err != nil {
 			pmemcommon.ExitError("scheduler setup", err)
 			return 1
