@@ -1127,6 +1127,7 @@ func (d *PmemCSIDriver) getProvisionerContainer() corev1.Container {
 			"--feature-gates=Topology=true",
 			"--strict-topology=true",
 			"--timeout=5m",
+			"--default-fstype=ext4",
 			fmt.Sprintf("--metrics-address=:%d", provisionerMetricsPort),
 		},
 		VolumeMounts: []corev1.VolumeMount{
