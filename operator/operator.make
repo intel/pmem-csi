@@ -47,10 +47,9 @@ OPERATOR_COURIER_IMAGE_TAG=operator-courier:$(OPERATOR_COURIER_VERSION)
 _work/operator-courier-$(OPERATOR_COURIER_VERSION):
 	curl -L https://github.com/operator-framework/operator-courier/archive/v$(OPERATOR_COURIER_VERSION).tar.gz | tar -zx -C ./_work
 
+.PHONY: operator-courier-image
 operator-courier-image: _work/operator-courier-$(OPERATOR_COURIER_VERSION)
-ifeq (, $(shell docker images --quiet $(OPERATOR_COURIER_IMAGE_TAG)))
-	@cd $< && docker build -f Dockerfile -t $(OPERATOR_COURIER_IMAGE_TAG) .
-endif
+	@if ! docker images --quiet $(OPERATOR_COURIER_IMAGE_TAG) | grep -q '.'; then set -x; cd $< && docker build -f Dockerfile -t $(OPERATOR_COURIER_IMAGE_TAG) .; fi
 
 MANIFESTS_DIR=deploy/kustomize/olm-catalog
 CATALOG_DIR=deploy/olm-catalog
@@ -76,16 +75,19 @@ operator-generate-catalog: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) _work/
 	@$(PATCH_VERSIONS) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
 	$(MAKE) operator-clean-crd
 	@$(PATCH_DATE) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
-	$(MAKE) operator-validate-catalog
+	@$(MAKE) --quiet operator-validate-catalog
 
-VALIDATE_CATALOG = \
-	OUT="$(shell docker run -v $(abspath $(CATALOG_DIR)):/catalog $(OPERATOR_COURIER_IMAGE_TAG) operator-courier verify --ui_validate_io /catalog 2>&1)" ; \
-	echo "$$OUT" | grep -q "^WARNING:"; \
-	if [ $$? -eq 0 ] ; then echo $$OUT ; false; fi
-
+# Check for warnings and errors in the catalog with operator-courier.
+# operator-courier does not set a non-zero return code when there are only
+# warnings, so we have to also parse the output.
+.PHONY: operator-validate-catalog
 operator-validate-catalog: operator-courier-image
-	@$(VALIDATE_CATALOG)
-
+	@ if ! OUT="$$(docker run --rm -v $(abspath $(CATALOG_DIR)):/catalog $(OPERATOR_COURIER_IMAGE_TAG) operator-courier verify --ui_validate_io /catalog 2>&1)" || \
+             echo "$$OUT" | grep -q "^WARNING:"; then \
+             echo >&2 "ERROR: Operator catalog did not pass validation with operator-courier:"; \
+             echo >&2 "$$OUT"; \
+             exit 1; \
+        fi
 
 # Generate OLM bundle. OperatorHub/OLM still does not support bundle format
 # but soon it will move from 'packagemanifests' to 'bundles'.
