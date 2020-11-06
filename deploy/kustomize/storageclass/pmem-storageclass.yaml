@@ -3,5 +3,3 @@ kind: StorageClass
 metadata:
   name: pmem-csi-sc
 provisioner: pmem-csi.intel.com
-reclaimPolicy: Delete
-volumeBindingMode: Immediate
