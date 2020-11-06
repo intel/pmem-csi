@@ -164,19 +164,23 @@ func CreatePod(
 	)
 	privileged := volumeMode == v1.PersistentVolumeBlock
 	root := int64(0)
+	pmemUID := int64(1000) // Set explicitly in the PMEM-CSI Dockerfile.
+	pmemGID := int64(1000) // Set indirectly.
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: f.Namespace.Name,
 		},
 		Spec: v1.PodSpec{
+			// Use non-root security context to trigger filesystem
+			// ownership change of the PMEM volume.
+			SecurityContext: &v1.PodSecurityContext{
+				RunAsUser:  &pmemUID,
+				RunAsGroup: &pmemGID,
+				FSGroup:    &pmemGID,
+			},
 			Containers: []v1.Container{
 				{
-					SecurityContext: &v1.SecurityContext{
-						Privileged: &privileged,
-						RunAsUser:  &root,
-						RunAsGroup: &root,
-					},
 					Name:    containerName,
 					Image:   os.Getenv("PMEM_CSI_IMAGE"),
 					Command: []string{"sleep", "1000000"},
@@ -269,6 +273,15 @@ func CreatePod(
 		)
 	}
 
+	if source.CSI != nil || volumeMode == v1.PersistentVolumeBlock {
+		// No FSGroup support for CSI ephemeral volumes and need root-privileges for raw block devices.
+		pod.Spec.Containers[0].SecurityContext = &v1.SecurityContext{
+			Privileged: &privileged,
+			RunAsUser:  &root,
+			RunAsGroup: &root,
+		}
+	}
+
 	By(fmt.Sprintf("Creating pod %s", pod.Name))
 	ns := f.Namespace.Name
 	podClient := f.PodClientNS(ns)
@@ -296,7 +309,7 @@ func testDax(
 	}
 
 	By("checking that missing DAX support is detected")
-	pmempod.RunInPod(f, root, []string{daxCheckBinary}, daxCheckBinary+" /no-dax; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
+	pmempod.RunInPod(f, root, []string{daxCheckBinary}, daxCheckBinary+" /tmp/no-dax; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
 
 	By("checking volume for DAX support")
 	pmempod.RunInPod(f, root, []string{daxCheckBinary}, "lsblk; mount | grep /mnt; "+daxCheckBinary+" /mnt/daxtest", ns, pod.Name, containerName)
