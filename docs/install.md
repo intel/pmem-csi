@@ -1068,8 +1068,8 @@ Available PMEM as percentage:
 pmem_amount_available / pmem_amount_managed
 ```
 
-Result variable | Value | Tags
-----------------|-------|-----
+| Result variable | Value | Tags|
+| ----------------|-------|-----|
 | none | 0.7332986065893997 | instance = 10.42.0.1:10010 |
 |  | | job = pmem-csi-containers |
 |  | | kubernetes_namespace = default |
@@ -1098,8 +1098,8 @@ Number of `CreateVolume` calls in nodes:
 pmem_csi_node_operations_seconds_count{method_name="/csi.v1.Controller/CreateVolume"}
 ```
 
-Result variable | Value | Tags
-----------------|-------|------
+|Result variable | Value | Tags|
+|----------------|-------|------|
 | `pmem_csi_node_operations_seconds_count` | 2 | driver_name = pmem-csi.intel.com |
 | | | grpc_status_code = OK |
 | | | instance = 10.42.0.1:10010 |
