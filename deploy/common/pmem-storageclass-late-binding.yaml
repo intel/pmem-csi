@@ -5,5 +5,4 @@ kind: StorageClass
 metadata:
   name: pmem-csi-sc-late-binding
 provisioner: pmem-csi.intel.com
-reclaimPolicy: Delete
 volumeBindingMode: WaitForFirstConsumer

@@ -281,6 +281,7 @@ spec:
         - --feature-gates=Topology=true
         - --strict-topology=true
         - --timeout=5m
+        - --default-fstype=ext4
         - --metrics-address=:10011
         env:
         - name: POD_NAMESPACE

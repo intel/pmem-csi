@@ -8,5 +8,3 @@ parameters:
   cacheSize: "2"
   persistencyModel: cache
 provisioner: pmem-csi.intel.com
-reclaimPolicy: Delete
-volumeBindingMode: Immediate

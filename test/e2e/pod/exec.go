@@ -20,7 +20,7 @@ import (
 // and executes a shell command. Any error is treated as test failure.
 func RunInPod(f *framework.Framework, rootdir string, items []string, command string, namespace, pod, container string) (string, string) {
 	var input io.ReadCloser
-	var cmdPrefix string
+	cmdPrefix := "cd /tmp && "
 	if len(items) > 0 {
 		args := []string{"-cf", "-"}
 		args = append(args, items...)
@@ -37,7 +37,7 @@ func RunInPod(f *framework.Framework, rootdir string, items []string, command st
 		}()
 
 		input = pipe
-		cmdPrefix = "tar -xf - &&"
+		cmdPrefix += "tar -xf - && "
 	}
 
 	options := framework.ExecOptions{

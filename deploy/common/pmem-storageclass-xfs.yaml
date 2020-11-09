@@ -8,5 +8,3 @@ parameters:
   csi.storage.k8s.io/fstype: xfs
   eraseafter: "false"
 provisioner: pmem-csi.intel.com
-reclaimPolicy: Delete
-volumeBindingMode: Immediate

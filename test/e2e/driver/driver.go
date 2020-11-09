@@ -56,7 +56,7 @@ func New(name, csiDriverName string, fsTypes []string, scManifests map[string]st
 	}
 	if scManifests == nil {
 		scManifests = map[string]string{
-			"":     "deploy/common/pmem-storageclass-ext4.yaml",
+			"":     "deploy/common/pmem-storageclass-default.yaml",
 			"ext4": "deploy/common/pmem-storageclass-ext4.yaml",
 			"xfs":  "deploy/common/pmem-storageclass-xfs.yaml",
 		}
