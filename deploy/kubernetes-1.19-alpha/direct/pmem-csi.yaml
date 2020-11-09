@@ -307,6 +307,9 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
       serviceAccountName: pmem-csi-controller
+      tolerations:
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/master
       volumes:
       - emptyDir: null
         name: plugin-socket-dir
