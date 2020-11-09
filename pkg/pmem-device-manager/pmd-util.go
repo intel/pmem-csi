@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
 	"golang.org/x/sys/unix"
 	"k8s.io/klog/v2"
@@ -44,7 +45,7 @@ func clearDevice(dev *PmemDeviceInfo, flush bool) error {
 	defer unix.Close(fd)
 
 	if err != nil {
-		return fmt.Errorf("failed to clear device %q: %w", dev.Path, ErrDeviceInUse)
+		return fmt.Errorf("failed to clear device %q: %w", dev.Path, pmemerr.DeviceInUse)
 	}
 
 	if blocks == 0 {
@@ -78,5 +79,5 @@ func waitDeviceAppears(dev *PmemDeviceInfo) error {
 			i, dev.Path, retryStatTimeout)
 		time.Sleep(retryStatTimeout)
 	}
-	return fmt.Errorf("%s: %w", dev.Path, ErrDeviceNotReady)
+	return fmt.Errorf("%s: device not ready", dev.Path)
 }

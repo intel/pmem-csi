@@ -250,7 +250,7 @@ func (cs *masterController) CreateVolume(ctx context.Context, req *csi.CreateVol
 		}
 
 		if len(chosenNodes) == 0 {
-			return nil, status.Error(codes.Unavailable, fmt.Sprintf("No node found with %v capacity", asked))
+			return nil, status.Error(codes.ResourceExhausted, fmt.Sprintf("No node found with %v capacity", asked))
 		}
 
 		klog.V(3).Infof("Chosen nodes: %v", chosenNodes)

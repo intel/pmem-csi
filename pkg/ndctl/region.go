@@ -12,6 +12,8 @@ import (
 
 	"github.com/google/uuid"
 	"k8s.io/klog/v2"
+
+	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 )
 
 type RegionType string
@@ -170,7 +172,7 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 			available = r.AvailableSize()
 		}
 		if opts.Size > available {
-			return nil, fmt.Errorf("Not enough space to create namespace with size %v", opts.Size)
+			return nil, fmt.Errorf("create namespace with size %v: %w", opts.Size, pmemerr.NotEnoughSpace)
 		}
 	}
 
