@@ -108,10 +108,7 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 			TestDynamicLateBindingProvisioning(f.ClientSet, &claim, "latebinding")
 		})
 
-		// This test is pending because pod startup itself failed
-		// occasionally for reasons that are out of our control
-		// (https://github.com/clearlinux/distribution/issues/966).
-		PIt("stress test", func() {
+		It("stress test [Slow]", func() {
 			// We cannot test directly whether pod and
 			// volume were created on the same node by
 			// chance or because the code enforces it.
