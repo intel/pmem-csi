@@ -74,6 +74,10 @@ spec:
                 values:
                 - "no"
                 - "false"
+      # Allow this pod to run on a master node.
+      tolerations:
+      - key: "node-role.kubernetes.io/master"
+        effect: "NoSchedule"
       containers:
       - name: pmem-driver
         image: intel/pmem-csi-driver:canary

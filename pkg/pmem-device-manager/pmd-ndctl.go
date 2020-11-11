@@ -32,7 +32,7 @@ var ndctlMutex = &sync.Mutex{}
 
 //NewPmemDeviceManagerNdctl Instantiates a new ndctl based pmem device manager
 // FIXME(avalluri): consider pmemPercentage while calculating available space
-func NewPmemDeviceManagerNdctl(pmemPercentage uint) (PmemDeviceManager, error) {
+func newPmemDeviceManagerNdctl(pmemPercentage uint) (PmemDeviceManager, error) {
 	if pmemPercentage > 100 {
 		return nil, fmt.Errorf("invalid pmemPercentage '%d'. Value must be 0..100", pmemPercentage)
 	}

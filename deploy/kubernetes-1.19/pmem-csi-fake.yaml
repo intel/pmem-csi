@@ -4,7 +4,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-production
+    pmem-csi.intel.com/deployment: fake-production
   name: pmem-csi-controller
   namespace: default
 ---
@@ -12,7 +12,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-production
+    pmem-csi.intel.com/deployment: fake-production
   name: pmem-csi-external-provisioner-cfg
   namespace: default
 rules:
@@ -67,7 +67,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-production
+    pmem-csi.intel.com/deployment: fake-production
   name: pmem-csi-external-provisioner-runner
 rules:
 - apiGroups:
@@ -142,7 +142,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-production
+    pmem-csi.intel.com/deployment: fake-production
   name: pmem-csi-csi-provisioner-role-cfg
   namespace: default
 roleRef:
@@ -158,7 +158,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-production
+    pmem-csi.intel.com/deployment: fake-production
   name: pmem-csi-csi-provisioner-role
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -173,7 +173,7 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-production
+    pmem-csi.intel.com/deployment: fake-production
   name: pmem-csi-controller
   namespace: default
 spec:
@@ -182,13 +182,13 @@ spec:
     targetPort: 10000
   selector:
     app: pmem-csi-controller
-    pmem-csi.intel.com/deployment: direct-production
+    pmem-csi.intel.com/deployment: fake-production
 ---
 apiVersion: v1
 kind: Service
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-production
+    pmem-csi.intel.com/deployment: fake-production
   name: pmem-csi-metrics
   namespace: default
 spec:
@@ -197,14 +197,14 @@ spec:
     targetPort: 10010
   selector:
     app: pmem-csi-controller
-    pmem-csi.intel.com/deployment: direct-production
+    pmem-csi.intel.com/deployment: fake-production
   type: NodePort
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-production
+    pmem-csi.intel.com/deployment: fake-production
   name: pmem-csi-controller
   namespace: default
 spec:
@@ -212,7 +212,7 @@ spec:
   selector:
     matchLabels:
       app: pmem-csi-controller
-      pmem-csi.intel.com/deployment: direct-production
+      pmem-csi.intel.com/deployment: fake-production
   serviceName: pmem-csi-controller
   template:
     metadata:
@@ -220,7 +220,7 @@ spec:
         pmem-csi.intel.com/scrape: containers
       labels:
         app: pmem-csi-controller
-        pmem-csi.intel.com/deployment: direct-production
+        pmem-csi.intel.com/deployment: fake-production
         pmem-csi.intel.com/webhook: ignore
     spec:
       affinity:
@@ -275,7 +275,6 @@ spec:
         - mountPath: /tmp
           name: tmp-dir
       - args:
-        - --capacity-controller-deployment-mode=central
         - -v=3
         - --csi-address=/csi/csi-controller.sock
         - --feature-gates=Topology=true
@@ -283,15 +282,6 @@ spec:
         - --timeout=5m
         - --default-fstype=ext4
         - --metrics-address=:10011
-        env:
-        - name: POD_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
-        - name: POD_NAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
         image: k8s.gcr.io/sig-storage/csi-provisioner:v2.0.2
         imagePullPolicy: IfNotPresent
         name: external-provisioner
@@ -323,21 +313,21 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-production
+    pmem-csi.intel.com/deployment: fake-production
   name: pmem-csi-node
   namespace: default
 spec:
   selector:
     matchLabels:
       app: pmem-csi-node
-      pmem-csi.intel.com/deployment: direct-production
+      pmem-csi.intel.com/deployment: fake-production
   template:
     metadata:
       annotations:
         pmem-csi.intel.com/scrape: containers
       labels:
         app: pmem-csi-node
-        pmem-csi.intel.com/deployment: direct-production
+        pmem-csi.intel.com/deployment: fake-production
         pmem-csi.intel.com/webhook: ignore
     spec:
       containers:
@@ -357,6 +347,7 @@ spec:
         - -drivername=$(PMEM_CSI_DRIVER_NAME)
         - -pmemPercentage=100
         - -metricsListen=:10010
+        - -deviceManager=fake
         env:
         - name: KUBE_NODE_NAME
           valueFrom:
@@ -458,12 +449,11 @@ apiVersion: storage.k8s.io/v1beta1
 kind: CSIDriver
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-production
+    pmem-csi.intel.com/deployment: fake-production
   name: pmem-csi.intel.com
 spec:
   attachRequired: false
   podInfoOnMount: true
-  storageCapacity: true
   volumeLifecycleModes:
   - Persistent
   - Ephemeral

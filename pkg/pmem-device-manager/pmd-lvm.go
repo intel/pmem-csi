@@ -37,7 +37,7 @@ var vgsArgs = []string{"--noheadings", "--nosuffix", "-o", "vg_name,vg_size,vg_f
 var lvmMutex = &sync.Mutex{}
 
 // NewPmemDeviceManagerLVM Instantiates a new LVM based pmem device manager
-func NewPmemDeviceManagerLVM(pmemPercentage uint) (PmemDeviceManager, error) {
+func newPmemDeviceManagerLVM(pmemPercentage uint) (PmemDeviceManager, error) {
 	if pmemPercentage > 100 {
 		return nil, fmt.Errorf("invalid pmemPercentage '%d'. Value must be 0..100", pmemPercentage)
 	}
@@ -73,14 +73,14 @@ func NewPmemDeviceManagerLVM(pmemPercentage uint) (PmemDeviceManager, error) {
 		}
 	}
 
-	return NewPmemDeviceManagerLVMForVGs(volumeGroups)
+	return newPmemDeviceManagerLVMForVGs(volumeGroups)
 }
 
 func (pmem *pmemLvm) GetMode() api.DeviceMode {
 	return api.DeviceModeLVM
 }
 
-func NewPmemDeviceManagerLVMForVGs(volumeGroups []string) (PmemDeviceManager, error) {
+func newPmemDeviceManagerLVMForVGs(volumeGroups []string) (PmemDeviceManager, error) {
 	devices, err := listDevices(volumeGroups...)
 	if err != nil {
 		return nil, err

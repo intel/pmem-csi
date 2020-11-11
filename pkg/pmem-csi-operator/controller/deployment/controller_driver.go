@@ -795,6 +795,13 @@ func (d *PmemCSIDriver) getControllerStatefulSet() *appsv1.StatefulSet {
 							},
 						},
 					},
+					Tolerations: []corev1.Toleration{
+						{
+							// Allow this pod to run on a master node.
+							Key:    "node-role.kubernetes.io/master",
+							Effect: "NoSchedule",
+						},
+					},
 					Volumes: []corev1.Volume{
 						{
 							Name: "plugin-socket-dir",

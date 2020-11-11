@@ -330,7 +330,7 @@ func (csid *csiDriver) Run() error {
 			return err
 		}
 	case Node:
-		dm, err := newDeviceManager(csid.cfg.DeviceManager, csid.cfg.PmemPercentage)
+		dm, err := pmdmanager.New(csid.cfg.DeviceManager, csid.cfg.PmemPercentage)
 		if err != nil {
 			return err
 		}
@@ -569,14 +569,4 @@ func register(ctx context.Context, conn *grpc.ClientConn, req *registry.Register
 	klog.V(4).Info("Registration success")
 
 	return nil
-}
-
-func newDeviceManager(dmType api.DeviceMode, pmemPercentage uint) (pmdmanager.PmemDeviceManager, error) {
-	switch dmType {
-	case api.DeviceModeLVM:
-		return pmdmanager.NewPmemDeviceManagerLVM(pmemPercentage)
-	case api.DeviceModeDirect:
-		return pmdmanager.NewPmemDeviceManagerNdctl(pmemPercentage)
-	}
-	return nil, fmt.Errorf("Unsupported device manager type '%s'", dmType)
 }
