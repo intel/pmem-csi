@@ -15,6 +15,8 @@ import (
 	"os"
 	"testing"
 
+	"k8s.io/klog/v2"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,6 +26,10 @@ var (
 	certFile = os.ExpandEnv("${TEST_WORK}/pmem-ca/pmem-registry.pem")
 	keyFile  = os.ExpandEnv("${TEST_WORK}/pmem-ca/pmem-registry-key.pem")
 )
+
+func init() {
+	klog.InitFlags(nil)
+}
 
 func TestMetrics(t *testing.T) {
 	cases := map[string]struct {
