@@ -32,8 +32,16 @@ Kubernetes](#installation-and-setup).
 
 The administrator must install PMEM-CSI, using [the PMEM-CSI
 operator](#install-using-the-operator) (recommended) or with [scripts
-and YAML files in the source code](#install-from-source). A PMEM-CSI
-installation can only use [direct device
+and YAML files in the source code](#install-from-source). The default
+install settings should work for most clusters. Some clusters don't
+use `/var/lib/kubelet` as the data directory for kubelet and then the
+corresponding PMEM-CSI setting must be changed accordingly because
+otherwise kubelet does not find PMEM-CSI. The operator has an option
+for that in its API (`kubeletDir` in the [`DeploymentSpec`](#deploymentspec)),
+the YAML files can be edited or modified with
+kustomize.
+
+A PMEM-CSI installation can only use [direct device
 mode](/docs/design.md#direct-device-mode) or [LVM
 device mode](/docs/design.md#direct-device-mode). It is possible to install
 PMEM-CSI twice on the same cluster with different modes, with these restrictions:
