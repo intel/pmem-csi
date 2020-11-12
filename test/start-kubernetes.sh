@@ -424,12 +424,6 @@ function init_kubernetes_cluster() (
         sed -e 's/.*: v\([0-9]*\)\.\([0-9]*\)\..*/\1.\2/' \
         >"${CLUSTER_DIRECTORY}/kubernetes.version"
 
-    # Allow all pods to run also on the master node *and* prevent the PMEM-CSI controller
-    # from running on the normal nodes. Workaround for networking issues on
-    # Clear Linux (https://github.com/intel/pmem-csi/issues/555).
-    ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} kubectl taint nodes pmem-csi-${CLUSTER}-master node-role.kubernetes.io/master:NoSchedule-
-    ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} kubectl label node -l storage=pmem pmem-csi.intel.com/controller=no
-
     kubernetes_usage
 )
 
