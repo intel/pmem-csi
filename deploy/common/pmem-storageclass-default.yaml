@@ -3,8 +3,5 @@
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  name: pmem-csi-sc-ext4
-parameters:
-  csi.storage.k8s.io/fstype: ext4
-  eraseafter: "true"
+  name: pmem-csi-sc
 provisioner: pmem-csi.intel.com

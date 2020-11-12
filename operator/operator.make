@@ -41,13 +41,24 @@ else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
 
+OPERATOR_COURIER_VERSION=2.1.10
+OPERATOR_COURIER_IMAGE_TAG=operator-courier:$(OPERATOR_COURIER_VERSION)
+
+_work/operator-courier-$(OPERATOR_COURIER_VERSION):
+	curl -L https://github.com/operator-framework/operator-courier/archive/v$(OPERATOR_COURIER_VERSION).tar.gz | tar -zx -C ./_work
+
+.PHONY: operator-courier-image
+operator-courier-image: _work/operator-courier-$(OPERATOR_COURIER_VERSION)
+	@if ! docker images --quiet $(OPERATOR_COURIER_IMAGE_TAG) | grep -q '.'; then set -x; cd $< && docker build -f Dockerfile -t $(OPERATOR_COURIER_IMAGE_TAG) .; fi
+
 MANIFESTS_DIR=deploy/kustomize/olm-catalog
 CATALOG_DIR=deploy/olm-catalog
 BUNDLE_DIR=deploy/bundle
 
 KUBECONFIG := $(shell echo $(PWD)/_work/$(CLUSTER)/kube.config)
 
-PATCH_VERSIONS := sed -i -e 's;X.Y.Z;$(MAJOR_MINOR_PATCH_VERSION);g' -e 's;X.Y;$(MAJOR_MINOR_VERSION);g'
+PATCH_VERSIONS := sed -i -e 's;X\.Y\.Z;$(MAJOR_MINOR_PATCH_VERSION);g' -e 's;X\.Y;$(MAJOR_MINOR_VERSION);g'
+PATCH_DATE := sed -i -e 's;\(.*createdAt: \).*;\1$(shell date +%FT%TZ);g'
 OPERATOR_OUTPUT_DIR := $(CATALOG_DIR)/$(MAJOR_MINOR_PATCH_VERSION)
 
 # Generate CRD and add kustomization support
@@ -63,6 +74,20 @@ operator-generate-catalog: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) _work/
 		--kustomize-dir $(MANIFESTS_DIR) --output-dir $(CATALOG_DIR)
 	@$(PATCH_VERSIONS) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
 	$(MAKE) operator-clean-crd
+	@$(PATCH_DATE) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
+	@$(MAKE) --quiet operator-validate-catalog
+
+# Check for warnings and errors in the catalog with operator-courier.
+# operator-courier does not set a non-zero return code when there are only
+# warnings, so we have to also parse the output.
+.PHONY: operator-validate-catalog
+operator-validate-catalog: operator-courier-image
+	@ if ! OUT="$$(docker run --rm -v $(abspath $(CATALOG_DIR)):/catalog $(OPERATOR_COURIER_IMAGE_TAG) operator-courier verify --ui_validate_io /catalog 2>&1)" || \
+             echo "$$OUT" | grep -q "^WARNING:"; then \
+             echo >&2 "ERROR: Operator catalog did not pass validation with operator-courier:"; \
+             echo >&2 "$$OUT"; \
+             exit 1; \
+        fi
 
 # Generate OLM bundle. OperatorHub/OLM still does not support bundle format
 # but soon it will move from 'packagemanifests' to 'bundles'.
@@ -71,6 +96,7 @@ operator-generate-bundle: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) _work/k
 	@_work/kustomize build --load_restrictor=none $(MANIFESTS_DIR) | $< generate bundle  --version=$(VERSION) \
         --kustomize-dir=$(MANIFESTS_DIR) --output-dir=$(BUNDLE_DIR)
 	@$(PATCH_VERSIONS) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
+	@$(PATCH_DATE) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
 
 operator-clean-crd:
 	rm -rf $(MANIFESTS_DIR)/crd

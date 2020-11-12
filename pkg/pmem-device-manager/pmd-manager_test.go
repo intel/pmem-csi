@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -125,7 +126,7 @@ func runTests(mode string) {
 	It("Should fail to retrieve non-existent device", func() {
 		dev, err := dm.GetDevice("unknown")
 		Expect(err).ShouldNot(BeNil(), "Error expected")
-		Expect(errors.Is(err, ErrDeviceNotFound)).Should(BeTrue(), "expected error is device not found error")
+		Expect(errors.Is(err, pmemerr.DeviceNotFound)).Should(BeTrue(), "expected error is device not found error")
 		Expect(dev).Should(BeNil(), "returned device should be nil")
 	})
 
@@ -206,7 +207,7 @@ func runTests(mode string) {
 		// Delete should fail as the device is in use
 		err = dm.DeleteDevice(name, true)
 		Expect(err).ShouldNot(BeNil(), "Error expected when deleting device in use: %s", dev.VolumeId)
-		Expect(errors.Is(err, ErrDeviceInUse)).Should(BeTrue(), "Expected device busy error: %s", dev.VolumeId)
+		Expect(errors.Is(err, pmemerr.DeviceInUse)).Should(BeTrue(), "Expected device busy error: %s", dev.VolumeId)
 		cleanupList[name] = false
 
 		err = unmount(mountPath)
@@ -218,7 +219,7 @@ func runTests(mode string) {
 
 		dev, err = dm.GetDevice(name)
 		Expect(err).ShouldNot(BeNil(), "GetDevice() should fail on deleted device")
-		Expect(errors.Is(err, ErrDeviceNotFound)).Should(BeTrue(), "expected error is os.ErrNotExist")
+		Expect(errors.Is(err, pmemerr.DeviceNotFound)).Should(BeTrue(), "expected error is DeviceNodeFound")
 		Expect(dev).Should(BeNil(), "returned device should be nil")
 
 		// Delete call should not return any error on non-existing device

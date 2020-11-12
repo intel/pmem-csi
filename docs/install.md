@@ -32,8 +32,16 @@ Kubernetes](#installation-and-setup).
 
 The administrator must install PMEM-CSI, using [the PMEM-CSI
 operator](#install-using-the-operator) (recommended) or with [scripts
-and YAML files in the source code](#install-from-source). A PMEM-CSI
-installation can only use [direct device
+and YAML files in the source code](#install-from-source). The default
+install settings should work for most clusters. Some clusters don't
+use `/var/lib/kubelet` as the data directory for kubelet and then the
+corresponding PMEM-CSI setting must be changed accordingly because
+otherwise kubelet does not find PMEM-CSI. The operator has an option
+for that in its API (`kubeletDir` in the [`DeploymentSpec`](#deploymentspec)),
+the YAML files can be edited or modified with
+kustomize.
+
+A PMEM-CSI installation can only use [direct device
 mode](/docs/design.md#direct-device-mode) or [LVM
 device mode](/docs/design.md#direct-device-mode). It is possible to install
 PMEM-CSI twice on the same cluster with different modes, with these restrictions:
@@ -1060,8 +1068,8 @@ Available PMEM as percentage:
 pmem_amount_available / pmem_amount_managed
 ```
 
-Result variable | Value | Tags
-----------------|-------|-----
+| Result variable | Value | Tags|
+| ----------------|-------|-----|
 | none | 0.7332986065893997 | instance = 10.42.0.1:10010 |
 |  | | job = pmem-csi-containers |
 |  | | kubernetes_namespace = default |
@@ -1090,8 +1098,8 @@ Number of `CreateVolume` calls in nodes:
 pmem_csi_node_operations_seconds_count{method_name="/csi.v1.Controller/CreateVolume"}
 ```
 
-Result variable | Value | Tags
-----------------|-------|------
+|Result variable | Value | Tags|
+|----------------|-------|------|
 | `pmem_csi_node_operations_seconds_count` | 2 | driver_name = pmem-csi.intel.com |
 | | | grpc_status_code = OK |
 | | | instance = 10.42.0.1:10010 |
@@ -1143,7 +1151,7 @@ The current API for PMEM-CSI `Deployment` resources is:
 |---|---|---|---|
 | image | string | PMEM-CSI docker image name used for the deployment | the same image as the operator<sup>1</sup> |
 | provisionerImage | string | [CSI provisioner](https://kubernetes-csi.github.io/docs/external-provisioner.html) docker image name | latest [external provisioner](https://kubernetes-csi.github.io/docs/external-provisioner.html) stable release image<sup>2</sup> |
-| registrarImage | string | [CSI node driver registrar](https://github.com/kubernetes-csi/node-driver-registrar) docker image name | latest [node driver registrar](https://kubernetes-csi.github.io/docs/node-driver-registrar.html) stable release image<sup>2</sup> |
+| nodeRegistrarImage | string | [CSI node driver registrar](https://github.com/kubernetes-csi/node-driver-registrar) docker image name | latest [node driver registrar](https://kubernetes-csi.github.io/docs/node-driver-registrar.html) stable release image<sup>2</sup> |
 | pullPolicy | string | Docker image pull policy. either one of `Always`, `Never`, `IfNotPresent` | `IfNotPresent` |
 | logLevel | integer | PMEM-CSI driver logging level | 3 |
 | deviceMode | string | Device management mode to use. Supports one of `lvm` or `direct` | `lvm`
