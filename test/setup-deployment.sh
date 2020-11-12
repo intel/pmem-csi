@@ -157,6 +157,22 @@ EOF
   value: "--pmemPercentage=50"
 EOF
                 fi
+
+                # Always use the configured label for selecting nodes.
+                ${SSH} "cat >>'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
+  - target:
+      group: apps
+      version: v1
+      kind: DaemonSet
+      name: pmem-csi-node
+    path: node-label-patch.yaml
+EOF
+                ${SSH} "cat >>'$tmpdir/my-deployment/node-label-patch.yaml'" <<EOF
+- op: add
+  path: /spec/template/spec/nodeSelector
+  value:
+     {$(echo "${TEST_PMEM_NODE_LABEL}" | sed -e 's/\(.*\)=\(.*\)/\1: "\2"/')}
+EOF
                 ;;
             scheduler)
                 # Change port number via JSON patch.

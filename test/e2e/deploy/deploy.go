@@ -932,6 +932,10 @@ func (d *Deployment) GetDriverDeployment() api.Deployment {
 			// PMEM must be used for LVM, otherwise other tests cannot
 			// run after the LVM driver was deployed once.
 			PMEMPercentage: 50,
+			NodeSelector: map[string]string{
+				// Provided by NFD.
+				"feature.node.kubernetes.io/memory-nv.dax": "true",
+			},
 		},
 	}
 }

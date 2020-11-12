@@ -56,8 +56,11 @@ virtual machines.
 The first node is the Kubernetes master without
 persistent memory.
 The other three nodes are worker nodes with one emulated 32GB NVDIMM each.
-After the cluster has been formed, `make start` adds `storage=pmem` label
-to the worker nodes and deploys the PMEM-CSI driver.
+After the cluster has been formed, `make start` installs [NFD](https://kubernetes-sigs.github.io/node-feature-discovery/stable/get-started/index.html) to label
+the worker nodes. The PMEM-CSI driver can be installed with
+`test/setup-deployment.sh`, but will also be installed as needed by
+the E2E test suite.
+
 Once `make start` completes, the cluster is ready for interactive use via
 `kubectl` inside the virtual machine. Alternatively, you can also
 set `KUBECONFIG` as shown at the end of the `make start` output

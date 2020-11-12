@@ -385,6 +385,10 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 							Spec: api.DeploymentSpec{
 								DeviceMode:     from,
 								PMEMPercentage: 50,
+								NodeSelector: map[string]string{
+									// Provided by NFD.
+									"feature.node.kubernetes.io/memory-nv.dax": "true",
+								},
 							},
 						}
 

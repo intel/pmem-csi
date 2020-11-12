@@ -209,9 +209,24 @@ on the Kubernetes version.
 
 - **Label the cluster nodes that provide persistent memory device(s)**
 
+PMEM-CSI manages PMEM on those nodes that have a certain label. For
+historic reasons, the default in the YAML files and the operator
+settings is to use a label `storage` with the value `pmem`.
+
+Such a label can be set for each node manually with:
+
 ``` console
 $ kubectl label node <your node> storage=pmem
 ```
+
+Alternatively, the [Node Feature
+Discovery (NFD)](https://kubernetes-sigs.github.io/node-feature-discovery/stable/get-started/index.html)
+add-on can be used to label nodes automatically. In that case, the
+default PMEM-CSI node selector has to be changed to
+`"feature.node.kubernetes.io/memory-nv.dax": "true"`. The operator has
+the [`nodeSelector`
+field](https://kubernetes-sigs.github.io/node-feature-discovery/stable/get-started/index.html)
+for that. For the YAML files a kustomize patch can be used.
 
 ### Install PMEM-CSI driver
 
@@ -267,12 +282,12 @@ metadata:
 spec:
   deviceMode: lvm
   nodeSelector:
-    storage: pmem
+    feature.node.kubernetes.io/memory-nv.dax: "true"
 EOF
 ```
 
 This uses the same `pmem-csi.intel.com` driver name as the YAML files
-in [`deploy`](/deploy) and the node label from the [hardware
+in [`deploy`](/deploy) and the node label created by NFD (see the [hardware
 installation and setup section](#installation-and-setup).
 
 Once the above deployment installation is successful, we can see all the driver
@@ -448,13 +463,16 @@ verify that the node labels have been configured correctly
 $ kubectl get nodes --show-labels
 ```
 
-The command output must indicate that every node with PMEM has these two labels:
+The command output must indicate that every node with PMEM has at least two labels:
 ``` console
 pmem-csi.intel.com/node=<NODE-NAME>,storage=pmem
 ```
 
-If **storage=pmem** is missing, label manually as described above. If
-**pmem-csi.intel.com/node** is missing, then double-check that the
+**storage=pmem** is the label that has to be added manually as
+described above.  When using NFD, the node should have the
+`feature.node.kubernetes.io/memory-nv.dax=true` label.
+
+If **pmem-csi.intel.com/node** is missing, then double-check that the
 alpha feature gates are enabled, that the CSI driver is running on the node,
 and that the driver's log output doesn't contain errors.
 
@@ -486,8 +504,7 @@ pmem-csi-pvc-xfs    Bound    pvc-f7101fd2-6b36-11e9-bf09-deadbeef0100   4Gi     
 $ kubectl create -f deploy/common/pmem-app.yaml
 ```
 
-These applications use **storage: pmem** in the <i>nodeSelector</i>
-list to ensure scheduling to a node supporting pmem device, and each requests a mount of a volume,
+These applications each request a mount of a volume,
 one with ext4-format and another with xfs-format file system.
 
 - **Verify two application pods reach 'Running' status**
