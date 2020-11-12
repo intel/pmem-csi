@@ -14,18 +14,24 @@ import (
 	"time"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	"github.com/intel/pmem-csi/pkg/exec"
 	"github.com/intel/pmem-csi/pkg/k8sutil"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment/testcases"
 	"github.com/intel/pmem-csi/pkg/version"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 	"github.com/intel/pmem-csi/test/e2e/operator/validate"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apiruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2epv "k8s.io/kubernetes/test/e2e/framework/pv"
 	runtime "sigs.k8s.io/controller-runtime/pkg/client"
@@ -107,6 +113,17 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		framework.Logf("got expected driver deployment %s", deployment.Name)
 	}
 
+	ensureObjectRecovered := func(obj apiruntime.Object) {
+		meta, err := meta.Accessor(obj)
+		Expect(err).ShouldNot(HaveOccurred(), "get meta object")
+		framework.Logf("Waiting for deleted object recovered %T/%s", obj, meta.GetName())
+		key := runtime.ObjectKey{Name: meta.GetName(), Namespace: meta.GetNamespace()}
+		Eventually(func() error {
+			return client.Get(context.TODO(), key, obj)
+		}, "2m", "1s").ShouldNot(HaveOccurred(), "failed to recover object")
+		framework.Logf("Object %T/%s recovered", obj, meta.GetName())
+	}
+
 	Context("deployment", func() {
 
 		tests := map[string]api.Deployment{
@@ -143,6 +160,34 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				validateDriver(deployment)
 			})
 		}
+
+		It("get deployment shall list expected fields", func() {
+			lblKey := "storage"
+			lblValue := "unknown-node"
+			deployment := getDeployment("test-get-deployment-fields")
+			// Only values that are visible in Deployment CR are shown in `kubectl get`
+			// but, not the default values chosen by the operator.
+			// So provide the values that are expected to list.
+			deployment.Spec.DeviceMode = api.DeviceModeDirect
+			deployment.Spec.PullPolicy = corev1.PullNever
+			deployment.Spec.Image = dummyImage
+			deployment.Spec.NodeSelector = map[string]string{
+				lblKey: lblValue,
+			}
+
+			deployment = deploy.CreateDeploymentCR(f, deployment)
+			defer deploy.DeleteDeploymentCR(f, deployment.Name)
+			validateDriver(deployment, "validate driver")
+
+			d := deploy.GetDeploymentCR(f, deployment.Name)
+
+			// Run in-cluster kubectl from master node
+			ssh := os.Getenv("REPO_ROOT") + "/_work/" + os.Getenv("CLUSTER") + "/ssh.0"
+			out, err := exec.RunCommand(ssh, "kubectl", "get", "deployments.pmem-csi.intel.com", "--no-headers")
+			Expect(err).ShouldNot(HaveOccurred(), "kubectl get: %v", out)
+			Expect(out).Should(MatchRegexp(`%s\s+%s\s+.*"?%s"?:"?%s"?.*\s+%s\s+%s\s+[0-9]+(s|m)`,
+				d.Name, d.Spec.DeviceMode, lblKey, lblValue, d.Spec.Image, d.Status.Phase), "fields mismatch")
+		})
 
 		It("driver image shall default to operator image", func() {
 			deployment := getDeployment("test-deployment-driver-image")
@@ -411,7 +456,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						defer deletePVC(f, pvc.Namespace, pvc.Name)
 
 						// Wait till a volume get provisioned for this claim
-						err := e2epv.WaitForPersistentVolumeClaimPhase(v1.ClaimBound, f.ClientSet, pvc.Namespace, pvc.Name, framework.Poll, framework.ClaimProvisionTimeout)
+						err := e2epv.WaitForPersistentVolumeClaimPhase(corev1.ClaimBound, f.ClientSet, pvc.Namespace, pvc.Name, framework.Poll, framework.ClaimProvisionTimeout)
 						Expect(err).NotTo(HaveOccurred(), "Persistent volume claim bound failure")
 
 						pvc, err = f.ClientSet.CoreV1().PersistentVolumeClaims(pvc.Namespace).Get(context.Background(), pvc.Name, metav1.GetOptions{})
@@ -485,6 +530,190 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				})
 			})
 		}
+	})
+
+	Context("recover", func() {
+		Context("deleted sub-resources", func() {
+			tests := map[string]func(*api.Deployment) apiruntime.Object{
+				"registry secret": func(dep *api.Deployment) apiruntime.Object {
+					return &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: dep.RegistrySecretName(), Namespace: d.Namespace,
+						},
+					}
+				},
+				"node secret": func(dep *api.Deployment) apiruntime.Object {
+					return &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.NodeSecretName(), Namespace: d.Namespace},
+					}
+				},
+				"service account": func(dep *api.Deployment) apiruntime.Object {
+					return &corev1.ServiceAccount{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.ServiceAccountName(), Namespace: d.Namespace},
+					}
+				},
+				"controller service": func(dep *api.Deployment) apiruntime.Object {
+					return &corev1.Service{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.ControllerServiceName(), Namespace: d.Namespace},
+					}
+				},
+				"metrics service": func(dep *api.Deployment) apiruntime.Object {
+					return &corev1.Service{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.MetricsServiceName(), Namespace: d.Namespace},
+					}
+				},
+				"provisioner role": func(dep *api.Deployment) apiruntime.Object {
+					return &rbacv1.Role{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerRoleName(), Namespace: d.Namespace},
+					}
+				},
+				"provisioner role binding": func(dep *api.Deployment) apiruntime.Object {
+					return &rbacv1.RoleBinding{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerRoleBindingName(), Namespace: d.Namespace},
+					}
+				},
+				"provisioner cluster role": func(dep *api.Deployment) apiruntime.Object {
+					return &rbacv1.ClusterRole{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerClusterRoleName()},
+					}
+				},
+				"provisioner cluster role binding": func(dep *api.Deployment) apiruntime.Object {
+					return &rbacv1.ClusterRoleBinding{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerClusterRoleBindingName()},
+					}
+				},
+				"csi driver": func(dep *api.Deployment) apiruntime.Object {
+					return &storagev1beta1.CSIDriver{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.GetName()},
+					}
+				},
+				"controller driver": func(dep *api.Deployment) apiruntime.Object {
+					return &appsv1.StatefulSet{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.ControllerDriverName(), Namespace: d.Namespace},
+					}
+				},
+				"node driver": func(dep *api.Deployment) apiruntime.Object {
+					return &appsv1.DaemonSet{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.NodeDriverName(), Namespace: d.Namespace},
+					}
+				},
+			}
+
+			delete := func(obj apiruntime.Object) {
+				meta, err := meta.Accessor(obj)
+				Expect(err).ShouldNot(HaveOccurred(), "get meta object")
+				Eventually(func() error {
+					err := client.Delete(context.TODO(), obj)
+					if err == nil || errors.IsNotFound(err) {
+						return nil
+					}
+					return err
+				}, "3m", "1s").ShouldNot(HaveOccurred(), "delete object '%T/%s", obj, meta.GetName())
+				framework.Logf("Deleted object %T/%s", obj, meta.GetName())
+			}
+			for name, getter := range tests {
+				name, getter := name, getter
+				It(name, func() {
+					dep := getDeployment("recover-" + strings.ReplaceAll(name, " ", "-"))
+					deployment := deploy.CreateDeploymentCR(f, dep)
+					defer deploy.DeleteDeploymentCR(f, dep.Name)
+					validateDriver(deployment)
+
+					obj := getter(&dep)
+					delete(obj)
+					ensureObjectRecovered(obj)
+					validateDriver(deployment, "restore deleted registry secret")
+				})
+			}
+		})
+
+		Context("conflicting update", func() {
+			tests := map[string]func(dep *api.Deployment) apiruntime.Object{
+				"controller": func(dep *api.Deployment) apiruntime.Object {
+					obj := &appsv1.StatefulSet{}
+					key := runtime.ObjectKey{Name: dep.ControllerDriverName(), Namespace: d.Namespace}
+					EventuallyWithOffset(1, func() error {
+						return client.Get(context.TODO(), key, obj)
+					}, "2m", "1s").ShouldNot(HaveOccurred(), "get stateful set")
+
+					for i, container := range obj.Spec.Template.Spec.Containers {
+						if container.Name == "pmem-driver" {
+							obj.Spec.Template.Spec.Containers[i].Command = []string{"malformed", "options"}
+							break
+						}
+					}
+					return obj
+				},
+				"node driver": func(dep *api.Deployment) apiruntime.Object {
+					obj := &appsv1.DaemonSet{}
+					key := runtime.ObjectKey{Name: dep.NodeDriverName(), Namespace: d.Namespace}
+					EventuallyWithOffset(1, func() error {
+						return client.Get(context.TODO(), key, obj)
+					}, "2m", "1s").ShouldNot(HaveOccurred(), "get daemon set")
+
+					for i, container := range obj.Spec.Template.Spec.Containers {
+						if container.Name == "pmem-driver" {
+							obj.Spec.Template.Spec.Containers[i].Command = []string{"malformed", "options"}
+							break
+						}
+					}
+					return obj
+				},
+				"metrics service": func(dep *api.Deployment) apiruntime.Object {
+					obj := &corev1.Service{}
+					key := runtime.ObjectKey{Name: dep.MetricsServiceName(), Namespace: d.Namespace}
+					EventuallyWithOffset(1, func() error {
+						return client.Get(context.TODO(), key, obj)
+					}, "2m", "1s").ShouldNot(HaveOccurred(), "get metrics service set")
+					obj.Spec.Ports = []corev1.ServicePort{
+						{
+							Port: 1111,
+							TargetPort: intstr.IntOrString{
+								IntVal: 1111,
+							},
+						},
+					}
+					return obj
+				},
+				"controller service": func(dep *api.Deployment) apiruntime.Object {
+					obj := &corev1.Service{}
+					key := runtime.ObjectKey{Name: dep.ControllerServiceName(), Namespace: d.Namespace}
+					EventuallyWithOffset(1, func() error {
+						return client.Get(context.TODO(), key, obj)
+					}, "2m", "1s").ShouldNot(HaveOccurred(), "get metrics service set")
+
+					obj.Spec.Ports = []corev1.ServicePort{
+						{
+							Port: 1111,
+							TargetPort: intstr.IntOrString{
+								IntVal: 1111,
+							},
+						},
+					}
+					return obj
+				},
+			}
+			for name, mutate := range tests {
+				name, mutate := name, mutate
+				It(name, func() {
+					dep := getDeployment("recover-" + strings.ReplaceAll(name, " ", "-"))
+					deployment := deploy.CreateDeploymentCR(f, dep)
+					defer deploy.DeleteDeploymentCR(f, dep.Name)
+					validateDriver(deployment)
+
+					obj := mutate(&deployment)
+					Eventually(func() error {
+						err := client.Update(context.TODO(), obj)
+						if err != nil && errors.IsConflict(err) {
+							obj = mutate(&deployment)
+						}
+						return err
+					}, "2m", "1s").ShouldNot(HaveOccurred(), "update: %s", name)
+
+					validateDriver(deployment, fmt.Sprintf("recovered %s", name))
+				})
+			}
+		})
 	})
 })
 
