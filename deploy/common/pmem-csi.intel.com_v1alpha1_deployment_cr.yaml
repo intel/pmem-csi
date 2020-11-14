@@ -5,5 +5,8 @@ metadata:
 spec:
   deviceMode: "lvm"
   nodeSelector:
-    storage: "pmem"
+    # When using Node Feature Discovery (NFD):
+    feature.node.kubernetes.io/memory-nv.dax: "true"
+    # When using manual node labeling with that label:
+    # storage: pmem
 

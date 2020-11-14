@@ -30,8 +30,6 @@ spec:
       volumeMounts:
         - name: data
           mountPath: /data
-  nodeSelector:
-    storage: pmem
   volumes:
   - name: my-csi-device
     persistentVolumeClaim:

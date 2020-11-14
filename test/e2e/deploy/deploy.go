@@ -927,13 +927,15 @@ func (d *Deployment) GetDriverDeployment() api.Deployment {
 			Labels: map[string]string{
 				deploymentLabel: d.Label(),
 			},
-			// TODO: replace pmemcsidriver.DeviceMode with api.DeviceMode everywhere
-			// and remove this cast here.
-			DeviceMode: api.DeviceMode(d.Mode),
+			DeviceMode: d.Mode,
 			// As in setup-deployment.sh, only 50% of the available
 			// PMEM must be used for LVM, otherwise other tests cannot
 			// run after the LVM driver was deployed once.
 			PMEMPercentage: 50,
+			NodeSelector: map[string]string{
+				// Provided by NFD.
+				"feature.node.kubernetes.io/memory-nv.dax": "true",
+			},
 		},
 	}
 }

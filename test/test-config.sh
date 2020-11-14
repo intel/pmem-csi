@@ -147,6 +147,10 @@ fi
 # match the directory suffix, i.e. start with a hyphen.
 : ${TEST_KUBERNETES_FLAVOR:=}
 
+# The label and its value that identifies the nodes with PMEM.
+# The default is the label set by NFD.
+: ${TEST_PMEM_NODE_LABEL:=feature.node.kubernetes.io/memory-nv.dax=true}
+
 # Kubernetes feature gates to enable/disable.
 # EndpointSlice is disabled because of https://github.com/kubernetes/kubernetes/issues/91287 (Kubernetes
 # < 1.19) and because there were random connection failures to node ports during sanity

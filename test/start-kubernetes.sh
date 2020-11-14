@@ -404,11 +404,19 @@ function init_kubernetes_cluster() (
     scp $SSH_ARGS ${CLOUD_USER}@${master_ip}:.kube/config $KUBECONFIG || die "failed to copy Kubernetes config file"
     export KUBECONFIG=${KUBECONFIG}
 
+    # Install NFD and let it label all nodes with "feature.node.kubernetes.io/memory-nv.dax: true".
+    NFD_VERSION=v0.6.0
+    ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/node-feature-discovery/$NFD_VERSION/nfd-master.yaml.template
+    ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/node-feature-discovery/$NFD_VERSION/nfd-worker-daemonset.yaml.template
+
     #get kubernetes join token
     join_token=$(ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} "$ENV_VARS kubeadm token create --print-join-command") || die "could not get kubeadm join token"
     pids=""
     for ip in ${workers_ip}; do
 
+        # storage=pmem is set *only* for version skew testing and PMEM-CSI deployments < 0.9.0.
+        # Those still need that label. "kubectl label" can be removed once we stop testing
+        # against such old release.
         vm_name=$(govm list -f '{{select (filterRegexp . "IP" "'${ip}'") "Name"}}') || die "could not find VM name for $ip"
         log_name=${CLUSTER_DIRECTORY}/${vm_name}.log
         ( ssh $SSH_ARGS ${CLOUD_USER}@${ip} "set -x; $ENV_VARS sudo ${join_token/kubeadm/kubeadm --ignore-preflight-errors=SystemVerification}" &&
@@ -423,12 +431,6 @@ function init_kubernetes_cluster() (
         grep 'Server Version' | \
         sed -e 's/.*: v\([0-9]*\)\.\([0-9]*\)\..*/\1.\2/' \
         >"${CLUSTER_DIRECTORY}/kubernetes.version"
-
-    # Allow all pods to run also on the master node *and* prevent the PMEM-CSI controller
-    # from running on the normal nodes. Workaround for networking issues on
-    # Clear Linux (https://github.com/intel/pmem-csi/issues/555).
-    ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} kubectl taint nodes pmem-csi-${CLUSTER}-master node-role.kubernetes.io/master:NoSchedule-
-    ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} kubectl label node -l storage=pmem pmem-csi.intel.com/controller=no
 
     kubernetes_usage
 )
