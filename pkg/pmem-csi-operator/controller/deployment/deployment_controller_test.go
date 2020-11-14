@@ -16,7 +16,7 @@ import (
 
 	"github.com/intel/pmem-csi/deploy"
 	"github.com/intel/pmem-csi/pkg/apis"
-	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	pmemcontroller "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment/testcases"
@@ -56,7 +56,7 @@ func getDeployment(d *pmemDeployment) *api.Deployment {
 	dep := &api.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Deployment",
-			APIVersion: "pmem-csi.intel.com/v1alpha1",
+			APIVersion: "pmem-csi.intel.com/v1beta1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: d.name,

@@ -144,5 +144,5 @@ esac
 
   cat <<EOF
 PMEM-CSI operator is running. To try out deploying the pmem-csi driver:
-    cat deploy/common/pmem-csi.intel.com_v1alpha1_deployment_cr.yaml | ${KUBECTL} create -f -
+    cat deploy/common/pmem-csi.intel.com_v1beta1_deployment_cr.yaml | ${KUBECTL} create -f -
 EOF

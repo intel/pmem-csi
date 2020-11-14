@@ -11,7 +11,7 @@ package testcases
 import (
 	"fmt"
 
-	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
 
 	corev1 "k8s.io/api/core/v1"

@@ -16,7 +16,7 @@ import (
 	"path"
 	"runtime"
 
-	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"

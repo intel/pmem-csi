@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"github.com/intel/pmem-csi/deploy"
-	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	"github.com/intel/pmem-csi/pkg/version"
 
 	corev1 "k8s.io/api/core/v1"

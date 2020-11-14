@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	"github.com/intel/pmem-csi/pkg/exec"
 	"github.com/intel/pmem-csi/pkg/k8sutil"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment/testcases"

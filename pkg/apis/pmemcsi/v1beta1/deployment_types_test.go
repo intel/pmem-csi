@@ -3,7 +3,7 @@ Copyright 2019  Intel Corporation.
 
 SPDX-License-Identifier: Apache-2.0
 */
-package v1alpha1_test
+package v1beta1_test
 
 import (
 	"io/ioutil"
@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/intel/pmem-csi/pkg/apis"
-	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -59,7 +59,7 @@ var _ = Describe("Operator", func() {
 
 		It("shall be able to set values", func() {
 			yaml := `kind: Deployment
-apiVersion: pmem-csi.intel.com/v1alpha1
+apiVersion: pmem-csi.intel.com/v1beta1
 metadata:
   name: test-deployment
 spec:

@@ -31,7 +31,7 @@ import (
 	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	"github.com/kubernetes-csi/csi-test/v3/pkg/sanity"
 	sanityutils "github.com/kubernetes-csi/csi-test/v3/utils"
 	"google.golang.org/grpc"

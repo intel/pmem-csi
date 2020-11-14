@@ -13,7 +13,7 @@ import (
 	"os/exec"
 	"strings"
 
-	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 
 	"github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
