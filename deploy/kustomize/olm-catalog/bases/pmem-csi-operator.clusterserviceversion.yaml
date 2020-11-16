@@ -5,7 +5,7 @@ metadata:
   namespace: placeholder
   annotations:
     categories: Storage
-    containerImage: intel/pmem-csi-driver:v0.8.0
+    containerImage: intel/pmem-csi-driver:v0.8.1
     description: An operator for deploying and managing the PMEM-CSI driver
     repository: https://github.com/intel/pmem-csi/tree/release-X.Y
     support: Intel

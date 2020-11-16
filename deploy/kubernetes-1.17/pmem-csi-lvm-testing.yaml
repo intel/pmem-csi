@@ -276,7 +276,7 @@ spec:
           value: pmem-csi.intel.com
         - name: GODEBUG
           value: x509ignoreCN=0
-        image: intel/pmem-csi-driver-test:v0.8.0
+        image: intel/pmem-csi-driver-test:v0.8.1
         imagePullPolicy: IfNotPresent
         name: pmem-driver
         ports:
@@ -329,7 +329,7 @@ spec:
         - -R
         - pmem-csi:pmem-csi
         - /var/lib/pmem-csi-coverage
-        image: intel/pmem-csi-driver-test:v0.8.0
+        image: intel/pmem-csi-driver-test:v0.8.1
         imagePullPolicy: Always
         name: coverage-init
         securityContext:
@@ -412,7 +412,7 @@ spec:
           value: /tmp/termination-log
         - name: GODEBUG
           value: x509ignoreCN=0
-        image: intel/pmem-csi-driver-test:v0.8.0
+        image: intel/pmem-csi-driver-test:v0.8.1
         imagePullPolicy: IfNotPresent
         name: pmem-driver
         ports:

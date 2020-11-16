@@ -76,7 +76,7 @@ spec:
                 - "false"
       containers:
       - name: pmem-driver
-        image: intel/pmem-csi-driver:v0.8.0
+        image: intel/pmem-csi-driver:v0.8.1
         imagePullPolicy: IfNotPresent
         command: [
                  "/usr/local/bin/pmem-csi-driver",
@@ -157,7 +157,7 @@ spec:
         storage: pmem
       containers:
       - name: pmem-driver
-        image: intel/pmem-csi-driver:v0.8.0
+        image: intel/pmem-csi-driver:v0.8.1
         imagePullPolicy: IfNotPresent
         command: [
                   "/usr/local/bin/pmem-csi-driver",
