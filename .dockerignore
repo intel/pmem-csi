@@ -1,16 +1,16 @@
 *
-! **/*.make
-! Dockerfile
-! LICENSE
-! Makefile
-! cmd/**
-! pkg/**
-! test/cmd/**
-! test/test-config.d/**
-! test/test-config.sh
-! third-party/**
-! hack/**
-! vendor/**
-! go.mod
-! go.sum
-! operator/
+!**/*.make
+!Dockerfile
+!LICENSE
+!Makefile
+!cmd/**
+!pkg/**
+!test/cmd/**
+!test/test-config.d/**
+!test/test-config.sh
+!third-party/**
+!hack/**
+!vendor/**
+!go.mod
+!go.sum
+!operator/
