@@ -75,13 +75,13 @@ function deploy_using_olm() {
 }
 
 function deploy_using_yaml() {
-  crd=${REPO_DIRECTORY}/deploy/crd/pmem-csi.intel.com_deployments.yaml
+  crd=${REPO_DIRECTORY}/deploy/crd/pmem-csi.intel.com_deployments_webhook.yaml
   echo "Deploying '${crd}'..."
   cat  ${crd} | ${SSH} kubectl apply -f -
 
   DEPLOYMENT_DIRECTORY="${REPO_DIRECTORY}/deploy/operator"
 
-  deploy="${DEPLOYMENT_DIRECTORY}/pmem-csi-operator.yaml"
+  deploy="${DEPLOYMENT_DIRECTORY}/pmem-csi-operator-webhook.yaml"
   echo "Deploying '${deploy}'..."
 
   if [ ! -f "$deploy" ]; then

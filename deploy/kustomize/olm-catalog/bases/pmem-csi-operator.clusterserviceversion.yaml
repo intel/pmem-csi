@@ -45,7 +45,7 @@ spec:
     owned:
     - kind: Deployment
       name: deployments.pmem-csi.intel.com
-      version: v1alpha1
+      version: v1beta1
       resources:
       - kind: StatefulSet
         name: ""

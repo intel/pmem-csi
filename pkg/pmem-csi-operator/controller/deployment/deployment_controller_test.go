@@ -58,7 +58,7 @@ func getDeployment(d *pmemDeployment) *api.Deployment {
 	dep := &api.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Deployment",
-			APIVersion: "pmem-csi.intel.com/v1beta1",
+			APIVersion: api.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: d.name,

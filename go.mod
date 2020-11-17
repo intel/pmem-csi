@@ -27,7 +27,7 @@ require (
 	github.com/onsi/ginkgo v1.14.1
 	github.com/onsi/gomega v1.10.2
 	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/operator-framework/operator-lib v0.1.0
+	github.com/operator-framework/operator-lib v0.2.0
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/common v0.14.0
 	github.com/prometheus/procfs v0.2.0 // indirect

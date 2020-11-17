@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	pmemcsiv1beta1 "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	"github.com/intel/pmem-csi/pkg/k8sutil"
 	pmemcontroller "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
 	"github.com/intel/pmem-csi/pkg/version"
@@ -109,7 +109,7 @@ func add(mgr manager.Manager, r *ReconcileDeployment) error {
 	}
 
 	// Watch for changes to primary resource Deployment
-	if err := c.Watch(&source.Kind{Type: &pmemcsiv1beta1.Deployment{}}, &handler.EnqueueRequestForObject{}, p); err != nil {
+	if err := c.Watch(&source.Kind{Type: &api.Deployment{}}, &handler.EnqueueRequestForObject{}, p); err != nil {
 		klog.Errorf("Deployment.Add: watch error: %v", err)
 		return err
 	}
@@ -166,7 +166,7 @@ func add(mgr manager.Manager, r *ReconcileDeployment) error {
 	for _, resource := range currentObjects {
 		if err := c.Watch(&source.Kind{Type: resource}, &handler.EnqueueRequestForOwner{
 			IsController: true,
-			OwnerType:    &pmemcsiv1beta1.Deployment{},
+			OwnerType:    &api.Deployment{},
 		}, sop); err != nil {
 			klog.Errorf("Deployment.Add: watch error: %v", err)
 			return err
@@ -180,7 +180,7 @@ func add(mgr manager.Manager, r *ReconcileDeployment) error {
 var _ reconcile.Reconciler = &ReconcileDeployment{}
 
 // ReconcileHook function to be invoked on reconciling a deployment.
-type ReconcileHook *func(d *pmemcsiv1beta1.Deployment)
+type ReconcileHook *func(d *api.Deployment)
 
 // ReconcileDeployment reconciles a Deployment object
 type ReconcileDeployment struct {
@@ -192,7 +192,7 @@ type ReconcileDeployment struct {
 	// container image used for deploying the operator
 	containerImage string
 	// known deployments
-	deployments map[string]*pmemcsiv1beta1.Deployment
+	deployments map[string]*api.Deployment
 	// deploymentsMutex protects concurrent access to deployments
 	deploymentsMutex sync.Mutex
 	// reconcileMutex synchronizes concurrent reconcile calls
@@ -236,7 +236,7 @@ func NewReconcileDeployment(client client.Client, opts pmemcontroller.Controller
 		k8sVersion:     opts.K8sVersion,
 		namespace:      opts.Namespace,
 		containerImage: opts.DriverImage,
-		deployments:    map[string]*pmemcsiv1beta1.Deployment{},
+		deployments:    map[string]*api.Deployment{},
 		reconcileHooks: map[ReconcileHook]struct{}{},
 	}, nil
 }
@@ -256,7 +256,7 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 	requeueDelayOnError := 2 * time.Minute
 
 	// Fetch the Deployment instance
-	deployment := &pmemcsiv1beta1.Deployment{}
+	deployment := &api.Deployment{}
 	err = r.client.Get(context.TODO(), request.NamespacedName, deployment)
 	if err != nil {
 		klog.V(3).Infof("Failed to retrieve object '%s' to reconcile", request.Name)
@@ -282,9 +282,9 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 	}
 
-	if deployment.Status.Phase == pmemcsiv1beta1.DeploymentPhaseNew {
+	if deployment.Status.Phase == api.DeploymentPhaseNew {
 		/* New deployment */
-		r.evRecorder.Event(deployment, corev1.EventTypeNormal, pmemcsiv1beta1.EventReasonNew, "Processing new driver deployment")
+		r.evRecorder.Event(deployment, corev1.EventTypeNormal, api.EventReasonNew, "Processing new driver deployment")
 	}
 
 	// Cache the deployment
@@ -311,16 +311,16 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 	d := &PmemCSIDriver{dep, r.namespace, r.k8sVersion}
 	if err := d.Reconcile(r); err != nil {
 		klog.Infof("Reconcile error: %v", err)
-		dep.Status.Phase = pmemcsiv1beta1.DeploymentPhaseFailed
+		dep.Status.Phase = api.DeploymentPhaseFailed
 		dep.Status.Reason = err.Error()
-		r.evRecorder.Event(dep, corev1.EventTypeWarning, pmemcsiv1beta1.EventReasonFailed, err.Error())
+		r.evRecorder.Event(dep, corev1.EventTypeWarning, api.EventReasonFailed, err.Error())
 
 		return reconcile.Result{Requeue: true, RequeueAfter: requeueDelayOnError}, err
 	}
 
-	dep.Status.Phase = pmemcsiv1beta1.DeploymentPhaseRunning
+	dep.Status.Phase = api.DeploymentPhaseRunning
 	dep.Status.Reason = "All driver components are deployed successfully"
-	r.evRecorder.Event(dep, corev1.EventTypeNormal, pmemcsiv1beta1.EventReasonRunning, "Driver deployment successful")
+	r.evRecorder.Event(dep, corev1.EventTypeNormal, api.EventReasonRunning, "Driver deployment successful")
 
 	return reconcile.Result{}, nil
 }
@@ -363,7 +363,7 @@ func (r *ReconcileDeployment) Delete(obj runtime.Object) error {
 }
 
 // PatchDeploymentStatus patches the give given deployment CR status
-func (r *ReconcileDeployment) PatchDeploymentStatus(dep *pmemcsiv1beta1.Deployment, patch client.Patch) error {
+func (r *ReconcileDeployment) PatchDeploymentStatus(dep *api.Deployment, patch client.Patch) error {
 	dep.Status.LastUpdated = metav1.Now()
 	// Passing a copy of CR to patch as the fake client used in tests
 	// will write back the changes to both status and spec.
@@ -375,13 +375,13 @@ func (r *ReconcileDeployment) PatchDeploymentStatus(dep *pmemcsiv1beta1.Deployme
 	return nil
 }
 
-func (r *ReconcileDeployment) saveDeployment(d *pmemcsiv1beta1.Deployment) {
+func (r *ReconcileDeployment) saveDeployment(d *api.Deployment) {
 	r.deploymentsMutex.Lock()
 	defer r.deploymentsMutex.Unlock()
 	r.deployments[d.Name] = d
 }
 
-func (r *ReconcileDeployment) getDeployment(name string) *pmemcsiv1beta1.Deployment {
+func (r *ReconcileDeployment) getDeployment(name string) *api.Deployment {
 	r.deploymentsMutex.Lock()
 	defer r.deploymentsMutex.Unlock()
 	return r.deployments[name]
@@ -393,7 +393,7 @@ func (r *ReconcileDeployment) deleteDeployment(name string) {
 	delete(r.deployments, name)
 }
 
-func (r *ReconcileDeployment) cacheDeploymentStatus(name string, status pmemcsiv1beta1.DeploymentStatus) {
+func (r *ReconcileDeployment) cacheDeploymentStatus(name string, status api.DeploymentStatus) {
 	r.deploymentsMutex.Lock()
 	defer r.deploymentsMutex.Unlock()
 	if d, ok := r.deployments[name]; ok {
