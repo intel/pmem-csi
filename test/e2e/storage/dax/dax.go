@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 
 	v1 "k8s.io/api/core/v1"
@@ -350,14 +351,14 @@ func testDax(
 	}
 
 	By("checking that missing DAX support is detected")
-	pmempod.RunInPod(f, root, []string{daxCheckBinary}, daxCheckBinary+" /tmp/no-dax; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
+	pmempod.RunInPod(f, root, []string{daxCheckBinary}, "/tmp/"+path.Base(daxCheckBinary)+" /tmp/no-dax; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
 
 	if expectDax {
 		By("checking volume for DAX support")
-		pmempod.RunInPod(f, root, []string{daxCheckBinary}, "lsblk; mount | grep /mnt; "+daxCheckBinary+" /mnt/daxtest", ns, pod.Name, containerName)
+		pmempod.RunInPod(f, root, []string{daxCheckBinary}, "lsblk; mount | grep /mnt; /tmp/"+path.Base(daxCheckBinary)+" /mnt/daxtest", ns, pod.Name, containerName)
 	} else {
 		By("checking volume for missing DAX support")
-		pmempod.RunInPod(f, root, []string{daxCheckBinary}, "lsblk; mount | grep /mnt; "+daxCheckBinary+" /mnt/daxtest; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
+		pmempod.RunInPod(f, root, []string{daxCheckBinary}, "lsblk; mount | grep /mnt; /tmp/"+path.Base(daxCheckBinary)+" /mnt/daxtest; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
 	}
 
 	// Data written in a container running under Kata Containers
@@ -506,7 +507,7 @@ func testHugepage(
 		}
 	}
 
-	accessOutput, _ := pmempod.RunInPod(f, root, []string{accessHugepagesBinary}, accessHugepagesBinary, ns, pod.Name, containerName)
+	accessOutput, _ := pmempod.RunInPod(f, root, []string{accessHugepagesBinary}, "/tmp/"+path.Base(accessHugepagesBinary), ns, pod.Name, containerName)
 	By(fmt.Sprintf("Output from pmem-access-hugepages pod:[%s]", accessOutput))
 	for worker := 1; ; worker++ {
 		sshcmd := fmt.Sprintf("%s/_work/%s/ssh.%d", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"), worker)
