@@ -17,6 +17,7 @@
     - [Command line arguments](#command-line-arguments)
     - [Environment variables](#environment-variables)
     - [Logging](#logging)
+- [Performance and resource measurements](#performance-and-resource-measurements)
 - [Switching device mode](#switching-device-mode)
     - [Going from LVM device mode to direct device mode](#going-from-lvm-device-mode-to-direct-device-mode)
     - [Going from direct device mode to LVM device mode](#going-from-direct-device-mode-to-lvm-device-mode)
@@ -257,6 +258,42 @@ The klog.Info statements are used via the verbosity checker using the following 
 - klog.V(5) - Even more verbose messages, useful for debugging and issue resolving. This level is used in testing type of deployment examples.
 
 There are also messages using klog.Warning, klog.Error and klog.Fatal, and their formatted counterparts.
+
+## Performance and resource measurements
+
+The [metrics
+server](https://github.com/kubernetes-sigs/metrics-server) is needed
+for `kubectl top node` and `kubectl top pod`. In the QEMU cluster it
+has to be installed with insecure TLS because of
+https://github.com/kubernetes/kubeadm/issues/2028. This can be done with:
+
+```console
+kustomize build deploy/kustomize/metrics-server | kubectl create -f -
+```
+
+The `Vertical Pod Autoscaler` can be used to determine resource
+requirements of the PMEM-CSI pods. The `hack/setup-va.sh` script
+checks out the source code under `_work` and installs it.
+
+For PMEM-CSI running in the default namespace, VPA can be instructed
+to provide recommendations with:
+
+```console
+kubectl apply -k deploy/kustomize/vpa-for-pmem-csi/
+```
+
+Resource requirements depend on the workload. To generate some load, run
+```console
+make test_e2e TEST_E2E_FOCUS=lvm-production.*late.binding.*stress.test
+```
+
+Now resource recommendations can be retrieved with:
+
+```console
+kubectl get vpa
+kubectl describe vpa
+kubectl get vpa pmem-csi-node -o jsonpath='{range .status.recommendation.containerRecommendations[*]}{.containerName}{":\n\tRequests: "}{.lowerBound}{"\n\tLimits: "}{.upperBound}{"\n"}{end}'
+```
 
 ## Switching device mode
 
