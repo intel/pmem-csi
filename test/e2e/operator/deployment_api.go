@@ -113,6 +113,18 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		framework.Logf("got expected driver deployment %s", deployment.Name)
 	}
 
+	validateConditions := func(depName string, expected map[api.DeploymentConditionType]corev1.ConditionStatus, what ...interface{}) {
+		if what == nil {
+			what = []interface{}{"validate driver(%s) status conditions", depName}
+		}
+		dep := deploy.GetDeploymentCR(f, depName)
+		actual := dep.Status.Conditions
+		ExpectWithOffset(1, len(actual)).Should(BeEquivalentTo(len(expected)), what...)
+		for _, c := range actual {
+			ExpectWithOffset(2, expected[c.Type]).Should(BeEquivalentTo(c.Status))
+		}
+	}
+
 	ensureObjectRecovered := func(obj apiruntime.Object) {
 		meta, err := meta.Accessor(obj)
 		Expect(err).ShouldNot(HaveOccurred(), "get meta object")
@@ -128,7 +140,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 		tests := map[string]api.Deployment{
 			"with defaults": getDeployment("test-deployment-with-defaults"),
-			"with explicit values": api.Deployment{
+			"with explicit values": {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-deployment-with-explicit",
 				},
@@ -158,6 +170,10 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				deployment = deploy.CreateDeploymentCR(f, deployment)
 				defer deploy.DeleteDeploymentCR(f, deployment.Name)
 				validateDriver(deployment)
+				validateConditions(deployment.Name, map[api.DeploymentConditionType]corev1.ConditionStatus{
+					api.CertsReady:     corev1.ConditionTrue,
+					api.DriverDeployed: corev1.ConditionTrue,
+				})
 			})
 		}
 
@@ -268,6 +284,11 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			deployment = deploy.CreateDeploymentCR(f, deployment)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 			validateDriver(deployment, true)
+			validateConditions(deployment.Name, map[api.DeploymentConditionType]corev1.ConditionStatus{
+				api.CertsReady:     corev1.ConditionTrue,
+				api.CertsVerified:  corev1.ConditionTrue,
+				api.DriverDeployed: corev1.ConditionTrue,
+			})
 		})
 
 		It("driver deployment shall be running even after operator exit", func() {
@@ -277,6 +298,10 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 			validateDriver(deployment, true)
+			validateConditions(deployment.Name, map[api.DeploymentConditionType]corev1.ConditionStatus{
+				api.CertsReady:     corev1.ConditionTrue,
+				api.DriverDeployed: corev1.ConditionTrue,
+			})
 
 			// Stop the operator
 			stopOperator(c, d)
