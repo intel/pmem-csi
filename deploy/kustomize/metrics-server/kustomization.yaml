@@ -1,0 +1,17 @@
+bases:
+- https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+
+# Inline patches are supported by recent kustomize, but not necessarily kubectl.
+patchesJSON6902:
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: metrics-server
+    namespace: kube-system
+  patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      # Needed because of https://github.com/kubernetes/kubeadm/issues/2028
+      value: --kubelet-insecure-tls
+

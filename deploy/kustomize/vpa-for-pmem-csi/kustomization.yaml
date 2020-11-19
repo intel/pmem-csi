@@ -1,0 +1,3 @@
+resources:
+- vpa-controller.yaml
+- vpa-node.yaml
