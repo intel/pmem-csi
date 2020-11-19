@@ -253,8 +253,11 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) error {
 	}
 
 	if err := redeployAll(); err != nil {
+		d.SetCondition(api.DriverDeployed, corev1.ConditionFalse, err.Error())
 		return err
 	}
+
+	d.SetCondition(api.DriverDeployed, corev1.ConditionTrue, "Driver deployed successfully.")
 
 	klog.Infof("Deployed '%d' objects.", len(allObjects))
 	// FIXME(avalluri): Limit the obsolete object deletion either only on version upgrades
@@ -384,6 +387,7 @@ func (d *PmemCSIDriver) redeploySecrets(r *ReconcileDeployment) ([]*corev1.Secre
 	if certsProvided {
 		// Use  provided certificates
 		if err := d.validateCertificates(); err != nil {
+			d.SetCondition(api.CertsVerified, corev1.ConditionFalse, err.Error())
 			return nil, err
 		}
 		d.SetCondition(api.CertsVerified, corev1.ConditionTrue, "Driver certificates validated.")
@@ -391,6 +395,7 @@ func (d *PmemCSIDriver) redeploySecrets(r *ReconcileDeployment) ([]*corev1.Secre
 	} else if rop.IsNew() || nop.IsNew() {
 		// Provision new self-signed certificates if not already present
 		if err := d.provisionCertificates(); err != nil {
+			d.SetCondition(api.CertsReady, corev1.ConditionFalse, err.Error())
 			return nil, err
 		}
 		updateSecrets = true
