@@ -80,6 +80,7 @@ func New(tlsConfig *tls.Config, driverName string) *RegistryServer {
 		nodeClients:     map[string]*NodeInfo{},
 		listeners:       map[RegistryListener]struct{}{},
 		cmm: metrics.NewCSIMetricsManagerWithOptions(driverName,
+			metrics.WithProcessStartTime(false),
 			metrics.WithSubsystem("pmem_csi_controller"),
 			metrics.WithLabelNames(NodeLabel),
 		),

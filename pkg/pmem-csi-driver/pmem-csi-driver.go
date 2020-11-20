@@ -309,7 +309,10 @@ func (csid *csiDriver) Run() error {
 
 	// On the csi.sock endpoint we gather statistics for incoming
 	// CSI method calls like any other CSI driver.
-	cmm := metrics.NewCSIMetricsManagerForPlugin(csid.cfg.DriverName)
+	cmm := metrics.NewCSIMetricsManagerWithOptions(csid.cfg.DriverName,
+		metrics.WithProcessStartTime(false),
+		metrics.WithSubsystem(metrics.SubsystemPlugin),
+	)
 	csid.gatherers = append(csid.gatherers, cmm.GetRegistry())
 
 	switch csid.cfg.Mode {
@@ -346,6 +349,7 @@ func (csid *csiDriver) Run() error {
 		// corresponding client calls use "pmem_csi_controller" with
 		// a tag that identifies the node that is being called.
 		cmmInternal := metrics.NewCSIMetricsManagerWithOptions(csid.cfg.DriverName,
+			metrics.WithProcessStartTime(false),
 			metrics.WithSubsystem("pmem_csi_node"),
 			// Always add the instance label to allow correlating with
 			// the controller calls.

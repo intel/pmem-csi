@@ -21,7 +21,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.12.1 // indirect
 	github.com/imdario/mergo v0.3.11 // indirect
-	github.com/kubernetes-csi/csi-lib-utils v0.8.1
+	github.com/kubernetes-csi/csi-lib-utils v0.9.0
 	github.com/kubernetes-csi/csi-test/v3 v3.1.1
 	github.com/nxadm/tail v1.4.5 // indirect
 	github.com/onsi/ginkgo v1.14.1
