@@ -47,6 +47,7 @@ type pmemDeployment struct {
 	name                                                string
 	deviceMode                                          string
 	logLevel                                            uint16
+	logFormat                                           string
 	image, pullPolicy, provisionerImage, registrarImage string
 	controllerCPU, controllerMemory                     string
 	nodeCPU, nodeMemory                                 string
@@ -75,6 +76,7 @@ func getDeployment(d *pmemDeployment) *api.Deployment {
 	spec := &dep.Spec
 	spec.DeviceMode = api.DeviceMode(d.deviceMode)
 	spec.LogLevel = d.logLevel
+	spec.LogFormat = api.LogFormat(d.logFormat)
 	spec.Image = d.image
 	spec.PullPolicy = corev1.PullPolicy(d.pullPolicy)
 	spec.ProvisionerImage = d.provisionerImage
@@ -337,6 +339,7 @@ func TestDeploymentController(t *testing.T) {
 				registrarImage:   "test-driver-registrar-image:v.0.0.0",
 				pullPolicy:       "Never",
 				logLevel:         10,
+				logFormat:        "json",
 				controllerCPU:    "1500m",
 				controllerMemory: "300Mi",
 				nodeCPU:          "1000m",

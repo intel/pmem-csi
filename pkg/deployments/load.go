@@ -69,6 +69,12 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 			[]byte("-v=3"),
 			[]byte(fmt.Sprintf("-v=%d", deployment.Spec.LogLevel)))
 
+		if deployment.Spec.LogFormat != "" {
+			*yaml = bytes.ReplaceAll(*yaml,
+				[]byte("-logging-format=text"),
+				[]byte(fmt.Sprintf("-logging-format=%s", deployment.Spec.LogFormat)))
+		}
+
 		*yaml = pmemImage.ReplaceAll(*yaml, []byte("image: "+deployment.Spec.Image))
 	}
 

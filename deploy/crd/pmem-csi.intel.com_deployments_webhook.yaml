@@ -307,6 +307,12 @@ spec:
                   type: string
                 description: Labels contains additional labels for all objects created by the operator.
                 type: object
+              logFormat:
+                description: LogFormat
+                enum:
+                - text
+                - json
+                type: string
               logLevel:
                 description: LogLevel number for the log verbosity
                 type: integer

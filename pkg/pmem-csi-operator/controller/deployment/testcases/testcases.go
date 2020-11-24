@@ -79,6 +79,13 @@ func UpdateTests() []UpdateTest {
 		"logLevel": func(d *api.Deployment) {
 			d.Spec.LogLevel++
 		},
+		"logFormat": func(d *api.Deployment) {
+			if d.Spec.LogFormat == api.LogFormatText {
+				d.Spec.LogFormat = api.LogFormatJSON
+			} else {
+				d.Spec.LogFormat = api.LogFormatText
+			}
+		},
 		"nodeSelector": func(d *api.Deployment) {
 			d.Spec.NodeSelector = map[string]string{
 				"still-no-such-label": "still-no-such-value",

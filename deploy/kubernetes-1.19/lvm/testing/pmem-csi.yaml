@@ -259,6 +259,7 @@ spec:
       - command:
         - /usr/local/bin/pmem-csi-driver
         - -v=3
+        - -logging-format=text
         - -mode=controller
         - -endpoint=unix:///csi/csi-controller.sock
         - -registryEndpoint=tcp://0.0.0.0:10000
@@ -390,6 +391,7 @@ spec:
         - /usr/local/bin/pmem-csi-driver
         - -deviceManager=lvm
         - -v=3
+        - -logging-format=text
         - -mode=node
         - -endpoint=unix:///csi/csi.sock
         - -nodeid=$(KUBE_NODE_NAME)

@@ -16,6 +16,7 @@ import (
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	"github.com/intel/pmem-csi/pkg/k8sutil"
+	"github.com/intel/pmem-csi/pkg/logger"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 )
 
@@ -25,6 +26,7 @@ var (
 		DeviceManager: api.DeviceModeLVM,
 	}
 	showVersion = flag.Bool("version", false, "Show release version and exit")
+	logFormat   = logger.NewFlag()
 	version     = "unknown" // Set version during build time
 )
 
@@ -59,6 +61,8 @@ func init() {
 }
 
 func Main() int {
+	flag.Parse()
+	logFormat.Apply()
 	if *showVersion {
 		fmt.Println(version)
 		return 0

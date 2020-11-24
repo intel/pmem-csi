@@ -558,21 +558,15 @@ var v1SecretPtr = reflect.TypeOf(&corev1.Secret{})
 
 // HandleEvent handles the delete/update events received on sub-objects. It ensures that any undesirable change
 // is reverted.
-func (d *pmemCSIDeployment) handleEvent(ctx context.Context, meta metav1.Object, obj apiruntime.Object, r *ReconcileDeployment) error {
+func (d *pmemCSIDeployment) handleEvent(ctx context.Context, metaData metav1.Object, obj apiruntime.Object, r *ReconcileDeployment) error {
 	objType := reflect.TypeOf(obj)
 	l := logger.Get(ctx).WithName("deployment/event")
-	l.V(5).Info("start", "object", logger.KObjWithType(meta), "type", objType)
+	l.V(5).Info("start", "object", logger.KObjWithType(metaData), "type", objType)
 
+	objName := metaData.GetName()
 	for name, handler := range subObjectHandlers {
-		if objType == handler.objType {
-			l.V(3).Info("redeploying", "name", name, "object", logger.KObjWithType(meta))
-			org := d.DeepCopy()
-			if _, err := d.redeploy(ctx, r, handler); err != nil {
-				return fmt.Errorf("failed to redeploy %s: %v", name, err)
-			}
-			if err := r.patchDeploymentStatus(d.Deployment, client.MergeFrom(org)); err != nil {
-				return fmt.Errorf("failed to update deployment CR status: %v", err)
-			}
+		if objType != handler.objType {
+			continue
 		}
 		metaObj, _ := meta.Accessor(handler.object(d))
 		if objName != metaObj.GetName() {
@@ -1165,6 +1159,7 @@ func (d *pmemCSIDeployment) getControllerCommand() []string {
 	return []string{
 		"/usr/local/bin/pmem-csi-driver",
 		fmt.Sprintf("-v=%d", d.Spec.LogLevel),
+		"-logging-format=" + string(d.Spec.LogFormat),
 		"-mode=controller",
 		"-endpoint=unix:///csi/csi-controller.sock",
 		fmt.Sprintf("-registryEndpoint=tcp://0.0.0.0:%d", controllerServicePort),
@@ -1182,6 +1177,7 @@ func (d *pmemCSIDeployment) getNodeDriverCommand() []string {
 		"/usr/local/bin/pmem-csi-driver",
 		fmt.Sprintf("-deviceManager=%s", d.Spec.DeviceMode),
 		fmt.Sprintf("-v=%d", d.Spec.LogLevel),
+		"-logging-format=" + string(d.Spec.LogFormat),
 		"-mode=node",
 		"-endpoint=unix:///csi/csi.sock",
 		"-nodeid=$(KUBE_NODE_NAME)",

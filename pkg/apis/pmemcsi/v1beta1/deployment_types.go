@@ -50,6 +50,15 @@ const (
 	DeviceModeFake DeviceMode = "fake"
 )
 
+type LogFormat string
+
+const (
+	// LogFormatText selects logging via the traditional glog (aka klog) plain text format.
+	LogFormatText LogFormat = "text"
+	// LogFormatJSON selects logging via the zap JSON format.
+	LogFormatJSON LogFormat = "json"
+)
+
 // +k8s:deepcopy-gen=true
 // DeploymentSpec defines the desired state of Deployment
 type DeploymentSpec struct {
@@ -76,6 +85,10 @@ type DeploymentSpec struct {
 	DeviceMode DeviceMode `json:"deviceMode,omitempty"`
 	// LogLevel number for the log verbosity
 	LogLevel uint16 `json:"logLevel,omitempty"`
+	// LogFormat
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=text;json
+	LogFormat LogFormat `json:"logFormat,omitempty"`
 	// RegistryCert encoded certificate signed by a CA for registry server authentication
 	// If not provided, provisioned one by the operator using self-signed CA
 	RegistryCert []byte `json:"registryCert,omitempty"`
@@ -366,6 +379,9 @@ func (d *Deployment) EnsureDefaults(operatorImage string) error {
 	}
 	if d.Spec.LogLevel == 0 {
 		d.Spec.LogLevel = DefaultLogLevel
+	}
+	if d.Spec.LogFormat == "" {
+		d.Spec.LogFormat = LogFormatText
 	}
 
 	if d.Spec.ProvisionerImage == "" {
