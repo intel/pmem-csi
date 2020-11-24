@@ -10,7 +10,11 @@ SPDX-License-Identifier: Apache-2.0
 // differently than klog itself.
 //
 // The formating of key/value pairs had to be copied from
-// klog because there is no klog.InfosDepth and klog.ErrorsDepth.
+// klog because there is no klog.InfosDepth and klog.ErrorsDepth
+// and therefore klog cannot be called.
+//
+// This package can be removed once https://github.com/kubernetes/klog/pull/197
+// is merged.
 package klogr
 
 import (

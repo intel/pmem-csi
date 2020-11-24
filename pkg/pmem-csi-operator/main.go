@@ -70,7 +70,7 @@ func Main() int {
 		return 1
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	// Become the leader before proceeding
 	err = leader.Become(ctx, "pmem-csi-operator-lock")
 	if err != nil {
@@ -111,7 +111,7 @@ func Main() int {
 		return 1
 	}
 	// Setup all Controllers
-	if err := controller.AddToManager(mgr, controller.ControllerOptions{
+	if err := controller.AddToManager(ctx, mgr, controller.ControllerOptions{
 		Config:       mgr.GetConfig(),
 		Namespace:    namespace,
 		K8sVersion:   *ver,
@@ -142,7 +142,7 @@ func Main() int {
 	}
 
 	list := &api.DeploymentList{}
-	if err := mgr.GetClient().List(context.TODO(), list); err != nil {
+	if err := mgr.GetClient().List(ctx, list); err != nil {
 		pmemcommon.ExitError("failed to get deployment list: %v", err)
 		return 1
 	}

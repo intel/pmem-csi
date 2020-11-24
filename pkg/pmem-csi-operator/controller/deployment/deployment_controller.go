@@ -16,8 +16,10 @@ import (
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	"github.com/intel/pmem-csi/pkg/k8sutil"
+	"github.com/intel/pmem-csi/pkg/logger"
 	pmemcontroller "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
 	"github.com/intel/pmem-csi/pkg/version"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,7 +28,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/klog/v2"
 	"k8s.io/kubectl/pkg/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -45,28 +46,28 @@ func init() {
 
 // Add creates a new Deployment Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, opts pmemcontroller.ControllerOptions) error {
-	r, err := NewReconcileDeployment(mgr.GetClient(), opts)
+func Add(ctx context.Context, mgr manager.Manager, opts pmemcontroller.ControllerOptions) error {
+	r, err := NewReconcileDeployment(ctx, mgr.GetClient(), opts)
 	if err != nil {
 		return err
 	}
-	return add(mgr, r.(*ReconcileDeployment))
+	return add(ctx, mgr, r.(*ReconcileDeployment))
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r *ReconcileDeployment) error {
+func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error {
 	// Create a new controller
 	c, err := controller.New("deployment-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		klog.Errorf("Deployment.Add: error: %v", err)
-		return err
+		return fmt.Errorf("create controller: %v", err)
 	}
+	l := logger.Get(ctx)
 
 	p := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			r.reconcileMutex.Lock()
 			defer r.reconcileMutex.Unlock()
-			klog.Infof("UPDATED: %T/%s, generation:%d", e.MetaOld, e.MetaOld.GetName(), e.MetaNew.GetGeneration())
+			l.V(3).Info("UPDATED", "object", logger.KObjWithType(e.MetaOld), "generation", e.MetaNew.GetGeneration())
 			if e.MetaNew.GetDeletionTimestamp() != nil {
 				// Deployment CR deleted, remove it's reference from cache.
 				// Objects owned by it are automatically garbage collected.
@@ -78,27 +79,27 @@ func add(mgr manager.Manager, r *ReconcileDeployment) error {
 				return false
 			}
 
-			op := NewObjectPatch(e.ObjectOld, e.ObjectNew)
-			data, err := op.Diff()
+			op := newObjectPatch(e.ObjectOld, e.ObjectNew)
+			data, err := op.diff()
 			if err != nil {
-				klog.Warningf("Failed to find deployment changes: %v", err)
+				l.Error(err, "find deployment changes")
 				return true
 			}
-			klog.Infof("Diff: %v", string(data))
+			l.V(3).Info("all changes", "diff", string(data))
 			// We are intersted in only spec changes, not CR status/metadata changes
 			re := regexp.MustCompile(`{.*"spec":{(.*)}.*}`)
 			res := re.FindSubmatch(data)
 			if len(res) < 2 {
-				klog.Infof("No spec changes observed, ignoring the event")
+				l.V(3).Info("no spec changes observed, ignoring the event")
 				return false
 			}
-			klog.Infof("CR changes: %v", string(res[1]))
+			l.V(3).Info("CR changes", "diff", string(res[1]))
 			return true
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			r.reconcileMutex.Lock()
 			defer r.reconcileMutex.Unlock()
-			klog.Infof("DELETED: %T/%s", e.Object, e.Meta.GetName())
+			l.V(3).Info("DELETED", "object", logger.KObjWithType(e.Meta))
 			// Deployment CR deleted, remove it's reference from cache.
 			// Objects owned by it are automatically garbage collected.
 			r.deleteDeployment(e.Meta.GetName())
@@ -110,8 +111,7 @@ func add(mgr manager.Manager, r *ReconcileDeployment) error {
 
 	// Watch for changes to primary resource Deployment
 	if err := c.Watch(&source.Kind{Type: &api.Deployment{}}, &handler.EnqueueRequestForObject{}, p); err != nil {
-		klog.Errorf("Deployment.Add: watch error: %v", err)
-		return err
+		return fmt.Errorf("watch: %v", err)
 	}
 
 	// Predicate functions for sub-object changes
@@ -122,35 +122,37 @@ func add(mgr manager.Manager, r *ReconcileDeployment) error {
 	// One exception is: If we fail to handle here, then we pass this
 	// event to reconcile loop, where it should recognize these requests
 	// and just requeue. Expecting that the failure is retried.
-	eventFunc := func(meta metav1.Object, obj apiruntime.Object) bool {
+	eventFunc := func(what string, meta metav1.Object, obj apiruntime.Object) bool {
+		// TODO:
+		// - check that this output is okay
+		// - check why "go test" does not cover this code
+		l.V(3).Info(what, "object", logger.KObjWithType(meta))
 		// Get the owned deployment
 		d, err := r.getDeploymentFor(meta)
 		if err != nil {
-			klog.Infof("%T/%s is not owned by any deployment", obj, meta.GetName())
+			l.V(3).Info("not owned by any deployment", "object", logger.KObjWithType(meta))
 			// The owner might have deleted already
 			// we can safely ignore this event
 			return false
 		}
 		r.reconcileMutex.Lock()
 		defer r.reconcileMutex.Unlock()
-		if err := d.HandleEvent(meta, obj, r); err != nil {
-			klog.Warningf("Error occurred while handling the event: %v, requeuing the event", err)
+		if err := d.handleEvent(ctx, meta, obj, r); err != nil {
+			l.Error(err, "while handling the event, requeuing the event")
 			return true
 		}
 		return false
 	}
 	sop := predicate.Funcs{
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			klog.Infof("DELETED: %T/%s", e.Object, e.Meta.GetName())
-			return eventFunc(e.Meta, e.Object)
+			return eventFunc("DELETED", e.Meta, e.Object)
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			if e.MetaNew.GetDeletionTimestamp() != nil {
 				// We can handle this in delete handler
 				return false
 			}
-			klog.Infof("UPDATED: %T/%s", e.ObjectOld, e.MetaOld.GetName())
-			return eventFunc(e.MetaOld, e.ObjectOld)
+			return eventFunc("UPDATED", e.MetaOld, e.ObjectOld)
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
 			// Do not handle sub-object create events as the object was create by us.
@@ -168,8 +170,7 @@ func add(mgr manager.Manager, r *ReconcileDeployment) error {
 			IsController: true,
 			OwnerType:    &api.Deployment{},
 		}, sop); err != nil {
-			klog.Errorf("Deployment.Add: watch error: %v", err)
-			return err
+			return fmt.Errorf("create watch: %v", err)
 		}
 	}
 
@@ -184,6 +185,10 @@ type ReconcileHook *func(d *api.Deployment)
 
 // ReconcileDeployment reconciles a Deployment object
 type ReconcileDeployment struct {
+	// The context passed into NewReconcileDeployment, i.e. the same for all
+	// operations.
+	ctx context.Context
+
 	client        client.Client
 	evBroadcaster record.EventBroadcaster
 	evRecorder    record.EventRecorder
@@ -203,7 +208,11 @@ type ReconcileDeployment struct {
 }
 
 // NewReconcileDeployment creates new deployment reconciler
-func NewReconcileDeployment(client client.Client, opts pmemcontroller.ControllerOptions) (reconcile.Reconciler, error) {
+func NewReconcileDeployment(ctx context.Context, client client.Client, opts pmemcontroller.ControllerOptions) (reconcile.Reconciler, error) {
+	// "reconcile" will be part of all future log messages.
+	l := logger.Get(ctx).WithName("reconcile")
+	ctx = logger.Set(ctx, l)
+
 	if opts.Namespace == "" {
 		opts.Namespace = k8sutil.GetNamespace()
 	}
@@ -217,19 +226,20 @@ func NewReconcileDeployment(client client.Client, opts pmemcontroller.Controller
 		if err != nil {
 			return nil, fmt.Errorf("failed to get in-cluster client: %v", err)
 		}
-		image, err := containerImage(cs, opts.Namespace)
+		image, err := containerImage(ctx, cs, opts.Namespace)
 		if err != nil {
 			return nil, fmt.Errorf("failed to find the operator image: %v", err)
 		}
 		opts.DriverImage = image
 	}
-	klog.Infof("Using '%s' as default driver image.", opts.DriverImage)
+	l.Info("new instance", "defaultDriverImage", opts.DriverImage)
 
 	evBroadcaster := record.NewBroadcaster()
 	evBroadcaster.StartRecordingToSink(&v1.EventSinkImpl{Interface: opts.EventsClient})
 	evRecorder := evBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: "pmem-csi-operator"})
 
 	return &ReconcileDeployment{
+		ctx:            ctx,
 		client:         client,
 		evBroadcaster:  evBroadcaster,
 		evRecorder:     evRecorder,
@@ -254,19 +264,21 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 	startTime := time.Now()
 
 	requeueDelayOnError := 2 * time.Minute
+	l := logger.Get(r.ctx).WithValues("deployment", request.NamespacedName.Name)
+	ctx := logger.Set(r.ctx, l)
 
 	// Fetch the Deployment instance
 	deployment := &api.Deployment{}
-	err = r.client.Get(context.TODO(), request.NamespacedName, deployment)
+	err = r.client.Get(ctx, request.NamespacedName, deployment)
 	if err != nil {
-		klog.V(3).Infof("Failed to retrieve object '%s' to reconcile", request.Name)
+		l.Error(err, "failed to retrieve CR to reconcile", "deployment", request.Name)
 		// One reason for this could be a failed predicate event handler of
 		// sub-objects. So requeue the request so that the same predicate
 		// handle could be called on that object.
 		return reconcile.Result{Requeue: requeue, RequeueAfter: requeueDelayOnError}, err
 	}
 
-	klog.Infof("Reconciling deployment %q", deployment.GetName())
+	l.V(3).Info("reconcile starting", "deployment", deployment.GetName())
 
 	// If the deployment has already been marked for deletion,
 	// then we don't need to do anything for it because the
@@ -294,23 +306,23 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 
 	// update status
 	defer func() {
-		klog.Infof("Updating deployment status...")
+		l.V(5).Info("updating deployment status")
 		// Some clients(fake client used in tests) do not support patching status reliably
 		// and updates even spec changes. So, revert any spec changes(like deployment defaults) we made.
 		// Revert back spec changes, those are not supposed to get saved on the API server.
 		deployment.Spec.DeepCopyInto(&dep.Spec)
 
-		if err := r.PatchDeploymentStatus(dep, client.MergeFrom(deployment.DeepCopy())); err != nil {
-			klog.Warningf("failed to update status %q for deployment %q: %v",
-				dep.Status.Phase, dep.Name, err)
+		if err := r.patchDeploymentStatus(dep, client.MergeFrom(deployment.DeepCopy())); err != nil {
+			l.Error(err, "failed to update status", "phase", dep.Status.Phase, "deployment", dep.Name)
+			// TODO: requeue object?!
 		}
 
-		klog.Infof("End of reconcile. Duration: %v", time.Since(startTime))
+		l.V(3).Info("reconcile done", "duration", time.Since(startTime))
 	}()
 
-	d := &PmemCSIDriver{dep, r.namespace, r.k8sVersion}
-	if err := d.Reconcile(r); err != nil {
-		klog.Infof("Reconcile error: %v", err)
+	d := &pmemCSIDeployment{dep, r.namespace, r.k8sVersion}
+	if err := d.reconcile(ctx, r); err != nil {
+		l.Error(err, "reconcile failed")
 		dep.Status.Phase = api.DeploymentPhaseFailed
 		dep.Status.Reason = err.Error()
 		r.evRecorder.Event(dep, corev1.EventTypeWarning, api.EventReasonFailed, err.Error())
@@ -349,7 +361,7 @@ func (r *ReconcileDeployment) Get(obj runtime.Object) error {
 	if err != nil {
 		return fmt.Errorf("internal error %T: %v", obj, err)
 	}
-	return r.client.Get(context.TODO(), key, obj)
+	return r.client.Get(r.ctx, key, obj)
 }
 
 // Delete delete existing Kubernetes object
@@ -358,16 +370,16 @@ func (r *ReconcileDeployment) Delete(obj runtime.Object) error {
 	if err != nil {
 		return fmt.Errorf("internal error %T: %v", obj, err)
 	}
-	klog.Infof("Deleting '%s/%s' of type '%T'", metaObj.GetNamespace(), metaObj.GetName(), obj)
-	return r.client.Delete(context.TODO(), obj)
+	logger.Get(r.ctx).Info("deleting", "object", logger.KObjWithType(metaObj))
+	return r.client.Delete(r.ctx, obj)
 }
 
 // PatchDeploymentStatus patches the give given deployment CR status
-func (r *ReconcileDeployment) PatchDeploymentStatus(dep *api.Deployment, patch client.Patch) error {
+func (r *ReconcileDeployment) patchDeploymentStatus(dep *api.Deployment, patch client.Patch) error {
 	dep.Status.LastUpdated = metav1.Now()
 	// Passing a copy of CR to patch as the fake client used in tests
 	// will write back the changes to both status and spec.
-	if err := r.client.Status().Patch(context.TODO(), dep.DeepCopy(), patch); err != nil {
+	if err := r.client.Status().Patch(r.ctx, dep.DeepCopy(), patch); err != nil {
 		return err
 	}
 	// update the status of cached deployment
@@ -401,7 +413,7 @@ func (r *ReconcileDeployment) cacheDeploymentStatus(name string, status api.Depl
 	}
 }
 
-func (r *ReconcileDeployment) getDeploymentFor(obj metav1.Object) (*PmemCSIDriver, error) {
+func (r *ReconcileDeployment) getDeploymentFor(obj metav1.Object) (*pmemCSIDeployment, error) {
 	r.deploymentsMutex.Lock()
 	defer r.deploymentsMutex.Unlock()
 	for _, d := range r.deployments {
@@ -411,7 +423,7 @@ func (r *ReconcileDeployment) getDeploymentFor(obj metav1.Object) (*PmemCSIDrive
 			if err := deployment.EnsureDefaults(r.containerImage); err != nil {
 				return nil, err
 			}
-			return &PmemCSIDriver{deployment, r.namespace, r.k8sVersion}, nil
+			return &pmemCSIDeployment{deployment, r.namespace, r.k8sVersion}, nil
 		}
 	}
 
@@ -419,14 +431,14 @@ func (r *ReconcileDeployment) getDeploymentFor(obj metav1.Object) (*PmemCSIDrive
 }
 
 // containerImage returns container image name used by operator Pod
-func containerImage(cs *kubernetes.Clientset, namespace string) (string, error) {
+func containerImage(ctx context.Context, cs *kubernetes.Clientset, namespace string) (string, error) {
 	const podNameEnv = "POD_NAME"
 	const operatorNameEnv = "OPERATOR_NAME"
 
 	containerImage := ""
 	// Operator deployment shall provide this environment
 	if podName := os.Getenv(podNameEnv); podName != "" {
-		pod, err := cs.CoreV1().Pods(namespace).Get(context.TODO(), podName, metav1.GetOptions{})
+		pod, err := cs.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
 		if err != nil {
 			return "", fmt.Errorf("error getting self pod '%s/%s': %v", namespace, podName, err)
 		}
