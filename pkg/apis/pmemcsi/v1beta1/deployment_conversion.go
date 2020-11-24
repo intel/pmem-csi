@@ -23,4 +23,5 @@ import (
 var _ conversion.Hub = &Deployment{}
 
 // Hub marks this(v1beta1) type as a conversion hub.
+// Conversion hub is the version that all other CRD versions get converted into.
 func (*Deployment) Hub() {}

@@ -1,15 +1,14 @@
-OPERATOR_SDK_VERSION=v1.0.0
+OPERATOR_SDK_VERSION=1.2.0
 
 # download operator-sdk binary
 _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION):
 	mkdir -p _work/bin/ 2> /dev/null
-#	Building operator-sdk from sources as that needs below fixes:
-#     https://github.com/operator-framework/operator-sdk/pull/3787
-#     https://github.com/operator-framework/operator-sdk/pull/3786
-#   curl -L https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk-$(OPERATOR_SDK_VERSION)-x86_64-linux-gnu -o $(abspath $@)
+#	Building operator-sdk from sources as that needs fixes for:
+#     https://github.com/operator-framework/operator-sdk/issues/4293
+#   curl -L https://github.com/operator-framework/operator-sdk/releases/download/v$(OPERATOR_SDK_VERSION)/operator-sdk-$(OPERATOR_SDK_VERSION)-x86_64-linux-gnu -o $(abspath $@)
 	tmpdir=`mktemp -d` && \
 	trap 'set -x; rm -rf $$tmpdir' EXIT && \
-	git clone --branch 1.0.0+fixes https://github.com/avalluri/operator-sdk.git $$tmpdir && \
+	git clone --branch $(OPERATOR_SDK_VERSION)+fixes https://github.com/avalluri/operator-sdk.git $$tmpdir && \
 	cd $$tmpdir && $(MAKE) build/operator-sdk && \
 	cp $$tmpdir/build/operator-sdk $(abspath $@) && \
 	chmod a+x $(abspath $@)
