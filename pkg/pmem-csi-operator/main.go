@@ -20,12 +20,9 @@ import (
 	"github.com/intel/pmem-csi/pkg/k8sutil"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
 
-	//"github.com/intel/pmem-csi/pkg/pmem-operator/version"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 
-	"github.com/operator-framework/operator-sdk/pkg/leader"
-	"github.com/operator-framework/operator-sdk/pkg/restmapper"
-	sdkVersion "github.com/operator-framework/operator-sdk/version"
+	"github.com/operator-framework/operator-lib/leader"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
@@ -38,7 +35,6 @@ func printVersion() {
 	//klog.Info(fmt.Sprintf("Operator Version: %s", version.Version))
 	klog.Info(fmt.Sprintf("Go Version: %s", runtime.Version()))
 	klog.Info(fmt.Sprintf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH))
-	klog.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))
 }
 
 var driverImage string
@@ -75,8 +71,7 @@ func Main() int {
 
 	// Create a new Cmd to provide shared dependencies and start components
 	mgr, err := manager.New(cfg, manager.Options{
-		Namespace:      namespace,
-		MapperProvider: restmapper.NewDynamicRESTMapper,
+		Namespace: namespace,
 	})
 	if err != nil {
 		pmemcommon.ExitError("Failed to create controller manager: ", err)

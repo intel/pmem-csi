@@ -11,6 +11,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -151,7 +152,12 @@ func WaitForPMEMDriver(c *Cluster, name string, d *Deployment) (metricsURL strin
 			return fmt.Errorf("get controller metrics: %v", err)
 		}
 		if resp.StatusCode != 200 {
-			return fmt.Errorf("HTTP GET %s failed: %d", metricsURL, resp.StatusCode)
+			body, _ := ioutil.ReadAll(resp.Body)
+			suffix := ""
+			if len(body) > 0 {
+				suffix = "\n" + string(body)
+			}
+			return fmt.Errorf("HTTP GET %s failed: %d%s", metricsURL, resp.StatusCode, suffix)
 		}
 
 		// Parse and check number of connected nodes. Dump the
@@ -1057,7 +1063,9 @@ func Describe(deployment, describe, what string, f func(d *Deployment)) bool {
 // DefineTests must be called to register all tests defined so far via Describe.
 func DefineTests() {
 	for deploymentName, group := range tests {
+		deploymentName := deploymentName
 		for describe, funcs := range group {
+			funcs := funcs
 			ginkgo.Describe(describe, func() {
 				deployment := EnsureDeployment(deploymentName)
 				for _, f := range funcs {
