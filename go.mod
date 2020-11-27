@@ -14,7 +14,7 @@ require (
 	github.com/go-logr/zapr v0.2.0 // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
 	github.com/golang/protobuf v1.4.2
-	github.com/google/go-cmp v0.5.2 // indirect
+	github.com/google/go-cmp v0.5.2
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/uuid v1.1.2
 	github.com/googleapis/gnostic v0.5.1 // indirect
@@ -66,6 +66,7 @@ require (
 	k8s.io/utils v0.0.0-20200912215256-4140de9c8800
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.0.12 // indirect
 	sigs.k8s.io/controller-runtime v0.6.3
+	sigs.k8s.io/yaml v1.2.0
 )
 
 replace (
