@@ -65,8 +65,8 @@ case ${TEST_DISTRO} in
     fedora)
         CLOUD_USER=${CLOUD_USER:-fedora}
         EFI=${EFI:-false}
-        TEST_DISTRO_VERSION=${TEST_DISTRO_VERSION:-31}
-        FEDORA_CLOUDIMG_REL=${FEDORA_CLOUDIMG_REL:-1.9}
+        TEST_DISTRO_VERSION=${TEST_DISTRO_VERSION:-33}
+        FEDORA_CLOUDIMG_REL=${FEDORA_CLOUDIMG_REL:-1.2}
         IMAGE_URL=${IMAGE_URL:-https://download.fedoraproject.org/pub/fedora/linux/releases/${TEST_DISTRO_VERSION}/Cloud/x86_64/images}
         CLOUD_IMAGE=${CLOUD_IMAGE:-Fedora-Cloud-Base-${TEST_DISTRO_VERSION}-${FEDORA_CLOUDIMG_REL}.x86_64.raw.xz}
         ;;
@@ -364,12 +364,18 @@ function init_kubernetes_cluster() (
     vm_id=0
     pids=""
     IPS=$(print_ips)
-    # in Fedora-31 case, add a flag to kernel cmdline and reboot
-    if [ "$TEST_DISTRO" = "fedora" -a "$TEST_DISTRO_VERSION" = "31" ]; then
+    # in Fedora-3[123] case, add a flag to kernel cmdline and reboot to disable cgroups v2
+    if [[ "$TEST_DISTRO" = "fedora" && "$TEST_DISTRO_VERSION" =~ 3[1-3] ]]; then
         SYSTEMD_UNIFIED_CGROUP_HIERARCHY=systemd.unified_cgroup_hierarchy
         for ip in ${IPS}; do
-            ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo sed -i 's/n8\"/n8 ${SYSTEMD_UNIFIED_CGROUP_HIERARCHY}=0\"/g' /etc/default/grub"
-            ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo grub2-mkconfig -o /boot/grub2/grub.cfg"
+            GRUB_BFS=$(ssh $SSH_ARGS ${CLOUD_USER}@${ip} "grep ^GRUB_ENABLE_BLSCFG /etc/default/grub | sed -e \"s;\(GRUB_ENABLE_BLSCFG=\)\(.*\);\2;g\"")
+            # If BFS enabled use 'grubby' to modify kernel parameters
+            if [ $GRUB_BFS = "true" ]; then
+                ssh $SSH_ARGS  ${CLOUD_USER}@${ip} "sudo grubby --update-kernel=ALL --args=\"${SYSTEMD_UNIFIED_CGROUP_HIERARCHY}=0\""
+            else
+                ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo sed -i 's/n8\"/n8 ${SYSTEMD_UNIFIED_CGROUP_HIERARCHY}=0\"/g' /etc/default/grub"
+                ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo grub2-mkconfig -o /boot/grub2/grub.cfg"
+            fi
             # use --force to speed up shutdown as nothing important running yet to wait for
             ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo systemctl --force reboot"
         done
