@@ -74,9 +74,9 @@ RUNTIME_DEPS += sed -e 's;^sigs.k8s.io/\([^/]*\).*;sigs.k8s.io/\1;' |
 # - everything from gRPC is one project
 RUNTIME_DEPS += sed -e 's;google.golang.org/grpc/*.*;grpc-go,https://github.com/grpc/grpc-go;' |
 # - Kubernetes is split across several repos.
-RUNTIME_DEPS += sed -e 's;^k8s.io/.*\|github.com/kubernetes-csi/.*;kubernetes,https://github.com/kubernetes/kubernetes,9641;' | \
+RUNTIME_DEPS += sed -e 's;^k8s.io/.*\|github.com/kubernetes-csi/.*;kubernetes,https://github.com/kubernetes/kubernetes,12141;' | \
 # - additional Golang repos
-RUNTIME_DEPS += sed -e 's;\(golang.org/x/.*\);Go,https://github.com/golang/go,9051;' | \
+RUNTIME_DEPS += sed -e 's;\(golang.org/x/.*\);Go,https://golang.org/,11382;' | \
 # - various other projects (sorted alphabetically)
 RUNTIME_DEPS += sed \
 	-e 's;\(github.com/PuerkitoBio/purell\);purell,https://\1;' \
