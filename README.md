@@ -10,10 +10,9 @@ library](https://github.com/pmem/ndctl). In this readme, we use
 *persistent memory* to refer to a non-volatile dual in-line memory
 module (NVDIMM).
 
-The [v0.8.0 release](https://github.com/intel/pmem-csi/releases/latest)
+The [v0.8 release](https://github.com/intel/pmem-csi/releases/latest)
 is the latest feature release and is [regularly updated](docs/DEVELOPMENT.md#release-management) with newer base images
-and bug fixes. The v0.7.0 release will stop receiving updates
-end of October 2020.
+and bug fixes. Older releases are no longer supported.
 
 Documentation is part of the source code for each release and also
 available in rendered form for easier reading:

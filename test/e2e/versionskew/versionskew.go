@@ -39,14 +39,13 @@ import (
 )
 
 const (
-	// base is the release branch used for version skew testing.
-	base = "0.7"
+	// base is the release branch used for version skew testing. Empty if none.
+	base = "0.8"
 )
 
 func baseSupportsKubernetes(ver version.Version) bool {
+	// 0.8 supports the same version as "devel".
 	switch ver {
-	case version.NewVersion(1, 19):
-		return false
 	default:
 		return true
 	}
@@ -170,6 +169,9 @@ func (p *skewTestSuite) DefineTests(driver testsuites.TestDriver, pattern testpa
 	BeforeEach(func() {
 		ver, err := k8sutil.GetKubernetesVersion(f.ClientConfig())
 		framework.ExpectNoError(err, "get Kubernetes version")
+		if base == "" {
+			skipper.Skipf("version skew testing disabled")
+		}
 		if !baseSupportsKubernetes(*ver) {
 			skipper.Skipf("%s not supported by release-%s", ver, base)
 		}
