@@ -1,10 +1,11 @@
 #!/bin/sh
 
 # Directory to use for storing intermediate files.
-CA=${CA:="pmem-ca"}
-WORKDIR=${WORKDIR:-$(mktemp -d -u -t pmem-XXXX)}
+WORKDIR=$(realpath ${WORKDIR:-$(mktemp -d -u -t pmem-XXXX)})
 mkdir -p $WORKDIR
 cd $WORKDIR
+CA=${CA:="$WORKDIR/ca"}
+NS=${NS:-pmem-csi}
 
 # Check for cfssl utilities.
 cfssl_found=1
@@ -14,31 +15,36 @@ if [ $cfssl_found -eq 0 ]; then
     exit 1
 fi
 
-# Generate CA certificates.
-<<EOF cfssl gencert -initca - | cfssljson -bare ca
+CA_CRT=$(realpath ${CA}.pem)
+CA_KEY=$(realpath ${CA}-key.pem)
+if ! [ -f ${CA_CRT} -a -f ${CA_KEY} ]; then
+  echo "Generating CA certificate ..."
+  <<EOF cfssl gencert -initca - | cfssljson -bare $(basename $CA)
 {
-    "CN": "$CA",
-    "hosts": [ "$CA" ],
+    "CN": "pmem-ca",
+    "hosts": [ "pmem-ca" ],
     "key": {
         "algo": "rsa",
         "size": 2048
     }
 }
 EOF
+fi
 
 # Generate server and client certificates.
 DEFAULT_CNS="pmem-registry pmem-node-controller"
 CNS="${DEFAULT_CNS} ${EXTRA_CNS:=""}"
 for name in ${CNS}; do
-  <<EOF cfssl gencert -ca=ca.pem -ca-key=ca-key.pem - | cfssljson -bare $name
+  echo "Generating Certificate for '$name'(NS=$NS) ..."
+  <<EOF cfssl gencert -ca=${CA_CRT} -ca-key=${CA_KEY} - | cfssljson -bare $name
 {
     "CN": "$name",
     "hosts": [
         $(if [ "$name" = "pmem-registry" ]; then
              # Some extra names needed for scheduler extender and webhook.
-             echo '"pmem-csi-scheduler", "pmem-csi-scheduler.default", "pmem-csi-scheduler.default.svc", "127.0.0.1",'
+             echo '"pmem-csi-scheduler", "pmem-csi-scheduler.'$NS'", "pmem-csi-scheduler.'$NS'.svc", "127.0.0.1",'
              # And for metrics server.
-             echo '"pmem-csi-metrics", "pmem-csi-metrics.default", "pmem-csi-metrics.default.svc",'
+             echo '"pmem-csi-metrics", "pmem-csi-metrics.'$NS'", "pmem-csi-metrics.'$NS'.svc",'
           fi
         )
         "$name"

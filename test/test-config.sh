@@ -101,6 +101,9 @@ fi
 # Allowed values: IfNotPresent, Always, Never
 : ${TEST_IMAGE_PULL_POLICY:=IfNotPresent}
 
+# Namespace used to deploy the PMRM-CSI driver
+: ${TEST_DRIVER_NAMESPACE:=pmem-csi}
+
 # Namespace used by test/start-operator.sh for the operator
 # itself.
 : ${TEST_OPERATOR_NAMESPACE:=pmem-csi}

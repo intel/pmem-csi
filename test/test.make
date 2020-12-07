@@ -212,13 +212,15 @@ run_dm_tests: _work/bin/govm start_test_vm
 
 _work/%/.ca-stamp: test/setup-ca.sh _work/.setupcfssl-stamp
 	rm -rf $(@D)
-	WORKDIR='$(@D)' PATH='$(PWD)/_work/bin/:$(PATH)' CA='$*' EXTRA_CNS="wrong-node-controller" $<
+	WORKDIR='$(@D)' PATH='$(PWD)/_work/bin/:$(PATH)' NS=default EXTRA_CNS="wrong-node-controller" $<
 	touch $@
 
+
+_work/.setupcfssl-stamp: CFSSL_VERSION=1.5.0
 _work/.setupcfssl-stamp:
 	rm -rf _work/bin
-	curl -L https://github.com/cloudflare/cfssl/releases/download/v1.4.1/cfssl_1.4.1_linux_amd64 -o _work/bin/cfssl --create-dirs
-	curl -L https://github.com/cloudflare/cfssl/releases/download/v1.4.1/cfssljson_1.4.1_linux_amd64 -o _work/bin/cfssljson --create-dirs
+	curl -L https://github.com/cloudflare/cfssl/releases/download/v$(CFSSL_VERSION)/cfssl_$(CFSSL_VERSION)_linux_amd64 -o _work/bin/cfssl --create-dirs
+	curl -L https://github.com/cloudflare/cfssl/releases/download/v$(CFSSL_VERSION)/cfssljson_$(CFSSL_VERSION)_linux_amd64 -o _work/bin/cfssljson --create-dirs
 
 	chmod a+x _work/bin/cfssl _work/bin/cfssljson
 	touch $@

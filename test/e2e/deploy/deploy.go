@@ -904,6 +904,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 				"REPO_ROOT="+root,
 				"TEST_DEPLOYMENT_QUIET=quiet",
 				"TEST_DEPLOYMENTMODE="+deployment.DeploymentMode(),
+				"TEST_DRIVER_NAMESPACE="+deployment.Namespace,
 				"TEST_DEVICEMODE="+string(deployment.Mode))
 			cmd.Env = env
 			_, err = pmemexec.Run(cmd)

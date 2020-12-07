@@ -18,6 +18,7 @@ SSH="${CLUSTER_DIRECTORY}/ssh.0"
 KUBECTL="${SSH} kubectl" # Always use the kubectl installed in the cluster.
 KUBERNETES_VERSION="$(cat "$CLUSTER_DIRECTORY/kubernetes.version")"
 DEPLOYMENT_DIRECTORY="${REPO_DIRECTORY}/deploy/kubernetes-$KUBERNETES_VERSION${TEST_KUBERNETES_FLAVOR}"
+TEST_DRIVER_NAMESPACE=${TEST_DRIVER_NAMESPACE:-pmem-csi}
 case ${TEST_DEPLOYMENTMODE} in
     testing)
         deployment_suffix="/testing";;
@@ -40,6 +41,24 @@ DEPLOY=(
 )
 echo "INFO: deploying from ${DEPLOYMENT_DIRECTORY}/${TEST_DEVICEMODE}${deployment_suffix}"
 
+# Generate certificates if not deploying in 'default' namespace.
+# Because the default certifictes in _work/pmem-ca/ are genereated
+# for the default namespace, so we can reuse them for driver running
+# in the default namespace. For other namespaces we create new
+# certificates using the exisitng CA.
+if [ ${TEST_DRIVER_NAMESPACE} != "default" ]; then
+    CA_DIR="${REPO_DIRECTORY}/_work/pmem-ca"
+    WORK_DIR="${CA_DIR}/${TEST_DRIVER_NAMESPACE}"
+    if ! [ -d "${WORK_DIR}" ]; then
+        # Generate new certificates using exisitng CA
+        PATH="${REPO_DIRECTORY}/_work/bin:$PATH" WORKDIR="${WORK_DIR}" CA="${CA_DIR}/ca" NS="${TEST_DRIVER_NAMESPACE}" ${TEST_DIRECTORY}/setup-ca.sh
+    fi
+    TEST_REGISTRY_CERT="${WORK_DIR}/pmem-registry.pem"
+    TEST_REGISTRY_KEY="${WORK_DIR}/pmem-registry-key.pem"
+    TEST_NODE_CERT="${WORK_DIR}/pmem-node-controller.pem"
+    TEST_NODE_KEY="${WORK_DIR}/pmem-node-controller-key.pem"
+fi
+
 # Read certificate files and turn them into Kubernetes secrets.
 #
 # -caFile (controller and all nodes)
@@ -58,6 +77,7 @@ apiVersion: v1
 kind: Secret
 metadata:
     name: pmem-csi-registry-secrets
+    namespace: ${TEST_DRIVER_NAMESPACE}
     labels:
         pmem-csi.intel.com/deployment: ${TEST_DEVICEMODE}-${TEST_DEPLOYMENTMODE}
 type: kubernetes.io/tls
@@ -70,6 +90,7 @@ apiVersion: v1
 kind: Secret
 metadata:
     name: pmem-csi-node-secrets
+    namespace: ${TEST_DRIVER_NAMESPACE}
     labels:
         pmem-csi.intel.com/deployment: ${TEST_DEVICEMODE}-${TEST_DEPLOYMENTMODE}
 type: Opaque
@@ -82,10 +103,10 @@ EOF
 case "$KUBERNETES_VERSION" in
     1.1[01234])
         # We cannot exclude the PMEM-CSI pods from the webhook because objectSelector
-        # was only added in 1.15. Instead, we exclude the entire "default" namespace.
+        # was only added in 1.15. Instead, we exclude the entire "TEST_DRIVER_NAMESPACE" namespace.
         # This means our normal test applications also don't use it, but our normal
         # instructions for checking that PMEM-CSI works still apply.
-        ${KUBECTL} label --overwrite ns default pmem-csi.intel.com/webhook=ignore
+        ${KUBECTL} label --overwrite ns ${TEST_DRIVER_NAMESPACE} pmem-csi.intel.com/webhook=ignore
         ;;
 esac
 
@@ -113,12 +134,15 @@ for deploy in ${DEPLOY[@]}; do
         if [ -f "$path/pmem-csi.yaml" ]; then
             # Replace registry. This is easier with sed than kustomize...
             ${SSH} sed -i -e "s^intel/pmem^${TEST_PMEM_REGISTRY}/pmem^g" "$tmpdir/$path/pmem-csi.yaml"
+            # Replace Namespace object name
+            ${SSH} "sed -ie 's;\(name: \)pmem-csi$;\1${TEST_DRIVER_NAMESPACE};g' $tmpdir/$path/pmem-csi.yaml"
             # Same for image pull policy.
             ${SSH} <<EOF
 sed -i -e "s^imagePullPolicy:.IfNotPresent^imagePullPolicy: ${TEST_IMAGE_PULL_POLICY}^g" "$tmpdir/$path/pmem-csi.yaml"
 EOF
         fi
         ${SSH} mkdir "$tmpdir/my-deployment"
+        trap '${SSH} "rm -rf $tmpdir"' SIGTERM SIGINT EXIT
         ${SSH} "cat >'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
 bases:
   - ../$path
@@ -207,10 +231,17 @@ EOF
                 ${SSH} "cat >'$tmpdir/my-deployment/webhook-patch.yaml'" <<EOF
 - op: replace
   path: /webhooks/0/clientConfig/caBundle
-  value: $(base64 -w 0 _work/pmem-ca/ca.pem)
+  value: $(base64 -w 0 ${TEST_CA})
+- op: replace
+  path: /webhooks/0/clientConfig/service/namespace
+  value: ${TEST_DRIVER_NAMESPACE}
 EOF
                 ;;
         esac
+
+        ${SSH} "cat >>'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
+namespace: ${TEST_DRIVER_NAMESPACE}
+EOF
         # When quickly taking down one installation of PMEM-CSI and recreating it, sometimes we get:
         #   nodePort: Invalid value: 32000: provided port is already allocated
         #

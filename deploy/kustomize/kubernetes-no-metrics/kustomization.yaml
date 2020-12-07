@@ -13,3 +13,6 @@ images:
   newTag: v2.0.2
 - name: k8s.gcr.io/sig-storage/csi-node-driver-registrar
   newTag: v1.2.0
+
+# Keep all the driver objects in 'pmem-csi' namespace
+namespace: pmem-csi

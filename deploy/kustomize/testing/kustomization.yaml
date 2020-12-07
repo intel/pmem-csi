@@ -1,2 +1,5 @@
 resources:
 - socat.yaml
+
+# Keep all the driver objects in 'pmem-csi' namespace
+namespace: pmem-csi
