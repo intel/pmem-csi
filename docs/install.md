@@ -254,6 +254,7 @@ $ kubectl create -f https://github.com/intel/pmem-csi/raw/devel/deploy/crd/pmem-
 ``` console
 $ kubectl create -f https://github.com/intel/pmem-csi/raw/devel/deploy/operator/pmem-csi-operator.yaml
 ```
+The operator gets deployed in a namespace called 'pmem-csi' which gets created by that YAML file.
 
 **NOTE:** Refer to the [PMEM-CSI operator API conversion webhook](#pmem-csi-operator-api-conversion-webhook) section
 for steps to install the operator with built-in conversion webhook.
@@ -361,7 +362,7 @@ Events:
   Normal  NewDeployment  58s   pmem-csi-operator  Processing new driver deployment
   Normal  Running        39s   pmem-csi-operator  Driver deployment successful
 
-$ kubectl get po
+$ kubectl get pod -n pmem-csi
 NAME                               READY   STATUS    RESTARTS   AGE
 pmem-csi-intel-com-controller-0    2/2     Running   0          51s
 pmem-csi-intel-com-node-4x7cv      2/2     Running   0          50s
@@ -458,11 +459,11 @@ for `kubectl kustomize`. For example:
      ``` ShellSession
      $ mkdir -p my-pmem-csi-deployment
      $ cat >my-pmem-csi-deployment/kustomization.yaml <<EOF
-     namespace: pmem-csi
+     namespace: pmem-driver
      bases:
        - ../deploy/kubernetes-1.17/lvm
      EOF
-     $ kubectl create namespace pmem-csi
+     $ kubectl create namespace pmem-driver
      $ kubectl create --kustomize my-pmem-csi-deployment
      ```
 
@@ -479,6 +480,7 @@ for `kubectl kustomize`. For example:
            version: v1
            kind: DaemonSet
            name: pmem-csi-node
+           namespace: pmem-csi
          path: lvm-parameters-patch.yaml
      EOF
      $ cat >my-pmem-csi-deployment/lvm-parameters-patch.yaml <<EOF
@@ -493,7 +495,7 @@ for `kubectl kustomize`. For example:
 - Wait until all pods reach 'Running' status
 
 ``` console
-$ kubectl get pods
+$ kubectl get pods -n pmem-csi
 NAME                    READY   STATUS    RESTARTS   AGE
 pmem-csi-node-8kmxf     2/2     Running   0          3m15s
 pmem-csi-node-bvx7m     2/2     Running   0          3m15s
@@ -781,6 +783,7 @@ patchesJson6902:
       version: v1
       kind: StatefulSet
       name: pmem-csi-controller
+      namespace: pmem-csi
     path: scheduler-patch.yaml
 EOF
 
@@ -828,6 +831,7 @@ patchesJson6902:
       version: v1
       kind: Service
       name: pmem-csi-scheduler
+      namespace: pmem-csi
     path: node-port-patch.yaml
 EOF
 
