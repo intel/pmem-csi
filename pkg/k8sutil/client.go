@@ -22,7 +22,7 @@ import (
 
 // NewClient connects to an API server either through KUBECONFIG (if set) or
 // through the in-cluster env variables.
-func NewClient() (kubernetes.Interface, error) {
+func NewClient(qps float64, burst int) (kubernetes.Interface, error) {
 	var config *rest.Config
 	var err error
 
@@ -34,20 +34,8 @@ func NewClient() (kubernetes.Interface, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create Kubernetes REST config: %v", err)
 	}
-	client, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, fmt.Errorf("create Kubernetes client: %v", err)
-	}
-	return client, nil
-}
-
-// NewInClusterClient connects code that runs inside a Kubernetes pod to the
-// API server.
-func NewInClusterClient() (kubernetes.Interface, error) {
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		return nil, fmt.Errorf("build in-cluster Kubernetes client configuration: %v", err)
-	}
+	config.QPS = float32(qps)
+	config.Burst = burst
 	client, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("create Kubernetes client: %v", err)

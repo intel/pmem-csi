@@ -15,7 +15,6 @@ import (
 	"k8s.io/klog/v2"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
-	"github.com/intel/pmem-csi/pkg/k8sutil"
 	"github.com/intel/pmem-csi/pkg/logger"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 )
@@ -39,6 +38,9 @@ func init() {
 	flag.StringVar(&config.CAFile, "caFile", "ca.pem", "Root CA certificate file to use for verifying connections")
 	flag.StringVar(&config.CertFile, "certFile", "pmem-registry.pem", "SSL certificate file to use for authenticating client connections")
 	flag.StringVar(&config.KeyFile, "keyFile", "pmem-registry-key.pem", "Private key file associated to certificate")
+
+	flag.Float64Var(&config.KubeAPIQPS, "kube-api-qps", 5, "QPS to use while communicating with the Kubernetes apiserver. Defaults to 5.0.")
+	flag.IntVar(&config.KubeAPIBurst, "kube-api-burst", 10, "Burst to use while communicating with the Kubernetes apiserver. Defaults to 10.")
 
 	/* metrics options */
 	flag.StringVar(&config.metricsListen, "metricsListen", "", "listen address (like :8001) for prometheus metrics endpoint, disabled by default")
@@ -65,17 +67,9 @@ func Main() int {
 
 	klog.V(3).Info("Version: ", version)
 
-	if config.schedulerListen != "" {
-		if config.Mode != Webhooks {
-			pmemcommon.ExitError("scheduler listening", errors.New("only supported in the controller"))
-			return 1
-		}
-		c, err := k8sutil.NewClient()
-		if err != nil {
-			pmemcommon.ExitError("scheduler setup", err)
-			return 1
-		}
-		config.client = c
+	if config.schedulerListen != "" && config.Mode != Webhooks {
+		pmemcommon.ExitError("scheduler listening", errors.New("only supported in the controller"))
+		return 1
 	}
 
 	config.Version = version

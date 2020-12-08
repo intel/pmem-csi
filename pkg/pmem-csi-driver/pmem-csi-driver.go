@@ -22,6 +22,7 @@ import (
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
+	"github.com/intel/pmem-csi/pkg/k8sutil"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	pmemstate "github.com/intel/pmem-csi/pkg/pmem-state"
@@ -115,9 +116,16 @@ type Config struct {
 	// PmemPercentage percentage of space to be used by the driver in each PMEM region
 	PmemPercentage uint
 
+	// KubeAPIQPS is the average rate of requests to the Kubernetes API server,
+	// enforced locally in client-go.
+	KubeAPIQPS float64
+
+	// KubeAPIQPS is the number of requests that a client is
+	// allowed to send above the average rate of request.
+	KubeAPIBurst int
+
 	// parameters for Kubernetes scheduler extender
 	schedulerListen string
-	client          kubernetes.Interface
 
 	// parameters for Prometheus metrics
 	metricsListen string
@@ -182,13 +190,17 @@ func (csid *csiDriver) Run() error {
 		if csid.cfg.schedulerListen == "" {
 			return errors.New("webhooks mode needs a scheduler listen address")
 		}
-		factory := informers.NewSharedInformerFactoryWithOptions(csid.cfg.client, resyncPeriod,
+		client, err := k8sutil.NewClient(config.KubeAPIQPS, config.KubeAPIBurst)
+		if err != nil {
+			return fmt.Errorf("connect to apiserver: %v", err)
+		}
+		factory := informers.NewSharedInformerFactoryWithOptions(client, resyncPeriod,
 			informers.WithNamespace(namespace),
 		)
 		podLister := factory.Core().V1().Pods().Lister()
 		c := scheduler.CapacityViaMetrics(namespace, csid.cfg.DriverName, podLister)
 		factory.Start(ctx.Done())
-		if _, err := csid.startScheduler(ctx, cancel, c); err != nil {
+		if _, err := csid.startScheduler(ctx, cancel, client, c); err != nil {
 			return err
 		}
 	case Node:
@@ -255,14 +267,14 @@ func (csid *csiDriver) Run() error {
 // logs errors and cancels the context when it runs into a problem,
 // either during the startup phase (blocking) or later at runtime (in
 // a go routine).
-func (csid *csiDriver) startScheduler(ctx context.Context, cancel func(), c scheduler.Capacity) (string, error) {
-	factory := informers.NewSharedInformerFactory(csid.cfg.client, resyncPeriod)
+func (csid *csiDriver) startScheduler(ctx context.Context, cancel func(), client kubernetes.Interface, c scheduler.Capacity) (string, error) {
+	factory := informers.NewSharedInformerFactory(client, resyncPeriod)
 	pvcLister := factory.Core().V1().PersistentVolumeClaims().Lister()
 	scLister := factory.Storage().V1().StorageClasses().Lister()
 	sched, err := scheduler.NewScheduler(
 		csid.cfg.DriverName,
 		c,
-		csid.cfg.client,
+		client,
 		pvcLister,
 		scLister,
 	)
