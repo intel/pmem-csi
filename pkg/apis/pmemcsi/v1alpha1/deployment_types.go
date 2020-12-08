@@ -340,6 +340,10 @@ func (d *Deployment) EnsureDefaults(operatorImage string) error {
 
 	if d.Spec.ControllerResources == nil {
 		d.Spec.ControllerResources = &corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse(DefaultControllerResourceCPU),
+				corev1.ResourceMemory: resource.MustParse(DefaultControllerResourceMemory),
+			},
 			Limits: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse(DefaultControllerResourceCPU),
 				corev1.ResourceMemory: resource.MustParse(DefaultControllerResourceMemory),
@@ -366,6 +370,10 @@ func (d *Deployment) EnsureDefaults(operatorImage string) error {
 
 	if d.Spec.NodeResources == nil {
 		d.Spec.NodeResources = &corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse(DefaultNodeResourceCPU),
+				corev1.ResourceMemory: resource.MustParse(DefaultNodeResourceMemory),
+			},
 			Limits: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse(DefaultNodeResourceCPU),
 				corev1.ResourceMemory: resource.MustParse(DefaultNodeResourceMemory),

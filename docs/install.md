@@ -275,7 +275,7 @@ Here is a minimal example driver deployment created with a custom resource:
 
 ``` ShellSession
 $ kubectl create -f - <<EOF
-apiVersion: pmem-csi.intel.com/v1alpha1
+apiVersion: pmem-csi.intel.com/v1beta1
 kind: Deployment
 metadata:
   name: pmem-csi.intel.com
@@ -302,13 +302,13 @@ Name:         pmem-csi.intel.com
 Namespace:
 Labels:       <none>
 Annotations:  <none>
-API Version:  pmem-csi.intel.com/v1alpha1
+API Version:  pmem-csi.intel.com/v1beta1
 Kind:         Deployment
 Metadata:
   Creation Timestamp:  2020-10-07T07:31:58Z
   Generation:          1
   Managed Fields:
-    API Version:  pmem-csi.intel.com/v1alpha1
+    API Version:  pmem-csi.intel.com/v1beta1
     Fields Type:  FieldsV1
     fieldsV1:
       f:spec:
@@ -320,7 +320,7 @@ Metadata:
     Manager:      kubectl-create
     Operation:    Update
     Time:         2020-10-07T07:31:58Z
-    API Version:  pmem-csi.intel.com/v1alpha1
+    API Version:  pmem-csi.intel.com/v1beta1
     Fields Type:  FieldsV1
     fieldsV1:
       f:status:
@@ -333,7 +333,7 @@ Metadata:
     Operation:       Update
     Time:            2020-10-07T07:32:22Z
   Resource Version:  1235740
-  Self Link:         /apis/pmem-csi.intel.com/v1alpha1/deployments/pmem-csi.intel.com
+  Self Link:         /apis/pmem-csi.intel.com/v1beta1/deployments/pmem-csi.intel.com
   UID:               d8635490-53fa-4eec-970d-cd4c76f53b23
 Spec:
   Device Mode:  lvm
@@ -1200,12 +1200,14 @@ The current API for PMEM-CSI `Deployment` resources is:
 
 |Field | Type | Description |
 |---|---|---|
-| apiVersion | string  | `pmem-csi.intel.com/v1alpha1`|
+| apiVersion | string  | `pmem-csi.intel.com/v1beta1` or `pmem-csi.intel.com/v1alpha1` |
 | kind | string | `Deployment`|
 | metadata | [ObjectMeta](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#metadata) | Object metadata, name used for CSI driver and as prefix for sub-objects |
 | spec | [DeploymentSpec](#deployment-spec) | Specification of the desired behavior of the deployment |
 
 #### DeploymentSpec
+
+Below specification fields are valid in all API revisions unless noted otherwise in the description.
 
 |Field | Type | Description | Default Value |
 |---|---|---|---|
@@ -1215,8 +1217,12 @@ The current API for PMEM-CSI `Deployment` resources is:
 | pullPolicy | string | Docker image pull policy. either one of `Always`, `Never`, `IfNotPresent` | `IfNotPresent` |
 | logLevel | integer | PMEM-CSI driver logging level | 3 |
 | deviceMode | string | Device management mode to use. Supports one of `lvm` or `direct` | `lvm`
-| controllerResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for controller pod |
-| nodeResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for the pods running on node(s) |
+| controllerResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for controller pod. <br/><sup>3</sup>_Deprecated and only available in `v1alpha1` API revision._ |
+| nodeResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for the pods running on node(s). <br/>_<sup>3</sup>Deprecated and only available in `v1alpha1` API revision._ |
+| controllerDriverResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for controller driver container running on master node. Available in `v1beta1` onwords. |
+| nodeDriverResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for the driver container running on worker node(s). <br/>_Available in `v1beta1` onwards._ |
+| provisionerResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for the [external provisioner](https://kubernetes-csi.github.io/docs/external-provisioner.html) sidecar container. <br>_Available in `v1beta1` onwards._ |
+| nodeRegistrarResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for the [driver registrar](https://kubernetes-csi.github.io/docs/node-driver-registrar.html) sidecar container running on worker node(s). <br/>_Available in `v1beta1` onwards._ |
 | registryCert | string | Encoded tls certificate signed by a certificate authority used for driver's controller registry server | generated by operator self-signed CA |
 | nodeControllerCert | string | Encoded tls certificate signed by a certificate authority used for driver's node controllers | generated by operator self-signed CA |
 | registryKey | string | Encoded RSA private key used for signing by `registryCert` | generated by the operator |
@@ -1236,6 +1242,10 @@ appropriate values:
 <sup>2</sup> Image versions depend on the Kubernetes release. The
 operator dynamically chooses suitable image versions. Users have to
 take care of that themselves when overriding the values.
+
+<sup>3</sup> Pod level resource requests(`nodeResources` and `controllerResources`)
+are deprecated infavor of per-container(`nodeDriverResources`, `nodeRegistrarResources`,
+`controllerDriverResources` and `provisionerResources`) resource requests.
 
 **WARNING**: although all fields can be modified and changes will be
 propagated to the deployed driver, not all changes are safe. In

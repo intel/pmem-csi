@@ -287,6 +287,12 @@ Resource requirements depend on the workload. To generate some load, run
 make test_e2e TEST_E2E_FOCUS=lvm-production.*late.binding.*stress.test
 ```
 
+Alternatively, could run [`hack/stress-driver.sh`](hack/stress-driver.sh)
+helper script to generate the load on the driver
+```console
+ROUNDS=500 VOL_COUNT=5 ./hack/stress-driver.sh
+```
+
 Now resource recommendations can be retrieved with:
 
 ```console
@@ -294,6 +300,9 @@ kubectl get vpa
 kubectl describe vpa
 kubectl get vpa pmem-csi-node -o jsonpath='{range .status.recommendation.containerRecommendations[*]}{.containerName}{":\n\tRequests: "}{.lowerBound}{"\n\tLimits: "}{.upperBound}{"\n"}{end}'
 ```
+
+The default resource requirements used for the driver deployments by the operator
+are chosen from the VPA recommendations described in this section.
 
 ## Switching device mode
 

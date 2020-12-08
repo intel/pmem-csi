@@ -48,6 +48,8 @@ type pmemDeployment struct {
 	image, pullPolicy, provisionerImage, registrarImage string
 	controllerCPU, controllerMemory                     string
 	nodeCPU, nodeMemory                                 string
+	provisionerCPU, provisionerMemory                   string
+	nodeRegistarCPU, nodeRegistrarMemory                string
 	caCert, regCert, regKey, ncCert, ncKey              []byte
 	kubeletDir                                          string
 }
@@ -76,7 +78,7 @@ func getDeployment(d *pmemDeployment) *api.Deployment {
 	spec.ProvisionerImage = d.provisionerImage
 	spec.NodeRegistrarImage = d.registrarImage
 	if d.controllerCPU != "" || d.controllerMemory != "" {
-		spec.ControllerResources = &corev1.ResourceRequirements{
+		spec.ControllerDriverResources = &corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse(d.controllerCPU),
 				corev1.ResourceMemory: resource.MustParse(d.controllerMemory),
@@ -84,10 +86,26 @@ func getDeployment(d *pmemDeployment) *api.Deployment {
 		}
 	}
 	if d.nodeCPU != "" || d.nodeMemory != "" {
-		spec.NodeResources = &corev1.ResourceRequirements{
+		spec.NodeDriverResources = &corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse(d.nodeCPU),
 				corev1.ResourceMemory: resource.MustParse(d.nodeMemory),
+			},
+		}
+	}
+	if d.provisionerCPU != "" || d.provisionerMemory != "" {
+		spec.ProvisionerResources = &corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse(d.provisionerCPU),
+				corev1.ResourceMemory: resource.MustParse(d.provisionerMemory),
+			},
+		}
+	}
+	if d.nodeRegistarCPU != "" || d.nodeRegistrarMemory != "" {
+		spec.NodeRegistrarResources = &corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse(d.nodeRegistarCPU),
+				corev1.ResourceMemory: resource.MustParse(d.nodeRegistrarMemory),
 			},
 		}
 	}

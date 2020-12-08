@@ -70,10 +70,14 @@ type DeploymentSpec struct {
 	ProvisionerImage string `json:"provisionerImage,omitempty"`
 	// NodeRegistrarImage CSI node driver registrar sidecar image
 	NodeRegistrarImage string `json:"nodeRegistrarImage,omitempty"`
-	// ControllerResources Compute resources required by Controller driver
-	ControllerResources *corev1.ResourceRequirements `json:"controllerResources,omitempty"`
-	// NodeResources Compute resources required by Node driver
-	NodeResources *corev1.ResourceRequirements `json:"nodeResources,omitempty"`
+	// ProvisionerResources Compute resources required by provisioner sidecar container
+	ProvisionerResources *corev1.ResourceRequirements `json:"provisionerResources,omitempty"`
+	// NodeRegistrarResources Compute resources required by node registrar sidecar container
+	NodeRegistrarResources *corev1.ResourceRequirements `json:"nodeRegistrarResources,omitempty"`
+	// NodeDriverResources Compute resources required by driver container running on worker nodes
+	NodeDriverResources *corev1.ResourceRequirements `json:"nodeDriverResources,omitempty"`
+	// ControllerDriverResources Compute resources required by driver container running on master node
+	ControllerDriverResources *corev1.ResourceRequirements `json:"controllerDriverResources,omitempty"`
 	// DeviceMode to use to manage PMEM devices. One of lvm, direct
 	// +kubebuilder:default:lvm
 	DeviceMode DeviceMode `json:"deviceMode,omitempty"`
@@ -254,14 +258,44 @@ const (
 	// DefaultRegistrarImage default node driver registrar image to use
 	DefaultRegistrarImage = defaultRegistrarImageName + ":" + defaultRegistrarImageTag
 
-	// DefaultControllerResourceCPU default CPU resource limit used for controller pod
-	DefaultControllerResourceCPU = "100m" // MilliSeconds
-	// DefaultControllerResourceMemory default memory resource limit used for controller pod
-	DefaultControllerResourceMemory = "250Mi" // MB
-	// DefaultNodeResourceCPU default CPU resource limit used for node driver pod
-	DefaultNodeResourceCPU = "100m" // MilliSeconds
-	// DefaultNodeResourceMemory default memory resource limit used for node driver pod
-	DefaultNodeResourceMemory = "250Mi" // MB
+	// Below resource requests and limits are derived(with minor adjustments) from
+	// recommendations reported by VirtualPodAutoscaler(LowerBound -> Requests and UpperBound -> Limits)
+
+	// DefaultControllerResourceRequestCPU default CPU resource request used for controller driver container
+	DefaultControllerResourceRequestCPU = "12m" // MilliSeconds
+
+	// DefaultControllerResourceRequestMemory default memory resource request used for controller driver container
+	DefaultControllerResourceRequestMemory = "128Mi" // MB
+	// DefaultNodeResourceRequestCPU default CPU resource request used for node driver container
+	DefaultNodeResourceRequestCPU = "100m" // MilliSeconds
+	// DefaultNodeResourceRequestMemory default memory resource request used for node driver container
+	DefaultNodeResourceRequestMemory = "250Mi" // MB
+	// DefaultNodeRegistrarRequestCPU default CPU resource request used for node registrar container
+	DefaultNodeRegistrarRequestCPU = "12m" // MilliSeconds
+	// DefaultNodeRegistrarRequestMemory default memory resource request used for node registrar container
+	DefaultNodeRegistrarRequestMemory = "128Mi" // MB
+	// DefaultProvisionerRequestCPU default CPU resource request used for provisioner container
+	DefaultProvisionerRequestCPU = "12m" // MilliSeconds
+	// DefaultProvisionerRequestMemory default memory resource request used for node registrar container
+	DefaultProvisionerRequestMemory = "128Mi" // MB
+
+	// DefaultControllerResourceLimitCPU default CPU resource limit used for controller driver container
+	DefaultControllerResourceLimitCPU = "500m" // MilliSeconds
+	// DefaultControllerResourceLimitMemory default memory resource limit used for controller driver container
+	DefaultControllerResourceLimitMemory = "250Mi" // MB
+	// DefaultNodeResourceLimitCPU default CPU resource limit used for node driver container
+	DefaultNodeResourceLimitCPU = "600m" // MilliSeconds
+	// DefaultNodeResourceLimitMemory default memory resource limit used for node driver container
+	DefaultNodeResourceLimitMemory = "500Mi" // MB
+	// DefaultNodeRegistrarLimitCPU default CPU resource limit used for node registrar container
+	DefaultNodeRegistrarLimitCPU = "100m" // MilliSeconds
+	// DefaultNodeRegistrarLimitMemory default memory resource limit used for node registrar container
+	DefaultNodeRegistrarLimitMemory = "128Mi" // MB
+	// DefaultProvisionerLimitCPU default CPU resource limit used for provisioner container
+	DefaultProvisionerLimitCPU = "250m" // MilliSeconds
+	// DefaultProvisionerLimitMemory default memory resource limit used for node registrar container
+	DefaultProvisionerLimitMemory = "250Mi" // MB
+
 	// DefaultDeviceMode default device manger used for deployment
 	DefaultDeviceMode = DeviceModeLVM
 	// DefaultPMEMPercentage PMEM space to reserve for the driver
@@ -318,6 +352,17 @@ func (d *Deployment) SetDriverStatus(t DriverType, status, reason string) {
 
 // EnsureDefaults make sure that the deployment object has all defaults set properly
 func (d *Deployment) EnsureDefaults(operatorImage string) error {
+	// Validate the given driver mode.
+	// In a realistic case this check might not needed as it should be
+	// handled by JSON schema as we defined deviceMode as enumeration.
+	switch d.Spec.DeviceMode {
+	case "":
+		d.Spec.DeviceMode = DefaultDeviceMode
+	case DeviceModeDirect, DeviceModeLVM:
+	default:
+		return fmt.Errorf("invalid device mode %q", d.Spec.DeviceMode)
+	}
+
 	if d.Spec.Image == "" {
 		// If provided use operatorImage
 		if operatorImage != "" {
@@ -333,45 +378,12 @@ func (d *Deployment) EnsureDefaults(operatorImage string) error {
 		d.Spec.LogLevel = DefaultLogLevel
 	}
 
-	/* Controller Defaults */
-
 	if d.Spec.ProvisionerImage == "" {
 		d.Spec.ProvisionerImage = DefaultProvisionerImage
 	}
 
-	if d.Spec.ControllerResources == nil {
-		d.Spec.ControllerResources = &corev1.ResourceRequirements{
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse(DefaultControllerResourceCPU),
-				corev1.ResourceMemory: resource.MustParse(DefaultControllerResourceMemory),
-			},
-		}
-	}
-
-	/* Node Defaults */
-
-	// Validate the given driver mode.
-	// In a realistic case this check might not needed as it should be
-	// handled by JSON schema as we defined deviceMode as enumeration.
-	switch d.Spec.DeviceMode {
-	case "":
-		d.Spec.DeviceMode = DefaultDeviceMode
-	case DeviceModeDirect, DeviceModeLVM:
-	default:
-		return fmt.Errorf("invalid device mode %q", d.Spec.DeviceMode)
-	}
-
 	if d.Spec.NodeRegistrarImage == "" {
 		d.Spec.NodeRegistrarImage = DefaultRegistrarImage
-	}
-
-	if d.Spec.NodeResources == nil {
-		d.Spec.NodeResources = &corev1.ResourceRequirements{
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse(DefaultNodeResourceCPU),
-				corev1.ResourceMemory: resource.MustParse(DefaultNodeResourceMemory),
-			},
-		}
 	}
 
 	if d.Spec.NodeSelector == nil {
@@ -384,6 +396,58 @@ func (d *Deployment) EnsureDefaults(operatorImage string) error {
 
 	if d.Spec.KubeletDir == "" {
 		d.Spec.KubeletDir = DefaultKubeletDir
+	}
+
+	if d.Spec.ControllerDriverResources == nil {
+		d.Spec.ControllerDriverResources = &corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse(DefaultControllerResourceRequestCPU),
+				corev1.ResourceMemory: resource.MustParse(DefaultControllerResourceRequestMemory),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse(DefaultControllerResourceLimitCPU),
+				corev1.ResourceMemory: resource.MustParse(DefaultControllerResourceLimitMemory),
+			},
+		}
+	}
+
+	if d.Spec.ProvisionerResources == nil {
+		d.Spec.ProvisionerResources = &corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse(DefaultProvisionerRequestCPU),
+				corev1.ResourceMemory: resource.MustParse(DefaultProvisionerRequestMemory),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse(DefaultProvisionerLimitCPU),
+				corev1.ResourceMemory: resource.MustParse(DefaultProvisionerLimitMemory),
+			},
+		}
+	}
+
+	if d.Spec.NodeDriverResources == nil {
+		d.Spec.NodeDriverResources = &corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse(DefaultNodeResourceRequestCPU),
+				corev1.ResourceMemory: resource.MustParse(DefaultNodeResourceRequestMemory),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse(DefaultNodeResourceLimitCPU),
+				corev1.ResourceMemory: resource.MustParse(DefaultNodeResourceLimitMemory),
+			},
+		}
+	}
+
+	if d.Spec.NodeRegistrarResources == nil {
+		d.Spec.NodeRegistrarResources = &corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse(DefaultNodeRegistrarRequestCPU),
+				corev1.ResourceMemory: resource.MustParse(DefaultNodeRegistrarRequestMemory),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse(DefaultNodeRegistrarLimitCPU),
+				corev1.ResourceMemory: resource.MustParse(DefaultNodeRegistrarLimitMemory),
+			},
+		}
 	}
 
 	return nil

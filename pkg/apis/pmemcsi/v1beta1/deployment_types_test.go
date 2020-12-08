@@ -46,15 +46,37 @@ var _ = Describe("Operator", func() {
 			Expect(d.Spec.ProvisionerImage).Should(BeEquivalentTo(api.DefaultProvisionerImage), "default provisioner image mismatch")
 			Expect(d.Spec.NodeRegistrarImage).Should(BeEquivalentTo(api.DefaultRegistrarImage), "default node driver registrar image mismatch")
 
-			Expect(d.Spec.ControllerResources).ShouldNot(BeNil(), "default controller resources not set")
-			rs := d.Spec.ControllerResources.Limits
-			Expect(rs.Cpu().String()).Should(BeEquivalentTo(api.DefaultControllerResourceCPU), "controller driver 'cpu' resource mismatch")
-			Expect(rs.Memory().String()).Should(BeEquivalentTo(api.DefaultControllerResourceMemory), "controller driver 'memory' resource mismatch")
+			Expect(d.Spec.ControllerDriverResources).ShouldNot(BeNil(), "default controller resources not set")
+			rs := d.Spec.ControllerDriverResources.Limits
+			Expect(rs.Cpu().String()).Should(BeEquivalentTo(api.DefaultControllerResourceLimitCPU), "controller driver 'cpu' resource mismatch")
+			Expect(rs.Memory().String()).Should(BeEquivalentTo(api.DefaultControllerResourceLimitMemory), "controller driver 'memory' resource mismatch")
 
-			Expect(d.Spec.NodeResources).ShouldNot(BeNil(), "default node resources not set")
-			nrs := d.Spec.NodeResources.Limits
-			Expect(nrs.Cpu().String()).Should(BeEquivalentTo(api.DefaultNodeResourceCPU), "node driver 'cpu' resource mismatch")
-			Expect(nrs.Memory().String()).Should(BeEquivalentTo(api.DefaultNodeResourceMemory), "node driver 'cpu' resource mismatch")
+			Expect(d.Spec.NodeDriverResources).ShouldNot(BeNil(), "default node driver resources not set")
+			rs = d.Spec.NodeDriverResources.Requests
+			Expect(rs.Cpu().String()).Should(BeEquivalentTo(api.DefaultNodeResourceRequestCPU), "node driver 'cpu' resource request mismatch")
+			Expect(rs.Memory().String()).Should(BeEquivalentTo(api.DefaultNodeResourceRequestMemory), "node driver 'cpu' resource request mismatch")
+
+			rs = d.Spec.NodeDriverResources.Limits
+			Expect(rs.Cpu().String()).Should(BeEquivalentTo(api.DefaultNodeResourceLimitCPU), "node driver 'cpu' resource limit mismatch")
+			Expect(rs.Memory().String()).Should(BeEquivalentTo(api.DefaultNodeResourceLimitMemory), "node driver 'cpu' resource limit mismatch")
+			Expect(d.Spec.NodeRegistrarResources).ShouldNot(BeNil(), "default node registrar resources not set")
+
+			rs = d.Spec.NodeRegistrarResources.Requests
+			Expect(rs.Cpu().String()).Should(BeEquivalentTo(api.DefaultNodeRegistrarRequestCPU), "node registrar 'cpu' resource request mismatch")
+			Expect(rs.Memory().String()).Should(BeEquivalentTo(api.DefaultNodeRegistrarRequestMemory), "node registrar 'cpu' resource request mismatch")
+
+			rs = d.Spec.NodeRegistrarResources.Limits
+			Expect(rs.Cpu().String()).Should(BeEquivalentTo(api.DefaultNodeRegistrarLimitCPU), "node registrar 'cpu' resource limit mismatch")
+			Expect(rs.Memory().String()).Should(BeEquivalentTo(api.DefaultNodeRegistrarLimitMemory), "node registrar 'cpu' resource limit mismatch")
+
+			Expect(d.Spec.ProvisionerResources).ShouldNot(BeNil(), "default provisioner resources not set")
+			rs = d.Spec.ProvisionerResources.Requests
+			Expect(rs.Cpu().String()).Should(BeEquivalentTo(api.DefaultProvisionerRequestCPU), "provisioner 'cpu' resource request mismatch")
+			Expect(rs.Memory().String()).Should(BeEquivalentTo(api.DefaultProvisionerRequestMemory), "provisioner 'cpu' resource request mismatch")
+
+			rs = d.Spec.ProvisionerResources.Limits
+			Expect(rs.Cpu().String()).Should(BeEquivalentTo(api.DefaultProvisionerLimitCPU), "provisioner 'cpu' resource limit mismatch")
+			Expect(rs.Memory().String()).Should(BeEquivalentTo(api.DefaultProvisionerLimitMemory), "provisioner 'cpu' resource limit mismatch")
 		})
 
 		It("shall be able to set values", func() {
@@ -69,14 +91,22 @@ spec:
   imagePullPolicy: Never
   provisionerImage: test-provisioner:v0.0.0
   nodeRegistrarImage: test-driver-registrar:v0.0.0
-  controllerResources:
+  controllerDriverResources:
     requests:
       cpu: 1000m
       memory: 10Mi
-  nodeResources:
+  nodeDriverResources:
     requests:
       cpu: 2000m
       memory: 100Mi
+  nodeRegistrarResources:
+    requests:
+      cpu: 100m
+      memory: 250Mi
+  provisionerResources:
+    requests:
+      cpu: 50m
+      memory: 150Mi
 `
 			decode := scheme.Codecs.UniversalDeserializer().Decode
 
@@ -95,15 +125,25 @@ spec:
 			Expect(d.Spec.ProvisionerImage).Should(BeEquivalentTo("test-provisioner:v0.0.0"), "provisioner image mismatch")
 			Expect(d.Spec.NodeRegistrarImage).Should(BeEquivalentTo("test-driver-registrar:v0.0.0"), "node driver registrar image mismatch")
 
-			Expect(d.Spec.ControllerResources).ShouldNot(BeNil(), "controller resources not set")
-			rs := d.Spec.ControllerResources.Requests
-			Expect(rs.Cpu().Cmp(resource.MustParse("1000m"))).Should(BeZero(), "controller driver 'cpu' resource mismatch")
-			Expect(rs.Memory().Cmp(resource.MustParse("10Mi"))).Should(BeZero(), "controller driver 'memory' resource mismatch")
+			Expect(d.Spec.ControllerDriverResources).ShouldNot(BeNil(), "controller driver resources not set")
+			rs := d.Spec.ControllerDriverResources.Requests
+			Expect(rs.Cpu().Cmp(resource.MustParse("1000m"))).Should(BeZero(), "controller driver 'cpu' resource requests mismatch")
+			Expect(rs.Memory().Cmp(resource.MustParse("10Mi"))).Should(BeZero(), "controller driver 'memory' resource requests mismatch")
 
-			Expect(d.Spec.NodeResources).ShouldNot(BeNil(), "node resources not set")
-			nrs := d.Spec.NodeResources.Requests
-			Expect(nrs.Cpu().Cmp(resource.MustParse("2000m"))).Should(BeZero(), "node driver 'cpu' resource mismatch")
-			Expect(nrs.Memory().Cmp(resource.MustParse("100Mi"))).Should(BeZero(), "node driver 'cpu' resource mismatch")
+			Expect(d.Spec.NodeDriverResources).ShouldNot(BeNil(), "node driver resources not set")
+			rs = d.Spec.NodeDriverResources.Requests
+			Expect(rs.Cpu().Cmp(resource.MustParse("2000m"))).Should(BeZero(), "node driver 'cpu' resource requests mismatch")
+			Expect(rs.Memory().Cmp(resource.MustParse("100Mi"))).Should(BeZero(), "node driver 'memory' resource requests mismatch")
+
+			Expect(d.Spec.NodeRegistrarResources).ShouldNot(BeNil(), "node registrar resources not set")
+			rs = d.Spec.NodeRegistrarResources.Requests
+			Expect(rs.Cpu().Cmp(resource.MustParse("100m"))).Should(BeZero(), "node registrar 'cpu' resource requests mismatch")
+			Expect(rs.Memory().Cmp(resource.MustParse("250Mi"))).Should(BeZero(), "node registrar 'memory' resource request mismatch")
+
+			Expect(d.Spec.ProvisionerResources).ShouldNot(BeNil(), "provisioner resources not set")
+			rs = d.Spec.ProvisionerResources.Requests
+			Expect(rs.Cpu().Cmp(resource.MustParse("50m"))).Should(BeZero(), "provisioner 'cpu' resource requests mismatch")
+			Expect(rs.Memory().Cmp(resource.MustParse("150Mi"))).Should(BeZero(), "provisioner 'memory' resource requests mismatch")
 		})
 
 		It("should have valid json schema", func() {
@@ -117,7 +157,12 @@ spec:
 			_, _, err = deserializer.Decode(data, nil, crd)
 			Expect(err).ShouldNot(HaveOccurred(), "decode crd file")
 
-			crdProp := crd.Spec.Versions[0].Schema.OpenAPIV3Schema
+			var crdProp *apiextensions.JSONSchemaProps
+			for _, v := range crd.Spec.Versions {
+				if v.Name == api.SchemeBuilder.GroupVersion.Version {
+					crdProp = v.Schema.OpenAPIV3Schema
+				}
+			}
 			Expect(crdProp).ShouldNot(BeNil(), "Nil CRD schmea")
 			Expect(crdProp.Type).Should(BeEquivalentTo("object"), "Deployment JSON schema type mismatch")
 			spec, ok := crdProp.Properties["spec"]
@@ -126,14 +171,22 @@ spec:
 			Expect(ok).Should(BeTrue(), "Deployment JSON schema does not have 'status'")
 
 			specProperties := map[string]string{
-				"logLevel":            "integer",
-				"image":               "string",
-				"imagePullPolicy":     "string",
-				"provisionerImage":    "string",
-				"nodeRegistrarImage":  "string",
-				"controllerResources": "object",
-				"nodeResources":       "object",
+				"logLevel":                  "integer",
+				"image":                     "string",
+				"imagePullPolicy":           "string",
+				"provisionerImage":          "string",
+				"nodeRegistrarImage":        "string",
+				"controllerDriverResources": "object",
+				"nodeDriverResources":       "object",
+				"provisionerResources":      "object",
+				"nodeRegistrarResources":    "object",
+				"kubeletDir":                "string",
 			}
+
+			for key := range spec.Properties {
+				By(key)
+			}
+
 			for prop, tipe := range specProperties {
 				jsonProp, ok := spec.Properties[prop]
 				Expect(ok).Should(BeTrue(), "Missing %q property in deployment spec", prop)
