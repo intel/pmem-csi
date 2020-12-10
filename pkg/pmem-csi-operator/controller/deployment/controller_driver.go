@@ -16,7 +16,7 @@ import (
 	"path"
 	"runtime"
 
-	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
@@ -1312,7 +1312,7 @@ func (d *PmemCSIDriver) getControllerContainer() corev1.Container {
 			},
 		},
 		Ports:                  d.getMetricsPorts(controllerMetricsPort),
-		Resources:              *d.Spec.ControllerResources,
+		Resources:              *d.Spec.ControllerDriverResources,
 		TerminationMessagePath: "/tmp/termination-log",
 		SecurityContext: &corev1.SecurityContext{
 			ReadOnlyRootFilesystem: &true,
@@ -1395,7 +1395,7 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 			},
 		},
 		Ports:     d.getMetricsPorts(nodeMetricsPort),
-		Resources: *d.Spec.NodeResources,
+		Resources: *d.Spec.NodeDriverResources,
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &true,
 			// Node driver must run as root user
@@ -1429,7 +1429,7 @@ func (d *PmemCSIDriver) getProvisionerContainer() corev1.Container {
 			},
 		},
 		Ports:     d.getMetricsPorts(provisionerMetricsPort),
-		Resources: *d.Spec.ControllerResources,
+		Resources: *d.Spec.ProvisionerResources,
 		SecurityContext: &corev1.SecurityContext{
 			ReadOnlyRootFilesystem: &true,
 		},
@@ -1466,7 +1466,7 @@ func (d *PmemCSIDriver) getNodeRegistrarContainer() corev1.Container {
 				Value: d.GetName(),
 			},
 		},
-		Resources: *d.Spec.NodeResources,
+		Resources: *d.Spec.NodeRegistrarResources,
 	}
 }
 

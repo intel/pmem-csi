@@ -34,9 +34,6 @@ var _ = Describe("Operator", func() {
 	})
 
 	Context("API", func() {
-		//
-		// TODO: Add input-validation tests for the API spec fields
-		//
 		It("shall set defaults for empty deployment", func() {
 			d := api.Deployment{}
 			err := d.EnsureDefaults("")

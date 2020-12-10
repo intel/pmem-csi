@@ -1,0 +1,32 @@
+# BIND_SERVICE capability is required to bind a listening port
+- op: add
+  path: /spec/template/spec/containers/0/securityContext/capabilities
+  value:
+    add:
+    - NET_BIND_SERVICE
+- op: add
+  path: /spec/template/spec/containers/0/ports
+  value:
+    - containerPort: 9443
+      protocol: TCP
+- op: add
+  path: /spec/template/spec/containers/0/command/1
+  value: --webhook=true
+- op: add
+  path: /spec/template/spec/containers/0/volumeMounts/1
+  value:
+    mountPath: /apiserver.local.config/certificates # default path expected by webhook server
+    name: webhook-certs
+    readOnly: true
+- op: add
+  path: /spec/template/spec/volumes/1
+  value:
+    name: webhook-certs
+    secret:
+      defaultMode: 420
+      secretName: pmem-csi-operator-service-cert # name defined in webhook-certificate.yaml
+      items:
+      - key: tls.crt
+        path: apiserver.crt
+      - key: tls.key
+        path: apiserver.key

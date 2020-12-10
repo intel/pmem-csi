@@ -13,7 +13,8 @@ import (
 	"strings"
 	"time"
 
-	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	alphaapi "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	"github.com/intel/pmem-csi/pkg/exec"
 	"github.com/intel/pmem-csi/pkg/k8sutil"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment/testcases"
@@ -148,16 +149,28 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					DeviceMode: api.DeviceModeDirect,
 					PullPolicy: corev1.PullNever,
 					Image:      dummyImage,
-					ControllerResources: &corev1.ResourceRequirements{
+					ControllerDriverResources: &corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
 							corev1.ResourceCPU:    resource.MustParse("200m"),
 							corev1.ResourceMemory: resource.MustParse("100Mi"),
 						},
 					},
-					NodeResources: &corev1.ResourceRequirements{
+					NodeDriverResources: &corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
 							corev1.ResourceCPU:    resource.MustParse("500m"),
 							corev1.ResourceMemory: resource.MustParse("500Mi"),
+						},
+					},
+					ProvisionerResources: &corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("210m"),
+							corev1.ResourceMemory: resource.MustParse("110Mi"),
+						},
+					},
+					NodeRegistrarResources: &corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("300m"),
+							corev1.ResourceMemory: resource.MustParse("100Mi"),
 						},
 					},
 				},
@@ -237,16 +250,28 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			spec.Image = "test-driver-image"
 			spec.PullPolicy = corev1.PullNever
 			spec.ProvisionerImage = "test-provisioner"
-			spec.ControllerResources = &corev1.ResourceRequirements{
+			spec.ControllerDriverResources = &corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{
 					corev1.ResourceCPU:    resource.MustParse("200m"),
 					corev1.ResourceMemory: resource.MustParse("100Mi"),
 				},
 			}
-			spec.NodeResources = &corev1.ResourceRequirements{
+			spec.NodeDriverResources = &corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{
 					corev1.ResourceCPU:    resource.MustParse("500m"),
 					corev1.ResourceMemory: resource.MustParse("500Mi"),
+				},
+			}
+			spec.ProvisionerResources = &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("300m"),
+					corev1.ResourceMemory: resource.MustParse("300Mi"),
+				},
+			}
+			spec.NodeRegistrarResources = &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("100m"),
+					corev1.ResourceMemory: resource.MustParse("200Mi"),
 				},
 			}
 			testcases.SetTLSOrDie(spec)
@@ -742,6 +767,84 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					validateDriver(deployment, fmt.Sprintf("recovered %s", name))
 				})
 			}
+		})
+	})
+
+	Context("conversion", func() {
+		getAlphaDeployment := func(name string) alphaapi.Deployment {
+			return alphaapi.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: name,
+				},
+				Spec: alphaapi.DeploymentSpec{
+					Image: dummyImage,
+				},
+			}
+		}
+		It("with default values", func() {
+			alphaDep := getAlphaDeployment("alpha-default-values")
+			deploy.CreateAlphaDeploymentCR(f, alphaDep)
+
+			deployment := deploy.GetDeploymentCR(f, alphaDep.Name)
+
+			defer deploy.DeleteDeploymentCR(f, deployment.Name)
+
+			validateDriver(deployment, true)
+
+			// Expect to ruturn alpha object converting from stored beta CR
+			alphaCR := deploy.GetAlphaDeploymentCR(f, deployment.Name)
+			betaCR := deploy.GetDeploymentCR(f, deployment.Name)
+			Expect(alphaCR).ShouldNot(BeNil(), "get alpha CR")
+			Expect(alphaCR.Spec).Should(BeEquivalentTo(alphaDep.Spec), "alpha CR spec mismatch")
+			Expect(alphaCR.Status).Should(BeEquivalentTo(betaCR.Status), "alpha CR status mismatch")
+		})
+		It("with explicit values", func() {
+			alphaDep := getAlphaDeployment("alpha-explicit-values")
+			alphaDep.Spec.NodeResources = &corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("10m"),
+					corev1.ResourceMemory: resource.MustParse("25Mi"),
+				},
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("100m"),
+					corev1.ResourceMemory: resource.MustParse("50Mi"),
+				},
+			}
+			alphaDep.Spec.ControllerResources = &corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("20m"),
+					corev1.ResourceMemory: resource.MustParse("50Mi"),
+				},
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU:    resource.MustParse("200m"),
+					corev1.ResourceMemory: resource.MustParse("100Mi"),
+				},
+			}
+			deploy.CreateAlphaDeploymentCR(f, alphaDep)
+
+			deployment := deploy.GetDeploymentCR(f, alphaDep.Name)
+
+			if d.HasOLM {
+				// OLM not yet support conversion webhooks, hence
+				// explicit conversion of version incompatible fields
+				// is not supported and they get ignored in default
+				// conversion provided by the API server.
+				alphaDep.Spec.NodeResources = nil
+				alphaDep.Spec.ControllerResources = nil
+			}
+			Expect(deployment.Spec.NodeDriverResources).Should(BeEquivalentTo(alphaDep.Spec.NodeResources), "node driver resources")
+			Expect(deployment.Spec.ControllerDriverResources).Should(BeEquivalentTo(alphaDep.Spec.ControllerResources), "controller driver resources")
+
+			defer deploy.DeleteDeploymentCR(f, deployment.Name)
+
+			validateDriver(deployment, true)
+
+			// Expect to ruturn alpha object converting from stored beta CR
+			alphaCR := deploy.GetAlphaDeploymentCR(f, deployment.Name)
+			betaCR := deploy.GetDeploymentCR(f, deployment.Name)
+			Expect(alphaCR).ShouldNot(BeNil(), "get alpha CR")
+			Expect(alphaCR.Spec).Should(BeEquivalentTo(alphaDep.Spec), "alpha CR spec mismatch")
+			Expect(alphaCR.Status).Should(BeEquivalentTo(betaCR.Status), "alpha CR status mismatch")
 		})
 	})
 })

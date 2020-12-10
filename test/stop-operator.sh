@@ -45,7 +45,7 @@ function delete_olm_operator() {
 
 function delete_operator() {
   DEPLOYMENT_DIRECTORY="${REPO_DIRECTORY}/deploy/operator"
-  deploy="${DEPLOYMENT_DIRECTORY}/pmem-csi-operator.yaml"
+  deploy="${DEPLOYMENT_DIRECTORY}/pmem-csi-operator-webhook.yaml"
 
   echo "Deleting operator deployment: ${deploy}"
   cat ${deploy} | ${KUBECTL} delete -f -

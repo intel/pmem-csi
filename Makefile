@@ -138,7 +138,7 @@ include test/start-stop.make
 include test/test.make
 
 #Kustomize latest release version
-KUSTOMIZE_VERSION=v3.8.2
+KUSTOMIZE_VERSION=v3.8.7
 _work/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz:
 	curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz -o $(abspath $@)
 
@@ -183,6 +183,7 @@ KUSTOMIZE += deploy/common/pmem-storageclass-xfs.yaml=deploy/kustomize/storagecl
 KUSTOMIZE += deploy/common/pmem-storageclass-cache.yaml=deploy/kustomize/storageclass-cache
 KUSTOMIZE += deploy/common/pmem-storageclass-late-binding.yaml=deploy/kustomize/storageclass-late-binding
 KUSTOMIZE += deploy/operator/pmem-csi-operator.yaml=deploy/kustomize/operator
+KUSTOMIZE += deploy/operator/pmem-csi-operator-webhook.yaml=deploy/kustomize/operator-webhook
 
 # Special one-off deployment with device mode = fake.
 KUSTOMIZE += deploy/kubernetes-1.19/pmem-csi-fake.yaml=deploy/kustomize/kubernetes-base-fake

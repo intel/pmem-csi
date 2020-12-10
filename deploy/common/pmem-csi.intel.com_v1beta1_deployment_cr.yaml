@@ -1,0 +1,12 @@
+apiVersion: pmem-csi.intel.com/v1beta1
+kind: Deployment
+metadata:
+  name: pmem-csi.intel.com
+spec:
+  deviceMode: "lvm"
+  nodeSelector:
+    # When using Node Feature Discovery (NFD):
+    feature.node.kubernetes.io/memory-nv.dax: "true"
+    # When using manual node labeling with that label:
+    # storage: pmem
+

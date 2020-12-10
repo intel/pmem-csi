@@ -17,7 +17,8 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 
 	"github.com/intel/pmem-csi/pkg/apis"
-	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	alphaapi "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 
 	"github.com/onsi/gomega"
 )
@@ -26,6 +27,11 @@ var (
 	DeploymentResource = schema.GroupVersionResource{
 		Group:    api.SchemeGroupVersion.Group,
 		Version:  api.SchemeGroupVersion.Version,
+		Resource: "deployments",
+	}
+	AlphaDeploymentResource = schema.GroupVersionResource{
+		Group:    alphaapi.SchemeGroupVersion.Group,
+		Version:  alphaapi.SchemeGroupVersion.Version,
 		Resource: "deployments",
 	}
 	Scheme = runtime.NewScheme()
@@ -39,7 +45,7 @@ func init() {
 	}
 }
 
-func DeploymentToUnstructured(in *api.Deployment) *unstructured.Unstructured {
+func deploymentToUnstructured(in interface{}, gvk schema.GroupVersionKind) *unstructured.Unstructured {
 	if in == nil {
 		return nil
 	}
@@ -49,12 +55,29 @@ func DeploymentToUnstructured(in *api.Deployment) *unstructured.Unstructured {
 
 	// Ensure that type info is set. It's required when passing
 	// the unstructured object to a dynamic client.
-	out.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "pmem-csi.intel.com",
-		Version: "v1alpha1",
+	out.SetGroupVersionKind(gvk)
+	return &out
+}
+
+func DeploymentToUnstructured(in *api.Deployment) *unstructured.Unstructured {
+	return deploymentToUnstructured(in, schema.GroupVersionKind{
+		Group:   api.SchemeGroupVersion.Group,
+		Version: api.SchemeGroupVersion.Version,
 		Kind:    "Deployment",
 	})
-	return &out
+}
+
+func AlphaDeploymentToUnstructured(in *alphaapi.Deployment) *unstructured.Unstructured {
+	return deploymentToUnstructured(in, schema.GroupVersionKind{
+		Group:   alphaapi.SchemeGroupVersion.Group,
+		Version: alphaapi.SchemeGroupVersion.Version,
+		Kind:    "Deployment",
+	})
+}
+
+func deploymentFromUnstructured(in *unstructured.Unstructured, out interface{}) {
+	err := Scheme.Convert(in, out, nil)
+	framework.ExpectNoError(err, "convert from unstructured deployment")
 }
 
 func DeploymentFromUnstructured(in *unstructured.Unstructured) *api.Deployment {
@@ -62,23 +85,43 @@ func DeploymentFromUnstructured(in *unstructured.Unstructured) *api.Deployment {
 		return nil
 	}
 	var out api.Deployment
-	err := Scheme.Convert(in, &out, nil)
-	framework.ExpectNoError(err, "convert from unstructured deployment")
+	deploymentFromUnstructured(in, &out)
 	return &out
 }
 
-func CreateDeploymentCR(f *framework.Framework, dep api.Deployment) api.Deployment {
-	in := DeploymentToUnstructured(&dep)
+func AlphaDeploymentFromUnstructured(in *unstructured.Unstructured) *alphaapi.Deployment {
+	if in == nil {
+		return nil
+	}
+	var out alphaapi.Deployment
+	deploymentFromUnstructured(in, &out)
+	return &out
+}
+
+func createDeploymentCR(f *framework.Framework, dep *unstructured.Unstructured, res schema.GroupVersionResource) *unstructured.Unstructured {
 	var out *unstructured.Unstructured
 
 	gomega.Eventually(func() error {
 		var err error
-		out, err = f.DynamicClient.Resource(DeploymentResource).Create(context.Background(), in, metav1.CreateOptions{})
+		out, err = f.DynamicClient.Resource(res).Create(context.Background(), dep, metav1.CreateOptions{})
 		LogError(err, "create deployment error: %v, will retry...", err)
 		return err
-	}, "3m", "1s").Should(gomega.BeNil(), "create deployment %q", dep.Name)
+	}, "3m", "1s").Should(gomega.BeNil(), "create deployment %q", dep.GetName())
+	return out
+}
+
+func CreateDeploymentCR(f *framework.Framework, dep api.Deployment) api.Deployment {
+	in := DeploymentToUnstructured(&dep)
+	out := createDeploymentCR(f, in, DeploymentResource)
 	framework.Logf("Created deployment %q", dep.Name)
 	return *DeploymentFromUnstructured(out)
+}
+
+func CreateAlphaDeploymentCR(f *framework.Framework, dep alphaapi.Deployment) alphaapi.Deployment {
+	in := AlphaDeploymentToUnstructured(&dep)
+	out := createDeploymentCR(f, in, AlphaDeploymentResource)
+	framework.Logf("Created deployment %q(%+v)", dep.Name, out)
+	return *AlphaDeploymentFromUnstructured(out)
 }
 
 func EnsureDeploymentCR(f *framework.Framework, dep api.Deployment) api.Deployment {
@@ -139,15 +182,26 @@ func UpdateDeploymentCR(f *framework.Framework, dep api.Deployment) api.Deployme
 	return *DeploymentFromUnstructured(out)
 }
 
-func GetDeploymentCR(f *framework.Framework, name string) api.Deployment {
+func getDeploymentCR(f *framework.Framework, name string, res schema.GroupVersionResource) *unstructured.Unstructured {
 	var out *unstructured.Unstructured
 	gomega.Eventually(func() error {
 		var err error
-		out, err = f.DynamicClient.Resource(DeploymentResource).Get(context.Background(), name, metav1.GetOptions{})
+		out, err = f.DynamicClient.Resource(res).Get(context.Background(), name, metav1.GetOptions{})
 		LogError(err, "get deployment error: %v, will retry...", err)
 		return err
 	}, "3m", "1s").Should(gomega.BeNil(), "get deployment")
+
+	return out
+}
+
+func GetDeploymentCR(f *framework.Framework, name string) api.Deployment {
+	out := getDeploymentCR(f, name, DeploymentResource)
 	return *DeploymentFromUnstructured(out)
+}
+
+func GetAlphaDeploymentCR(f *framework.Framework, name string) alphaapi.Deployment {
+	out := getDeploymentCR(f, name, AlphaDeploymentResource)
+	return *AlphaDeploymentFromUnstructured(out)
 }
 
 // LogError will log the message only if err is non-nil. The error

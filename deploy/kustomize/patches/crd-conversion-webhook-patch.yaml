@@ -1,0 +1,23 @@
+# Annotation used by cert-manager to inject webhook caBundle into CRD
+- op: add
+  # The correct annotation name is cert-manager.io/inject-ca-from. But,
+  # kustomize is not supporting to passing '/' as key names.
+  # So, in post CSV generation(make operator-generate-catalog) we replace
+  # this '.' with '/'
+  path: /metadata/annotations/cert-manager.io.inject-ca-from
+  value: default/pmem-csi-operator-selfsigned
+
+# Configure CRD conversion webhook
+- op: add
+  path: /spec/conversion
+  value:
+    strategy: Webhook
+    webhook:
+      conversionReviewVersions: ["v1beta1", "v1alpha1"]
+      clientConfig:
+        #caBundle: Cg==
+        service:
+          name: pmem-csi-operator-service
+          namespace: default # should match with the operator namespace
+          port: 9443
+          path: /convert
