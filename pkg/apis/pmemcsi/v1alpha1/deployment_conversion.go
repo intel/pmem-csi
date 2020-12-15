@@ -71,7 +71,7 @@ func (d *Deployment) ConvertTo(dst conversion.Hub) error {
 
 	// +kubebuilder:docs-gen:collapse=rote conversion
 
-	klog.Infof("Coverted Object: %+v", *out)
+	klog.Infof("Converted Object: %+v", *out)
 
 	return nil
 }

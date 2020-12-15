@@ -50,13 +50,6 @@ const (
 	DeviceModeFake DeviceMode = "fake"
 )
 
-// NOTE(avalluri): Due to below errors we stop setting
-// few CRD schema fields by prefixing those lines a '-'.
-// Once the below issues go fixed replace those '-' with '+'
-// Setting default(+kubebuilder:default=value) for v1beta1 CRD fails, only supports since v1 CRD.
-//   Related issue : https://github.com/kubernetes-sigs/controller-tools/issues/478
-// Fails setting min/max for integers: https://github.com/helm/helm/issues/5806
-
 // +k8s:deepcopy-gen=true
 // DeploymentSpec defines the desired state of Deployment
 type DeploymentSpec struct {
@@ -74,12 +67,10 @@ type DeploymentSpec struct {
 	ControllerResources *corev1.ResourceRequirements `json:"controllerResources,omitempty"`
 	// NodeResources Compute resources required by Node driver
 	NodeResources *corev1.ResourceRequirements `json:"nodeResources,omitempty"`
-	// DeviceMode to use to manage PMEM devices. One of lvm, direct
-	// +kubebuilder:default:lvm
+	// DeviceMode to use to manage PMEM devices.
+	// +kubebuilder:validation:Enum=lvm;direct
 	DeviceMode DeviceMode `json:"deviceMode,omitempty"`
 	// LogLevel number for the log verbosity
-	// +kubebuilder:validation:Required
-	// kubebuilder:default=3
 	LogLevel uint16 `json:"logLevel,omitempty"`
 	// RegistryCert encoded certificate signed by a CA for registry server authentication
 	// If not provided, provisioned one by the operator using self-signed CA
@@ -99,12 +90,10 @@ type DeploymentSpec struct {
 	// NodeSelector node labels to use for selection of driver node
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 	// PMEMPercentage represents the percentage of space to be used by the driver in each PMEM region
-	// on every node.
+	// on every node. Unset (= zero) selects the default of 100%.
 	// This is only valid for driver in LVM mode.
-	// +kubebuilder:validation:Required
-	// -kubebuilder:validation:Minimum=1
-	// -kubebuilder:validation:Maximum=100
-	// -kubebuilder:default=100
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
 	PMEMPercentage uint16 `json:"pmemPercentage,omitempty"`
 	// Labels contains additional labels for all objects created by the operator.
 	Labels map[string]string `json:"labels,omitempty"`
@@ -231,7 +220,7 @@ const (
 
 const (
 	// DefaultLogLevel default logging level used for the driver
-	DefaultLogLevel = uint16(5)
+	DefaultLogLevel = uint16(3)
 	// DefaultImagePullPolicy default image pull policy for all the images used by the deployment
 	DefaultImagePullPolicy = corev1.PullIfNotPresent
 
