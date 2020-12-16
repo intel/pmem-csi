@@ -37,15 +37,21 @@ func (d *Deployment) ConvertTo(dst conversion.Hub) error {
 
 	// no change in other fields
 	out.ObjectMeta = in.ObjectMeta
-	out.Spec.LogLevel = in.Spec.LogLevel
 	out.Spec.Image = in.Spec.Image
-	out.Spec.CACert = in.Spec.CACert
+	out.Spec.PullPolicy = in.Spec.PullPolicy
+	out.Spec.ProvisionerImage = in.Spec.ProvisionerImage
+	out.Spec.NodeRegistrarImage = in.Spec.NodeRegistrarImage
+	out.Spec.DeviceMode = v1beta1.DeviceMode(string(in.Spec.DeviceMode))
+	out.Spec.LogLevel = in.Spec.LogLevel
 	out.Spec.RegistryCert = in.Spec.RegistryCert
 	out.Spec.RegistryPrivateKey = in.Spec.RegistryPrivateKey
 	out.Spec.NodeControllerCert = in.Spec.NodeControllerCert
 	out.Spec.NodeControllerPrivateKey = in.Spec.NodeControllerPrivateKey
+	out.Spec.CACert = in.Spec.CACert
 	out.Spec.NodeSelector = in.Spec.NodeSelector
+	out.Spec.PMEMPercentage = in.Spec.PMEMPercentage
 	out.Spec.Labels = in.Spec.Labels
+	out.Spec.KubeletDir = in.Spec.KubeletDir
 
 	out.Status.Components = nil
 	for _, s := range in.Status.Components {
@@ -88,15 +94,21 @@ func (d *Deployment) ConvertFrom(src conversion.Hub) error {
 
 	// no change in other fields
 	out.ObjectMeta = in.ObjectMeta
-	out.Spec.LogLevel = in.Spec.LogLevel
 	out.Spec.Image = in.Spec.Image
-	out.Spec.CACert = in.Spec.CACert
+	out.Spec.PullPolicy = in.Spec.PullPolicy
+	out.Spec.ProvisionerImage = in.Spec.ProvisionerImage
+	out.Spec.NodeRegistrarImage = in.Spec.NodeRegistrarImage
+	out.Spec.DeviceMode = DeviceMode(string(in.Spec.DeviceMode))
+	out.Spec.LogLevel = in.Spec.LogLevel
 	out.Spec.RegistryCert = in.Spec.RegistryCert
 	out.Spec.RegistryPrivateKey = in.Spec.RegistryPrivateKey
 	out.Spec.NodeControllerCert = in.Spec.NodeControllerCert
 	out.Spec.NodeControllerPrivateKey = in.Spec.NodeControllerPrivateKey
+	out.Spec.CACert = in.Spec.CACert
 	out.Spec.NodeSelector = in.Spec.NodeSelector
+	out.Spec.PMEMPercentage = in.Spec.PMEMPercentage
 	out.Spec.Labels = in.Spec.Labels
+	out.Spec.KubeletDir = in.Spec.KubeletDir
 
 	out.Status.Components = nil
 	for _, s := range in.Status.Components {
