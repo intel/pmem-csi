@@ -276,10 +276,6 @@ if kubectl version | grep -q '^Server Version.*Major:"1", Minor:"1[01234]"'; the
     fi
 fi
 
-# Install cert-manager, used by the operator for provisioning certificates
-# required for webhook
-kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.0.4/cert-manager.yaml
-
 # Run additional commands specified in config.
 ${TEST_CONFIGURE_POST_ALL}
 
