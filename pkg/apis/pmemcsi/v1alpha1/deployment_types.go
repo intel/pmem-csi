@@ -122,10 +122,9 @@ type DeploymentCondition struct {
 	// Status of the condition, one of True, False, Unknown.
 	Status corev1.ConditionStatus `json:"status"`
 	// Message human readable text that explain why this condition is in this state
-	// +optional
 	Reason string `json:"reason,omitempty"`
 	// Last time the condition was probed.
-	// +optional
+	// +nullable
 	LastUpdateTime metav1.Time `json:"lastUpdateTime,omitempty"`
 }
 
@@ -158,6 +157,7 @@ type DriverStatus struct {
 	// driver is in this state.
 	Reason string `json:"reason"`
 	// LastUpdated time of the driver status
+	// +nullable
 	LastUpdated metav1.Time `json:"lastUpdated,omitempty"`
 }
 
@@ -175,6 +175,7 @@ type DeploymentStatus struct {
 	Conditions []DeploymentCondition `json:"conditions,omitempty"`
 	Components []DriverStatus        `json:"driverComponents,omitempty"`
 	// LastUpdated time of the deployment status
+	// +nullable
 	LastUpdated metav1.Time `json:"lastUpdated,omitempty"`
 }
 
