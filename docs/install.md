@@ -1221,6 +1221,10 @@ The current API for PMEM-CSI `Deployment` resources is:
 
 Below specification fields are valid in all API versions unless noted otherwise in the description.
 
+The default values are used by the operator when no value is set for a
+field explicitly. Those defaults can change over time and are not part
+of the API specification.
+
 |Field | Type | Description | Default Value |
 |---|---|---|---|
 | image | string | PMEM-CSI docker image name used for the deployment | the same image as the operator<sup>1</sup> |

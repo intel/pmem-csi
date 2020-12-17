@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
@@ -31,7 +32,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/watch"
@@ -53,6 +56,17 @@ func getDeployment(name string) api.Deployment {
 			Name: name,
 		},
 		Spec: api.DeploymentSpec{
+			Image: dummyImage,
+		},
+	}
+}
+
+func getAlphaDeployment(name string) alphaapi.Deployment {
+	return alphaapi.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Spec: alphaapi.DeploymentSpec{
 			Image: dummyImage,
 		},
 	}
@@ -822,54 +836,153 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		})
 	})
 
-	Context("conversion", func() {
-		getAlphaDeployment := func(name string) alphaapi.Deployment {
-			return alphaapi.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: name,
-				},
-				Spec: alphaapi.DeploymentSpec{
-					Image: dummyImage,
-				},
-			}
+	Context("validation", func() {
+		versions := map[string]schema.GroupVersionResource{
+			"v1alpha1": deploy.AlphaDeploymentResource,
+			"v1beta1":  deploy.DeploymentResource,
 		}
-		It("with default values", func() {
+		for name, gvr := range versions {
+			gvr := gvr
+			Context(name, func() {
+				toUnstructured := func(in interface{}) *unstructured.Unstructured {
+					var out unstructured.Unstructured
+					err := deploy.Scheme.Convert(in, &out, nil)
+					framework.ExpectNoError(err, "convert to unstructured deployment")
+					out.SetGroupVersionKind(schema.GroupVersionKind{
+						Group:   gvr.Group,
+						Version: gvr.Version,
+						Kind:    "Deployment",
+					})
+					return &out
+				}
+
+				Context("PMEMPercentage", func() {
+					cases := map[string]uint16{
+						"okay":                      50,
+						"must be greater than 0":    0,
+						"must be less or equal 100": 101,
+					}
+					for name, percentage := range cases {
+						percentage := percentage
+						It(name, func() {
+							dep := getDeployment("percentage")
+							dep.Spec.PMEMPercentage = percentage
+							unstructured := toUnstructured(&dep)
+							_, err := f.DynamicClient.Resource(gvr).Create(context.Background(), unstructured, metav1.CreateOptions{})
+							if err == nil {
+								defer deploy.DeleteDeploymentCR(f, dep.Name)
+							}
+							// Zero is actually a valid value: it is treated as "unset" because of
+							// the JSON omitempty and thus means "I want the default".
+							valid := percentage >= 0 && percentage <= 100
+							if valid {
+								framework.ExpectNoError(err, "valid percentage should work")
+							} else {
+								framework.ExpectError(err, "invalid percentage should be rejected")
+							}
+						})
+					}
+				})
+
+				Context("DeviceMode", func() {
+					cases := map[string]bool{
+						string(api.DeviceModeLVM):    true,
+						string(api.DeviceModeDirect): true,
+						"noSuchMode":                 false,
+					}
+					for mode, valid := range cases {
+						mode, valid := mode, valid
+						It(mode, func() {
+							dep := getDeployment("mode")
+							dep.Spec.DeviceMode = api.DeviceMode(mode)
+							unstructured := toUnstructured(&dep)
+							_, err := f.DynamicClient.Resource(gvr).Create(context.Background(), unstructured, metav1.CreateOptions{})
+							if err == nil {
+								defer deploy.DeleteDeploymentCR(f, dep.Name)
+							}
+							if valid {
+								framework.ExpectNoError(err, "valid device mode should work")
+							} else {
+								framework.ExpectError(err, "invalid device mode should be rejected")
+							}
+						})
+					}
+				})
+			})
+		}
+	})
+
+	Context("conversion", func() {
+		It("from alpha with default values", func() {
+			dep := getDeployment("alpha-default-values")
 			alphaDep := getAlphaDeployment("alpha-default-values")
 			deploy.CreateAlphaDeploymentCR(f, alphaDep)
+			defer deploy.DeleteDeploymentCR(f, alphaDep.Name)
 
-			deployment := deploy.GetDeploymentCR(f, alphaDep.Name)
-
-			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-
-			validateDriver(deployment, true)
-
-			// Expect to ruturn alpha object converting from stored beta CR
-			alphaCR := deploy.GetAlphaDeploymentCR(f, deployment.Name)
-			betaCR := deploy.GetDeploymentCR(f, deployment.Name)
+			// Expect the same spec to be returned for the
+			// stored CR, regardless of the version that
+			// is used to retrieve it.
+			alphaCR := deploy.GetAlphaDeploymentCR(f, dep.Name)
+			cr := deploy.GetDeploymentCR(f, dep.Name)
 			Expect(alphaCR).ShouldNot(BeNil(), "get alpha CR")
+			Expect(cr).ShouldNot(BeNil(), "get current CR")
 			Expect(alphaCR.Spec).Should(BeEquivalentTo(alphaDep.Spec), "alpha CR spec mismatch")
-			Expect(alphaCR.Status).Should(BeEquivalentTo(betaCR.Status), "alpha CR status mismatch")
+			Expect(cr.Spec).Should(BeEquivalentTo(dep.Spec), "current CR spec mismatch")
+			Expect(alphaCR.Status).Should(BeEquivalentTo(cr.Status), "status mismatch")
+		})
+		It("from current version with default values", func() {
+			dep := getDeployment("alpha-default-values")
+			alphaDep := getAlphaDeployment("alpha-default-values")
+			deploy.CreateDeploymentCR(f, dep)
+			defer deploy.DeleteDeploymentCR(f, alphaDep.Name)
+
+			// Expect the same spec to be returned for the
+			// stored CR, regardless of the version that
+			// is used to retrieve it.
+			alphaCR := deploy.GetAlphaDeploymentCR(f, dep.Name)
+			cr := deploy.GetDeploymentCR(f, dep.Name)
+			Expect(alphaCR).ShouldNot(BeNil(), "get alpha CR")
+			Expect(cr).ShouldNot(BeNil(), "get current CR")
+			Expect(alphaCR.Spec).Should(BeEquivalentTo(alphaDep.Spec), "alpha CR spec mismatch")
+			Expect(cr.Spec).Should(BeEquivalentTo(dep.Spec), "current CR spec mismatch")
+			Expect(alphaCR.Status).Should(BeEquivalentTo(cr.Status), "status mismatch")
 		})
 		It("with explicit values", func() {
-			alphaDep := getAlphaDeployment("alpha-explicit-values")
-			alphaDep.Spec.NodeResources = &corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("10m"),
-					corev1.ResourceMemory: resource.MustParse("25Mi"),
+			alphaDep := alphaapi.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "explict-values",
 				},
-				Limits: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("100m"),
-					corev1.ResourceMemory: resource.MustParse("50Mi"),
-				},
-			}
-			alphaDep.Spec.ControllerResources = &corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("20m"),
-					corev1.ResourceMemory: resource.MustParse("50Mi"),
-				},
-				Limits: corev1.ResourceList{
-					corev1.ResourceCPU:    resource.MustParse("200m"),
-					corev1.ResourceMemory: resource.MustParse("100Mi"),
+				Spec: alphaapi.DeploymentSpec{
+					Image:              dummyImage,
+					PullPolicy:         corev1.PullAlways,
+					ProvisionerImage:   "no-such-provisioner",
+					NodeRegistrarImage: "no-such-registrar",
+					NodeResources: &corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("10m"),
+							corev1.ResourceMemory: resource.MustParse("25Mi"),
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("100m"),
+							corev1.ResourceMemory: resource.MustParse("50Mi"),
+						},
+					},
+					ControllerResources: &corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("20m"),
+							corev1.ResourceMemory: resource.MustParse("50Mi"),
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("200m"),
+							corev1.ResourceMemory: resource.MustParse("100Mi"),
+						},
+					},
+					DeviceMode:     alphaapi.DeviceModeDirect,
+					LogLevel:       5,
+					NodeSelector:   map[string]string{"no-such-label": "no-such-key"},
+					PMEMPercentage: 99,
+					Labels:         map[string]string{"app": "explicit"},
+					KubeletDir:     "/tmp",
 				},
 			}
 			deploy.CreateAlphaDeploymentCR(f, alphaDep)
@@ -889,14 +1002,32 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 
-			validateDriver(deployment, true)
-
-			// Expect to ruturn alpha object converting from stored beta CR
+			// Expect the same spec to be returned for the
+			// stored CR, regardless of the version that
+			// is used to retrieve it.
 			alphaCR := deploy.GetAlphaDeploymentCR(f, deployment.Name)
-			betaCR := deploy.GetDeploymentCR(f, deployment.Name)
+			cr := deploy.GetDeploymentCR(f, deployment.Name)
 			Expect(alphaCR).ShouldNot(BeNil(), "get alpha CR")
 			Expect(alphaCR.Spec).Should(BeEquivalentTo(alphaDep.Spec), "alpha CR spec mismatch")
-			Expect(alphaCR.Status).Should(BeEquivalentTo(betaCR.Status), "alpha CR status mismatch")
+			Expect(alphaCR.Status).Should(BeEquivalentTo(cr.Status), "status mismatch")
+
+			// We can also compare the full spec by iterating over all fields. Those that have no match
+			// must be blanked out first.
+			// BeEquivalentTo cannot be used here because the structs cannot be converted into each other.
+			alphaDep.Spec.NodeResources = nil
+			alphaDep.Spec.ControllerResources = nil
+			alphaV := reflect.ValueOf(alphaDep.Spec)
+			alphaType := reflect.TypeOf(alphaDep.Spec)
+			v := reflect.ValueOf(cr.Spec)
+			for i := 0; i < alphaType.NumField(); i++ {
+				name := alphaType.Field(i).Name
+				actual := v.FieldByName(name)
+				if actual.Kind() == reflect.Invalid {
+					// Zero value, ignore the field.
+					continue
+				}
+				Expect(actual.Interface()).Should(BeEquivalentTo(alphaV.FieldByName(name).Interface()), "current CR field %s mismatch", name)
+			}
 		})
 	})
 })

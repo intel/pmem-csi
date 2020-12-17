@@ -113,14 +113,14 @@ func createDeploymentCR(f *framework.Framework, dep *unstructured.Unstructured, 
 func CreateDeploymentCR(f *framework.Framework, dep api.Deployment) api.Deployment {
 	in := DeploymentToUnstructured(&dep)
 	out := createDeploymentCR(f, in, DeploymentResource)
-	framework.Logf("Created deployment %q", dep.Name)
+	framework.Logf("Created deployment %q = (%+v)", dep.Name, out)
 	return *DeploymentFromUnstructured(out)
 }
 
 func CreateAlphaDeploymentCR(f *framework.Framework, dep alphaapi.Deployment) alphaapi.Deployment {
 	in := AlphaDeploymentToUnstructured(&dep)
 	out := createDeploymentCR(f, in, AlphaDeploymentResource)
-	framework.Logf("Created deployment %q(%+v)", dep.Name, out)
+	framework.Logf("Created deployment %q = (%+v)", dep.Name, out)
 	return *AlphaDeploymentFromUnstructured(out)
 }
 
