@@ -119,6 +119,10 @@ var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 	}
 	podlogs.CopyAllLogs(ctx, c, "default", to)
 	podlogs.WatchPods(ctx, c, "default", ginkgo.GinkgoWriter)
+	// capture operator logs, they are supposed to run in operator-test namespace
+	// as defined in deploy/deploy.go
+	podlogs.CopyAllLogs(ctx, c, "operator-test", to)
+	podlogs.WatchPods(ctx, c, "operator-test", ginkgo.GinkgoWriter)
 
 	dc := c.DiscoveryClient
 

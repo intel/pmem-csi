@@ -291,4 +291,3 @@ spec:
           hostPath:
             path: /sys
             type: DirectoryOrCreate
-

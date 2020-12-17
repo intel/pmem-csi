@@ -11,6 +11,8 @@
 # The directory containing setup-ca*.sh.
 : ${TEST_DIRECTORY:=$(dirname $(readlink -f $0))}
 
+: ${TEST_DRIVER_NAMESPACE:=pmem-csi}
+
 
 tmpdir=`mktemp -d`
 trap 'rm -r $tmpdir' EXIT
@@ -42,6 +44,7 @@ apiVersion: v1
 kind: Secret
 metadata:
     name: pmem-csi-registry-secrets
+    namespace: ${TEST_DRIVER_NAMESPACE}
 type: kubernetes.io/tls
 data:
     ca.crt: ${CA}
@@ -52,6 +55,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: pmem-csi-node-secrets
+  namespace: ${TEST_DRIVER_NAMESPACE}
 type: Opaque
 data:
     ca.crt: ${CA}

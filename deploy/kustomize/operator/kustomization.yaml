@@ -1,2 +1,33 @@
 resources:
+- namespace.yaml
 - operator.yaml
+- events-rbac.yaml
+
+# Deploy the operator in a dedicated namespace
+namespace: pmem-csi
+
+patchesJSON6902:
+- target:
+    group: rbac.authorization.k8s.io
+    version: v1
+    kind: Role
+    name: pmem-csi-operator-event
+  path: operator-events-namespace-patch.yaml
+- target:
+    group: rbac.authorization.k8s.io
+    version: v1
+    kind: RoleBinding
+    name: pmem-csi-operator-event
+  path: operator-events-namespace-patch.yaml
+
+vars:
+- name: SERVICE_ACCOUNT_NAMESPACE
+  objref:
+    apiVersion: v1
+    kind: ServiceAccount
+    name: pmem-csi-operator
+  fieldRef:
+    fieldPath: metadata.namespace
+
+configurations:
+- kustomizeconfig.yaml

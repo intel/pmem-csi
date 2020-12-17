@@ -1,12 +1,19 @@
 # Generated with "make kustomize", do not edit!
 
 apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    pmem-csi.intel.com/deployment: direct-testing
+  name: pmem-csi
+---
+apiVersion: v1
 kind: ServiceAccount
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-testing
   name: pmem-csi-controller
-  namespace: default
+  namespace: pmem-csi
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -14,7 +21,7 @@ metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-testing
   name: pmem-csi-external-provisioner-cfg
-  namespace: default
+  namespace: pmem-csi
 rules:
 - apiGroups:
   - ""
@@ -144,7 +151,7 @@ metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-testing
   name: pmem-csi-csi-provisioner-role-cfg
-  namespace: default
+  namespace: pmem-csi
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -152,7 +159,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: pmem-csi-controller
-  namespace: default
+  namespace: pmem-csi
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -167,7 +174,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: pmem-csi-controller
-  namespace: default
+  namespace: pmem-csi
 ---
 apiVersion: v1
 kind: Service
@@ -175,7 +182,7 @@ metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-testing
   name: pmem-csi-controller
-  namespace: default
+  namespace: pmem-csi
 spec:
   ports:
   - port: 10000
@@ -190,7 +197,7 @@ metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-testing
   name: pmem-csi-controller-testing
-  namespace: default
+  namespace: pmem-csi
 spec:
   ports:
   - port: 10002
@@ -205,7 +212,7 @@ metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-testing
   name: pmem-csi-metrics
-  namespace: default
+  namespace: pmem-csi
 spec:
   ports:
   - port: 10010
@@ -221,7 +228,7 @@ metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-testing
   name: pmem-csi-controller
-  namespace: default
+  namespace: pmem-csi
 spec:
   replicas: 1
   selector:
@@ -373,7 +380,7 @@ metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-testing
   name: pmem-csi-node
-  namespace: default
+  namespace: pmem-csi
 spec:
   selector:
     matchLabels:
@@ -518,7 +525,7 @@ metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-testing
   name: pmem-csi-node-testing
-  namespace: default
+  namespace: pmem-csi
 spec:
   selector:
     matchLabels:

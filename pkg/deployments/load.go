@@ -53,8 +53,8 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 			*yaml = bytes.ReplaceAll(*yaml, []byte("/var/lib/kubelet"), []byte(deployment.Spec.KubeletDir))
 		}
 
-		// This assumes that all namespaced objects actually have "namespace: default".
-		*yaml = bytes.ReplaceAll(*yaml, []byte("namespace: default"), []byte("namespace: "+namespace))
+		// This assumes that all namespaced objects actually have "namespace: pmem-csi".
+		*yaml = bytes.ReplaceAll(*yaml, []byte("namespace: pmem-csi"), []byte("namespace: "+namespace))
 
 		// Also rename the prefix inside the registry endpoint.
 		*yaml = bytes.ReplaceAll(*yaml,
@@ -231,6 +231,12 @@ func loadObjects(kubernetes version.Version, deviceMode api.DeviceMode,
 		_, _, err := deserializer.Decode(item, nil, &obj)
 		if err != nil {
 			return nil, fmt.Errorf("decode item %q from file %q: %v", item, path, err)
+		}
+		if obj.GetKind() == "Namespace" {
+			// Though the driver deployment manifests have Namespace object defined
+			// but, Namespaces are not owned by PMEM-CSI Deployments. So we can
+			// ignore.
+			continue
 		}
 		if patchUnstructured != nil {
 			patchUnstructured(&obj)

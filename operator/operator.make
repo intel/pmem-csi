@@ -4,7 +4,7 @@ OPERATOR_SDK_VERSION=1.2.0
 _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION):
 	mkdir -p _work/bin/ 2> /dev/null
 #	Building operator-sdk from sources as that needs fixes for:
-#     https://github.com/operator-framework/operator-sdk/issues/4293
+#     https://github.com/operator-framework/operator-sdk/pull/4309
 #   curl -L https://github.com/operator-framework/operator-sdk/releases/download/v$(OPERATOR_SDK_VERSION)/operator-sdk-$(OPERATOR_SDK_VERSION)-x86_64-linux-gnu -o $(abspath $@)
 	tmpdir=`mktemp -d` && \
 	trap 'set -x; rm -rf $$tmpdir' EXIT && \

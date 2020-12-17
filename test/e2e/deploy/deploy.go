@@ -696,6 +696,11 @@ func Parse(deploymentName string) (*Deployment, error) {
 	deployment := &Deployment{
 		Namespace: "default",
 	}
+	if deploymentName == "operator" {
+		// Run the operator tests in a dedicated namespace
+		// to cover the non-default namespace usecase
+		deployment.Namespace = "operator-test"
+	}
 	if deploymentName == "operator-direct-production" {
 		deployment.Namespace = "kube-system"
 	}
@@ -899,6 +904,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 				"REPO_ROOT="+root,
 				"TEST_DEPLOYMENT_QUIET=quiet",
 				"TEST_DEPLOYMENTMODE="+deployment.DeploymentMode(),
+				"TEST_DRIVER_NAMESPACE="+deployment.Namespace,
 				"TEST_DEVICEMODE="+string(deployment.Mode))
 			cmd.Env = env
 			_, err = pmemexec.Run(cmd)

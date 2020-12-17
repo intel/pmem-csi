@@ -1,0 +1,35 @@
+#
+# RBAC rules required for the operator to generate
+# deployment events.
+# Events are namespace scoped. PMEM-CSI Deployment CR is 
+# cluster-scoped. Events on cluster-scoped objects are 
+# generated in the default namespace. 
+# 
+# Hence, these RBAC rules are required for the operator
+# to generate events in default namespace even if the
+# operator deployed in different namespace.
+#
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pmem-csi-operator-event
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - '*'
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pmem-csi-operator-event
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pmem-csi-operator-event
+subjects:
+- kind: ServiceAccount
+  name: pmem-csi-operator
+  namespace: $(SERVICE_ACCOUNT_NAMESPACE) # replaced by kustomize with service account namespace

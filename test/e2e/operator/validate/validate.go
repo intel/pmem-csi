@@ -117,7 +117,7 @@ func DriverDeployment(client client.Client, k8sver version.Version, namespace st
 	(&deployment).EnsureDefaults(driverImage)
 
 	// Validate sub-objects. A sub-object is anything that has the deployment object as owner.
-	objects, err := listAllDeployedObjects(client, deployment)
+	objects, err := listAllDeployedObjects(client, deployment, namespace)
 	if err != nil {
 		return false, err
 	}
@@ -495,12 +495,18 @@ func prettyPrintObjectID(object unstructured.Unstructured) string {
 		object.GetNamespace())
 }
 
-func listAllDeployedObjects(c client.Client, deployment api.Deployment) ([]unstructured.Unstructured, error) {
+func listAllDeployedObjects(c client.Client, deployment api.Deployment, namespace string) ([]unstructured.Unstructured, error) {
 	objects := []unstructured.Unstructured{}
 
 	for _, list := range operatordeployment.AllObjectLists() {
 		opts := &client.ListOptions{
-			Namespace: deployment.Namespace,
+			Namespace: namespace,
+		}
+		// Test client does not support differentiating cluster-scoped objects
+		// and the query fails when fetch those object by setting the namespace-
+		switch list.GetKind() {
+		case "CSIDriverList", "ClusterRoleList", "ClusterRoleBindingList":
+			opts = &client.ListOptions{}
 		}
 		// Filtering by owner doesn't work, so we have to use brute-force and look at all
 		// objects.

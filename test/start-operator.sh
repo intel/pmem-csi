@@ -77,11 +77,11 @@ function deploy_using_olm() {
 function deploy_using_yaml() {
   crd=${REPO_DIRECTORY}/deploy/crd/pmem-csi.intel.com_deployments_webhook.yaml
   echo "Deploying '${crd}'..."
-  cat  ${crd} | ${SSH} kubectl apply -f -
+  sed -e "s;\(namespace: \)pmem-csi$;\1${TEST_OPERATOR_NAMESPACE};g" \
+      -e "s;\(cert-manager.io/inject-ca-from: \)pmem-csi;\1${TEST_OPERATOR_NAMESPACE};g" ${crd} | ${SSH} kubectl apply -f -
 
-  DEPLOYMENT_DIRECTORY="${REPO_DIRECTORY}/deploy/operator"
-
-  deploy="${DEPLOYMENT_DIRECTORY}/pmem-csi-operator-webhook.yaml"
+  DEPLOY_DIRECTORY="${REPO_DIRECTORY}/deploy"
+  deploy="${DEPLOY_DIRECTORY}/operator/pmem-csi-operator-webhook.yaml"
   echo "Deploying '${deploy}'..."
 
   if [ ! -f "$deploy" ]; then
@@ -91,38 +91,38 @@ function deploy_using_yaml() {
   tmpdir=$(${SSH} mktemp -d)
   trap '${SSH} "rm -rf $tmpdir"' SIGTERM SIGINT EXIT
 
-  ${SSH} "cat > '$tmpdir/operator.yaml'" <<EOF
+  ${SSH} "cat > $tmpdir/operator.yaml" <<EOF
 $(cat "${deploy}")
 EOF
 
   if [ "${TEST_PMEM_REGISTRY}" != "" ]; then
      ${SSH} sed -ie "s^intel/pmem^${TEST_PMEM_REGISTRY}/pmem^g" "$tmpdir/operator.yaml"
   fi
-  ${SSH} <<EOF
-sed -i -e "s^imagePullPolicy:.IfNotPresent^imagePullPolicy: ${TEST_IMAGE_PULL_POLICY}^g" -e 's/namespace: default/namespace: $TEST_OPERATOR_NAMESPACE/' "$tmpdir/operator.yaml"
-EOF
-  ${SSH} "cat >'$tmpdir/kustomization.yaml'" <<EOF
+  if [ "${TEST_IMAGE_PULL_POLICY}" != "" ]; then
+    ${SSH} "sed -ie 's;\(imagePullPolicy: \).*;\1${TEST_IMAGE_PULL_POLICY};g' $tmpdir/operator.yaml"
+  fi
+  if [ "${TEST_OPERATOR_NAMESPACE}" != "" ]; then
+    # replace namespace object name
+    ${SSH} "sed -ie 's;\(name: \)pmem-csi$;\1${TEST_OPERATOR_NAMESPACE};g' $tmpdir/operator.yaml"
+    # replace namespace of other objects
+    ${SSH} "sed -ie 's;\(namespace: \)pmem-csi$;\1${TEST_OPERATOR_NAMESPACE};g' $tmpdir/operator.yaml"
+    # replace webservice secret dns names
+    ${SSH} "sed -ie 's;pmem-csi.svc;${TEST_OPERATOR_NAMESPACE}.svc;g' $tmpdir/operator.yaml"
+  fi
+
+  ${SSH} "cat > $tmpdir/kustomization.yaml" <<EOF
 resources:
 - operator.yaml
+EOF
+
+  if [ "${TEST_OPERATOR_DEPLOYMENT_LABEL}" != "" ]; then
+  ${SSH} "cat >>'$tmpdir/kustomization.yaml'" <<EOF
 commonLabels:
   pmem-csi.intel.com/deployment: ${TEST_OPERATOR_DEPLOYMENT_LABEL}
 EOF
+  fi
 
-  ${SSH} "cat >>'$tmpdir/kustomization.yaml'" <<EOF
-namespace: "${TEST_OPERATOR_NAMESPACE}"
-patchesJson6902:
-- target:
-    group: rbac.authorization.k8s.io
-    version: v1
-    kind: ClusterRoleBinding
-    name: pmem-csi-operator
-  path: crb-sa-namespace-patch.json
-EOF
-  ${SSH} "cat >'$tmpdir/crb-sa-namespace-patch.json'" <<EOF
-- op: replace
-  path: /subjects/0/namespace
-  value: "${TEST_OPERATOR_NAMESPACE}"
-EOF
+  echo "Deploying the operator in '${TEST_OPERATOR_NAMESPACE}' namespace..."
 
   ${KUBECTL} apply --kustomize "$tmpdir"
 }
@@ -143,6 +143,6 @@ case $deploy_method in
 esac
 
   cat <<EOF
-PMEM-CSI operator is running. To try out deploying the pmem-csi driver:
+PMEM-CSI operator is running in '${TEST_OPERATOR_NAMESPACE}' namespace. To try out deploying the pmem-csi driver:
     cat deploy/common/pmem-csi.intel.com_v1beta1_deployment_cr.yaml | ${KUBECTL} create -f -
 EOF

@@ -5,6 +5,8 @@ resources:
 - webhook-certificate.yaml
 - webhook-service.yaml
 
+namespace: pmem-csi
+
 patchesJson6902:
 - target:
     group: apps

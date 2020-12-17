@@ -44,14 +44,19 @@ function delete_olm_operator() {
 }
 
 function delete_operator() {
-  DEPLOYMENT_DIRECTORY="${REPO_DIRECTORY}/deploy/operator"
+  DEPLOY_DIRECTORY="${REPO_DIRECTORY}/deploy/operator"
   deploy="${DEPLOYMENT_DIRECTORY}/pmem-csi-operator-webhook.yaml"
 
-  echo "Deleting operator deployment: ${deploy}"
-  cat ${deploy} | ${KUBECTL} delete -f -
+  echo "Deleting operator components in namespace '${TEST_OPERATOR_NAMESPACE}'"
+  # Failures are expected like, as deleting namespace could also delete
+  # resources created in that namespace. And when try to delete a resoruce
+  # after deleting it's namespace will return NotFound error
+  sed -e "s;\(namespace: \)pmem-csi$;\1${TEST_OPERATOR_NAMESPACE};g"  -e "s;\(name: \)pmem-csi$;\1${TEST_OPERATOR_NAMESPACE};g" \
+    ${DEPLOY_DIRECTORY}/pmem-csi-operator.yaml | \
+    ${KUBECTL} delete -f - 2>&1 | grep -v NotFound || true
 
   echo "Deleting CRD..."
-  ${SSH} kubectl delete crd deployments.pmem-csi.intel.com
+  ${KUBECTL} delete crd deployments.pmem-csi.intel.com
 }
 
 deploy_method=yaml
