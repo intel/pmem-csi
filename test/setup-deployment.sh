@@ -41,15 +41,15 @@ DEPLOY=(
 echo "INFO: deploying from ${DEPLOYMENT_DIRECTORY}/${TEST_DEVICEMODE}${deployment_suffix}"
 
 # Generate certificates if not deploying in 'default' namespace.
-# Because the default certifictes in _work/pmem-ca/ are genereated
+# Because the default certificates in _work/pmem-ca/ are generated
 # for the default namespace, so we can reuse them for driver running
 # in the default namespace. For other namespaces we create new
-# certificates using the exisitng CA.
+# certificates using the existing CA.
 if [ ${TEST_DRIVER_NAMESPACE} != "default" ]; then
     CA_DIR="${REPO_DIRECTORY}/_work/pmem-ca"
     WORK_DIR="${CA_DIR}/${TEST_DRIVER_NAMESPACE}"
     if ! [ -d "${WORK_DIR}" ]; then
-        # Generate new certificates using exisitng CA
+        # Generate new certificates using existing CA
         PATH="${REPO_DIRECTORY}/_work/bin:$PATH" WORKDIR="${WORK_DIR}" CA="${CA_DIR}/ca" NS="${TEST_DRIVER_NAMESPACE}" ${TEST_DIRECTORY}/setup-ca.sh
     fi
     TEST_REGISTRY_CERT="${WORK_DIR}/pmem-registry.pem"
