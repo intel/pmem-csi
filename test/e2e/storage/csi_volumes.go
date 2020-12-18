@@ -108,10 +108,7 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 			TestDynamicLateBindingProvisioning(f.ClientSet, &claim, "latebinding")
 		})
 
-		// This test is pending because it triggers volumes leaks
-		// in PMEM-CSI (https://github.com/intel/pmem-csi/issues/823).
-		// We need to fix those before enabling the test again.
-		PIt("stress test", func() {
+		It("stress test [Slow]", func() {
 			// We cannot test directly whether pod and
 			// volume were created on the same node by
 			// chance or because the code enforces it.
