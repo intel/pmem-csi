@@ -14,10 +14,12 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"reflect"
 	"runtime"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
+	"github.com/intel/pmem-csi/pkg/logger"
 	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	"github.com/intel/pmem-csi/pkg/version"
@@ -33,7 +35,6 @@ import (
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/klog/v2"
 	"k8s.io/kubectl/pkg/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -102,20 +103,25 @@ func AllObjectLists() []*unstructured.UnstructuredList {
 	return lists
 }
 
-type PmemCSIDriver struct {
+// pmemCSIDeployment represents the desired state of a PMEM-CSI driver
+// deployment.
+type pmemCSIDeployment struct {
 	*api.Deployment
-	// operators namespace used for creating sub-resources
+	// operator's namespace used for creating sub-resources
 	namespace  string
 	k8sVersion version.Version
 }
 
-type ObjectPatch struct {
+// objectPatch combines a modified object and the patch against
+// the current revision of that object that produces the modified
+// object.
+type objectPatch struct {
 	obj   apiruntime.Object
 	patch client.Patch
 }
 
-func NewObjectPatch(obj, copy apiruntime.Object) *ObjectPatch {
-	return &ObjectPatch{
+func newObjectPatch(obj, copy apiruntime.Object) *objectPatch {
+	return &objectPatch{
 		obj:   obj,
 		patch: client.MergeFrom(copy),
 	}
@@ -123,7 +129,7 @@ func NewObjectPatch(obj, copy apiruntime.Object) *ObjectPatch {
 
 // IsNew checks if the object is a new object, i.e, the it is not
 // yet stored with the APIServer.
-func (op ObjectPatch) IsNew() bool {
+func (op objectPatch) isNew() bool {
 	if op.obj != nil {
 		// We ignore only possible error - client.errNotObject
 		// and treat it's as new object
@@ -138,7 +144,7 @@ func (op ObjectPatch) IsNew() bool {
 
 // Diff returns the raw data representing the differences between
 // original object and the changed/patch object.
-func (op ObjectPatch) Diff() ([]byte, error) {
+func (op objectPatch) diff() ([]byte, error) {
 	data, err := op.patch.Data(op.obj)
 	if err != nil {
 		return nil, err
@@ -153,28 +159,29 @@ func (op ObjectPatch) Diff() ([]byte, error) {
 
 // Apply sends the changes to API Server
 // Creates new object if not existing, otherwise patches it with changes
-func (op *ObjectPatch) Apply(c client.Client, labels map[string]string) error {
+func (op *objectPatch) apply(ctx context.Context, c client.Client, labels map[string]string) error {
 	objMeta, err := meta.Accessor(op.obj)
 	if err != nil {
 		return fmt.Errorf("internal error %T: %v", op.obj, err)
 	}
+	l := logger.Get(ctx).WithName("objectPatch/apply")
 
 	// NOTE(avalluri): Set labels just before creating/patching.
 	// Setting them before creating the client.Patch makes
 	// they get lost from the final diff.
 	objMeta.SetLabels(labels)
 
-	if op.IsNew() {
+	if op.isNew() {
 		// For unknown reason client.Create() clearing off the
 		// GVK on obj, So restore it manually.
 		gvk := op.obj.GetObjectKind().GroupVersionKind()
-		klog.Infof("Create: %T/%s", op.obj, objMeta.GetName())
-		err := c.Create(context.TODO(), op.obj)
+		l.V(3).Info("create", logger.KObjWithType(objMeta))
+		err := c.Create(ctx, op.obj)
 		op.obj.GetObjectKind().SetGroupVersionKind(gvk)
 		return err
 	}
-	klog.Infof("Update: %T/%s", op.obj, objMeta.GetName())
-	data, err := op.Diff()
+	l.V(3).Info("update", logger.KObjWithType(objMeta))
+	data, err := op.diff()
 	if err != nil {
 		return err
 	}
@@ -185,70 +192,38 @@ func (op *ObjectPatch) Apply(c client.Client, labels map[string]string) error {
 		return nil
 	}
 
-	return c.Patch(context.TODO(), op.obj, op.patch)
+	return c.Patch(ctx, op.obj, op.patch)
 }
 
 // Reconcile reconciles the driver deployment. When adding new
 // objects, extend also currentObjects above and the RBAC rules in
 // deploy/kustomize/operator/operator.yaml.
-func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) error {
+func (d *pmemCSIDeployment) reconcile(ctx context.Context, r *ReconcileDeployment) error {
 
 	if err := d.EnsureDefaults(r.containerImage); err != nil {
 		return err
 	}
+	l := logger.Get(ctx).WithName("reconcile")
 
-	klog.Infof("Deployment: %q, state %q ", d.Name, d.Status.Phase)
+	l.V(3).Info("start", "deployment", d.Name, "phase", d.Status.Phase)
 	var allObjects []apiruntime.Object
 	redeployAll := func() error {
 		var o apiruntime.Object
 		var err error
-		s, err := d.redeploySecrets(r)
+		s, err := d.redeploySecrets(ctx, r)
 		if err != nil {
 			return err
 		}
 		for _, o := range s {
 			allObjects = append(allObjects, o)
 		}
-		if o, err = d.redeployProvisionerRole(r); err != nil {
-			return fmt.Errorf("failed to update RBAC role: %v", err)
+
+		for name, handler := range subObjectHandlers {
+			if o, err = d.redeploy(ctx, r, handler); err != nil {
+				return fmt.Errorf("failed to update %s: %v", name, err)
+			}
+			allObjects = append(allObjects, o)
 		}
-		allObjects = append(allObjects, o)
-		if o, err = d.redeployProvisionerRoleBinding(r); err != nil {
-			return fmt.Errorf("failed to update RBAC role bindings: %v", err)
-		}
-		allObjects = append(allObjects, o)
-		if o, err = d.redeployProvisionerClusterRole(r); err != nil {
-			return fmt.Errorf("failed to update RBAC cluster role: %v", err)
-		}
-		allObjects = append(allObjects, o)
-		if o, err = d.redeployProvisionerClusterRoleBinding(r); err != nil {
-			return fmt.Errorf("failed to update RBAC cluster role bindings: %v", err)
-		}
-		allObjects = append(allObjects, o)
-		if o, err = d.redeployServiceAccount(r); err != nil {
-			return fmt.Errorf("failed to update service account: %v", err)
-		}
-		allObjects = append(allObjects, o)
-		if o, err = d.redeployControllerService(r); err != nil {
-			return fmt.Errorf("failed to update controller service: %v", err)
-		}
-		allObjects = append(allObjects, o)
-		if o, err = d.redeployMetricsService(r); err != nil {
-			return fmt.Errorf("failed to update controller service: %v", err)
-		}
-		allObjects = append(allObjects, o)
-		if o, err = d.redeployCSIDriver(r); err != nil {
-			return fmt.Errorf("failed to update CSI driver: %v", err)
-		}
-		allObjects = append(allObjects, o)
-		if o, err = d.redeployControllerDriver(r); err != nil {
-			return fmt.Errorf("failed to update controller driver: %v", err)
-		}
-		allObjects = append(allObjects, o)
-		if o, err = d.redeployNodeDriver(r); err != nil {
-			return fmt.Errorf("failed to update node driver: %v", err)
-		}
-		allObjects = append(allObjects, o)
 		return nil
 	}
 
@@ -259,10 +234,10 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) error {
 
 	d.SetCondition(api.DriverDeployed, corev1.ConditionTrue, "Driver deployed successfully.")
 
-	klog.Infof("Deployed '%d' objects.", len(allObjects))
+	l.V(3).Info("deployed", "numObjects", len(allObjects))
 	// FIXME(avalluri): Limit the obsolete object deletion either only on version upgrades
 	// or on operator restart.
-	if err := d.deleteObsoleteObjects(r, allObjects); err != nil {
+	if err := d.deleteObsoleteObjects(ctx, r, allObjects); err != nil {
 		return fmt.Errorf("Delete obsolete objects failed with error: %v", err)
 	}
 
@@ -271,16 +246,17 @@ func (d *PmemCSIDriver) Reconcile(r *ReconcileDeployment) error {
 
 // getSubObject retrieves the latest revision of given object type from the API server
 // And checks if that object is owned by the current deployment CR
-func (d *PmemCSIDriver) getSubObject(r *ReconcileDeployment, obj apiruntime.Object) error {
+func (d *pmemCSIDeployment) getSubObject(ctx context.Context, r *ReconcileDeployment, obj apiruntime.Object) error {
 	objMeta, err := meta.Accessor(obj)
 	if err != nil {
 		return fmt.Errorf("internal error %T: %v", obj, err)
 	}
+	l := logger.Get(ctx).WithName("getSubObject")
 
-	klog.Infof("Get: %T/%s", obj, objMeta.GetName())
+	l.V(3).Info("get", "object", logger.KObjWithType(objMeta))
 	if err := r.Get(obj); err != nil {
 		if errors.IsNotFound(err) {
-			klog.Infof("Not found: %T/%s", obj, objMeta.GetName())
+			l.V(3).Info("not found", logger.KObjWithType(objMeta))
 			return nil
 		}
 		return err
@@ -294,14 +270,15 @@ func (d *PmemCSIDriver) getSubObject(r *ReconcileDeployment, obj apiruntime.Obje
 }
 
 // updateSubObject writes the object changes to the API server.
-func (d *PmemCSIDriver) updateSubObject(r *ReconcileDeployment, op *ObjectPatch) error {
-	return op.Apply(r.client, d.Spec.Labels)
+func (d *pmemCSIDeployment) updateSubObject(ctx context.Context, r *ReconcileDeployment, op *objectPatch) error {
+	return op.apply(ctx, r.client, d.Spec.Labels)
 }
 
 type redeployObject struct {
-	object     func() apiruntime.Object
-	modify     func(apiruntime.Object) error
-	postUpdate func(apiruntime.Object) error
+	objType    reflect.Type
+	object     func(*pmemCSIDeployment) apiruntime.Object
+	modify     func(*pmemCSIDeployment, apiruntime.Object) error
+	postUpdate func(*pmemCSIDeployment, apiruntime.Object) error
 }
 
 // redeploy resets/patches the object returned by ro.object()
@@ -309,28 +286,28 @@ type redeployObject struct {
 // Here are the redeploy steps:
 //  1. Get the object by calling ro.object() which needs redeploying.
 //  2. Retrieve the latest data saved at APIServer for that object.
-//  3. Create an ObjectPatch for that object to record the changes from this point.
+//  3. Create an objectPatch for that object to record the changes from this point.
 //  4. Call ro.modify() to modify the object's data.
-//  5. Call ObjectPatch.Apply() to submit the chanages to the APIServer.
+//  5. Call objectPatch.Apply() to submit the chanages to the APIServer.
 //  6. If the update in step-5 was success, then call the ro.postUpdate() callback
 //     to run any post update steps.
-func (d *PmemCSIDriver) redeploy(r *ReconcileDeployment, ro redeployObject) (apiruntime.Object, error) {
-	o := ro.object()
+func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment, ro redeployObject) (apiruntime.Object, error) {
+	o := ro.object(d)
 	if o == nil {
 		return nil, fmt.Errorf("nil object")
 	}
-	if err := d.getSubObject(r, o); err != nil {
+	if err := d.getSubObject(ctx, r, o); err != nil {
 		return nil, err
 	}
-	op := NewObjectPatch(o, o.DeepCopyObject())
-	if err := ro.modify(o); err != nil {
+	op := newObjectPatch(o, o.DeepCopyObject())
+	if err := ro.modify(d, o); err != nil {
 		return nil, err
 	}
-	if err := d.updateSubObject(r, op); err != nil {
+	if err := d.updateSubObject(ctx, r, op); err != nil {
 		return nil, err
 	}
 	if ro.postUpdate != nil {
-		if err := ro.postUpdate(o); err != nil {
+		if err := ro.postUpdate(d, o); err != nil {
 			return nil, err
 		}
 	}
@@ -346,33 +323,33 @@ func (d *PmemCSIDriver) redeploy(r *ReconcileDeployment, ro redeployObject) (api
 //
 // We cannot use d.redeploy() as secrets needs to be provisioned if not preset.
 // This special case cannot be fit into generice redeploy logic.
-func (d *PmemCSIDriver) redeploySecrets(r *ReconcileDeployment) ([]*corev1.Secret, error) {
+func (d *pmemCSIDeployment) redeploySecrets(ctx context.Context, r *ReconcileDeployment) ([]*corev1.Secret, error) {
 	rs := &corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: d.getObjectMeta(d.RegistrySecretName(), false),
 	}
-	if err := d.getSubObject(r, rs); err != nil {
+	if err := d.getSubObject(ctx, r, rs); err != nil {
 		return nil, err
 	}
-	rop := NewObjectPatch(rs, rs.DeepCopy())
+	rop := newObjectPatch(rs, rs.DeepCopy())
 
 	ns := &corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: d.getObjectMeta(d.NodeSecretName(), false),
 	}
-	if err := d.getSubObject(r, ns); err != nil {
+	if err := d.getSubObject(ctx, r, ns); err != nil {
 		return nil, err
 	}
-	nop := NewObjectPatch(ns, ns.DeepCopy())
+	nop := newObjectPatch(ns, ns.DeepCopy())
 
 	update := func() error {
 		d.getRegistrySecrets(rs)
-		if err := d.updateSubObject(r, rop); err != nil {
+		if err := d.updateSubObject(ctx, r, rop); err != nil {
 			return fmt.Errorf("failed to update registry secrets: %w", err)
 		}
 
 		d.getNodeSecrets(ns)
-		if err := d.updateSubObject(r, nop); err != nil {
+		if err := d.updateSubObject(ctx, r, nop); err != nil {
 			return fmt.Errorf("failed to update node secrets: %w", err)
 		}
 		return nil
@@ -392,9 +369,9 @@ func (d *PmemCSIDriver) redeploySecrets(r *ReconcileDeployment) ([]*corev1.Secre
 		}
 		d.SetCondition(api.CertsVerified, corev1.ConditionTrue, "Driver certificates validated.")
 		updateSecrets = true
-	} else if rop.IsNew() || nop.IsNew() {
+	} else if rop.isNew() || nop.isNew() {
 		// Provision new self-signed certificates if not already present
-		if err := d.provisionCertificates(); err != nil {
+		if err := d.provisionCertificates(ctx); err != nil {
 			d.SetCondition(api.CertsReady, corev1.ConditionFalse, err.Error())
 			return nil, err
 		}
@@ -411,20 +388,20 @@ func (d *PmemCSIDriver) redeploySecrets(r *ReconcileDeployment) ([]*corev1.Secre
 	return []*corev1.Secret{rs, ns}, nil
 }
 
-// redeployNodeDriver deploys the node daemon set and records its status on to CR status.
-func (d *PmemCSIDriver) redeployNodeDriver(r *ReconcileDeployment) (apiruntime.Object, error) {
-	return d.redeploy(r, redeployObject{
-		object: func() apiruntime.Object {
+var subObjectHandlers = map[string]redeployObject{
+	"node driver": {
+		objType: reflect.TypeOf(&appsv1.DaemonSet{}),
+		object: func(d *pmemCSIDeployment) apiruntime.Object {
 			return &appsv1.DaemonSet{
 				TypeMeta:   metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 				ObjectMeta: d.getObjectMeta(d.NodeDriverName(), false),
 			}
 		},
-		modify: func(o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
 			d.getNodeDaemonSet(o.(*appsv1.DaemonSet))
 			return nil
 		},
-		postUpdate: func(o apiruntime.Object) error {
+		postUpdate: func(d *pmemCSIDeployment, o apiruntime.Object) error {
 			ds := o.(*appsv1.DaemonSet)
 			// Update node driver status is status object
 			status := "NotReady"
@@ -440,23 +417,20 @@ func (d *PmemCSIDriver) redeployNodeDriver(r *ReconcileDeployment) (apiruntime.O
 			d.SetDriverStatus(api.NodeDriver, status, reason)
 			return nil
 		},
-	})
-}
-
-// redeployControllerDriver deploys the controller stateful set and records its status on to CR status.
-func (d *PmemCSIDriver) redeployControllerDriver(r *ReconcileDeployment) (apiruntime.Object, error) {
-	return d.redeploy(r, redeployObject{
-		object: func() apiruntime.Object {
+	},
+	"controller driver": {
+		objType: reflect.TypeOf(&appsv1.StatefulSet{}),
+		object: func(d *pmemCSIDeployment) apiruntime.Object {
 			return &appsv1.StatefulSet{
 				TypeMeta:   metav1.TypeMeta{Kind: "StatefulSet", APIVersion: "apps/v1"},
 				ObjectMeta: d.getObjectMeta(d.ControllerDriverName(), false),
 			}
 		},
-		modify: func(o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
 			d.getControllerStatefulSet(o.(*appsv1.StatefulSet))
 			return nil
 		},
-		postUpdate: func(o apiruntime.Object) error {
+		postUpdate: func(d *pmemCSIDeployment, o apiruntime.Object) error {
 			ss := o.(*appsv1.StatefulSet)
 			// Update controller status is status object
 			status := "NotReady"
@@ -473,205 +447,154 @@ func (d *PmemCSIDriver) redeployControllerDriver(r *ReconcileDeployment) (apirun
 			d.SetDriverStatus(api.ControllerDriver, status, reason)
 			return nil
 		},
-	})
-}
-
-func (d *PmemCSIDriver) redeployControllerService(r *ReconcileDeployment) (apiruntime.Object, error) {
-	return d.redeploy(r, redeployObject{
-		object: func() apiruntime.Object {
+	},
+	"controller service": {
+		objType: reflect.TypeOf(&corev1.Service{}),
+		object: func(d *pmemCSIDeployment) apiruntime.Object {
 			return &corev1.Service{
 				TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 				ObjectMeta: d.getObjectMeta(d.ControllerServiceName(), false),
 			}
 		},
-		modify: func(o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
 			d.getControllerService(o.(*corev1.Service))
 			return nil
 		},
-	})
-}
-
-func (d *PmemCSIDriver) redeployMetricsService(r *ReconcileDeployment) (apiruntime.Object, error) {
-	return d.redeploy(r, redeployObject{
-		object: func() apiruntime.Object {
+	},
+	"metrics service": {
+		objType: reflect.TypeOf(&corev1.Service{}),
+		object: func(d *pmemCSIDeployment) apiruntime.Object {
 			return &corev1.Service{
 				TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 				ObjectMeta: d.getObjectMeta(d.MetricsServiceName(), false),
 			}
 		},
-		modify: func(o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
 			d.getMetricsService(o.(*corev1.Service))
 			return nil
 		},
-	})
-}
-
-func (d *PmemCSIDriver) redeployCSIDriver(r *ReconcileDeployment) (apiruntime.Object, error) {
-	return d.redeploy(r, redeployObject{
-		object: func() apiruntime.Object {
+	},
+	"CSIDriver": {
+		objType: reflect.TypeOf(&storagev1beta1.CSIDriver{}),
+		object: func(d *pmemCSIDeployment) apiruntime.Object {
 			return &storagev1beta1.CSIDriver{
 				TypeMeta:   metav1.TypeMeta{Kind: "CSIDriver", APIVersion: "storage.k8s.io/v1beta1"},
 				ObjectMeta: d.getObjectMeta(d.CSIDriverName(), true),
 			}
 		},
-		modify: func(o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
 			d.getCSIDriver(o.(*storagev1beta1.CSIDriver))
 			return nil
 		},
-	})
-}
-
-func (d *PmemCSIDriver) redeployProvisionerRole(r *ReconcileDeployment) (apiruntime.Object, error) {
-	return d.redeploy(r, redeployObject{
-		object: func() apiruntime.Object {
+	},
+	"provisioner role": {
+		objType: reflect.TypeOf(&rbacv1.Role{}),
+		object: func(d *pmemCSIDeployment) apiruntime.Object {
 			return &rbacv1.Role{
 				TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 				ObjectMeta: d.getObjectMeta(d.ProvisionerRoleName(), false),
 			}
 		},
-		modify: func(o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
 			d.getControllerProvisionerRole(o.(*rbacv1.Role))
 			return nil
 		},
-	})
-}
-
-func (d *PmemCSIDriver) redeployProvisionerRoleBinding(r *ReconcileDeployment) (apiruntime.Object, error) {
-	return d.redeploy(r, redeployObject{
-		object: func() apiruntime.Object {
+	},
+	"provisioner role binding": {
+		objType: reflect.TypeOf(&rbacv1.RoleBinding{}),
+		object: func(d *pmemCSIDeployment) apiruntime.Object {
 			return &rbacv1.RoleBinding{
 				TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 				ObjectMeta: d.getObjectMeta(d.ProvisionerRoleBindingName(), false),
 			}
 		},
-		modify: func(o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
 			d.getControllerProvisionerRoleBinding(o.(*rbacv1.RoleBinding))
 			return nil
 		},
-	})
-}
-
-func (d *PmemCSIDriver) redeployProvisionerClusterRole(r *ReconcileDeployment) (apiruntime.Object, error) {
-	return d.redeploy(r, redeployObject{
-		object: func() apiruntime.Object {
+	},
+	"provisioner cluster role": {
+		objType: reflect.TypeOf(&rbacv1.ClusterRole{}),
+		object: func(d *pmemCSIDeployment) apiruntime.Object {
 			return &rbacv1.ClusterRole{
 				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 				ObjectMeta: d.getObjectMeta(d.ProvisionerClusterRoleName(), true),
 			}
 		},
-		modify: func(o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
 			d.getControllerProvisionerClusterRole(o.(*rbacv1.ClusterRole))
 			return nil
 		},
-	})
-}
-
-func (d *PmemCSIDriver) redeployProvisionerClusterRoleBinding(r *ReconcileDeployment) (apiruntime.Object, error) {
-	return d.redeploy(r, redeployObject{
-		object: func() apiruntime.Object {
+	},
+	"provisioner cluster role binding": {
+		objType: reflect.TypeOf(&rbacv1.ClusterRoleBinding{}),
+		object: func(d *pmemCSIDeployment) apiruntime.Object {
 			return &rbacv1.ClusterRoleBinding{
 				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 				ObjectMeta: d.getObjectMeta(d.ProvisionerClusterRoleBindingName(), true),
 			}
 		},
-		modify: func(o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
 			d.getControllerProvisionerClusterRoleBinding(o.(*rbacv1.ClusterRoleBinding))
 			return nil
 		},
-	})
-}
-
-func (d *PmemCSIDriver) redeployServiceAccount(r *ReconcileDeployment) (apiruntime.Object, error) {
-	return d.redeploy(r, redeployObject{
-		object: func() apiruntime.Object {
+	},
+	"service account": {
+		objType: reflect.TypeOf(&corev1.ServiceAccount{}),
+		object: func(d *pmemCSIDeployment) apiruntime.Object {
 			return &corev1.ServiceAccount{
 				TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 				ObjectMeta: d.getObjectMeta(d.ServiceAccountName(), false),
 			}
 		},
-		modify: func(o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
 			// nothing to customize for service account
 			return nil
 		},
-	})
+	},
 }
 
-// HandleEvent handles the delete/update events received on sub-objects
-func (d *PmemCSIDriver) HandleEvent(meta metav1.Object, obj apiruntime.Object, r *ReconcileDeployment) error {
-	switch obj.(type) {
-	case *corev1.Secret:
-		klog.Infof("Redeploying driver secrets")
-		if _, err := d.redeploySecrets(r); err != nil {
-			return fmt.Errorf("failed to redeploy %q secrets: %v", meta.GetName(), err)
+var v1SecretPtr = reflect.TypeOf(&corev1.Secret{})
+
+// HandleEvent handles the delete/update events received on sub-objects. It ensures that any undesirable change
+// is reverted.
+func (d *pmemCSIDeployment) handleEvent(ctx context.Context, metaData metav1.Object, obj apiruntime.Object, r *ReconcileDeployment) error {
+	objType := reflect.TypeOf(obj)
+	l := logger.Get(ctx).WithName("deployment/event")
+	l.V(5).Info("start", "object", logger.KObjWithType(metaData), "type", objType)
+
+	objName := metaData.GetName()
+	for name, handler := range subObjectHandlers {
+		if objType != handler.objType {
+			continue
 		}
-	case *appsv1.DaemonSet:
-		klog.Infof("Redeploying node driver")
+		metaObj, _ := meta.Accessor(handler.object(d))
+		if objName != metaObj.GetName() {
+			continue
+		}
+		l.V(3).Info("redeploying", "name", name, "object", logger.KObjWithType(metaData))
 		org := d.DeepCopy()
-		if _, err := d.redeployNodeDriver(r); err != nil {
-			return fmt.Errorf("failed to redeploy node driver: %v", err)
+		if _, err := d.redeploy(ctx, r, handler); err != nil {
+			return fmt.Errorf("failed to redeploy %s: %v", name, err)
 		}
-		if err := r.PatchDeploymentStatus(d.Deployment, client.MergeFrom(org)); err != nil {
+		if err := r.patchDeploymentStatus(d.Deployment, client.MergeFrom(org)); err != nil {
 			return fmt.Errorf("failed to update deployment CR status: %v", err)
 		}
-	case *appsv1.StatefulSet:
-		klog.Infof("Redeploying controller driver")
-		org := d.DeepCopy()
-		if _, err := d.redeployControllerDriver(r); err != nil {
-			return fmt.Errorf("failed to redeploy controller driver: %v", err)
+	}
+
+	if objType == v1SecretPtr {
+		l.V(3).Info("redeploying", "name", "driver secrets", "object", logger.KObjWithType(metaData))
+		if _, err := d.redeploySecrets(ctx, r); err != nil {
+			return fmt.Errorf("failed to redeploy %q secrets: %v", metaData.GetName(), err)
 		}
-		if err := r.PatchDeploymentStatus(d.Deployment, client.MergeFrom(org)); err != nil {
-			return fmt.Errorf("failed to update deployment CR status: %v", err)
-		}
-	case *rbacv1.Role:
-		klog.Infof("Redeploying provisioner RBAC role: %q", meta.GetName())
-		if _, err := d.redeployProvisionerRole(r); err != nil {
-			return fmt.Errorf("failed to redeploy %q provisioner role: %v", meta.GetName(), err)
-		}
-	case *rbacv1.ClusterRole:
-		klog.Infof("Redeploying provisioner cluster role: %q", meta.GetName())
-		if _, err := d.redeployProvisionerClusterRole(r); err != nil {
-			return fmt.Errorf("failed to redeploy %q cluster role: %v", meta.GetName(), err)
-		}
-	case *rbacv1.RoleBinding:
-		klog.Infof("Redeploying provisioner role binding")
-		if _, err := d.redeployProvisionerRoleBinding(r); err != nil {
-			return fmt.Errorf("failed to redeploy %q role binding: %v", meta.GetName(), err)
-		}
-	case *rbacv1.ClusterRoleBinding:
-		klog.Infof("Redeploying provisioner cluster role binding: %q", meta.GetName())
-		if _, err := d.redeployProvisionerClusterRoleBinding(r); err != nil {
-			return fmt.Errorf("failed to redeploy %q cluster role binding: %v", meta.GetName(), err)
-		}
-	case *corev1.ServiceAccount:
-		klog.Infof("Redeploying service account")
-		if _, err := d.redeployServiceAccount(r); err != nil {
-			return fmt.Errorf("failed to redeploy %q service account: %v", meta.GetName(), err)
-		}
-	case *corev1.Service:
-		var err error
-		klog.Infof("Redeploying service: %s", meta.GetName())
-		if meta.GetName() == d.ControllerServiceName() {
-			_, err = d.redeployControllerService(r)
-		} else if meta.GetName() == d.MetricsServiceName() {
-			_, err = d.redeployMetricsService(r)
-		}
-		if err != nil {
-			return fmt.Errorf("failed to redeploy %q service: %v", meta.GetName(), err)
-		}
-	case *storagev1beta1.CSIDriver:
-		klog.Infof("Redeploying %q CSIDriver", meta.GetName())
-		if _, err := d.redeployCSIDriver(r); err != nil {
-			return fmt.Errorf("failed to redeploy %q CSIDriver: %v", meta.GetName(), err)
-		}
-	default:
-		klog.Infof("Ignoring event on '%s' of type %T", meta.GetName(), obj)
 	}
 
 	return nil
 }
 
-func objectIsObsolete(objList []apiruntime.Object, toFind unstructured.Unstructured) (bool, error) {
-	klog.V(5).Infof("Checking if %q of type %q is obsolete...", toFind.GetName(), toFind.GetObjectKind().GroupVersionKind())
+func objectIsObsolete(ctx context.Context, objList []apiruntime.Object, toFind unstructured.Unstructured) (bool, error) {
+	l := logger.Get(ctx)
+	l.V(5).Info("checking for obsolete object", "name", toFind.GetName(), "gkv", toFind.GetObjectKind().GroupVersionKind())
 	for i := range objList {
 		metaObj, err := meta.Accessor(objList[i])
 		if err != nil {
@@ -686,7 +609,7 @@ func objectIsObsolete(objList []apiruntime.Object, toFind unstructured.Unstructu
 	return true, nil
 }
 
-func (d *PmemCSIDriver) isOwnerOf(obj unstructured.Unstructured) bool {
+func (d *pmemCSIDeployment) isOwnerOf(obj unstructured.Unstructured) bool {
 	for _, owner := range obj.GetOwnerReferences() {
 		if owner.UID == d.GetUID() {
 			return true
@@ -696,10 +619,11 @@ func (d *PmemCSIDriver) isOwnerOf(obj unstructured.Unstructured) bool {
 	return false
 }
 
-func (d *PmemCSIDriver) deleteObsoleteObjects(r *ReconcileDeployment, newObjects []apiruntime.Object) error {
+func (d *pmemCSIDeployment) deleteObsoleteObjects(ctx context.Context, r *ReconcileDeployment, newObjects []apiruntime.Object) error {
+	l := logger.Get(ctx).WithName("deleteObsoleteObjects")
 	for _, obj := range newObjects {
 		metaObj, _ := meta.Accessor(obj)
-		klog.V(5).Infof("==>%q type %q", metaObj.GetName(), obj.GetObjectKind().GroupVersionKind())
+		l.V(5).Info("new object", "name", metaObj.GetName(), "gkv", obj.GetObjectKind().GroupVersionKind())
 	}
 
 	for _, list := range AllObjectLists() {
@@ -707,8 +631,8 @@ func (d *PmemCSIDriver) deleteObsoleteObjects(r *ReconcileDeployment, newObjects
 			Namespace: d.namespace,
 		}
 
-		klog.V(5).Infof("Fetching '%s' list with options: %v", list.GetObjectKind(), opts.Namespace)
-		if err := r.client.List(context.TODO(), list, opts); err != nil {
+		l.V(5).Info("fetching objects", "gkv", list.GetObjectKind(), "options", opts.Namespace)
+		if err := r.client.List(ctx, list, opts); err != nil {
 			return err
 		}
 
@@ -716,14 +640,14 @@ func (d *PmemCSIDriver) deleteObsoleteObjects(r *ReconcileDeployment, newObjects
 			if !d.isOwnerOf(obj) {
 				continue
 			}
-			obsolete, err := objectIsObsolete(newObjects, obj)
+			obsolete, err := objectIsObsolete(ctx, newObjects, obj)
 			if err != nil {
 				return err
 			}
 			if !obsolete {
 				continue
 			}
-			klog.Infof("Deleting %q of type '%s' because it is an obsolete object.", obj.GetName(), obj.GetObjectKind().GroupVersionKind())
+			l.V(3).Info("deleting obsolete object", "name", obj.GetName(), "gkv", obj.GetObjectKind().GroupVersionKind())
 
 			o, err := scheme.Scheme.New(obj.GetObjectKind().GroupVersionKind())
 			if err != nil {
@@ -744,18 +668,19 @@ func (d *PmemCSIDriver) deleteObsoleteObjects(r *ReconcileDeployment, newObjects
 	return nil
 }
 
-func (d *PmemCSIDriver) getRegistrySecrets(secret *corev1.Secret) {
+func (d *pmemCSIDeployment) getRegistrySecrets(secret *corev1.Secret) {
 	d.getSecret(secret, "registry-secrets", d.Spec.CACert, d.Spec.RegistryPrivateKey, d.Spec.RegistryCert)
 }
 
-func (d *PmemCSIDriver) getNodeSecrets(secret *corev1.Secret) {
+func (d *pmemCSIDeployment) getNodeSecrets(secret *corev1.Secret) {
 	d.getSecret(secret, "node-secrets", d.Spec.CACert, d.Spec.NodeControllerPrivateKey, d.Spec.NodeControllerCert)
 }
 
-func (d *PmemCSIDriver) provisionCertificates() error {
+func (d *pmemCSIDeployment) provisionCertificates(ctx context.Context) error {
+	l := logger.Get(ctx).WithName("provisionCertificates")
 	var prKey *rsa.PrivateKey
 
-	klog.Infof("Provisioning new certificates for deployment '%s'", d.Name)
+	l.V(3).Info("provisioning new certificates")
 	ca, err := pmemtls.NewCA(nil, nil)
 	if err != nil {
 		return fmt.Errorf("failed to initialize CA: %v", err)
@@ -806,7 +731,7 @@ func (d *PmemCSIDriver) provisionCertificates() error {
 // a tls client connection to that sever using the provided keys and certificates.
 // As we use mutual-tls, testing one server is enough to make sure that the provided
 // certificates works
-func (d *PmemCSIDriver) validateCertificates() error {
+func (d *pmemCSIDeployment) validateCertificates() error {
 	tmp, err := ioutil.TempDir("", "pmem-csi-validate-certs-*")
 	if err != nil {
 		return err
@@ -842,7 +767,7 @@ func (d *PmemCSIDriver) validateCertificates() error {
 	return nil
 }
 
-func (d *PmemCSIDriver) getCSIDriver(csiDriver *storagev1beta1.CSIDriver) {
+func (d *pmemCSIDeployment) getCSIDriver(csiDriver *storagev1beta1.CSIDriver) {
 	attachRequired := false
 	podInfoOnMount := true
 
@@ -860,7 +785,7 @@ func (d *PmemCSIDriver) getCSIDriver(csiDriver *storagev1beta1.CSIDriver) {
 	}
 }
 
-func (d *PmemCSIDriver) getSecret(secret *corev1.Secret, cn string, ca, encodedKey, encodedCert []byte) {
+func (d *pmemCSIDeployment) getSecret(secret *corev1.Secret, cn string, ca, encodedKey, encodedCert []byte) {
 	secret.Type = corev1.SecretTypeTLS
 	secret.Data = map[string][]byte{
 		// Same names as in the example secrets and in the v1 API.
@@ -870,7 +795,7 @@ func (d *PmemCSIDriver) getSecret(secret *corev1.Secret, cn string, ca, encodedK
 	}
 }
 
-func (d *PmemCSIDriver) getService(service *corev1.Service, t corev1.ServiceType, port int32) {
+func (d *pmemCSIDeployment) getService(service *corev1.Service, t corev1.ServiceType, port int32) {
 	service.Spec.Type = t
 	if service.Spec.Ports == nil {
 		service.Spec.Ports = append(service.Spec.Ports, corev1.ServicePort{})
@@ -884,15 +809,15 @@ func (d *PmemCSIDriver) getService(service *corev1.Service, t corev1.ServiceType
 	}
 }
 
-func (d *PmemCSIDriver) getControllerService(service *corev1.Service) {
+func (d *pmemCSIDeployment) getControllerService(service *corev1.Service) {
 	d.getService(service, corev1.ServiceTypeClusterIP, controllerServicePort)
 }
 
-func (d *PmemCSIDriver) getMetricsService(service *corev1.Service) {
+func (d *pmemCSIDeployment) getMetricsService(service *corev1.Service) {
 	d.getService(service, corev1.ServiceTypeNodePort, controllerMetricsPort)
 }
 
-func (d *PmemCSIDriver) getControllerProvisionerRole(role *rbacv1.Role) {
+func (d *pmemCSIDeployment) getControllerProvisionerRole(role *rbacv1.Role) {
 	role.Rules = []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{""},
@@ -935,7 +860,7 @@ func (d *PmemCSIDriver) getControllerProvisionerRole(role *rbacv1.Role) {
 	}
 }
 
-func (d *PmemCSIDriver) getControllerProvisionerRoleBinding(rb *rbacv1.RoleBinding) {
+func (d *pmemCSIDeployment) getControllerProvisionerRoleBinding(rb *rbacv1.RoleBinding) {
 	rb.Subjects = []rbacv1.Subject{
 		{
 			Kind:      "ServiceAccount",
@@ -950,7 +875,7 @@ func (d *PmemCSIDriver) getControllerProvisionerRoleBinding(rb *rbacv1.RoleBindi
 	}
 }
 
-func (d *PmemCSIDriver) getControllerProvisionerClusterRole(cr *rbacv1.ClusterRole) {
+func (d *pmemCSIDeployment) getControllerProvisionerClusterRole(cr *rbacv1.ClusterRole) {
 	cr.Rules = []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{""},
@@ -1011,7 +936,7 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRole(cr *rbacv1.ClusterRo
 	}
 }
 
-func (d *PmemCSIDriver) getControllerProvisionerClusterRoleBinding(crb *rbacv1.ClusterRoleBinding) {
+func (d *pmemCSIDeployment) getControllerProvisionerClusterRoleBinding(crb *rbacv1.ClusterRoleBinding) {
 	crb.Subjects = []rbacv1.Subject{
 		{
 			Kind:      "ServiceAccount",
@@ -1026,7 +951,7 @@ func (d *PmemCSIDriver) getControllerProvisionerClusterRoleBinding(crb *rbacv1.C
 	}
 }
 
-func (d *PmemCSIDriver) getControllerStatefulSet(ss *appsv1.StatefulSet) {
+func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 	replicas := int32(1)
 	true := true
 	pmemcsiUser := int64(1000)
@@ -1126,7 +1051,7 @@ func (d *PmemCSIDriver) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 	}
 }
 
-func (d *PmemCSIDriver) getNodeDaemonSet(ds *appsv1.DaemonSet) {
+func (d *pmemCSIDeployment) getNodeDaemonSet(ds *appsv1.DaemonSet) {
 	directoryOrCreate := corev1.HostPathDirectoryOrCreate
 	ds.Spec = appsv1.DaemonSetSpec{
 		Selector: &metav1.LabelSelector{
@@ -1230,10 +1155,11 @@ func (d *PmemCSIDriver) getNodeDaemonSet(ds *appsv1.DaemonSet) {
 	}
 }
 
-func (d *PmemCSIDriver) getControllerCommand() []string {
+func (d *pmemCSIDeployment) getControllerCommand() []string {
 	return []string{
 		"/usr/local/bin/pmem-csi-driver",
 		fmt.Sprintf("-v=%d", d.Spec.LogLevel),
+		"-logging-format=" + string(d.Spec.LogFormat),
 		"-mode=controller",
 		"-endpoint=unix:///csi/csi-controller.sock",
 		fmt.Sprintf("-registryEndpoint=tcp://0.0.0.0:%d", controllerServicePort),
@@ -1246,11 +1172,12 @@ func (d *PmemCSIDriver) getControllerCommand() []string {
 	}
 }
 
-func (d *PmemCSIDriver) getNodeDriverCommand() []string {
+func (d *pmemCSIDeployment) getNodeDriverCommand() []string {
 	return []string{
 		"/usr/local/bin/pmem-csi-driver",
 		fmt.Sprintf("-deviceManager=%s", d.Spec.DeviceMode),
 		fmt.Sprintf("-v=%d", d.Spec.LogLevel),
+		"-logging-format=" + string(d.Spec.LogFormat),
 		"-mode=node",
 		"-endpoint=unix:///csi/csi.sock",
 		"-nodeid=$(KUBE_NODE_NAME)",
@@ -1267,7 +1194,7 @@ func (d *PmemCSIDriver) getNodeDriverCommand() []string {
 	}
 }
 
-func (d *PmemCSIDriver) getControllerContainer() corev1.Container {
+func (d *pmemCSIDeployment) getControllerContainer() corev1.Container {
 	true := true
 	return corev1.Container{
 		Name:            "pmem-driver",
@@ -1320,7 +1247,7 @@ func (d *PmemCSIDriver) getControllerContainer() corev1.Container {
 	}
 }
 
-func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
+func (d *pmemCSIDeployment) getNodeDriverContainer() corev1.Container {
 	bidirectional := corev1.MountPropagationBidirectional
 	true := true
 	root := int64(0)
@@ -1407,7 +1334,7 @@ func (d *PmemCSIDriver) getNodeDriverContainer() corev1.Container {
 	return c
 }
 
-func (d *PmemCSIDriver) getProvisionerContainer() corev1.Container {
+func (d *pmemCSIDeployment) getProvisionerContainer() corev1.Container {
 	true := true
 	return corev1.Container{
 		Name:            "external-provisioner",
@@ -1436,7 +1363,7 @@ func (d *PmemCSIDriver) getProvisionerContainer() corev1.Container {
 	}
 }
 
-func (d *PmemCSIDriver) getNodeRegistrarContainer() corev1.Container {
+func (d *pmemCSIDeployment) getNodeRegistrarContainer() corev1.Container {
 	true := true
 	return corev1.Container{
 		Name:            "driver-registrar",
@@ -1470,7 +1397,7 @@ func (d *PmemCSIDriver) getNodeRegistrarContainer() corev1.Container {
 	}
 }
 
-func (d *PmemCSIDriver) getMetricsPorts(port int32) []corev1.ContainerPort {
+func (d *pmemCSIDeployment) getMetricsPorts(port int32) []corev1.ContainerPort {
 	return []corev1.ContainerPort{
 		{
 			Name:          "metrics",
@@ -1480,7 +1407,7 @@ func (d *PmemCSIDriver) getMetricsPorts(port int32) []corev1.ContainerPort {
 	}
 }
 
-func (d *PmemCSIDriver) getObjectMeta(name string, isClusterResource bool) metav1.ObjectMeta {
+func (d *pmemCSIDeployment) getObjectMeta(name string, isClusterResource bool) metav1.ObjectMeta {
 	meta := metav1.ObjectMeta{
 		Name: name,
 		OwnerReferences: []metav1.OwnerReference{

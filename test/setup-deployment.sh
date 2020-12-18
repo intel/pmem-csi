@@ -18,7 +18,6 @@ SSH="${CLUSTER_DIRECTORY}/ssh.0"
 KUBECTL="${SSH} kubectl" # Always use the kubectl installed in the cluster.
 KUBERNETES_VERSION="$(cat "$CLUSTER_DIRECTORY/kubernetes.version")"
 DEPLOYMENT_DIRECTORY="${REPO_DIRECTORY}/deploy/kubernetes-$KUBERNETES_VERSION${TEST_KUBERNETES_FLAVOR}"
-TEST_DRIVER_NAMESPACE=${TEST_DRIVER_NAMESPACE:-pmem-csi}
 case ${TEST_DEPLOYMENTMODE} in
     testing)
         deployment_suffix="/testing";;
@@ -42,15 +41,15 @@ DEPLOY=(
 echo "INFO: deploying from ${DEPLOYMENT_DIRECTORY}/${TEST_DEVICEMODE}${deployment_suffix}"
 
 # Generate certificates if not deploying in 'default' namespace.
-# Because the default certifictes in _work/pmem-ca/ are genereated
+# Because the default certificates in _work/pmem-ca/ are generated
 # for the default namespace, so we can reuse them for driver running
 # in the default namespace. For other namespaces we create new
-# certificates using the exisitng CA.
+# certificates using the existing CA.
 if [ ${TEST_DRIVER_NAMESPACE} != "default" ]; then
     CA_DIR="${REPO_DIRECTORY}/_work/pmem-ca"
     WORK_DIR="${CA_DIR}/${TEST_DRIVER_NAMESPACE}"
     if ! [ -d "${WORK_DIR}" ]; then
-        # Generate new certificates using exisitng CA
+        # Generate new certificates using existing CA
         PATH="${REPO_DIRECTORY}/_work/bin:$PATH" WORKDIR="${WORK_DIR}" CA="${CA_DIR}/ca" NS="${TEST_DRIVER_NAMESPACE}" ${TEST_DIRECTORY}/setup-ca.sh
     fi
     TEST_REGISTRY_CERT="${WORK_DIR}/pmem-registry.pem"
@@ -71,6 +70,8 @@ REGISTRY_KEY=$(read_key "${TEST_REGISTRY_KEY}")
 NODE_CERT=$(read_key "${TEST_NODE_CERT}")
 # -keyFile (same for all nodes)
 NODE_KEY=$(read_key "${TEST_NODE_KEY}")
+
+${KUBECTL} get ns ${TEST_DRIVER_NAMESPACE} 2>/dev/null >/dev/null || ${KUBECTL} create ns ${TEST_DRIVER_NAMESPACE}
 
 ${KUBECTL} apply -f - <<EOF
 apiVersion: v1

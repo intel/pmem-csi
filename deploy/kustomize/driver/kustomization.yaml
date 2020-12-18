@@ -1,3 +1,2 @@
 resources:
   - pmem-csi.yaml
-  - namespace.yaml

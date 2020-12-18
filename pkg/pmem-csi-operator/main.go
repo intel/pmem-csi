@@ -12,18 +12,18 @@ import (
 	"fmt"
 	"runtime"
 
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/klog/v2"
-
 	"github.com/intel/pmem-csi/pkg/apis"
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	"github.com/intel/pmem-csi/pkg/k8sutil"
+	"github.com/intel/pmem-csi/pkg/logger"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
 
 	"github.com/operator-framework/operator-lib/leader"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -39,8 +39,11 @@ func printVersion() {
 	klog.Info(fmt.Sprintf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH))
 }
 
-var driverImage string
-var startWebhook bool
+var (
+	driverImage  = flag.String("image", "", "docker container image used for deploying the operator.")
+	startWebhook = flag.Bool("webhook", false, "run conversion webhook server")
+	logFormat    = logger.NewFlag()
+)
 
 const (
 	// Default values used by OLM CA for webhook
@@ -51,15 +54,14 @@ const (
 )
 
 func init() {
-	klog.InitFlags(nil)
-	flag.StringVar(&driverImage, "image", "", "docker container image used for deploying the operator.")
-	flag.BoolVar(&startWebhook, "webhook", false, "run conversion webhook server")
+	// klog gets initialized by k8s.io/component-base/logs.
 
 	flag.Set("logtostderr", "true")
 }
 
 func Main() int {
 	flag.Parse()
+	logFormat.Apply()
 
 	printVersion()
 
@@ -70,7 +72,7 @@ func Main() int {
 		return 1
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
 	// Become the leader before proceeding
 	err = leader.Become(ctx, "pmem-csi-operator-lock")
 	if err != nil {
@@ -111,11 +113,11 @@ func Main() int {
 		return 1
 	}
 	// Setup all Controllers
-	if err := controller.AddToManager(mgr, controller.ControllerOptions{
+	if err := controller.AddToManager(ctx, mgr, controller.ControllerOptions{
 		Config:       mgr.GetConfig(),
 		Namespace:    namespace,
 		K8sVersion:   *ver,
-		DriverImage:  driverImage,
+		DriverImage:  *driverImage,
 		EventsClient: cs.CoreV1().Events(""),
 	}); err != nil {
 		pmemcommon.ExitError("Failed to add controller to manager: ", err)
@@ -124,7 +126,7 @@ func Main() int {
 
 	// Setup conversion webhooks
 
-	if startWebhook {
+	if *startWebhook {
 		if err := setupWebhookWithManager(mgr, &api.Deployment{
 			ObjectMeta: metav1.ObjectMeta{Name: "pmem-csi-operator"},
 		}); err != nil {
@@ -142,7 +144,7 @@ func Main() int {
 	}
 
 	list := &api.DeploymentList{}
-	if err := mgr.GetClient().List(context.TODO(), list); err != nil {
+	if err := mgr.GetClient().List(ctx, list); err != nil {
 		pmemcommon.ExitError("failed to get deployment list: %v", err)
 		return 1
 	}

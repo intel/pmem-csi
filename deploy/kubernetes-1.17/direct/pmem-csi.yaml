@@ -1,13 +1,6 @@
 # Generated with "make kustomize", do not edit!
 
 apiVersion: v1
-kind: Namespace
-metadata:
-  labels:
-    pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi
----
-apiVersion: v1
 kind: ServiceAccount
 metadata:
   labels:
@@ -244,6 +237,7 @@ spec:
       - command:
         - /usr/local/bin/pmem-csi-driver
         - -v=3
+        - -logging-format=text
         - -mode=controller
         - -endpoint=unix:///csi/csi-controller.sock
         - -registryEndpoint=tcp://0.0.0.0:10000
@@ -342,6 +336,7 @@ spec:
         - /usr/local/bin/pmem-csi-driver
         - -deviceManager=direct
         - -v=3
+        - -logging-format=text
         - -mode=node
         - -endpoint=unix:///csi/csi.sock
         - -nodeid=$(KUBE_NODE_NAME)

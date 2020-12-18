@@ -10,9 +10,7 @@
 
 # The directory containing setup-ca*.sh.
 : ${TEST_DIRECTORY:=$(dirname $(readlink -f $0))}
-
-: ${TEST_DRIVER_NAMESPACE:=pmem-csi}
-
+. ${TEST_CONFIG:-${TEST_DIRECTORY}/test-config.sh}
 
 tmpdir=`mktemp -d`
 trap 'rm -r $tmpdir' EXIT
@@ -38,6 +36,8 @@ REGISTRY_KEY=$(read_key "$tmpdir/pmem-registry-key.pem")
 NODE_CERT=$(read_key "$tmpdir/pmem-node-controller.pem")
 # -keyFile (same for all nodes)
 NODE_KEY=$(read_key "$tmpdir/pmem-node-controller-key.pem")
+
+kubectl get ns ${TEST_DRIVER_NAMESPACE} 2>/dev/null >/dev/null || kubectl create ns ${TEST_DRIVER_NAMESPACE}
 
 ${KUBECTL} apply -f - <<EOF
 apiVersion: v1

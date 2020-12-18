@@ -257,6 +257,8 @@ The klog.Info statements are used via the verbosity checker using the following 
 - klog.V(4) - Elevated verbosity messages.
 - klog.V(5) - Even more verbose messages, useful for debugging and issue resolving. This level is used in testing type of deployment examples.
 
+These are *not* the same levels as in the [Kubernetes logging conventions](https://github.com/kubernetes/community/blob/4eeba4d57bed01502cb09598a74d21671d4ee876/contributors/devel/sig-instrumentation/logging.md).
+
 There are also messages using klog.Warning, klog.Error and klog.Fatal, and their formatted counterparts.
 
 ## Performance and resource measurements

@@ -69,6 +69,12 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 			[]byte("-v=3"),
 			[]byte(fmt.Sprintf("-v=%d", deployment.Spec.LogLevel)))
 
+		if deployment.Spec.LogFormat != "" {
+			*yaml = bytes.ReplaceAll(*yaml,
+				[]byte("-logging-format=text"),
+				[]byte(fmt.Sprintf("-logging-format=%s", deployment.Spec.LogFormat)))
+		}
+
 		*yaml = pmemImage.ReplaceAll(*yaml, []byte("image: "+deployment.Spec.Image))
 	}
 
@@ -231,12 +237,6 @@ func loadObjects(kubernetes version.Version, deviceMode api.DeviceMode,
 		_, _, err := deserializer.Decode(item, nil, &obj)
 		if err != nil {
 			return nil, fmt.Errorf("decode item %q from file %q: %v", item, path, err)
-		}
-		if obj.GetKind() == "Namespace" {
-			// Though the driver deployment manifests have Namespace object defined
-			// but, Namespaces are not owned by PMEM-CSI Deployments. So we can
-			// ignore.
-			continue
 		}
 		if patchUnstructured != nil {
 			patchUnstructured(&obj)

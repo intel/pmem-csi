@@ -39,6 +39,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/kubernetes/test/e2e/framework"
+	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	e2epv "k8s.io/kubernetes/test/e2e/framework/pv"
 	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -292,6 +293,38 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			// operator image should be the driver image
 			deployment.Spec.Image = operatorPod.Spec.Containers[0].Image
 			validateDriver(deployment)
+		})
+
+		Context("logging format", func() {
+			cases := map[string]api.LogFormat{
+				"default": "",
+				"text":    api.LogFormatText,
+				"JSON":    api.LogFormatJSON,
+			}
+			for name, format := range cases {
+				format := format
+				It(name, func() {
+					deployment := getDeployment("test-deployment-driver-image")
+					deployment.Spec.Image = ""
+					deployment.Spec.PMEMPercentage = 50
+					deployment.Spec.LogFormat = format
+
+					deployment = deploy.CreateDeploymentCR(f, deployment)
+					defer deploy.DeleteDeploymentCR(f, deployment.Name)
+
+					validateDriver(deployment)
+
+					output, err := e2epod.GetPodLogs(f.ClientSet, d.Namespace, deployment.Name+"-controller-0", "pmem-driver")
+					framework.ExpectNoError(err, "get pod logs for controller-0")
+
+					if format == api.LogFormatJSON {
+						Expect(output).To(MatchRegexp(`\{"ts":\d+.\d+,"msg":"Version:`), "PMEM-CSI driver output in JSON")
+					} else {
+						Expect(output).To(MatchRegexp(`I.*main.go:.*Version: `), "PMEM-CSI driver output in glog format")
+					}
+					framework.Logf("got pod log: %s", output)
+				})
+			}
 		})
 
 		It("shall be able to edit running deployment", func() {
@@ -904,6 +937,36 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 								framework.ExpectNoError(err, "valid device mode should work")
 							} else {
 								framework.ExpectError(err, "invalid device mode should be rejected")
+							}
+						})
+					}
+				})
+
+				Context("LogFormat", func() {
+					if gvr == deploy.AlphaDeploymentResource {
+						// Field not part of API.
+						return
+					}
+
+					cases := map[string]bool{
+						string(api.LogFormatText): true,
+						string(api.LogFormatJSON): true,
+						"noSuchMode":              false,
+					}
+					for format, valid := range cases {
+						format, valid := format, valid
+						It(format, func() {
+							dep := getDeployment("format")
+							dep.Spec.LogFormat = api.LogFormat(format)
+							unstructured := toUnstructured(&dep)
+							_, err := f.DynamicClient.Resource(gvr).Create(context.Background(), unstructured, metav1.CreateOptions{})
+							if err == nil {
+								defer deploy.DeleteDeploymentCR(f, dep.Name)
+							}
+							if valid {
+								framework.ExpectNoError(err, "valid log format should work")
+							} else {
+								framework.ExpectError(err, "invalid log format should be rejected")
 							}
 						})
 					}
