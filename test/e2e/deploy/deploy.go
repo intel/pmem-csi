@@ -811,7 +811,9 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 			}
 			return
 		}
-		framework.Logf("have %s PMEM-CSI deployment, want %s -> delete existing deployment", running.Name(), deployment.Name())
+		framework.Logf("have %s PMEM-CSI deployment in namespace %s, want %s in namespace %s-> delete existing deployment",
+			running.Name(), running.Namespace,
+			deployment.Name(), deployment.Namespace)
 
 		if running.HasOLM {
 			cmd := exec.Command("test/stop-operator.sh", "-olm")
