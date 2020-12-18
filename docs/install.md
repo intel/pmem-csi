@@ -399,6 +399,17 @@ To get the source code, use:
 $ git clone https://github.com/intel/pmem-csi
 ```
 
+- **Choose a namespace**
+
+By default, setting up certificates as described in the next step will
+automatically create a `pmem-csi` namespace if it does not exist yet.
+Later the driver will be installed in that namespace.
+
+This can be changed by:
+- setting the `TEST_DRIVER_NAMESPACE` env variable to a different name
+  when invoking `setup-ca-kubernetes.sh` and
+- modifying the deployment with kustomize as explained below.
+
 - **Set up certificates**
 
 Certificates are required as explained in [Security](design.md#security).
@@ -463,7 +474,6 @@ for `kubectl kustomize`. For example:
      bases:
        - ../deploy/kubernetes-1.17/lvm
      EOF
-     $ kubectl create namespace pmem-driver
      $ kubectl create --kustomize my-pmem-csi-deployment
      ```
 
