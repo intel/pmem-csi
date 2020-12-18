@@ -18,7 +18,6 @@ SSH="${CLUSTER_DIRECTORY}/ssh.0"
 KUBECTL="${SSH} kubectl" # Always use the kubectl installed in the cluster.
 KUBERNETES_VERSION="$(cat "$CLUSTER_DIRECTORY/kubernetes.version")"
 DEPLOYMENT_DIRECTORY="${REPO_DIRECTORY}/deploy/kubernetes-$KUBERNETES_VERSION${TEST_KUBERNETES_FLAVOR}"
-TEST_DRIVER_NAMESPACE=${TEST_DRIVER_NAMESPACE:-pmem-csi}
 case ${TEST_DEPLOYMENTMODE} in
     testing)
         deployment_suffix="/testing";;

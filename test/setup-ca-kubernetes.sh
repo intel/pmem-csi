@@ -10,9 +10,7 @@
 
 # The directory containing setup-ca*.sh.
 : ${TEST_DIRECTORY:=$(dirname $(readlink -f $0))}
-
-: ${TEST_DRIVER_NAMESPACE:=pmem-csi}
-
+. ${TEST_CONFIG:-${TEST_DIRECTORY}/test-config.sh}
 
 tmpdir=`mktemp -d`
 trap 'rm -r $tmpdir' EXIT
