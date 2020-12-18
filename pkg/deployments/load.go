@@ -238,12 +238,6 @@ func loadObjects(kubernetes version.Version, deviceMode api.DeviceMode,
 		if err != nil {
 			return nil, fmt.Errorf("decode item %q from file %q: %v", item, path, err)
 		}
-		if obj.GetKind() == "Namespace" {
-			// Though the driver deployment manifests have Namespace object defined
-			// but, Namespaces are not owned by PMEM-CSI Deployments. So we can
-			// ignore.
-			continue
-		}
 		if patchUnstructured != nil {
 			patchUnstructured(&obj)
 		}

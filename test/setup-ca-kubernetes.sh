@@ -37,6 +37,8 @@ NODE_CERT=$(read_key "$tmpdir/pmem-node-controller.pem")
 # -keyFile (same for all nodes)
 NODE_KEY=$(read_key "$tmpdir/pmem-node-controller-key.pem")
 
+kubectl get ns ${TEST_DRIVER_NAMESPACE} 2>/dev/null >/dev/null || kubectl create ns ${TEST_DRIVER_NAMESPACE}
+
 ${KUBECTL} apply -f - <<EOF
 apiVersion: v1
 kind: Secret

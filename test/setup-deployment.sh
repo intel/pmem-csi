@@ -71,6 +71,8 @@ NODE_CERT=$(read_key "${TEST_NODE_CERT}")
 # -keyFile (same for all nodes)
 NODE_KEY=$(read_key "${TEST_NODE_KEY}")
 
+${KUBECTL} get ns ${TEST_DRIVER_NAMESPACE} 2>/dev/null >/dev/null || ${KUBECTL} create ns ${TEST_DRIVER_NAMESPACE}
+
 ${KUBECTL} apply -f - <<EOF
 apiVersion: v1
 kind: Secret

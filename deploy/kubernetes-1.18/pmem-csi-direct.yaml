@@ -1,13 +1,6 @@
 # Generated with "make kustomize", do not edit!
 
 apiVersion: v1
-kind: Namespace
-metadata:
-  labels:
-    pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi
----
-apiVersion: v1
 kind: ServiceAccount
 metadata:
   labels:
