@@ -14,7 +14,12 @@ webhooks:
       - key: pmem-csi.intel.com/webhook
         operator: NotIn
         values: ["ignore"]
-    failurePolicy: Fail
+    # For pods with PMEM volumes using late binding, not activating the
+    # scheduler extension is okayish (but see https://github.com/kubernetes-csi/external-provisioner/issues/544).
+    # It's worse for CSI ephemeral volumes because there is no recovery.
+    # Nonetheless, failing pod scheduling entirely when PMEM-CSI is down
+    # seems worse, so we let the scheduler continue despite failures.
+    failurePolicy: Ignore
     clientConfig:
       service:
         name: pmem-csi-scheduler
