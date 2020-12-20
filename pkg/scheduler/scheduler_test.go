@@ -345,7 +345,7 @@ func TestScheduler(t *testing.T) {
 			},
 			nodes: []string{nodeA},
 			expectedFailures: map[string]string{
-				nodeA: "checking for capacity: retrieve capacity: node node-A unknown",
+				nodeA: "retrieve capacity: node node-A unknown",
 			},
 		},
 		"one volume, one node, enough capacity": {
