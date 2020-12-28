@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	alphaapi "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	"github.com/intel/pmem-csi/pkg/exec"
 	"github.com/intel/pmem-csi/pkg/k8sutil"
@@ -56,17 +55,6 @@ func getDeployment(name string) api.Deployment {
 			Name: name,
 		},
 		Spec: api.DeploymentSpec{
-			Image: dummyImage,
-		},
-	}
-}
-
-func getAlphaDeployment(name string) alphaapi.Deployment {
-	return alphaapi.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
-		Spec: alphaapi.DeploymentSpec{
 			Image: dummyImage,
 		},
 	}
@@ -870,8 +858,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 	Context("validation", func() {
 		versions := map[string]schema.GroupVersionResource{
-			"v1alpha1": deploy.AlphaDeploymentResource,
-			"v1beta1":  deploy.DeploymentResource,
+			"v1beta1": deploy.DeploymentResource,
 		}
 		for name, gvr := range versions {
 			gvr := gvr
@@ -942,11 +929,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				})
 
 				Context("LogFormat", func() {
-					if gvr == deploy.AlphaDeploymentResource {
-						// Field not part of API.
-						return
-					}
-
 					cases := map[string]bool{
 						string(api.LogFormatText): true,
 						string(api.LogFormatJSON): true,

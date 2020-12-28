@@ -17,7 +17,6 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 
 	"github.com/intel/pmem-csi/pkg/apis"
-	alphaapi "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 
 	"github.com/onsi/gomega"
@@ -27,11 +26,6 @@ var (
 	DeploymentResource = schema.GroupVersionResource{
 		Group:    api.SchemeGroupVersion.Group,
 		Version:  api.SchemeGroupVersion.Version,
-		Resource: "deployments",
-	}
-	AlphaDeploymentResource = schema.GroupVersionResource{
-		Group:    alphaapi.SchemeGroupVersion.Group,
-		Version:  alphaapi.SchemeGroupVersion.Version,
 		Resource: "deployments",
 	}
 	Scheme = runtime.NewScheme()
