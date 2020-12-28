@@ -72,9 +72,9 @@ rules:
 - apiGroups:
   - pmem-csi.intel.com
   resources:
-  - deployments
-  - deployments/status
-  - deployments/finalizers
+  - pmemcsideployments
+  - pmemcsideployments/status
+  - pmemcsideployments/finalizers
   verbs:
   - '*'
 ---

@@ -106,7 +106,7 @@ func AllObjectLists() []*unstructured.UnstructuredList {
 // pmemCSIDeployment represents the desired state of a PMEM-CSI driver
 // deployment.
 type pmemCSIDeployment struct {
-	*api.Deployment
+	*api.PmemCSIDeployment
 	// operator's namespace used for creating sub-resources
 	namespace  string
 	k8sVersion version.Version
@@ -577,7 +577,7 @@ func (d *pmemCSIDeployment) handleEvent(ctx context.Context, metaData metav1.Obj
 		if _, err := d.redeploy(ctx, r, handler); err != nil {
 			return fmt.Errorf("failed to redeploy %s: %v", name, err)
 		}
-		if err := r.patchDeploymentStatus(d.Deployment, client.MergeFrom(org)); err != nil {
+		if err := r.patchDeploymentStatus(d.PmemCSIDeployment, client.MergeFrom(org)); err != nil {
 			return fmt.Errorf("failed to update deployment CR status: %v", err)
 		}
 	}

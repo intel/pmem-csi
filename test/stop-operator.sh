@@ -56,7 +56,7 @@ function delete_operator() {
     ${KUBECTL} delete -f - 2>&1 | grep -v NotFound || true
 
   echo "Deleting CRD..."
-  ${KUBECTL} delete crd deployments.pmem-csi.intel.com
+  ${KUBECTL} delete crd/pmemcsideployments.pmem-csi.intel.com
 }
 
 deploy_method=yaml

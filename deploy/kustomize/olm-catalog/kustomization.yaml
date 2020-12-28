@@ -2,8 +2,8 @@ bases:
 - ../operator
 
 resources:
-- ../../common/pmem-csi.intel.com_v1beta1_deployment_cr.yaml
-- ../../crd/pmem-csi.intel.com_deployments.yaml
+- ../../common/pmem-csi.intel.com_v1beta1_pmemcsideployment_cr.yaml
+- ../../crd/pmem-csi.intel.com_pmemcsideployments.yaml
 
 images:
 - name: intel/pmem-csi-driver

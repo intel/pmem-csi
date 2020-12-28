@@ -7,14 +7,16 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.3.0
   creationTimestamp: null
-  name: deployments.pmem-csi.intel.com
+  name: pmemcsideployments.pmem-csi.intel.com
 spec:
   group: pmem-csi.intel.com
   names:
-    kind: Deployment
-    listKind: DeploymentList
-    plural: deployments
-    singular: deployment
+    kind: PmemCSIDeployment
+    listKind: PmemCSIDeploymentList
+    plural: pmemcsideployments
+    shortNames:
+    - pcd
+    singular: pmemcsideployment
   scope: Cluster
   versions:
   - additionalPrinterColumns:
@@ -36,7 +38,7 @@ spec:
     name: v1beta1
     schema:
       openAPIV3Schema:
-        description: Deployment is the Schema for the deployments API
+        description: PmemCSIDeployment is the Schema for the deployments API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation

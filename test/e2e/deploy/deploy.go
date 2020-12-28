@@ -352,7 +352,7 @@ func RemoveObjects(c *Cluster, deployment *Deployment) error {
 		// restarting things that we want removed.
 		if list, err := c.dc.Resource(DeploymentResource).List(context.Background(), filter); !failure(err) && list != nil {
 			for _, object := range list.Items {
-				deployment := api.Deployment{}
+				deployment := api.PmemCSIDeployment{}
 				err := Scheme.Convert(&object, &deployment, nil)
 				framework.ExpectNoError(err, "convert %v to PMEM-CSI deployment", object)
 				del(deployment.ObjectMeta, deployment, func() error {
@@ -923,13 +923,13 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 
 // GetDriverDeployment returns the spec for the driver deployment that is used
 // for deployments like operator-lvm-production.
-func (d *Deployment) GetDriverDeployment() api.Deployment {
-	return api.Deployment{
+func (d *Deployment) GetDriverDeployment() api.PmemCSIDeployment {
+	return api.PmemCSIDeployment{
 		// TypeMeta is needed because
 		// DefaultUnstructuredConverter does not add it for us. Is there a better way?
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: api.SchemeGroupVersion.String(),
-			Kind:       "Deployment",
+			Kind:       "PmemCSIDeployment",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "pmem-csi",

@@ -35,7 +35,7 @@ var _ = Describe("Operator", func() {
 
 	Context("API", func() {
 		It("shall set defaults for empty deployment", func() {
-			d := api.Deployment{}
+			d := api.PmemCSIDeployment{}
 			err := d.EnsureDefaults("")
 			Expect(err).ShouldNot(HaveOccurred(), "ensure defaults")
 
@@ -80,7 +80,7 @@ var _ = Describe("Operator", func() {
 		})
 
 		It("shall be able to set values", func() {
-			yaml := `kind: Deployment
+			yaml := `kind: PmemCSIDeployment
 apiVersion: pmem-csi.intel.com/v1beta1
 metadata:
   name: test-deployment
@@ -114,7 +114,7 @@ spec:
 			Expect(err).Should(BeNil(), "Failed to parse deployment")
 			Expect(obj).ShouldNot(BeNil(), "Nil deployment object")
 
-			d := obj.(*api.Deployment)
+			d := obj.(*api.PmemCSIDeployment)
 			err = d.EnsureDefaults("")
 			Expect(err).ShouldNot(HaveOccurred(), "ensure defaults")
 
@@ -148,7 +148,7 @@ spec:
 
 		It("should have valid json schema", func() {
 
-			crdFile := os.Getenv("REPO_ROOT") + "/deploy/crd/pmem-csi.intel.com_deployments.yaml"
+			crdFile := os.Getenv("REPO_ROOT") + "/deploy/crd/pmem-csi.intel.com_pmemcsideployments.yaml"
 			data, err := ioutil.ReadFile(crdFile)
 			Expect(err).ShouldNot(HaveOccurred(), "load crd data")
 			crd := &apiextensions.CustomResourceDefinition{}

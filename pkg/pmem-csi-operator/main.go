@@ -121,7 +121,7 @@ func Main() int {
 		return 1
 	}
 
-	list := &api.DeploymentList{}
+	list := &api.PmemCSIDeploymentList{}
 	if err := mgr.GetClient().List(ctx, list); err != nil {
 		pmemcommon.ExitError("failed to get deployment list: %v", err)
 		return 1

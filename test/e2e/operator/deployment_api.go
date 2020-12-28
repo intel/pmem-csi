@@ -49,8 +49,8 @@ import (
 // because these tests do not actually need a running driver.
 const dummyImage = "unexisting/pmem-csi-driver"
 
-func getDeployment(name string) api.Deployment {
-	return api.Deployment{
+func getDeployment(name string) api.PmemCSIDeployment {
+	return api.PmemCSIDeployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
@@ -121,7 +121,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		cancel()
 	})
 
-	validateDriver := func(deployment api.Deployment, what ...interface{}) {
+	validateDriver := func(deployment api.PmemCSIDeployment, what ...interface{}) {
 		framework.Logf("waiting for expected driver deployment %s", deployment.Name)
 		if what == nil {
 			what = []interface{}{"validate driver"}
@@ -150,7 +150,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		}
 	}
 
-	validateEvents := func(dep *api.Deployment, expectedEvents []string, what ...interface{}) {
+	validateEvents := func(dep *api.PmemCSIDeployment, expectedEvents []string, what ...interface{}) {
 		if what == nil {
 			what = []interface{}{"validate events"}
 		}
@@ -187,7 +187,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 	Context("deployment", func() {
 
-		tests := map[string]api.Deployment{
+		tests := map[string]api.PmemCSIDeployment{
 			"with defaults": getDeployment("test-deployment-with-defaults"),
 			"with explicit values": {
 				ObjectMeta: metav1.ObjectMeta{
@@ -261,7 +261,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			// Run in-cluster kubectl from master node
 			ssh := os.Getenv("REPO_ROOT") + "/_work/" + os.Getenv("CLUSTER") + "/ssh.0"
-			out, err := exec.RunCommand(ssh, "kubectl", "get", "deployments.pmem-csi.intel.com", "--no-headers")
+			out, err := exec.RunCommand(ssh, "kubectl", "get", "pmemcsideployments.pmem-csi.intel.com", "--no-headers")
 			Expect(err).ShouldNot(HaveOccurred(), "kubectl get: %v", out)
 			Expect(out).Should(MatchRegexp(`%s\s+%s\s+.*"?%s"?:"?%s"?.*\s+%s\s+%s\s+[0-9]+(s|m)`,
 				d.Name, d.Spec.DeviceMode, lblKey, lblValue, d.Spec.Image, d.Status.Phase), "fields mismatch")
@@ -559,7 +559,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					postSwitch := postSwitch
 					It(name, func() {
 						driverName := ctx + "-" + strings.Replace(name, " ", "-", -1)
-						deployment := api.Deployment{
+						deployment := api.PmemCSIDeployment{
 							ObjectMeta: metav1.ObjectMeta{
 								Name: driverName,
 							},
@@ -623,7 +623,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			testcase := testcase
 			Context(testcase.Name, func() {
 				testIt := func(restart bool) {
-					deployment := *testcase.Deployment.DeepCopyObject().(*api.Deployment)
+					deployment := *testcase.Deployment.DeepCopyObject().(*api.PmemCSIDeployment)
 
 					// Use fake images to prevent pods from actually starting.
 					deployment.Spec.Image = dummyImage
@@ -674,65 +674,65 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 	Context("recover", func() {
 		Context("deleted sub-resources", func() {
-			tests := map[string]func(*api.Deployment) apiruntime.Object{
-				"registry secret": func(dep *api.Deployment) apiruntime.Object {
+			tests := map[string]func(*api.PmemCSIDeployment) apiruntime.Object{
+				"registry secret": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					return &corev1.Secret{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: dep.RegistrySecretName(), Namespace: d.Namespace,
 						},
 					}
 				},
-				"node secret": func(dep *api.Deployment) apiruntime.Object {
+				"node secret": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					return &corev1.Secret{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.NodeSecretName(), Namespace: d.Namespace},
 					}
 				},
-				"service account": func(dep *api.Deployment) apiruntime.Object {
+				"service account": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					return &corev1.ServiceAccount{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ServiceAccountName(), Namespace: d.Namespace},
 					}
 				},
-				"controller service": func(dep *api.Deployment) apiruntime.Object {
+				"controller service": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					return &corev1.Service{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ControllerServiceName(), Namespace: d.Namespace},
 					}
 				},
-				"metrics service": func(dep *api.Deployment) apiruntime.Object {
+				"metrics service": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					return &corev1.Service{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.MetricsServiceName(), Namespace: d.Namespace},
 					}
 				},
-				"provisioner role": func(dep *api.Deployment) apiruntime.Object {
+				"provisioner role": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					return &rbacv1.Role{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerRoleName(), Namespace: d.Namespace},
 					}
 				},
-				"provisioner role binding": func(dep *api.Deployment) apiruntime.Object {
+				"provisioner role binding": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					return &rbacv1.RoleBinding{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerRoleBindingName(), Namespace: d.Namespace},
 					}
 				},
-				"provisioner cluster role": func(dep *api.Deployment) apiruntime.Object {
+				"provisioner cluster role": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					return &rbacv1.ClusterRole{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerClusterRoleName()},
 					}
 				},
-				"provisioner cluster role binding": func(dep *api.Deployment) apiruntime.Object {
+				"provisioner cluster role binding": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					return &rbacv1.ClusterRoleBinding{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerClusterRoleBindingName()},
 					}
 				},
-				"csi driver": func(dep *api.Deployment) apiruntime.Object {
+				"csi driver": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					return &storagev1beta1.CSIDriver{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.GetName()},
 					}
 				},
-				"controller driver": func(dep *api.Deployment) apiruntime.Object {
+				"controller driver": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					return &appsv1.StatefulSet{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ControllerDriverName(), Namespace: d.Namespace},
 					}
 				},
-				"node driver": func(dep *api.Deployment) apiruntime.Object {
+				"node driver": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					return &appsv1.DaemonSet{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.NodeDriverName(), Namespace: d.Namespace},
 					}
@@ -768,8 +768,8 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		})
 
 		Context("conflicting update", func() {
-			tests := map[string]func(dep *api.Deployment) apiruntime.Object{
-				"controller": func(dep *api.Deployment) apiruntime.Object {
+			tests := map[string]func(dep *api.PmemCSIDeployment) apiruntime.Object{
+				"controller": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					obj := &appsv1.StatefulSet{}
 					key := runtime.ObjectKey{Name: dep.ControllerDriverName(), Namespace: d.Namespace}
 					EventuallyWithOffset(1, func() error {
@@ -784,7 +784,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					}
 					return obj
 				},
-				"node driver": func(dep *api.Deployment) apiruntime.Object {
+				"node driver": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					obj := &appsv1.DaemonSet{}
 					key := runtime.ObjectKey{Name: dep.NodeDriverName(), Namespace: d.Namespace}
 					EventuallyWithOffset(1, func() error {
@@ -799,7 +799,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					}
 					return obj
 				},
-				"metrics service": func(dep *api.Deployment) apiruntime.Object {
+				"metrics service": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					obj := &corev1.Service{}
 					key := runtime.ObjectKey{Name: dep.MetricsServiceName(), Namespace: d.Namespace}
 					EventuallyWithOffset(1, func() error {
@@ -815,7 +815,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					}
 					return obj
 				},
-				"controller service": func(dep *api.Deployment) apiruntime.Object {
+				"controller service": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					obj := &corev1.Service{}
 					key := runtime.ObjectKey{Name: dep.ControllerServiceName(), Namespace: d.Namespace}
 					EventuallyWithOffset(1, func() error {
@@ -860,18 +860,22 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		versions := map[string]schema.GroupVersionResource{
 			"v1beta1": deploy.DeploymentResource,
 		}
-		for name, gvr := range versions {
+		for version, gvr := range versions {
 			gvr := gvr
-			Context(name, func() {
+			Context(version, func() {
 				toUnstructured := func(in interface{}) *unstructured.Unstructured {
 					var out unstructured.Unstructured
 					err := deploy.Scheme.Convert(in, &out, nil)
 					framework.ExpectNoError(err, "convert to unstructured deployment")
-					out.SetGroupVersionKind(schema.GroupVersionKind{
+					gvk := schema.GroupVersionKind{
 						Group:   gvr.Group,
 						Version: gvr.Version,
 						Kind:    "Deployment",
-					})
+					}
+					if version == "v1beta1" {
+						gvk.Kind = "PmemCSIDeployment"
+					}
+					out.SetGroupVersionKind(gvk)
 					return &out
 				}
 
@@ -1032,7 +1036,7 @@ func startOperator(c *deploy.Cluster, d *deploy.Deployment) {
 	framework.Logf("Operator is restored!")
 }
 
-func switchDeploymentMode(c *deploy.Cluster, f *framework.Framework, depName, ns string, mode api.DeviceMode) api.Deployment {
+func switchDeploymentMode(c *deploy.Cluster, f *framework.Framework, depName, ns string, mode api.DeviceMode) api.PmemCSIDeployment {
 	podNames := []string{}
 
 	for i := 1; i < c.NumNodes(); i++ {

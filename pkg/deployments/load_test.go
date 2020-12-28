@@ -46,7 +46,7 @@ func TestLoadObjects(t *testing.T) {
 			// currently run as part of test/e2e/operator API testing, with
 			// the code in controller_driver.go serving as reference.
 			namespace := "kube-system"
-			deployment := api.Deployment{
+			deployment := api.PmemCSIDeployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "pmem-csi.example.org",
 				},

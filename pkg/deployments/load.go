@@ -33,7 +33,7 @@ var nameRegex = regexp.MustCompile(`(name|app|secretName|serviceName|serviceAcco
 // LoadAndCustomizeObjects reads all objects stored in a pmem-csi.yaml reference file
 // and updates them on-the-fly according to the deployment spec, namespace and name.
 func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMode,
-	namespace string, deployment api.Deployment) ([]unstructured.Unstructured, error) {
+	namespace string, deployment api.PmemCSIDeployment) ([]unstructured.Unstructured, error) {
 
 	// Conceptually this function is similar to calling "kustomize" for
 	// our deployments. But because we controll the input, we can do some
@@ -124,7 +124,7 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 	return loadObjects(kubernetes, deviceMode, patchYAML, patchUnstructured)
 }
 
-func patchPodTemplate(obj *unstructured.Unstructured, deployment api.Deployment, resources map[string]*corev1.ResourceRequirements) error {
+func patchPodTemplate(obj *unstructured.Unstructured, deployment api.PmemCSIDeployment, resources map[string]*corev1.ResourceRequirements) error {
 	if resources == nil {
 		return nil
 	}
