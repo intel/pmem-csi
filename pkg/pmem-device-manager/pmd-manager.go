@@ -3,7 +3,7 @@ package pmdmanager
 import (
 	"fmt"
 
-	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 )
 
 const (

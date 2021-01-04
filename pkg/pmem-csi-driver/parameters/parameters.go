@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
