@@ -75,13 +75,12 @@ function deploy_using_olm() {
 }
 
 function deploy_using_yaml() {
-  crd=${REPO_DIRECTORY}/deploy/crd/pmem-csi.intel.com_deployments_webhook.yaml
+  crd=${REPO_DIRECTORY}/deploy/crd/pmem-csi.intel.com_deployments.yaml
   echo "Deploying '${crd}'..."
-  sed -e "s;\(namespace: \)pmem-csi$;\1${TEST_OPERATOR_NAMESPACE};g" \
-      -e "s;\(cert-manager.io/inject-ca-from: \)pmem-csi;\1${TEST_OPERATOR_NAMESPACE};g" ${crd} | ${SSH} kubectl apply -f -
+  sed -e "s;\(namespace: \)pmem-csi$;\1${TEST_OPERATOR_NAMESPACE};g" ${crd} | ${SSH} kubectl apply -f -
 
   DEPLOY_DIRECTORY="${REPO_DIRECTORY}/deploy"
-  deploy="${DEPLOY_DIRECTORY}/operator/pmem-csi-operator-webhook.yaml"
+  deploy="${DEPLOY_DIRECTORY}/operator/pmem-csi-operator.yaml"
   echo "Deploying '${deploy}'..."
 
   if [ ! -f "$deploy" ]; then

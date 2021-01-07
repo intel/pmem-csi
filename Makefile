@@ -183,7 +183,6 @@ KUSTOMIZE += deploy/common/pmem-storageclass-xfs.yaml=deploy/kustomize/storagecl
 KUSTOMIZE += deploy/common/pmem-storageclass-cache.yaml=deploy/kustomize/storageclass-cache
 KUSTOMIZE += deploy/common/pmem-storageclass-late-binding.yaml=deploy/kustomize/storageclass-late-binding
 KUSTOMIZE += deploy/operator/pmem-csi-operator.yaml=deploy/kustomize/operator
-KUSTOMIZE += deploy/operator/pmem-csi-operator-webhook.yaml=deploy/kustomize/operator-webhook
 
 # Special one-off deployment with device mode = fake.
 KUSTOMIZE += deploy/kubernetes-1.19/pmem-csi-fake.yaml=deploy/kustomize/kubernetes-base-fake

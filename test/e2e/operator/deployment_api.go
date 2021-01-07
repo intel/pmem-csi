@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"reflect"
 	"strings"
 	"time"
 
@@ -973,125 +972,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				})
 			})
 		}
-	})
-
-	Context("conversion", func() {
-		It("from alpha with default values", func() {
-			dep := getDeployment("alpha-default-values")
-			alphaDep := getAlphaDeployment("alpha-default-values")
-			deploy.CreateAlphaDeploymentCR(f, alphaDep)
-			defer deploy.DeleteDeploymentCR(f, alphaDep.Name)
-
-			// Expect the same spec to be returned for the
-			// stored CR, regardless of the version that
-			// is used to retrieve it.
-			alphaCR := deploy.GetAlphaDeploymentCR(f, dep.Name)
-			cr := deploy.GetDeploymentCR(f, dep.Name)
-			Expect(alphaCR).ShouldNot(BeNil(), "get alpha CR")
-			Expect(cr).ShouldNot(BeNil(), "get current CR")
-			Expect(alphaCR.Spec).Should(BeEquivalentTo(alphaDep.Spec), "alpha CR spec mismatch")
-			Expect(cr.Spec).Should(BeEquivalentTo(dep.Spec), "current CR spec mismatch")
-			Expect(alphaCR.Status).Should(BeEquivalentTo(cr.Status), "status mismatch")
-		})
-		It("from current version with default values", func() {
-			dep := getDeployment("alpha-default-values")
-			alphaDep := getAlphaDeployment("alpha-default-values")
-			deploy.CreateDeploymentCR(f, dep)
-			defer deploy.DeleteDeploymentCR(f, alphaDep.Name)
-
-			// Expect the same spec to be returned for the
-			// stored CR, regardless of the version that
-			// is used to retrieve it.
-			alphaCR := deploy.GetAlphaDeploymentCR(f, dep.Name)
-			cr := deploy.GetDeploymentCR(f, dep.Name)
-			Expect(alphaCR).ShouldNot(BeNil(), "get alpha CR")
-			Expect(cr).ShouldNot(BeNil(), "get current CR")
-			Expect(alphaCR.Spec).Should(BeEquivalentTo(alphaDep.Spec), "alpha CR spec mismatch")
-			Expect(cr.Spec).Should(BeEquivalentTo(dep.Spec), "current CR spec mismatch")
-			Expect(alphaCR.Status).Should(BeEquivalentTo(cr.Status), "status mismatch")
-		})
-		It("with explicit values", func() {
-			alphaDep := alphaapi.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "explict-values",
-				},
-				Spec: alphaapi.DeploymentSpec{
-					Image:              dummyImage,
-					PullPolicy:         corev1.PullAlways,
-					ProvisionerImage:   "no-such-provisioner",
-					NodeRegistrarImage: "no-such-registrar",
-					NodeResources: &corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("10m"),
-							corev1.ResourceMemory: resource.MustParse("25Mi"),
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("100m"),
-							corev1.ResourceMemory: resource.MustParse("50Mi"),
-						},
-					},
-					ControllerResources: &corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("20m"),
-							corev1.ResourceMemory: resource.MustParse("50Mi"),
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("200m"),
-							corev1.ResourceMemory: resource.MustParse("100Mi"),
-						},
-					},
-					DeviceMode:     alphaapi.DeviceModeDirect,
-					LogLevel:       5,
-					NodeSelector:   map[string]string{"no-such-label": "no-such-key"},
-					PMEMPercentage: 99,
-					Labels:         map[string]string{"app": "explicit"},
-					KubeletDir:     "/tmp",
-				},
-			}
-			deploy.CreateAlphaDeploymentCR(f, alphaDep)
-
-			deployment := deploy.GetDeploymentCR(f, alphaDep.Name)
-
-			if d.HasOLM {
-				// OLM not yet support conversion webhooks, hence
-				// explicit conversion of version incompatible fields
-				// is not supported and they get ignored in default
-				// conversion provided by the API server.
-				alphaDep.Spec.NodeResources = nil
-				alphaDep.Spec.ControllerResources = nil
-			}
-			Expect(deployment.Spec.NodeDriverResources).Should(BeEquivalentTo(alphaDep.Spec.NodeResources), "node driver resources")
-			Expect(deployment.Spec.ControllerDriverResources).Should(BeEquivalentTo(alphaDep.Spec.ControllerResources), "controller driver resources")
-
-			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-
-			// Expect the same spec to be returned for the
-			// stored CR, regardless of the version that
-			// is used to retrieve it.
-			alphaCR := deploy.GetAlphaDeploymentCR(f, deployment.Name)
-			cr := deploy.GetDeploymentCR(f, deployment.Name)
-			Expect(alphaCR).ShouldNot(BeNil(), "get alpha CR")
-			Expect(alphaCR.Spec).Should(BeEquivalentTo(alphaDep.Spec), "alpha CR spec mismatch")
-			Expect(alphaCR.Status).Should(BeEquivalentTo(cr.Status), "status mismatch")
-
-			// We can also compare the full spec by iterating over all fields. Those that have no match
-			// must be blanked out first.
-			// BeEquivalentTo cannot be used here because the structs cannot be converted into each other.
-			alphaDep.Spec.NodeResources = nil
-			alphaDep.Spec.ControllerResources = nil
-			alphaV := reflect.ValueOf(alphaDep.Spec)
-			alphaType := reflect.TypeOf(alphaDep.Spec)
-			v := reflect.ValueOf(cr.Spec)
-			for i := 0; i < alphaType.NumField(); i++ {
-				name := alphaType.Field(i).Name
-				actual := v.FieldByName(name)
-				if actual.Kind() == reflect.Invalid {
-					// Zero value, ignore the field.
-					continue
-				}
-				Expect(actual.Interface()).Should(BeEquivalentTo(alphaV.FieldByName(name).Interface()), "current CR field %s mismatch", name)
-			}
-		})
 	})
 })
 
