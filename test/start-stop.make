@@ -9,20 +9,10 @@ _work/bin/govm: _work/govm_$(GOVM_VERSION)_Linux_amd64.tar.gz
 	tar zxf $< -C _work/bin/
 	touch $@
 
-# cert manager is used to provide certificates. It replaces the former
-# home-grown solution with cssfl.
-CERT_MANAGER_VERSION=v1.0.4
-_work/cert-manager-$(CERT_MANAGER_VERSION).yaml:
-	mkdir -p $(@D)
-	curl -L -o $@ https://github.com/jetstack/cert-manager/releases/download/$(CERT_MANAGER_VERSION)/cert-manager.yaml
-
-_work/cert-manager.yaml: _work/cert-manager-$(CERT_MANAGER_VERSION).yaml
-	ln -sf $(<F) $@
-
 # Brings up the emulator environment:
 # - starts a Kubernetes cluster with NVDIMMs as described in https://github.com/qemu/qemu/blob/bd54b11062c4baa7d2e4efadcf71b8cfd55311fd/docs/nvdimm.txt
 # - generate pmem secrets if necessary
-start: _work/pmem-ca/.ca-stamp _work/bin/govm _work/cert-manager.yaml
+start: _work/pmem-ca/.ca-stamp _work/bin/govm
 	PATH="$(PWD)/_work/bin:$$PATH" test/start-kubernetes.sh
 
 # Stops the VMs and removes all files. Beware that the simple "rm -rf" only works if we don't
