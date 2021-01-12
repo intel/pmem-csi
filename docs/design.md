@@ -114,7 +114,7 @@ In direct device mode, the driver does not attempt to limit space
 use. It also does not mark "own" namespaces. The _Name_ field of a
 namespace gets value of the VolumeID.
 
-## Kata Container support
+## Kata Containers support
 
 [Kata Containers](https://katacontainers.io) runs applications inside a
 virtual machine. This poses a problem for App Direct mode, because
@@ -139,7 +139,7 @@ This gets solved as follows:
   that filesystem normally *but* due to limitations in the Linux
   kernel, mounting might have to be done without `-odax` and thus
   App Direct access does not work.
-- When the Kata Container runtime is asked to provide access to that
+- When the Kata Containers runtime is asked to provide access to that
   filesystem, it will instead pass the underlying `pmem-csi-vm.img`
   file into QEMU as a [nvdimm
   device](https://github.com/qemu/qemu/blob/master/docs/nvdimm.txt)
@@ -151,9 +151,9 @@ This gets solved as follows:
 Such volumes can be used with full dax semantic *only* inside Kata
 Containers. They are still usable with other runtimes, just not
 with dax semantic. Because of that and the additional space overhead,
-Kata Container support has to be enabled explicitly via a [storage
+Kata Containers support has to be enabled explicitly via a [storage
 class parameter and Kata Containers must be set up
-appropriately](install.md#kata-containers-support)
+appropriately](install.md#kata-containers-support).
 
 ## Driver modes
 
