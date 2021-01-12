@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
+	"k8s.io/kubernetes/test/e2e/framework/skipper"
 
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 	pmempod "github.com/intel/pmem-csi/test/e2e/pod"
@@ -45,6 +46,9 @@ var _ = deploy.DescribeForAll("TLS", func(d *deploy.Deployment) {
 
 	Context("controller", func() {
 		It("is secure", func() {
+			if !d.HasController {
+				skipper.Skipf("has no controller")
+			}
 			checkTLS(f, "pmem-csi-intel-com-controller-0.pmem-csi-intel-com-controller."+d.Namespace)
 		})
 	})

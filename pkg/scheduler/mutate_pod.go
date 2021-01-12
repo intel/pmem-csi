@@ -27,8 +27,9 @@ import (
 )
 
 const (
-	// Resource is the resource that will trigger the scheduler extender.
-	Resource = "pmem-csi.intel.com/scheduler"
+	// resourceSuffix is the part which gets added to the CSI driver name to
+	// create the extended resource name that will trigger the scheduler extender.
+	resourceSuffix = "/scheduler"
 )
 
 // Handle implements admission.Handler interface.
@@ -70,14 +71,15 @@ func (s scheduler) Handle(ctx context.Context, req admission.Request) admission.
 
 	ctnr := &pod.Spec.Containers[0]
 	quantity := resource.NewQuantity(1, resource.DecimalSI)
+	resource := corev1.ResourceName(s.driverName + resourceSuffix)
 	if ctnr.Resources.Requests == nil {
 		ctnr.Resources.Requests = corev1.ResourceList{}
 	}
-	ctnr.Resources.Requests[Resource] = *quantity
+	ctnr.Resources.Requests[resource] = *quantity
 	if ctnr.Resources.Limits == nil {
 		ctnr.Resources.Limits = corev1.ResourceList{}
 	}
-	ctnr.Resources.Limits[Resource] = *quantity
+	ctnr.Resources.Limits[resource] = *quantity
 
 	marshaledPod, err := json.Marshal(pod)
 	if err != nil {

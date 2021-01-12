@@ -320,7 +320,7 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 		l.V(3).Info("reconcile done", "duration", time.Since(startTime))
 	}()
 
-	d := &pmemCSIDeployment{dep, r.namespace, r.k8sVersion}
+	d := &pmemCSIDeployment{dep, r.namespace, r.k8sVersion, []byte{}}
 	if err := d.reconcile(ctx, r); err != nil {
 		l.Error(err, "reconcile failed")
 		dep.Status.Phase = api.DeploymentPhaseFailed
@@ -423,7 +423,7 @@ func (r *ReconcileDeployment) getDeploymentFor(obj metav1.Object) (*pmemCSIDeplo
 			if err := deployment.EnsureDefaults(r.containerImage); err != nil {
 				return nil, err
 			}
-			return &pmemCSIDeployment{deployment, r.namespace, r.k8sVersion}, nil
+			return &pmemCSIDeployment{deployment, r.namespace, r.k8sVersion, []byte{}}, nil
 		}
 	}
 

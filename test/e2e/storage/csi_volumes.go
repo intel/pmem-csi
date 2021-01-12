@@ -48,7 +48,7 @@ var (
 )
 
 var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
-	csiTestDriver := driver.New(d.Name(), "pmem-csi.intel.com", nil, nil)
+	csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil)
 
 	// List of testSuites to be added below.
 	var csiTestSuites = []func() testsuites.TestSuite{

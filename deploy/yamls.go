@@ -40,7 +40,7 @@ func init() {
 	for _, file := range AssetNames() {
 		parts := re.FindStringSubmatch(file)
 		if parts == nil {
-			panic(fmt.Sprintf("unexpected deployment asset: %s", file))
+			continue
 		}
 		kubernetes, err := version.Parse(parts[1])
 		if err != nil {

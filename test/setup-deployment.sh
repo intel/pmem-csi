@@ -160,6 +160,9 @@ EOF
 - op: add
   path: /spec/ports/0/nodePort
   value: ${TEST_SCHEDULER_EXTENDER_NODE_PORT}
+- op: add
+  path: /spec/type
+  value: NodePort
 EOF
                 ;;
             webhook)

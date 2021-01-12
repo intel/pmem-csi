@@ -62,6 +62,7 @@ rules:
   - ""
   resources:
   - pods
+  - secrets
   verbs:
   - get
 ---
@@ -89,6 +90,12 @@ rules:
   - pmemcsideployments
   - pmemcsideployments/status
   - pmemcsideployments/finalizers
+  verbs:
+  - '*'
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
   verbs:
   - '*'
 ---

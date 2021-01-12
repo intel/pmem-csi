@@ -208,7 +208,7 @@ $(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
 	fi
 
 kustomize: _work/go-bindata clean_kustomize_output $(KUSTOMIZE_OUTPUT)
-	$< -o deploy/bindata_generated.go -pkg deploy deploy/kubernetes-*/*/pmem-csi.yaml
+	$< -o deploy/bindata_generated.go -pkg deploy deploy/kubernetes-*/*/pmem-csi.yaml deploy/kustomize/webhook/webhook.yaml deploy/kustomize/scheduler/scheduler-service.yaml
 
 clean_kustomize_output:
 	rm -rf deploy/kubernetes-*

@@ -29,6 +29,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/storage/testpatterns"
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
 
+	e2edriver "github.com/intel/pmem-csi/test/e2e/driver"
 	"github.com/intel/pmem-csi/test/e2e/ephemeral"
 
 	. "github.com/onsi/ginkgo"
@@ -109,12 +110,15 @@ func (p *schedulerTestSuite) DefineTests(driver testsuites.TestDriver, pattern t
 		init()
 		defer cleanup()
 
-		l.testSchedulerInPod(f, l.resource.Pattern.VolType, l.resource.VolSource, l.config)
+		driverName := driver.(e2edriver.CSIDriver).GetCSIDriverName(l.config)
+
+		l.testSchedulerInPod(f, driverName, l.resource.Pattern.VolType, l.resource.VolSource, l.config)
 	})
 }
 
 func (l local) testSchedulerInPod(
 	f *framework.Framework,
+	driverName string,
 	volumeType testpatterns.TestVolType,
 	source *v1.VolumeSource,
 	config *testsuites.PerTestConfig) {
@@ -163,12 +167,14 @@ func (l local) testSchedulerInPod(
 		podClient.DeleteSync(createdPod.Name, metav1.DeleteOptions{}, framework.DefaultPodDeletionTimeout)
 	}()
 
+	resourceName := v1.ResourceName(driverName + "/scheduler")
+
 	Expect(createdPod.Spec.Containers[0].Resources).NotTo(BeNil(), "pod resources")
 	Expect(createdPod.Spec.Containers[0].Resources.Requests).NotTo(BeNil(), "pod resource requests")
-	_, ok := createdPod.Spec.Containers[0].Resources.Requests["pmem-csi.intel.com/scheduler"]
+	_, ok := createdPod.Spec.Containers[0].Resources.Requests[resourceName]
 	Expect(ok).To(BeTrue(), "PMEM-CSI extended resource request")
 	Expect(createdPod.Spec.Containers[0].Resources.Limits).NotTo(BeNil(), "pod resource requests")
-	_, ok = createdPod.Spec.Containers[0].Resources.Requests["pmem-csi.intel.com/scheduler"]
+	_, ok = createdPod.Spec.Containers[0].Resources.Requests[resourceName]
 	Expect(ok).To(BeTrue(), "PMEM-CSI extended resource limit")
 
 	podErr := e2epod.WaitForPodRunningInNamespace(f.ClientSet, createdPod)

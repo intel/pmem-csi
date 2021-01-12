@@ -21,6 +21,7 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 	"github.com/intel/pmem-csi/test/e2e/operator/validate"
 
+	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -295,6 +296,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					deployment.Spec.Image = ""
 					deployment.Spec.PMEMPercentage = 50
 					deployment.Spec.LogFormat = format
+					deployment.Spec.ControllerTLSSecret = "pmem-csi-intel-com-controller-secret"
 
 					deployment = deploy.CreateDeploymentCR(f, deployment)
 					defer deploy.DeleteDeploymentCR(f, deployment.Name)
@@ -424,13 +426,59 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 		It("shall recover from conflicts", func() {
 			deployment := getDeployment("test-recover-from-conflicts")
-			sec := &corev1.Secret{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Secret",
-					APIVersion: "v1",
-				},
+			deployment.Spec.ControllerTLSSecret = "pmem-csi-intel-com-controller-secret"
+			se := &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      deployment.GetHyphenedName() + "-registry-secrets",
+					Name:      deployment.GetHyphenedName() + "-scheduler",
+					Namespace: d.Namespace,
+				},
+				Spec: corev1.ServiceSpec{
+					Selector: map[string]string{"app": "foobar"},
+					Type:     corev1.ServiceTypeClusterIP,
+					Ports: []corev1.ServicePort{
+						{Port: 433},
+					},
+				},
+			}
+			deleteService := func() {
+				Eventually(func() error {
+					err := f.ClientSet.CoreV1().Services(d.Namespace).Delete(context.Background(), se.Name, metav1.DeleteOptions{})
+					deploy.LogError(err, "Delete service error: %v, will retry...", err)
+					if errors.IsNotFound(err) {
+						return nil
+					}
+					return err
+				}, "3m", "1s").ShouldNot(HaveOccurred(), "delete service %s", se.Name)
+			}
+			Eventually(func() error {
+				_, err := f.ClientSet.CoreV1().Services(d.Namespace).Create(context.Background(), se, metav1.CreateOptions{})
+				deploy.LogError(err, "create service error: %v, will retry...", err)
+				return err
+			}, "3m", "1s").ShouldNot(HaveOccurred(), "create service %s", se.Name)
+			defer deleteService()
+
+			deployment = deploy.CreateDeploymentCR(f, deployment)
+			defer deploy.DeleteDeploymentCR(f, deployment.Name)
+
+			// The deployment should fail to create the required service as it already
+			// exists and is owned by others.
+			Eventually(func() bool {
+				out := deploy.GetDeploymentCR(f, deployment.Name)
+				return out.Status.Phase == api.DeploymentPhaseFailed
+			}, "3m", "1s").Should(BeTrue(), "deployment should fail %q", deployment.Name)
+			validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonFailed})
+
+			// Deleting the existing service should make the deployment succeed.
+			deleteService()
+			validateDriver(deployment, true)
+			validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonRunning})
+		})
+
+		It("shall recover from missing secret", func() {
+			deployment := getDeployment("test-recover-from-missing-secret")
+			sec := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-controller-secret",
 					Namespace: d.Namespace,
 				},
 				Type: corev1.SecretTypeTLS,
@@ -440,36 +488,34 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					"tls.crt": []byte("fake crt"),
 				},
 			}
-			deleteSecret := func(name string) {
-				Eventually(func() error {
-					err := f.ClientSet.CoreV1().Secrets(d.Namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
-					deploy.LogError(err, "Delete secret error: %v, will retry...", err)
-					if errors.IsNotFound(err) {
-						return nil
-					}
-					return err
-				}, "3m", "1s").ShouldNot(HaveOccurred(), "delete secret %q", name)
-			}
-			Eventually(func() error {
-				_, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Create(context.Background(), sec, metav1.CreateOptions{})
-				deploy.LogError(err, "create secret error: %v, will retry...", err)
-				return err
-			}, "3m", "1s").ShouldNot(HaveOccurred(), "create secret %q", sec.Name)
-			defer deleteSecret(sec.Name)
-
+			deployment.Spec.ControllerTLSSecret = sec.Name
 			deployment = deploy.CreateDeploymentCR(f, deployment)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 
-			// The deployment should fail to create required secret(s) as it already
-			// exists and is owned by others.
+			// The deployment should fail because the required secret is missing.
 			Eventually(func() bool {
 				out := deploy.GetDeploymentCR(f, deployment.Name)
 				return out.Status.Phase == api.DeploymentPhaseFailed
 			}, "3m", "1s").Should(BeTrue(), "deployment should fail %q", deployment.Name)
 			validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonFailed})
 
-			// Deleting the existing secret should make the deployment succeed.
-			deleteSecret(sec.Name)
+			// Creating the secret should make the deployment succeed.
+			deleteSecret := func() {
+				Eventually(func() error {
+					err := f.ClientSet.CoreV1().Secrets(d.Namespace).Delete(context.Background(), sec.Name, metav1.DeleteOptions{})
+					deploy.LogError(err, "Delete secret error: %v, will retry...", err)
+					if errors.IsNotFound(err) {
+						return nil
+					}
+					return err
+				}, "3m", "1s").ShouldNot(HaveOccurred(), "delete secret %s", sec.Name)
+			}
+			Eventually(func() error {
+				_, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Create(context.Background(), sec, metav1.CreateOptions{})
+				deploy.LogError(err, "create secret error: %v, will retry...", err)
+				return err
+			}, "3m", "1s").ShouldNot(HaveOccurred(), "create secret %s", sec.Name)
+			defer deleteSecret()
 			validateDriver(deployment, true)
 			validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonRunning})
 		})
@@ -585,9 +631,10 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 						deployment = deploy.CreateDeploymentCR(f, deployment)
 						defer deploy.DeleteDeploymentCR(f, deployment.Name)
-						deploy.WaitForPMEMDriver(c, deployment.Name,
+						deploy.WaitForPMEMDriver(c,
 							&deploy.Deployment{
-								Namespace: d.Namespace,
+								Namespace:  d.Namespace,
+								DriverName: driverName,
 							})
 						validateDriver(deployment, true)
 
@@ -685,18 +732,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 	Context("recover", func() {
 		Context("deleted sub-resources", func() {
 			tests := map[string]func(*api.PmemCSIDeployment) apiruntime.Object{
-				"registry secret": func(dep *api.PmemCSIDeployment) apiruntime.Object {
-					return &corev1.Secret{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: dep.RegistrySecretName(), Namespace: d.Namespace,
-						},
-					}
-				},
-				"node secret": func(dep *api.PmemCSIDeployment) apiruntime.Object {
-					return &corev1.Secret{
-						ObjectMeta: metav1.ObjectMeta{Name: dep.NodeSecretName(), Namespace: d.Namespace},
-					}
-				},
 				"provisioner service account": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					return &corev1.ServiceAccount{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerServiceAccountName(), Namespace: d.Namespace},
@@ -705,6 +740,11 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				"webhooks service account": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					return &corev1.ServiceAccount{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksServiceAccountName(), Namespace: d.Namespace},
+					}
+				},
+				"scheduler service": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+					return &corev1.Service{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.SchedulerServiceName(), Namespace: d.Namespace},
 					}
 				},
 				"controller service": func(dep *api.PmemCSIDeployment) apiruntime.Object {
@@ -735,6 +775,11 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				"webhooks cluster role binding": func(dep *api.PmemCSIDeployment) apiruntime.Object {
 					return &rbacv1.ClusterRoleBinding{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksClusterRoleBindingName()},
+					}
+				},
+				"mutating webhook config": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+					return &admissionregistrationv1beta1.MutatingWebhookConfiguration{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.MutatingWebhookName()},
 					}
 				},
 				"provisioner role": func(dep *api.PmemCSIDeployment) apiruntime.Object {
@@ -789,7 +834,10 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			for name, getter := range tests {
 				name, getter := name, getter
 				It(name, func() {
+					// Create a deployment with controller and webhook config.
 					dep := getDeployment("recover-" + strings.ReplaceAll(name, " ", "-"))
+					dep.Spec.ControllerTLSSecret = "pmem-csi-intel-com-controller-secret"
+					dep.Spec.MutatePods = api.MutatePodsAlways
 					deployment := deploy.CreateDeploymentCR(f, dep)
 					defer deploy.DeleteDeploymentCR(f, dep.Name)
 					validateDriver(deployment)
@@ -872,6 +920,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				name, mutate := name, mutate
 				It(name, func() {
 					dep := getDeployment("recover-" + strings.ReplaceAll(name, " ", "-"))
+					dep.Spec.ControllerTLSSecret = "pmem-csi-intel-com-controller-secret"
 					deployment := deploy.CreateDeploymentCR(f, dep)
 					defer deploy.DeleteDeploymentCR(f, dep.Name)
 					validateDriver(deployment)
@@ -1104,9 +1153,10 @@ func switchDeploymentMode(c *deploy.Cluster, f *framework.Framework, depName, ns
 		}, "3m", "1s").Should(BeTrue(), "Pod restart '%s'", pod)
 	}
 
-	deploy.WaitForPMEMDriver(c, depName,
+	deploy.WaitForPMEMDriver(c,
 		&deploy.Deployment{
-			Namespace: ns,
+			Namespace:  ns,
+			DriverName: depName,
 		})
 
 	return deployment

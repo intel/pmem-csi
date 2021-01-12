@@ -8,6 +8,8 @@
 // deploy/kubernetes-1.19-alpha/lvm/pmem-csi.yaml
 // deploy/kubernetes-1.19/direct/pmem-csi.yaml
 // deploy/kubernetes-1.19/lvm/pmem-csi.yaml
+// deploy/kustomize/webhook/webhook.yaml
+// deploy/kustomize/scheduler/scheduler-service.yaml
 package deploy
 
 import (
@@ -99,7 +101,7 @@ func deployKubernetes117DirectPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.17/direct/pmem-csi.yaml", size: 12635, mode: os.FileMode(420), modTime: time.Unix(1610654713, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.17/direct/pmem-csi.yaml", size: 12635, mode: os.FileMode(420), modTime: time.Unix(1610654763, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -119,7 +121,7 @@ func deployKubernetes117LvmPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.17/lvm/pmem-csi.yaml", size: 12569, mode: os.FileMode(420), modTime: time.Unix(1610654714, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.17/lvm/pmem-csi.yaml", size: 12569, mode: os.FileMode(420), modTime: time.Unix(1610654764, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -139,7 +141,7 @@ func deployKubernetes118DirectPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.18/direct/pmem-csi.yaml", size: 12635, mode: os.FileMode(420), modTime: time.Unix(1610654718, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.18/direct/pmem-csi.yaml", size: 12635, mode: os.FileMode(420), modTime: time.Unix(1610654768, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -159,7 +161,7 @@ func deployKubernetes118LvmPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.18/lvm/pmem-csi.yaml", size: 12569, mode: os.FileMode(420), modTime: time.Unix(1610654720, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.18/lvm/pmem-csi.yaml", size: 12569, mode: os.FileMode(420), modTime: time.Unix(1610654770, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -179,7 +181,7 @@ func deployKubernetes119AlphaDirectPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.19-alpha/direct/pmem-csi.yaml", size: 12949, mode: os.FileMode(420), modTime: time.Unix(1610654729, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.19-alpha/direct/pmem-csi.yaml", size: 12949, mode: os.FileMode(420), modTime: time.Unix(1610654779, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -199,7 +201,7 @@ func deployKubernetes119AlphaLvmPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.19-alpha/lvm/pmem-csi.yaml", size: 12883, mode: os.FileMode(420), modTime: time.Unix(1610654731, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.19-alpha/lvm/pmem-csi.yaml", size: 12883, mode: os.FileMode(420), modTime: time.Unix(1610654781, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -219,7 +221,7 @@ func deployKubernetes119DirectPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.19/direct/pmem-csi.yaml", size: 12635, mode: os.FileMode(420), modTime: time.Unix(1610654724, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.19/direct/pmem-csi.yaml", size: 12635, mode: os.FileMode(420), modTime: time.Unix(1610654774, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -239,7 +241,47 @@ func deployKubernetes119LvmPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.19/lvm/pmem-csi.yaml", size: 12569, mode: os.FileMode(420), modTime: time.Unix(1610654725, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.19/lvm/pmem-csi.yaml", size: 12569, mode: os.FileMode(420), modTime: time.Unix(1610654775, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _deployKustomizeWebhookWebhookYaml = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\xc4\x54\x3f\x6f\xfb\x46\x0c\xdd\xfd\x29\x08\x77\x68\x0b\x44\x16\x02\xa4\x40\xa1\xad\x0d\xdc\xc2\x43\x82\xa0\x29\xda\x21\xc8\x70\x3a\xbd\x58\xac\x4f\x47\xe1\xc8\x93\xe3\x6f\x5f\x9c\x2c\x3b\xc9\xf0\x9b\x7f\x9e\x7c\x7c\xfc\xf3\x48\x3e\xca\x8d\xfc\x0f\x92\xb2\xc4\x86\x5c\x37\xb0\x96\xbf\x09\x7b\x56\x4b\xce\x58\xe2\xe6\xf0\xab\x6e\x58\xea\xe9\xb6\x85\xb9\xdb\xd5\x81\x63\xd7\xd0\x43\x36\x67\x1c\xf7\xff\xa2\xed\x45\x0e\xf7\x12\xdf\x78\x9f\xcf\x11\xab\x01\xe6\x3a\x67\xae\x59\x11\x45\x37\xa0\xa1\x71\xc0\x50\x79\xe5\x8a\xa3\x21\x54\x5e\x86\xaa\x84\xad\x8e\xe7\x70\x2d\x9e\xd5\xc5\x57\xba\x19\xdc\x5c\x82\x36\x73\xd0\xc6\xcb\xb0\x22\x3a\x67\xd4\xd1\x79\x3c\x23\xc0\x9b\xa4\x66\x36\x13\x0d\xce\x7c\xbf\x7d\x1f\x13\xe6\x26\xf4\x62\xaf\xe8\x80\xd3\x07\x87\x8f\x74\xf5\x52\x7e\xf1\x23\x92\x11\xc9\x95\x8c\xf4\x28\xb6\x8b\x57\xfb\xe4\x42\x86\x36\xf4\xb2\xe6\x7d\x94\x84\xf5\xeb\x0c\x49\xfb\x1f\xbc\x7d\x77\x1a\x3f\xd0\x1f\x92\xca\xd8\x94\x8e\x6c\x3d\x3d\x3d\x6c\x1f\x68\x92\x90\x07\x28\x65\xe5\xb8\xa7\xe0\x0c\xd4\x72\xec\x38\xee\x6f\x28\x8a\x91\xf3\xc6\xd3\xbc\x42\xb2\x1e\x4b\x1e\xf5\x3d\xba\x1c\x90\x08\xef\x86\x58\xe8\x13\x2b\xc9\xc1\x9d\x58\x7b\xfa\xa9\xcd\x46\x0a\x50\x6f\x36\x6a\x53\xd7\x7b\xb6\x3e\xb7\x73\x0f\x87\xdc\x22\x45\x18\xb4\x34\x57\x97\xf8\x14\x5d\xa8\xc6\x24\x13\x97\x44\x48\x35\xab\x66\x68\xfd\xcb\xdd\xdd\xcf\x9b\xa5\xe2\xce\x7e\x54\x3a\x4a\x52\xd0\x9b\x24\xba\x7f\xde\x11\xc6\x1e\x03\x92\x0b\xd7\x1e\x5a\x78\x97\x15\x85\x68\x42\x21\x14\x85\x12\xbc\x4c\x48\xa7\x4b\xa2\x47\x89\xb0\x1e\x01\xaa\x37\xf4\xe6\x38\x94\xce\x46\xe9\x2e\x3d\x95\x27\xa2\x71\x42\x38\xd1\xb1\x47\x9c\xc7\x54\x95\x82\xac\xd4\xc9\x31\x5e\x66\x00\x0c\x0b\xa5\x1b\x52\xa1\x23\x28\xc0\x4a\xed\x4f\xe3\xf1\x12\x8d\x63\x06\x75\xd0\x91\x0d\x73\xc5\x9c\xa0\x67\x3a\xcb\xeb\x49\x02\xfb\x53\x43\xbb\x79\x5b\x33\xe2\x03\x23\xda\xf9\x5c\x2e\xc2\x50\xa4\x89\x3d\x9a\xeb\x9e\xbf\x79\x33\x57\x02\x5f\x5c\xe7\x63\xf8\xf0\xbf\x62\xa3\xb3\xbe\xa1\x7a\x94\xae\x1e\xca\xb9\x62\x41\xbc\xfb\x3d\xc7\x2e\x2c\x05\x53\x0e\xf8\xa4\xd1\xb3\xf6\x66\xdd\xd2\xcb\xfa\xfe\xaf\xed\x6f\x7f\x6f\x17\x9d\x95\x9f\x1b\xf9\xcf\x24\x79\x9c\xd1\xaf\xf6\xe5\x33\x32\x23\xd3\xed\x27\x2c\x41\x25\x27\x7f\x56\x6e\x91\xe9\xfa\x75\xf5\x7f\x00\x00\x00\xff\xff\xcd\x46\xf3\x6c\x77\x04\x00\x00")
+
+func deployKustomizeWebhookWebhookYamlBytes() ([]byte, error) {
+	return bindataRead(
+		_deployKustomizeWebhookWebhookYaml,
+		"deploy/kustomize/webhook/webhook.yaml",
+	)
+}
+
+func deployKustomizeWebhookWebhookYaml() (*asset, error) {
+	bytes, err := deployKustomizeWebhookWebhookYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "deploy/kustomize/webhook/webhook.yaml", size: 1143, mode: os.FileMode(420), modTime: time.Unix(1610654562, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _deployKustomizeSchedulerSchedulerServiceYaml = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x6c\x8e\xb1\x4a\x04\x41\x0c\x86\xfb\x79\x8a\xbc\xc0\xae\x2b\x5e\x21\xd3\x5a\xd9\x1d\x08\xf6\x63\xf6\x47\x87\x9b\x99\x84\x24\x7b\xe0\xdb\xcb\xae\x16\x87\x5c\x97\xc0\xc7\xf7\xfd\x45\xeb\x3b\xcc\xab\x8c\x4c\xd7\xc7\x74\xa9\x63\xcd\xf4\x06\xbb\x56\x46\xea\x88\xb2\x96\x28\x39\x11\x8d\xd2\x91\x49\x3b\xfa\xc4\x5e\xa7\x3a\x02\x6d\x62\xe9\x93\xf3\x17\xd6\xad\xc1\xfe\x20\xd7\xc2\x37\x64\x72\x05\xef\x02\x47\x03\x87\xd8\x7e\x13\x15\xd5\xf9\xb2\x7d\xc0\x06\x02\x3e\x57\x79\xf8\x17\x60\x19\x61\xd2\x7e\xbd\xf7\xf8\x3a\x3c\xca\xb8\x4d\xcd\xc7\xa8\x99\xa5\x27\xa2\xf8\x56\x64\x7a\x69\x9b\x07\xec\xf5\x9c\x88\x54\x2c\x7c\xaf\x4f\x14\xc5\x3e\x11\x67\xb1\xc8\xf4\xbc\x2c\xcb\x91\xd0\xe3\x3d\x9d\x9e\xd2\x4f\x00\x00\x00\xff\xff\x05\xad\x4e\x1c\x15\x01\x00\x00")
+
+func deployKustomizeSchedulerSchedulerServiceYamlBytes() ([]byte, error) {
+	return bindataRead(
+		_deployKustomizeSchedulerSchedulerServiceYaml,
+		"deploy/kustomize/scheduler/scheduler-service.yaml",
+	)
+}
+
+func deployKustomizeSchedulerSchedulerServiceYaml() (*asset, error) {
+	bytes, err := deployKustomizeSchedulerSchedulerServiceYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "deploy/kustomize/scheduler/scheduler-service.yaml", size: 277, mode: os.FileMode(420), modTime: time.Unix(1610654562, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -304,6 +346,8 @@ var _bindata = map[string]func() (*asset, error){
 	"deploy/kubernetes-1.19-alpha/lvm/pmem-csi.yaml":    deployKubernetes119AlphaLvmPmemCsiYaml,
 	"deploy/kubernetes-1.19/direct/pmem-csi.yaml":       deployKubernetes119DirectPmemCsiYaml,
 	"deploy/kubernetes-1.19/lvm/pmem-csi.yaml":          deployKubernetes119LvmPmemCsiYaml,
+	"deploy/kustomize/webhook/webhook.yaml":             deployKustomizeWebhookWebhookYaml,
+	"deploy/kustomize/scheduler/scheduler-service.yaml": deployKustomizeSchedulerSchedulerServiceYaml,
 }
 
 // AssetDir returns the file names below a certain
@@ -378,6 +422,14 @@ var _bintree = &bintree{nil, map[string]*bintree{
 			}},
 			"lvm": &bintree{nil, map[string]*bintree{
 				"pmem-csi.yaml": &bintree{deployKubernetes119AlphaLvmPmemCsiYaml, map[string]*bintree{}},
+			}},
+		}},
+		"kustomize": &bintree{nil, map[string]*bintree{
+			"scheduler": &bintree{nil, map[string]*bintree{
+				"scheduler-service.yaml": &bintree{deployKustomizeSchedulerSchedulerServiceYaml, map[string]*bintree{}},
+			}},
+			"webhook": &bintree{nil, map[string]*bintree{
+				"webhook.yaml": &bintree{deployKustomizeWebhookWebhookYaml, map[string]*bintree{}},
 			}},
 		}},
 	}},

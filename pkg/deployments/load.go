@@ -24,11 +24,12 @@ import (
 
 // LoadObjects reads all objects stored in a pmem-csi.yaml reference file.
 func LoadObjects(kubernetes version.Version, deviceMode api.DeviceMode) ([]unstructured.Unstructured, error) {
-	return loadObjects(kubernetes, deviceMode, nil, nil)
+	return loadYAML(yamlPath(kubernetes, deviceMode), nil, nil, nil)
 }
 
 var pmemImage = regexp.MustCompile(`image: intel/pmem-csi-driver(-test)?:\S+`)
-var nameRegex = regexp.MustCompile(`(name|app|secretName|serviceName|serviceAccountName): pmem-csi`)
+var nameRegex = regexp.MustCompile(`(name|secretName|serviceName|serviceAccountName): pmem-csi-intel-com`)
+var driverNameRegex = regexp.MustCompile(`(?m)(name|app\.kubernetes.io/instance): pmem-csi.intel.com$`)
 
 // LoadAndCustomizeObjects reads all objects stored in a pmem-csi.yaml reference file
 // and updates them on-the-fly according to the deployment spec, namespace and name.
@@ -39,9 +40,10 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 	// our deployments. But because we controll the input, we can do some
 	// things like renaming with a simple text search/replace.
 	patchYAML := func(yaml *[]byte) {
-		// This renames the objects. A hyphen is used instead of a dot,
-		// except for CSIDriver which needs the exact name.
+		// This renames the objects and labels. A hyphen is used instead of a dot,
+		// except for CSIDriver and instance label which need the exact name.
 		*yaml = nameRegex.ReplaceAll(*yaml, []byte("$1: "+deployment.GetHyphenedName()))
+		*yaml = driverNameRegex.ReplaceAll(*yaml, []byte("$1: "+deployment.Name))
 
 		// Update the driver name inside the state and socket dir.
 		*yaml = bytes.ReplaceAll(*yaml, []byte("path: /var/lib/pmem-csi.intel.com"), []byte("path: /var/lib/"+deployment.Name))
@@ -78,9 +80,36 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 		*yaml = pmemImage.ReplaceAll(*yaml, []byte("image: "+deployment.Spec.Image))
 	}
 
+	enabled := func(obj *unstructured.Unstructured) bool {
+		if deployment.Spec.ControllerTLSSecret != "" {
+			// Shortcut: all objects enabled.
+			return true
+		}
+
+		// Controller is disabled.
+		switch obj.GetKind() + "/" + obj.GetName() {
+		case "StatefulSet/" + deployment.ControllerDriverName(),
+			"Service/" + deployment.ControllerServiceName(),
+			"Service/" + deployment.MetricsServiceName(),
+			"Service/" + deployment.SchedulerServiceName(),
+			"ServiceAccount/" + deployment.WebhooksServiceAccountName(),
+			"Role/" + deployment.WebhooksRoleName(),
+			"RoleBinding/" + deployment.WebhooksRoleBindingName(),
+			"ClusterRole/" + deployment.WebhooksClusterRoleName(),
+			"ClusterRoleBinding/" + deployment.WebhooksClusterRoleBindingName(),
+			"MutatingWebhookConfiguration/" + deployment.MutatingWebhookName():
+			return false
+		default:
+			return true
+		}
+	}
+
 	patchUnstructured := func(obj *unstructured.Unstructured) {
 		if deployment.Spec.Labels != nil {
 			labels := obj.GetLabels()
+			if labels == nil {
+				labels = map[string]string{}
+			}
 			for key, value := range deployment.Spec.Labels {
 				labels[key] = value
 			}
@@ -88,12 +117,9 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 		}
 
 		switch obj.GetKind() {
-		case "CSIDriver":
-			obj.SetName(deployment.GetName())
 		case "StatefulSet":
 			resources := map[string]*corev1.ResourceRequirements{
-				"pmem-driver":          deployment.Spec.ControllerDriverResources,
-				"external-provisioner": deployment.Spec.ProvisionerResources,
+				"pmem-driver": deployment.Spec.ControllerDriverResources,
 			}
 			if err := patchPodTemplate(obj, deployment, resources); err != nil {
 				// TODO: avoid panic
@@ -101,8 +127,9 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 			}
 		case "DaemonSet":
 			resources := map[string]*corev1.ResourceRequirements{
-				"pmem-driver":      deployment.Spec.NodeDriverResources,
-				"driver-registrar": deployment.Spec.NodeRegistrarResources,
+				"pmem-driver":          deployment.Spec.NodeDriverResources,
+				"external-provisioner": deployment.Spec.ProvisionerResources,
+				"driver-registrar":     deployment.Spec.NodeRegistrarResources,
 			}
 			if err := patchPodTemplate(obj, deployment, resources); err != nil {
 				// TODO: avoid panic
@@ -118,10 +145,46 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 				}
 				spec["nodeSelector"] = selector
 			}
+		case "MutatingWebhookConfiguration":
+			webhooks := obj.Object["webhooks"].([]interface{})
+			failurePolicy := "Ignore"
+			if deployment.Spec.MutatePods == api.MutatePodsAlways {
+				failurePolicy = "Fail"
+			}
+			webhooks[0].(map[string]interface{})["failurePolicy"] = failurePolicy
+		case "Service":
+			switch obj.GetName() {
+			case deployment.SchedulerServiceName():
+				if deployment.Spec.SchedulerNodePort != 0 {
+					spec := obj.Object["spec"].(map[string]interface{})
+					spec["type"] = "NodePort"
+					ports := spec["ports"].([]interface{})
+					ports[0].(map[string]interface{})["nodePort"] = deployment.Spec.SchedulerNodePort
+				}
+			}
 		}
 	}
 
-	return loadObjects(kubernetes, deviceMode, patchYAML, patchUnstructured)
+	objects, err := loadYAML(yamlPath(kubernetes, deviceMode), patchYAML, enabled, patchUnstructured)
+	if err != nil {
+		return nil, err
+	}
+
+	scheduler, err := loadYAML("deploy/kustomize/scheduler/scheduler-service.yaml", patchYAML, enabled, patchUnstructured)
+	if err != nil {
+		return nil, err
+	}
+	objects = append(objects, scheduler...)
+
+	if deployment.Spec.MutatePods != api.MutatePodsNever {
+		webhook, err := loadYAML("deploy/kustomize/webhook/webhook.yaml", patchYAML, enabled, patchUnstructured)
+		if err != nil {
+			return nil, err
+		}
+		objects = append(objects, webhook...)
+	}
+
+	return objects, nil
 }
 
 func patchPodTemplate(obj *unstructured.Unstructured, deployment api.PmemCSIDeployment, resources map[string]*corev1.ResourceRequirements) error {
@@ -205,14 +268,25 @@ func patchPodTemplate(obj *unstructured.Unstructured, deployment api.PmemCSIDepl
 		}
 	}
 
+	volumes := spec["volumes"].([]interface{})
+	for _, volume := range volumes {
+		volume := volume.(map[string]interface{})
+		volumeName := volume["name"].(string)
+		if volumeName == "webhook-cert" {
+			volume["secret"].(map[string]interface{})["secretName"] = deployment.Spec.ControllerTLSSecret
+		}
+	}
 	return nil
 }
 
-func loadObjects(kubernetes version.Version, deviceMode api.DeviceMode,
-	patchYAML func(yaml *[]byte),
-	patchUnstructured func(obj *unstructured.Unstructured)) ([]unstructured.Unstructured, error) {
-	path := fmt.Sprintf("deploy/kubernetes-%s/%s/pmem-csi.yaml", kubernetes, deviceMode)
+func yamlPath(kubernetes version.Version, deviceMode api.DeviceMode) string {
+	return fmt.Sprintf("deploy/kubernetes-%s/%s/pmem-csi.yaml", kubernetes, deviceMode)
+}
 
+func loadYAML(path string,
+	patchYAML func(yaml *[]byte),
+	enabled func(obj *unstructured.Unstructured) bool,
+	patchUnstructured func(obj *unstructured.Unstructured)) ([]unstructured.Unstructured, error) {
 	// We load the builtin yaml files.
 	yaml, err := deploy.Asset(path)
 	if err != nil {
@@ -237,6 +311,9 @@ func loadObjects(kubernetes version.Version, deviceMode api.DeviceMode,
 		_, _, err := deserializer.Decode(item, nil, &obj)
 		if err != nil {
 			return nil, fmt.Errorf("decode item %q from file %q: %v", item, path, err)
+		}
+		if enabled != nil && !enabled(&obj) {
+			continue
 		}
 		if patchUnstructured != nil {
 			patchUnstructured(&obj)

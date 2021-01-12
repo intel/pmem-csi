@@ -50,6 +50,11 @@ type DynamicDriver interface {
 	WithParameters(parameters map[string]string) DynamicDriver
 }
 
+// CSIDriver exposes the CSI driver name, something that is normally hidden.
+type CSIDriver interface {
+	GetCSIDriverName(config *testsuites.PerTestConfig) string
+}
+
 func New(name, csiDriverName string, fsTypes []string, scManifests map[string]string) testsuites.TestDriver {
 	if fsTypes == nil {
 		fsTypes = []string{"", "ext4", "xfs"}

@@ -15,6 +15,7 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/driver"
 	"github.com/intel/pmem-csi/test/e2e/operator/validate"
 	"github.com/intel/pmem-csi/test/e2e/storage/dax"
+	"github.com/intel/pmem-csi/test/e2e/storage/scheduler"
 
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
@@ -56,6 +57,10 @@ var _ = deploy.DescribeForSome("driver", func(d *deploy.Deployment) bool {
 	csiTestDriver := driver.New(d.Name(), d.GetDriverDeployment().Name, []string{""} /* only the default fs type */, nil)
 	var csiTestSuites = []func() testsuites.TestSuite{
 		dax.InitDaxTestSuite,
+	}
+	if d.HasController {
+		// Scheduler tests depend on the webhooks in the controller.
+		csiTestSuites = append(csiTestSuites, scheduler.InitSchedulerTestSuite)
 	}
 
 	testsuites.DefineTestSuite(csiTestDriver, csiTestSuites)

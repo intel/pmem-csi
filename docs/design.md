@@ -291,15 +291,22 @@ components that help with pod scheduling:
 
 ### Scheduler extender
 
-When a pod requests the special [extended
+When a pod requests a special [extended
 resource](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#extended-resources)
-called `pmem-csi.intel.com/scheduler`, the Kubernetes scheduler calls
+, the Kubernetes scheduler calls
 a [scheduler
 extender](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/scheduling/scheduler_extender.md)
 provided by PMEM-CSI with a list of nodes that a pod might run
-on. This extender is implemented in the PMEM-CSI controller and
-connects to node driver's metrics endpoint to check for
-capacity. PMEM-CSI then filters out all nodes which currently do not
+on.
+
+The name of that special resource is `<CSI driver name>/scheduler`,
+i.e. `pmem-csi.intel.com/scheduler` when the default PMEM-CSI driver
+name is used. It is possible to configure one extender per PMEM-CSI
+deployment because each deployment has its own unique driver name.
+
+This extender is implemented in the PMEM-CSI controller and retrieves
+metrics data from each PMEM-CSI node driver instance to filter out all
+nodes which currently do not
 have enough storage left for the volumes that still need to be
 created. This considers inline ephemeral volumes and all unbound
 volumes, regardless whether they use late binding or immediate
@@ -327,7 +334,7 @@ See our [implementation](http://github.com/intel/pmem-csi/tree/devel/pkg/schedul
 
 ### Pod admission webhook
 
-Having to add `pmem-csi.intel.com/scheduler` manually is not
+Having to add the `<CSI driver name>/scheduler` extended resource manually is not
 user-friendly. To simplify this, PMEM-CSI provides a [mutating
 admission
 webhook](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/)

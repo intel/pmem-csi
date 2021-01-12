@@ -817,14 +817,26 @@ $ cat >my-scheduler/node-port-patch.yaml <<EOF
 - op: add
   path: /spec/ports/0/nodePort
   value: 32000
+- op: add
+  path: /spec/type
+  value: NodePort
 EOF
 
 $ kubectl create --kustomize my-scheduler
 ```
 
+When the node port is not needed, the scheduler service can be
+created directly with:
+``` console
+kubectl create --kustomize deploy/kustomize/scheduler
+```
+
 How to (re)configure `kube-scheduler` depends on the cluster. With
 kubeadm it is possible to set all necessary options in advance before
-creating the master node with `kubeadm init`. One additional
+creating the master node with `kubeadm init`. A running cluster can
+be modified with `kubeadm upgrade`.
+
+One additional
 complication with kubeadm is that `kube-scheduler` by default doesn't
 trust any root CA. The following kubeadm config file solves
 this together with enabling the scheduler configuration by
@@ -976,6 +988,7 @@ EOF
 
 $ kubectl create --kustomize my-webhook
 ```
+
 ### Storage capacity tracking
 
 [Kubernetes
@@ -1211,6 +1224,9 @@ of the API specification.
 | logLevel | integer | PMEM-CSI driver logging level | 3 |
 | logFormat | text | log output format | "text" or "json" <sup>3</sup> |
 | deviceMode | string | Device management mode to use. Supports one of `lvm` or `direct` | `lvm`
+| controllerTLSSecret | string | Name of an existing secret in the driver's namespace which contains ca.crt, tls.crt and tls.key data for the scheduler extender and pod mutation webhook. A controller is started if (and only if) this secret is specified. | empty
+| mutatePods | Always/Try/Never | Defines how a mutating pod webhook is configured if a controller is started. The field is ignored if the controller is not enabled. "Never" disables pod mutation. "Try" configured it so that pod creation is allowed to proceed even when the webhook fails. "Always" requires that the webhook gets invoked successfully before creating a pod. | Try
+| schedulerNodePort | If non-zero, the scheduler service is created as a NodeService with that fixed port number. Otherwise that service is created as a cluster service. The number must be from the range reserved by Kubernetes for node ports. This is useful if the kube-scheduler cannot reach the scheduler extender via a cluster service. | 0
 | controllerResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for controller pod. <br/><sup>4</sup>_Deprecated and only available in `v1alpha1`._ |
 | nodeResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for the pods running on node(s). <br/>_<sup>4</sup>Deprecated and only available in `v1alpha1`._ |
 | controllerDriverResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for controller driver container running on master node. Available since `v1beta1`. |

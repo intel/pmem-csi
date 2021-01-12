@@ -59,6 +59,20 @@ const (
 	LogFormatJSON LogFormat = "json"
 )
 
+type MutatePods string
+
+const (
+	// MutatePodsAlways enables the mutating pod webhook so that a failure is considered fatal.
+	MutatePodsAlways MutatePods = "Always"
+
+	// MutatePodsTry enables the mutating pod webhook so that it a pod can be created even
+	// when the webhook fails.
+	MutatePodsTry MutatePods = "Try"
+
+	// MutatePodsNever disables the mutating pod webhook.
+	MutatePodsNever MutatePods = "Never"
+)
+
 // +k8s:deepcopy-gen=true
 // DeploymentSpec defines the desired state of Deployment
 type DeploymentSpec struct {
@@ -78,8 +92,24 @@ type DeploymentSpec struct {
 	NodeRegistrarResources *corev1.ResourceRequirements `json:"nodeRegistrarResources,omitempty"`
 	// NodeDriverResources Compute resources required by driver container running on worker nodes
 	NodeDriverResources *corev1.ResourceRequirements `json:"nodeDriverResources,omitempty"`
-	// ControllerDriverResources Compute resources required by driver container running on master node
+	// ControllerDriverResources Compute resources required by central driver container
 	ControllerDriverResources *corev1.ResourceRequirements `json:"controllerDriverResources,omitempty"`
+	// ControllerTLSSecret is the name of a secret which contains ca.crt, tls.crt and tls.key data
+	// for the scheduler extender and pod mutation webhook. A controller is started if (and only if)
+	// this secret is specified.
+	ControllerTLSSecret string `json:"controllerTLSSecret,omitempty"`
+	// MutatePod defines how a mutating pod webhook is configured if a controller
+	// is started. The field is ignored if the controller is not enabled.
+	// The default is "Try".
+	// +kubebuilder:validation:Enum=Always;Try;Never
+	MutatePods MutatePods `json:"mutatePods,omitempty"`
+	// SchedulerNodePort, if non-zero, ensures that the "scheduler" service
+	// is created as a NodeService with that fixed port number. Otherwise
+	// that service is created as a cluster service. The number must be
+	// from the range reserved by Kubernetes for
+	// node ports. This is useful if the kube-scheduler cannot reach the scheduler
+	// extender via a cluster service.
+	SchedulerNodePort int32 `json:"schedulerNodePort,omitempty"`
 	// DeviceMode to use to manage PMEM devices.
 	// +kubebuilder:validation:Enum=lvm;direct
 	DeviceMode DeviceMode `json:"deviceMode,omitempty"`
@@ -228,6 +258,8 @@ const (
 	// DefaultDriverImage default PMEM-CSI driver docker image
 	DefaultDriverImage = defaultDriverImageName + ":" + defaultDriverImageTag
 
+	DefaultMutatePods = MutatePodsTry
+
 	// The sidecar versions must be kept in sync with the
 	// deploy/kustomize YAML files!
 
@@ -305,6 +337,16 @@ const (
 	DeploymentPhaseFailed DeploymentPhase = "Failed"
 )
 
+// A TLS secret must contain three data items.
+const (
+	// TLSSecretCA is the CA bundle.
+	TLSSecretCA = "ca.crt"
+	// TLSSecretKey is the secret key to be used by the server.
+	TLSSecretKey = "tls.key"
+	// TLSSecretCert is the public key to used by the server.
+	TLSSecretCert = "tls.crt"
+)
+
 func (d *PmemCSIDeployment) SetCondition(t DeploymentConditionType, state corev1.ConditionStatus, reason string) {
 	for _, c := range d.Status.Conditions {
 		if c.Type == t {
@@ -345,6 +387,14 @@ func (d *PmemCSIDeployment) EnsureDefaults(operatorImage string) error {
 	case DeviceModeDirect, DeviceModeLVM:
 	default:
 		return fmt.Errorf("invalid device mode %q", d.Spec.DeviceMode)
+	}
+
+	switch d.Spec.MutatePods {
+	case "":
+		d.Spec.MutatePods = DefaultMutatePods
+	case MutatePodsAlways, MutatePodsTry, MutatePodsNever:
+	default:
+		return fmt.Errorf("invalid MutatePods value: %s", d.Spec.MutatePods)
 	}
 
 	if d.Spec.Image == "" {
@@ -478,6 +528,12 @@ func (d *PmemCSIDeployment) MetricsServiceName() string {
 	return d.GetHyphenedName() + "-metrics"
 }
 
+// SchedulerServiceName returns the name of the controller's scheduler
+// Service object
+func (d *PmemCSIDeployment) SchedulerServiceName() string {
+	return d.GetHyphenedName() + "-scheduler"
+}
+
 // WebhooksServiceAccountName returns the name of the service account
 // used by the StatefulSet with the webhooks.
 func (d *PmemCSIDeployment) WebhooksServiceAccountName() string {
@@ -506,6 +562,12 @@ func (d *PmemCSIDeployment) WebhooksClusterRoleName() string {
 // webhooks' ClusterRoleBinding object name used by the deployment
 func (d *PmemCSIDeployment) WebhooksClusterRoleBindingName() string {
 	return d.GetHyphenedName() + "-webhooks-role"
+}
+
+// MutatingWebhookName returns the name of the
+// MutatingWebhookConfiguration
+func (d *PmemCSIDeployment) MutatingWebhookName() string {
+	return d.GetHyphenedName() + "-hook"
 }
 
 // NodeServiceAccountName returns the name of the service account
