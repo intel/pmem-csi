@@ -173,5 +173,5 @@ $(case ${TEST_KUBERNETES_VERSION} in 1.19) echo ',CSIStorageCapacity=true,Generi
 # Kubernetes node port number
 # (https://kubernetes.io/docs/concepts/services-networking/service/#nodeport)
 # that is going to be used by kube-scheduler to reach the scheduler
-# extender service (see deploy/scheduler/scheduler-service.yaml).
+# extender service (see test/setup-kubernetes.sh)
 : ${TEST_SCHEDULER_EXTENDER_NODE_PORT:=32000}
