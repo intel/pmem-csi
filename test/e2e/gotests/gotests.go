@@ -55,7 +55,7 @@ func runGoTest(f *framework.Framework, pkg string) {
 	err = build.Run()
 	framework.ExpectNoError(err, "compile test program for %s", pkg)
 
-	label := labels.SelectorFromSet(labels.Set(map[string]string{"app": "pmem-csi-node"}))
+	label := labels.SelectorFromSet(labels.Set(map[string]string{"app.kubernetes.io/name": "pmem-csi-node"}))
 	pods, err := f.ClientSet.CoreV1().Pods("default").List(context.Background(), metav1.ListOptions{LabelSelector: label.String()})
 	framework.ExpectNoError(err, "list PMEM-CSI pods")
 	Expect(pods.Items).NotTo(BeEmpty(), "have PMEM-CSI pods")

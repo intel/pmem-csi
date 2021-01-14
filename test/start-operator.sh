@@ -141,6 +141,10 @@ case $deploy_method in
     exit 1 ;;
 esac
 
+# Set up TLS secrets in the TEST_OPERATOR_NAMESPACE, with the two different prefixes.
+PATH="${REPO_DIRECTORY}/_work/bin:$PATH" TEST_DRIVER_NAMESPACE="${TEST_OPERATOR_NAMESPACE}" TEST_DRIVER_PREFIX=second-pmem-csi-intel-com ${TEST_DIRECTORY}/setup-ca-kubernetes.sh
+PATH="${REPO_DIRECTORY}/_work/bin:$PATH" TEST_DRIVER_NAMESPACE="${TEST_OPERATOR_NAMESPACE}" ${TEST_DIRECTORY}/setup-ca-kubernetes.sh
+
   cat <<EOF
 PMEM-CSI operator is running in '${TEST_OPERATOR_NAMESPACE}' namespace. To try out deploying the pmem-csi driver:
     cat deploy/common/pmem-csi.intel.com_v1beta1_pmemcsideployment_cr.yaml | ${KUBECTL} create -f -

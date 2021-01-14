@@ -426,11 +426,15 @@ This can be changed by:
 
 - **Set up certificates**
 
-Certificates are required as explained in [Security](design.md#security).
-If you are not using the test cluster described in
-[Starting and stopping a test cluster](autotest.md#starting-and-stopping-a-test-cluster)
-where certificates are created automatically, you must set up certificates manually.
-This can be done by running the `./test/setup-ca-kubernetes.sh` script for your cluster.
+Certificates are required as explained in [Security](design.md#security) for
+running the PMEM-CSI [scheduler extender](design.md#scheduler-extender) and
+[webhook](design.md#pod-admission-webhook). If those are not used, then certificate
+creation can be skipped. However, the YAML deployment files always create the PMEM-CSI
+controller StatefulSet which needs the certificates. Without them, the
+`pmem-csi-intel-com-controller-0` pod cannot start, so it is recommended to create
+certificates or customize the deployment so that this StatefulSet is not created.
+
+Certificates can be created by running the `./test/setup-ca-kubernetes.sh` script for your cluster.
 This script requires "cfssl" tools which can be downloaded.
 These are the steps for manual set-up of certificates:
 
@@ -521,10 +525,10 @@ for `kubectl kustomize`. For example:
 ``` console
 $ kubectl get pods -n pmem-csi
 NAME                    READY   STATUS    RESTARTS   AGE
-pmem-csi-node-8kmxf     2/2     Running   0          3m15s
-pmem-csi-node-bvx7m     2/2     Running   0          3m15s
-pmem-csi-controller-0   2/2     Running   0          3m15s
-pmem-csi-node-fbmpg     2/2     Running   0          3m15s
+pmem-csi-intel-com-node-8kmxf     2/2     Running   0          3m15s
+pmem-csi-intel-com-node-bvx7m     2/2     Running   0          3m15s
+pmem-csi-intel-com-controller-0   2/2     Running   0          3m15s
+pmem-csi-intel-com-node-fbmpg     2/2     Running   0          3m15s
 ```
 
 After the driver is deployed using one of the methods mentioned above,
@@ -804,7 +808,7 @@ patchesJson6902:
   - target:
       version: v1
       kind: Service
-      name: pmem-csi-scheduler
+      name: pmem-csi-intel-com-scheduler
       namespace: pmem-csi
     path: node-port-patch.yaml
 EOF
@@ -960,7 +964,7 @@ patchesJson6902:
       group: admissionregistration.k8s.io
       version: v1beta1
       kind: MutatingWebhookConfiguration
-      name: pmem-csi-hook
+      name: pmem-csi-intel-com-hook
     path: webhook-patch.yaml
 EOF
 
@@ -1041,7 +1045,7 @@ containers provide different data. For example, the controller
 provides:
 
 ``` ShellSession
-$ kubectl port-forward pmem-csi-controller-0 10010
+$ kubectl port-forward pmem-csi-intel-com-controller-0 10010
 Forwarding from 127.0.0.1:10010 -> 10010
 Forwarding from [::1]:10010 -> 10010
 ```

@@ -36,7 +36,9 @@ func (n node) createPMEMPod(port int) *corev1.Pod {
 			Name:      "pmem-csi-node-" + n.name,
 			Namespace: n.namespace,
 			Labels: map[string]string{
-				"app": "pmem-csi-node",
+				"app.kubernetes.io/part-of":   "pmem-csi",
+				"app.kubernetes.io/component": "node",
+				"app.kubernetes.io/instance":  n.driverName,
 			},
 		},
 		Spec: corev1.PodSpec{

@@ -128,7 +128,11 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			if socat != nil {
 				return socat
 			}
-			socat = cluster.WaitForAppInstance("pmem-csi-node-testing", cluster.NodeIP(1), d.Namespace)
+			socat = cluster.WaitForAppInstance(labels.Set{
+				"app.kubernetes.io/component": "node-testing",
+				"app.kubernetes.io/part-of":   "pmem-csi",
+			},
+				cluster.NodeIP(1), d.Namespace)
 			return socat
 		}
 
@@ -331,7 +335,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			v.namePrefix = "mount-volume"
 
 			pods, err := WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,
-				labels.Set{"app": "pmem-csi-node"}.AsSelector(), cluster.NumNodes()-1, time.Minute)
+				labels.Set{"app.kubernetes.io/name": "pmem-csi-node"}.AsSelector(), cluster.NumNodes()-1, time.Minute)
 			framework.ExpectNoError(err, "All node drivers are not ready")
 
 			name, vol := v.create(22*1024*1024, nodeID)
@@ -364,7 +368,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 		It("capacity is restored after controller restart", func() {
 			By("Fetching pmem-csi-controller pod name")
 			pods, err := WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,
-				labels.Set{"app": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, time.Minute)
+				labels.Set{"app.kubernetes.io/name": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, time.Minute)
 			framework.ExpectNoError(err, "PMEM-CSI controller running with one replica")
 			controllerNode := pods.Items[0].Spec.NodeName
 			canRestartNode(controllerNode)
@@ -377,7 +381,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			restartNode(f.ClientSet, controllerNode, sc)
 
 			_, err = WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,
-				labels.Set{"app": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, 5*time.Minute)
+				labels.Set{"app.kubernetes.io/name": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, 5*time.Minute)
 			framework.ExpectNoError(err, "PMEM-CSI controller running again with one replica")
 
 			By("waiting for full capacity")

@@ -23,9 +23,11 @@ import (
 
 	"github.com/prometheus/common/expfmt"
 	v1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
@@ -76,7 +78,7 @@ func WaitForOperator(c *Cluster, namespace string) *v1.Pod {
 	// TODO(avalluri): At later point of time we should add readiness support
 	// for the operator. Then we can query directly the operator if its ready.
 	// As intrem solution we are just checking Pod.Status.
-	operator := c.WaitForAppInstance("pmem-csi-operator", "", namespace)
+	operator := c.WaitForAppInstance(labels.Set{"app": "pmem-csi-operator"}, "", namespace)
 	ginkgo.By("Operator is ready!")
 	return operator
 }
@@ -85,7 +87,7 @@ func WaitForOperator(c *Cluster, namespace string) *v1.Pod {
 // is ready else fails with exception.
 func WaitForOLM(c *Cluster, namespace string) *v1.Pod {
 	ginkgo.By("Waiting if the OLM deployment is ready...")
-	olm := c.WaitForAppInstance("olm-operator", "", namespace)
+	olm := c.WaitForAppInstance(labels.Set{"app": "olm-operator"}, "", namespace)
 	ginkgo.By("OLM is ready!")
 	return olm
 }

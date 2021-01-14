@@ -5,7 +5,7 @@ kind: ServiceAccount
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-controller
+  name: pmem-csi-intel-com-controller
   namespace: pmem-csi
 ---
 apiVersion: v1
@@ -13,7 +13,7 @@ kind: ServiceAccount
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-webhooks
+  name: pmem-csi-intel-com-webhooks
   namespace: pmem-csi
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -21,7 +21,7 @@ kind: Role
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-external-provisioner-cfg
+  name: pmem-csi-intel-com-external-provisioner-cfg
   namespace: pmem-csi
 rules:
 - apiGroups:
@@ -76,7 +76,7 @@ kind: Role
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-webhooks-cfg
+  name: pmem-csi-intel-com-webhooks-cfg
   namespace: pmem-csi
 rules:
 - apiGroups:
@@ -93,7 +93,7 @@ kind: ClusterRole
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-external-provisioner-runner
+  name: pmem-csi-intel-com-external-provisioner-runner
 rules:
 - apiGroups:
   - ""
@@ -168,7 +168,7 @@ kind: ClusterRole
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-webhooks-runner
+  name: pmem-csi-intel-com-webhooks-runner
 rules:
 - apiGroups:
   - ""
@@ -192,15 +192,15 @@ kind: RoleBinding
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-csi-provisioner-role-cfg
+  name: pmem-csi-intel-com-csi-provisioner-role-cfg
   namespace: pmem-csi
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: pmem-csi-external-provisioner-cfg
+  name: pmem-csi-intel-com-external-provisioner-cfg
 subjects:
 - kind: ServiceAccount
-  name: pmem-csi-controller
+  name: pmem-csi-intel-com-controller
   namespace: pmem-csi
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -208,15 +208,15 @@ kind: RoleBinding
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-webhooks-role-cfg
+  name: pmem-csi-intel-com-webhooks-role-cfg
   namespace: pmem-csi
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: pmem-csi-webhooks-cfg
+  name: pmem-csi-intel-com-webhooks-cfg
 subjects:
 - kind: ServiceAccount
-  name: pmem-csi-webhooks
+  name: pmem-csi-intel-com-webhooks
   namespace: pmem-csi
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -224,14 +224,14 @@ kind: ClusterRoleBinding
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-csi-provisioner-role
+  name: pmem-csi-intel-com-csi-provisioner-role
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: pmem-csi-external-provisioner-runner
+  name: pmem-csi-intel-com-external-provisioner-runner
 subjects:
 - kind: ServiceAccount
-  name: pmem-csi-controller
+  name: pmem-csi-intel-com-controller
   namespace: pmem-csi
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -239,14 +239,14 @@ kind: ClusterRoleBinding
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-webhooks-role
+  name: pmem-csi-intel-com-webhooks-role
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: pmem-csi-webhooks-runner
+  name: pmem-csi-intel-com-webhooks-runner
 subjects:
 - kind: ServiceAccount
-  name: pmem-csi-webhooks
+  name: pmem-csi-intel-com-webhooks
   namespace: pmem-csi
 ---
 apiVersion: v1
@@ -254,14 +254,15 @@ kind: Service
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-controller
+  name: pmem-csi-intel-com-controller
   namespace: pmem-csi
 spec:
   ports:
   - port: 10000
     targetPort: 10000
   selector:
-    app: pmem-csi-controller
+    app.kubernetes.io/instance: pmem-csi.intel.com
+    app.kubernetes.io/name: pmem-csi-controller
     pmem-csi.intel.com/deployment: direct-production
 ---
 apiVersion: v1
@@ -269,14 +270,15 @@ kind: Service
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-metrics
+  name: pmem-csi-intel-com-metrics
   namespace: pmem-csi
 spec:
   ports:
   - port: 10010
     targetPort: 10010
   selector:
-    app: pmem-csi-controller
+    app.kubernetes.io/instance: pmem-csi.intel.com
+    app.kubernetes.io/name: pmem-csi-controller
     pmem-csi.intel.com/deployment: direct-production
   type: NodePort
 ---
@@ -284,22 +286,30 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: pmem-csi.intel.com
+    app.kubernetes.io/name: pmem-csi-controller
+    app.kubernetes.io/part-of: pmem-csi
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-controller
+  name: pmem-csi-intel-com-controller
   namespace: pmem-csi
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: pmem-csi-controller
+      app.kubernetes.io/instance: pmem-csi.intel.com
+      app.kubernetes.io/name: pmem-csi-controller
       pmem-csi.intel.com/deployment: direct-production
-  serviceName: pmem-csi-controller
+  serviceName: pmem-csi-intel-com-controller
   template:
     metadata:
       annotations:
         pmem-csi.intel.com/scrape: containers
       labels:
-        app: pmem-csi-controller
+        app.kubernetes.io/component: controller
+        app.kubernetes.io/instance: pmem-csi.intel.com
+        app.kubernetes.io/name: pmem-csi-controller
+        app.kubernetes.io/part-of: pmem-csi
         pmem-csi.intel.com/deployment: direct-production
         pmem-csi.intel.com/webhook: ignore
     spec:
@@ -339,33 +349,41 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
-      serviceAccountName: pmem-csi-webhooks
+      serviceAccountName: pmem-csi-intel-com-webhooks
       tolerations:
       - effect: NoSchedule
         key: node-role.kubernetes.io/master
       volumes:
       - name: webhook-cert
         secret:
-          secretName: pmem-csi-registry-secrets
+          secretName: pmem-csi-intel-com-controller-secret
 ---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   labels:
+    app.kubernetes.io/component: node
+    app.kubernetes.io/instance: pmem-csi.intel.com
+    app.kubernetes.io/name: pmem-csi-node
+    app.kubernetes.io/part-of: pmem-csi
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-node
+  name: pmem-csi-intel-com-node
   namespace: pmem-csi
 spec:
   selector:
     matchLabels:
-      app: pmem-csi-node
+      app.kubernetes.io/instance: pmem-csi.intel.com
+      app.kubernetes.io/name: pmem-csi-node
       pmem-csi.intel.com/deployment: direct-production
   template:
     metadata:
       annotations:
         pmem-csi.intel.com/scrape: containers
       labels:
-        app: pmem-csi-node
+        app.kubernetes.io/component: node
+        app.kubernetes.io/instance: pmem-csi.intel.com
+        app.kubernetes.io/name: pmem-csi-node
+        app.kubernetes.io/part-of: pmem-csi
         pmem-csi.intel.com/deployment: direct-production
         pmem-csi.intel.com/webhook: ignore
     spec:
@@ -474,7 +492,7 @@ spec:
           name: socket-dir
       nodeSelector:
         storage: pmem
-      serviceAccountName: pmem-csi-controller
+      serviceAccountName: pmem-csi-intel-com-controller
       volumes:
       - hostPath:
           path: /var/lib/kubelet/plugins/pmem-csi.intel.com

@@ -373,7 +373,7 @@ func (p *skewTestSuite) DefineTests(driver testsuites.TestDriver, pattern testpa
 		framework.ExpectNoError(err, "get cluster information")
 		mixedDeployment := *deployment
 		mixedDeployment.Version = ""
-		deploy.WaitForPMEMDriver(c, "pmem-csi", &mixedDeployment)
+		deploy.WaitForPMEMDriver(c, &mixedDeployment)
 
 		// This relies on FindDeployment getting the version number from the image.
 		deployment, err = deploy.FindDeployment(c)

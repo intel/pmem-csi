@@ -1,4 +1,4 @@
-namePrefix: pmem-csi-
+namePrefix: pmem-csi-intel-com-
 
 resources:
 - https://github.com/kubernetes-csi/external-provisioner/raw/v2.0.0/deploy/kubernetes/rbac.yaml

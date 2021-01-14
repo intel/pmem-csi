@@ -1,7 +1,7 @@
 apiVersion: admissionregistration.k8s.io/v1beta1
 kind: MutatingWebhookConfiguration
 metadata:
-  name: pmem-csi-hook
+  name: pmem-csi-intel-com-hook
 webhooks:
   - name: pod-hook.pmem-csi.intel.com
     namespaceSelector:
@@ -22,8 +22,8 @@ webhooks:
     failurePolicy: Ignore
     clientConfig:
       service:
-        name: pmem-csi-scheduler
-        namespace: default
+        name: pmem-csi-intel-com-scheduler
+        namespace: pmem-csi
         path: /pod/mutate
       caBundle:
     rules:

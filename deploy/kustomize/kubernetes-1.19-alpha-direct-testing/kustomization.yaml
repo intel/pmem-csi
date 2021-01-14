@@ -9,5 +9,5 @@ patchesJson6902:
     group: apps
     version: v1
     kind: StatefulSet
-    name: pmem-csi-controller
+    name: pmem-csi-intel-com-controller
   path: ../patches/external-provisioner-storage-capacity-patch.yaml

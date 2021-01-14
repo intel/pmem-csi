@@ -34,15 +34,21 @@ func CapacityViaMetrics(namespace, driverName string, podLister corelistersv1.Po
 	}
 }
 
-// TODO: this needs to be configurable
-var pmemCSINode = labels.Set{"app": "pmem-csi-node"}.AsSelector()
+// All PMEM-CSI deployments must use these labels for the node driver pods.
+func (c *capacityFromMetrics) pmemCSINodeSelector() labels.Selector {
+	return labels.Set{
+		"app.kubernetes.io/part-of":   "pmem-csi",
+		"app.kubernetes.io/component": "node",
+		"app.kubernetes.io/instance":  c.driverName,
+	}.AsSelector()
+}
 
 // NodeCapacity implements the necessary method for the NodeCapacity interface by
 // looking up pods in the namespace which run on the node (usually one)
 // and retrieving metrics data from them. The driver name is checked to allow
 // more than one driver instance per node (unlikely).
 func (c *capacityFromMetrics) NodeCapacity(nodeName string) (int64, error) {
-	pods, err := c.podLister.List(pmemCSINode)
+	pods, err := c.podLister.List(c.pmemCSINodeSelector())
 	if err != nil {
 		return 0, fmt.Errorf("list PMEM-CSI node pods: %v", err)
 	}

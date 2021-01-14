@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -1033,7 +1034,7 @@ func stopOperator(c *deploy.Cluster, d *deploy.Deployment) error {
 	Eventually(func() bool {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		_, err := c.GetAppInstance(ctx, "pmem-csi-operator", "", d.Namespace)
+		_, err := c.GetAppInstance(ctx, labels.Set{"app": "pmem-csi-operator"}, "", d.Namespace)
 		deploy.LogError(err, "get operator error: %v, will retry...", err)
 		return err != nil && strings.HasPrefix(err.Error(), "no app")
 	}, "3m", "1s").Should(BeTrue(), "delete operator pod")
@@ -1075,7 +1076,10 @@ func switchDeploymentMode(c *deploy.Cluster, f *framework.Framework, depName, ns
 
 	for i := 1; i < c.NumNodes(); i++ {
 		Eventually(func() error {
-			pod, err := c.GetAppInstance(context.Background(), depName+"-node", c.NodeIP(i), ns)
+			pod, err := c.GetAppInstance(context.Background(),
+				labels.Set{"app.kubernetes.io/name": "pmem-csi-node",
+					"app.kubernetes.io/instance": depName},
+				c.NodeIP(i), ns)
 			if err != nil {
 				return err
 			}

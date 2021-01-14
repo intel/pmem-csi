@@ -3,7 +3,7 @@
 This mixin for a regular production deployment of PMEM-CSI adds port
 forwarding to the outside world.
 
-The pmem-csi-node-testing DaemonSet forwards
+The pmem-csi-intel-com-node-testing DaemonSet forwards
 /var/lib/kubelet/plugins/pmem-csi.intel.com/csi.sock on all nodes,
 using the fixed port 9735 (arbitrarily chosen). The advantage of this
 approach is that:

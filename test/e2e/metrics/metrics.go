@@ -67,7 +67,7 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 		// "testing" deployment. We just need to find one of
 		// those pods...
 		socatPods, err := f.ClientSet.CoreV1().Pods(d.Namespace).List(context.Background(), metav1.ListOptions{
-			LabelSelector: "app in ( pmem-csi-node-testing )",
+			LabelSelector: "app.kubernetes.io/name in ( pmem-csi-node-testing )",
 		})
 		framework.ExpectNoError(err, "list socat pods")
 		Expect(pods.Items).NotTo(BeEmpty(), "at least one socat pod should be running")
@@ -115,7 +115,7 @@ Accept: */*
 						if strings.HasPrefix(container.Name, "pmem") {
 							Expect(stdout).To(ContainSubstring("go_threads "), name)
 							Expect(stdout).To(ContainSubstring("process_open_fds "), name)
-							if !strings.HasPrefix(pod.Name, "pmem-csi-controller") {
+							if !strings.Contains(pod.Name, "controller") {
 								// Only the node driver implements CSI and manages volumes.
 								Expect(stdout).To(ContainSubstring("csi_plugin_operations_seconds "), name)
 								Expect(stdout).To(ContainSubstring("pmem_amount_available "), name)
