@@ -482,6 +482,71 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 	})
 
 	Context("switch device mode", func() {
+		startPod := func(f *framework.Framework, pvc *corev1.PersistentVolumeClaim) *corev1.Pod {
+			// Now try using the volume
+			app := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "switch-mode-app",
+					Namespace: corev1.NamespaceDefault,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:            "test-driver",
+							Image:           os.Getenv("PMEM_CSI_IMAGE"),
+							ImagePullPolicy: corev1.PullIfNotPresent,
+							Command:         []string{"sleep", "180"},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "pmem-volume",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: pvc.Name,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			By(fmt.Sprintf("Starting application pod '%s'", app.Name))
+			Eventually(func() error {
+				_, err := f.ClientSet.CoreV1().Pods(app.Namespace).Create(context.Background(), app, metav1.CreateOptions{})
+				deploy.LogError(err, "create pod %q error: %v, will retry...", app.Name, err)
+				return err
+			}, "3m", "1s").ShouldNot(HaveOccurred(), "create pod %q", app.Name)
+
+			return app
+		}
+
+		stopPod := func(p *corev1.Pod) {
+			By(fmt.Sprintf("Stopping application pod '%s'", p.Name))
+			Eventually(func() error {
+				err := f.ClientSet.CoreV1().Pods(p.Namespace).Delete(context.Background(), p.Name, metav1.DeleteOptions{})
+				if err != nil && errors.IsNotFound(err) {
+					return nil
+				}
+				deploy.LogError(err, "delete pod %q error: %v, will retry...", p.Name, err)
+				return err
+			}, "3m", "1s").ShouldNot(HaveOccurred(), "delete pod %q", p.Name)
+		}
+
+		checkIfPodRunning := func(p *corev1.Pod) {
+			By(fmt.Sprintf("Ensure application pod '%s' is running", p.Name))
+			Eventually(func() error {
+				pod, err := f.ClientSet.CoreV1().Pods(p.Namespace).Get(context.Background(), p.Name, metav1.GetOptions{})
+				if err != nil {
+					return err
+				}
+				if pod.Status.Phase != corev1.PodRunning {
+					return fmt.Errorf("%s: status %v", pod.Name, pod.Status.Phase)
+				}
+				return nil
+			}, "3m", "1s").ShouldNot(HaveOccurred(), "pod read %q", p.Name)
+		}
+
 		postSwitchFuncs := map[string]func(from, to api.DeviceMode, depName string, pvc *corev1.PersistentVolumeClaim){
 			"delete volume": func(from, to api.DeviceMode, depName string, pvc *corev1.PersistentVolumeClaim) {
 				// Delete Volume created in `from` device mode
@@ -491,64 +556,15 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				// Switch back to original device mode
 				switchDeploymentMode(c, f, depName, d.Namespace, from)
 
-				// Now try using the volume
-				app := &corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "switch-mode-app",
-						Namespace: corev1.NamespaceDefault,
-					},
-					Spec: corev1.PodSpec{
-						Containers: []corev1.Container{
-							{
-								Name:            "test-driver",
-								Image:           os.Getenv("PMEM_CSI_IMAGE"),
-								ImagePullPolicy: corev1.PullIfNotPresent,
-								Command:         []string{"sleep", "180"},
-							},
-						},
-						Volumes: []corev1.Volume{
-							{
-								Name: "pmem-volume",
-								VolumeSource: corev1.VolumeSource{
-									PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-										ClaimName: pvc.Name,
-									},
-								},
-							},
-						},
-					},
-				}
-
-				By(fmt.Sprintf("Starting application pod '%s'", app.Name))
-				Eventually(func() error {
-					_, err := f.ClientSet.CoreV1().Pods(app.Namespace).Create(context.Background(), app, metav1.CreateOptions{})
-					deploy.LogError(err, "create pod %q error: %v, will retry...", app.Name, err)
-					return err
-				}, "3m", "1s").ShouldNot(HaveOccurred(), "create pod %q", app.Name)
-
-				defer func() {
-					By(fmt.Sprintf("Stopping application pod '%s'", app.Name))
-					Eventually(func() error {
-						err := f.ClientSet.CoreV1().Pods(app.Namespace).Delete(context.Background(), app.Name, metav1.DeleteOptions{})
-						if err != nil && errors.IsNotFound(err) {
-							return nil
-						}
-						deploy.LogError(err, "delete pod %q error: %v, will retry...", app.Name, err)
-						return err
-					}, "3m", "1s").ShouldNot(HaveOccurred(), "delete pod %q", app.Name)
-				}()
-
-				By(fmt.Sprintf("Ensure application pod '%s' is running", app.Name))
-				Eventually(func() error {
-					pod, err := f.ClientSet.CoreV1().Pods(app.Namespace).Get(context.Background(), app.Name, metav1.GetOptions{})
-					if err != nil {
-						return err
-					}
-					if pod.Status.Phase != corev1.PodRunning {
-						return fmt.Errorf("%s: status %v", pod.Name, pod.Status.Phase)
-					}
-					return nil
-				}, "3m", "1s").ShouldNot(HaveOccurred(), "pod read %q", app.Name)
+				p := startPod(f, pvc)
+				defer stopPod(p)
+				checkIfPodRunning(p)
+			},
+			"use volume in different mode": func(from, to api.DeviceMode, depName string, pvc *corev1.PersistentVolumeClaim) {
+				// Application should able to use the volume created by the driver in diffrent mode
+				p := startPod(f, pvc)
+				defer stopPod(p)
+				checkIfPodRunning(p)
 			},
 		}
 

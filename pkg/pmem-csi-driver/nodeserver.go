@@ -181,7 +181,12 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		}
 		volumeParameters = v
 
-		if device, err = ns.cs.dm.GetDevice(req.VolumeId); err != nil {
+		dm, err := ns.getDeviceManagerForVolume(req.VolumeId)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "%v", err)
+		}
+
+		if device, err = dm.GetDevice(req.VolumeId); err != nil {
 			if errors.Is(err, pmemerr.DeviceNotFound) {
 				return nil, status.Errorf(codes.NotFound, "no device found with volume id %q: %v", req.VolumeId, err)
 			}
@@ -486,7 +491,12 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	klog.V(4).Infof("NodeStageVolume: VolumeID:%v Staging target path:%v Requested fsType:%v Requested mount options:%v",
 		req.GetVolumeId(), stagingtargetPath, requestedFsType, mountOptions)
 
-	device, err := ns.cs.dm.GetDevice(req.VolumeId)
+	dm, err := ns.getDeviceManagerForVolume(req.VolumeId)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "%v", err)
+	}
+
+	device, err := dm.GetDevice(req.VolumeId)
 	if err != nil {
 		if errors.Is(err, pmemerr.DeviceNotFound) {
 			return nil, status.Errorf(codes.NotFound, "no device found with volume id %q: %v", req.VolumeId, err)
@@ -541,10 +551,14 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 	klog.V(4).Infof("NodeUnStageVolume: VolumeID:%v Staging target path:%v",
 		req.GetVolumeId(), stagingtargetPath)
 
+	dm, err := ns.getDeviceManagerForVolume(req.VolumeId)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "%v", err)
+	}
 	// by spec, we have to return OK if asked volume is not mounted on asked path,
 	// so we look up the current device by volumeID and see is that device
 	// mounted on staging target path
-	if _, err := ns.cs.dm.GetDevice(req.VolumeId); err != nil {
+	if _, err := dm.GetDevice(req.VolumeId); err != nil {
 		if errors.Is(err, pmemerr.DeviceNotFound) {
 			return nil, status.Errorf(codes.NotFound, "no device found with volume id '%s': %s", req.VolumeId, err.Error())
 		}
@@ -685,6 +699,31 @@ func (ns *nodeServer) mount(sourcePath, targetPath string, mountOptions []string
 	}
 
 	return nil
+}
+
+// getDeviceManagerForVolume checks the stored volume parametes for the
+// given id and returns the device manager which creates that volume.
+func (ns *nodeServer) getDeviceManagerForVolume(id string) (pmdmanager.PmemDeviceManager, error) {
+
+	vol, ok := ns.cs.pmemVolumes[id]
+	if !ok {
+		return nil, fmt.Errorf("unknown volume: %s", id)
+	}
+
+	v, err := parameters.Parse(parameters.NodeVolumeOrigin, vol.Params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse volume parameters for volume %q: %v", id, err)
+	}
+
+	dm := ns.cs.dm
+	if v.GetDeviceMode() != dm.GetMode() {
+		dm, err = pmdmanager.New(v.GetDeviceMode(), 0)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize device manager for volume '%s'(volume mode: '%s'): %v", id, v.GetDeviceMode(), err)
+		}
+	}
+
+	return dm, nil
 }
 
 // This is based on function used in LV-CSI driver
