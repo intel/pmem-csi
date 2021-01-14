@@ -20,11 +20,8 @@ import (
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
 
 	"github.com/operator-framework/operator-lib/leader"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	apiruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
@@ -43,14 +40,6 @@ var (
 	driverImage  = flag.String("image", "", "docker container image used for deploying the operator.")
 	startWebhook = flag.Bool("webhook", false, "run conversion webhook server")
 	logFormat    = logger.NewFlag()
-)
-
-const (
-	// Default values used by OLM CA for webhook
-	WebhookPort     = 9443
-	WebhookCertDir  = "/apiserver.local.config/certificates"
-	WebhookCertName = "apiserver.crt"
-	WebhookKeyName  = "apiserver.key"
 )
 
 func init() {
@@ -124,17 +113,6 @@ func Main() int {
 		return 1
 	}
 
-	// Setup conversion webhooks
-
-	if *startWebhook {
-		if err := setupWebhookWithManager(mgr, &api.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "pmem-csi-operator"},
-		}); err != nil {
-			pmemcommon.ExitError("Failed to create webhook(v1alpha1)", err)
-			return 1
-		}
-	}
-
 	klog.Info("Starting the Cmd.")
 
 	// Start the Cmd
@@ -143,7 +121,7 @@ func Main() int {
 		return 1
 	}
 
-	list := &api.DeploymentList{}
+	list := &api.PmemCSIDeploymentList{}
 	if err := mgr.GetClient().List(ctx, list); err != nil {
 		pmemcommon.ExitError("failed to get deployment list: %v", err)
 		return 1
@@ -162,19 +140,4 @@ func Main() int {
 	}
 
 	return 0
-}
-
-func setupWebhookWithManager(mgr ctrl.Manager, apiType apiruntime.Object) error {
-	klog.Infof("Setting up webhook...")
-	bldr := ctrl.NewWebhookManagedBy(mgr).For(apiType)
-
-	// Specify OLM CA Info for webhook
-	srv := mgr.GetWebhookServer()
-	srv.CertDir = WebhookCertDir
-	srv.CertName = WebhookCertName
-	srv.KeyName = WebhookKeyName
-	srv.Port = WebhookPort
-
-	return bldr.Complete()
-
 }

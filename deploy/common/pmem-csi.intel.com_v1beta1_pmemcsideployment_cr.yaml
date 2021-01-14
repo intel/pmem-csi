@@ -1,5 +1,5 @@
-apiVersion: pmem-csi.intel.com/v1alpha1
-kind: Deployment
+apiVersion: pmem-csi.intel.com/v1beta1
+kind: PmemCSIDeployment
 metadata:
   name: pmem-csi.intel.com
 spec:

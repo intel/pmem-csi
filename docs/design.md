@@ -420,8 +420,8 @@ on a Kubernetes cluster. This operator is based on the CoreOS [operator-sdk](htt
 tools and APIs.
 
 The driver deployment is controlled by a cluster-scoped [custom resource](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/)
-named [`Deployment`](./install.md#pmem-csi-deployment-crd) in the
+named [`PmemCSIDeployment`](./install.md#pmem-csi-deployment-crd) in the
 `pmem-csi.intel.com/v1beta1` API group. The operator runs inside the cluster
 and listens for deployment changes. It makes sure that the required Kubernetes
-objects are created for a driver deployment.
-Refer to [Deployment CRD](./install.md#deployment) for details.
+objects are created for a driver deployment. Refer to the PmemCSIDeployment
+CRD for details.

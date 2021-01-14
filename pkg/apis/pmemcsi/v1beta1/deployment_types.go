@@ -198,16 +198,16 @@ type DeploymentStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// Deployment is the Schema for the deployments API
+// PmemCSIDeployment is the Schema for the deployments API
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=deployments,scope=Cluster
+// +kubebuilder:resource:path=pmemcsideployments,scope=Cluster,shortName=pcd,singular=pmemcsideployment
 // +kubebuilder:printcolumn:name="DeviceMode",type=string,JSONPath=`.spec.deviceMode`
 // +kubebuilder:printcolumn:name="NodeSelector",type=string,JSONPath=`.spec.nodeSelector`
 // +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.image`
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:storageversion
-type Deployment struct {
+type PmemCSIDeployment struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
@@ -217,15 +217,15 @@ type Deployment struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// DeploymentList contains a list of Deployment
-type DeploymentList struct {
+// PmemCSIDeploymentList contains a list of PmemCSIDeployment objects
+type PmemCSIDeploymentList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Deployment `json:"items"`
+	Items           []PmemCSIDeployment `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Deployment{}, &DeploymentList{})
+	SchemeBuilder.Register(&PmemCSIDeployment{}, &PmemCSIDeploymentList{})
 }
 
 const (
@@ -324,7 +324,7 @@ const (
 	DeploymentPhaseFailed DeploymentPhase = "Failed"
 )
 
-func (d *Deployment) SetCondition(t DeploymentConditionType, state corev1.ConditionStatus, reason string) {
+func (d *PmemCSIDeployment) SetCondition(t DeploymentConditionType, state corev1.ConditionStatus, reason string) {
 	for _, c := range d.Status.Conditions {
 		if c.Type == t {
 			c.Status = state
@@ -341,7 +341,7 @@ func (d *Deployment) SetCondition(t DeploymentConditionType, state corev1.Condit
 	})
 }
 
-func (d *Deployment) SetDriverStatus(t DriverType, status, reason string) {
+func (d *PmemCSIDeployment) SetDriverStatus(t DriverType, status, reason string) {
 	if d.Status.Components == nil {
 		d.Status.Components = make([]DriverStatus, 2)
 	}
@@ -354,7 +354,7 @@ func (d *Deployment) SetDriverStatus(t DriverType, status, reason string) {
 }
 
 // EnsureDefaults make sure that the deployment object has all defaults set properly
-func (d *Deployment) EnsureDefaults(operatorImage string) error {
+func (d *PmemCSIDeployment) EnsureDefaults(operatorImage string) error {
 	// Validate the given driver mode.
 	// In a realistic case this check might not needed as it should be
 	// handled by JSON schema as we defined deviceMode as enumeration.
@@ -463,85 +463,85 @@ func (d *Deployment) EnsureDefaults(operatorImage string) error {
 // Most objects created for the deployment will use hyphens in the name, sometimes
 // with an additional suffix like -controller, but others must use the original
 // name (like the CSIDriver object).
-func (d *Deployment) GetHyphenedName() string {
+func (d *PmemCSIDeployment) GetHyphenedName() string {
 	return strings.ReplaceAll(d.GetName(), ".", "-")
 }
 
 // RegistrySecretName returns the name of the registry
 // Secret object used by the deployment
-func (d *Deployment) RegistrySecretName() string {
+func (d *PmemCSIDeployment) RegistrySecretName() string {
 	return d.GetHyphenedName() + "-registry-secrets"
 }
 
 // NodeSecretName returns the name of the node-controller
 // Secret object used by the deployment
-func (d *Deployment) NodeSecretName() string {
+func (d *PmemCSIDeployment) NodeSecretName() string {
 	return d.GetHyphenedName() + "-node-secrets"
 }
 
 // CSIDriverName returns the name of the CSIDriver
 // object name for the deployment
-func (d *Deployment) CSIDriverName() string {
+func (d *PmemCSIDeployment) CSIDriverName() string {
 	return d.GetName()
 }
 
 // ControllerServiceName returns the name of the controller
 // Service object used by the deployment
-func (d *Deployment) ControllerServiceName() string {
+func (d *PmemCSIDeployment) ControllerServiceName() string {
 	return d.GetHyphenedName() + "-controller"
 }
 
 // MetricsServiceName returns the name of the controller metrics
 // Service object used by the deployment
-func (d *Deployment) MetricsServiceName() string {
+func (d *PmemCSIDeployment) MetricsServiceName() string {
 	return d.GetHyphenedName() + "-metrics"
 }
 
 // ServiceAccountName returns the name of the ServiceAccount
 // object used by the deployment
-func (d *Deployment) ServiceAccountName() string {
+func (d *PmemCSIDeployment) ServiceAccountName() string {
 	return d.GetHyphenedName() + "-controller"
 }
 
 // ProvisionerRoleName returns the name of the provisioner's
 // RBAC Role object name used by the deployment
-func (d *Deployment) ProvisionerRoleName() string {
+func (d *PmemCSIDeployment) ProvisionerRoleName() string {
 	return d.GetHyphenedName() + "-external-provisioner-cfg"
 }
 
 // ProvisionerRoleBindingName returns the name of the provisioner's
 // RoleBinding object name used by the deployment
-func (d *Deployment) ProvisionerRoleBindingName() string {
+func (d *PmemCSIDeployment) ProvisionerRoleBindingName() string {
 	return d.GetHyphenedName() + "-csi-provisioner-role-cfg"
 }
 
 // ProvisionerClusterRoleName returns the name of the
 // provisioner's ClusterRole object name used by the deployment
-func (d *Deployment) ProvisionerClusterRoleName() string {
+func (d *PmemCSIDeployment) ProvisionerClusterRoleName() string {
 	return d.GetHyphenedName() + "-external-provisioner-runner"
 }
 
 // ProvisionerClusterRoleBindingName returns the name of the
 // provisioner ClusterRoleBinding object name used by the deployment
-func (d *Deployment) ProvisionerClusterRoleBindingName() string {
+func (d *PmemCSIDeployment) ProvisionerClusterRoleBindingName() string {
 	return d.GetHyphenedName() + "-csi-provisioner-role"
 }
 
 // NodeDriverName returns the name of the driver
 // DaemonSet object name used by the deployment
-func (d *Deployment) NodeDriverName() string {
+func (d *PmemCSIDeployment) NodeDriverName() string {
 	return d.GetHyphenedName() + "-node"
 }
 
 // ControllerDriverName returns the name of the controller
 // StatefulSet object name used by the deployment
-func (d *Deployment) ControllerDriverName() string {
+func (d *PmemCSIDeployment) ControllerDriverName() string {
 	return d.GetHyphenedName() + "-controller"
 }
 
 // GetOwnerReference returns self owner reference could be used by other object
 // to add this deployment to it's owner reference list.
-func (d *Deployment) GetOwnerReference() metav1.OwnerReference {
+func (d *PmemCSIDeployment) GetOwnerReference() metav1.OwnerReference {
 	blockOwnerDeletion := true
 	isController := true
 	return metav1.OwnerReference{
@@ -559,7 +559,7 @@ func (d *Deployment) GetOwnerReference() metav1.OwnerReference {
 // - true with nil error if provided certificates are valid.
 // - false with nil error if no certificates are provided.
 // - false with appropriate error if invalid/incomplete certificates provided.
-func (d *Deployment) HaveCertificatesConfigured() (bool, error) {
+func (d *PmemCSIDeployment) HaveCertificatesConfigured() (bool, error) {
 	// Encoded private keys and certificates
 	caCert := d.Spec.CACert
 	registryPrKey := d.Spec.RegistryPrivateKey

@@ -45,7 +45,7 @@ function delete_olm_operator() {
 
 function delete_operator() {
   DEPLOY_DIRECTORY="${REPO_DIRECTORY}/deploy/operator"
-  deploy="${DEPLOYMENT_DIRECTORY}/pmem-csi-operator-webhook.yaml"
+  deploy="${DEPLOYMENT_DIRECTORY}/pmem-csi-operator.yaml"
 
   echo "Deleting operator components in namespace '${TEST_OPERATOR_NAMESPACE}'"
   # Failures are expected like, as deleting namespace could also delete
@@ -56,7 +56,7 @@ function delete_operator() {
     ${KUBECTL} delete -f - 2>&1 | grep -v NotFound || true
 
   echo "Deleting CRD..."
-  ${KUBECTL} delete crd deployments.pmem-csi.intel.com
+  ${KUBECTL} delete crd/pmemcsideployments.pmem-csi.intel.com
 }
 
 deploy_method=yaml

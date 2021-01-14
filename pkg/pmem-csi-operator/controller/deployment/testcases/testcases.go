@@ -23,25 +23,25 @@ import (
 // change one or more fields in it.
 type UpdateTest struct {
 	Name       string
-	Deployment api.Deployment
-	Mutate     func(d *api.Deployment)
+	Deployment api.PmemCSIDeployment
+	Mutate     func(d *api.PmemCSIDeployment)
 }
 
 func UpdateTests() []UpdateTest {
-	singleMutators := map[string]func(d *api.Deployment){
-		"image": func(d *api.Deployment) {
+	singleMutators := map[string]func(d *api.PmemCSIDeployment){
+		"image": func(d *api.PmemCSIDeployment) {
 			d.Spec.Image = "updated-image"
 		},
-		"pullPolicy": func(d *api.Deployment) {
+		"pullPolicy": func(d *api.PmemCSIDeployment) {
 			d.Spec.PullPolicy = corev1.PullNever
 		},
-		"provisionerImage": func(d *api.Deployment) {
+		"provisionerImage": func(d *api.PmemCSIDeployment) {
 			d.Spec.ProvisionerImage = "still-no-such-provisioner-image"
 		},
-		"nodeRegistrarImage": func(d *api.Deployment) {
+		"nodeRegistrarImage": func(d *api.PmemCSIDeployment) {
 			d.Spec.NodeRegistrarImage = "still-no-such-registrar-image"
 		},
-		"controllerDriverResources": func(d *api.Deployment) {
+		"controllerDriverResources": func(d *api.PmemCSIDeployment) {
 			d.Spec.ControllerDriverResources = &corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{
 					corev1.ResourceCPU:    resource.MustParse("201m"),
@@ -49,7 +49,7 @@ func UpdateTests() []UpdateTest {
 				},
 			}
 		},
-		"nodeDriverResources": func(d *api.Deployment) {
+		"nodeDriverResources": func(d *api.PmemCSIDeployment) {
 			d.Spec.NodeDriverResources = &corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{
 					corev1.ResourceCPU:    resource.MustParse("501m"),
@@ -57,7 +57,7 @@ func UpdateTests() []UpdateTest {
 				},
 			}
 		},
-		"provisionerResources": func(d *api.Deployment) {
+		"provisionerResources": func(d *api.PmemCSIDeployment) {
 			d.Spec.ProvisionerResources = &corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{
 					corev1.ResourceCPU:    resource.MustParse("101m"),
@@ -65,7 +65,7 @@ func UpdateTests() []UpdateTest {
 				},
 			}
 		},
-		"nodeRegistrarResources": func(d *api.Deployment) {
+		"nodeRegistrarResources": func(d *api.PmemCSIDeployment) {
 			d.Spec.NodeRegistrarResources = &corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{
 					corev1.ResourceCPU:    resource.MustParse("301m"),
@@ -73,39 +73,39 @@ func UpdateTests() []UpdateTest {
 				},
 			}
 		},
-		"TLS": func(d *api.Deployment) {
+		"TLS": func(d *api.PmemCSIDeployment) {
 			SetTLSOrDie(&d.Spec)
 		},
-		"logLevel": func(d *api.Deployment) {
+		"logLevel": func(d *api.PmemCSIDeployment) {
 			d.Spec.LogLevel++
 		},
-		"logFormat": func(d *api.Deployment) {
+		"logFormat": func(d *api.PmemCSIDeployment) {
 			if d.Spec.LogFormat == api.LogFormatText {
 				d.Spec.LogFormat = api.LogFormatJSON
 			} else {
 				d.Spec.LogFormat = api.LogFormatText
 			}
 		},
-		"nodeSelector": func(d *api.Deployment) {
+		"nodeSelector": func(d *api.PmemCSIDeployment) {
 			d.Spec.NodeSelector = map[string]string{
 				"still-no-such-label": "still-no-such-value",
 			}
 		},
-		"pmemPercentage": func(d *api.Deployment) {
+		"pmemPercentage": func(d *api.PmemCSIDeployment) {
 			d.Spec.PMEMPercentage++
 		},
-		"labels": func(d *api.Deployment) {
+		"labels": func(d *api.PmemCSIDeployment) {
 			if d.Spec.Labels == nil {
 				d.Spec.Labels = map[string]string{}
 			}
 			d.Spec.Labels["foo"] = "bar"
 		},
-		"kubeletDir": func(d *api.Deployment) {
+		"kubeletDir": func(d *api.PmemCSIDeployment) {
 			d.Spec.KubeletDir = "/foo/bar"
 		},
 	}
 
-	full := api.Deployment{
+	full := api.PmemCSIDeployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "pmem-csi-with-values",
 		},
@@ -168,7 +168,7 @@ func UpdateTests() []UpdateTest {
 	}
 	SetTLSOrDie(&full.Spec)
 
-	baseDeployments := map[string]api.Deployment{
+	baseDeployments := map[string]api.PmemCSIDeployment{
 		"default deployment": {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "pmem-csi-with-defaults",
@@ -177,7 +177,7 @@ func UpdateTests() []UpdateTest {
 		"deployment with specific values": full,
 	}
 
-	updateAll := func(d *api.Deployment) {
+	updateAll := func(d *api.PmemCSIDeployment) {
 		for _, mutator := range singleMutators {
 			mutator(d)
 		}

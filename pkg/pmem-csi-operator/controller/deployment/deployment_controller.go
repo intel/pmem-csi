@@ -110,7 +110,7 @@ func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error
 	}
 
 	// Watch for changes to primary resource Deployment
-	if err := c.Watch(&source.Kind{Type: &api.Deployment{}}, &handler.EnqueueRequestForObject{}, p); err != nil {
+	if err := c.Watch(&source.Kind{Type: &api.PmemCSIDeployment{}}, &handler.EnqueueRequestForObject{}, p); err != nil {
 		return fmt.Errorf("watch: %v", err)
 	}
 
@@ -168,7 +168,7 @@ func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error
 	for _, resource := range currentObjects {
 		if err := c.Watch(&source.Kind{Type: resource}, &handler.EnqueueRequestForOwner{
 			IsController: true,
-			OwnerType:    &api.Deployment{},
+			OwnerType:    &api.PmemCSIDeployment{},
 		}, sop); err != nil {
 			return fmt.Errorf("create watch: %v", err)
 		}
@@ -181,7 +181,7 @@ func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error
 var _ reconcile.Reconciler = &ReconcileDeployment{}
 
 // ReconcileHook function to be invoked on reconciling a deployment.
-type ReconcileHook *func(d *api.Deployment)
+type ReconcileHook *func(d *api.PmemCSIDeployment)
 
 // ReconcileDeployment reconciles a Deployment object
 type ReconcileDeployment struct {
@@ -197,7 +197,7 @@ type ReconcileDeployment struct {
 	// container image used for deploying the operator
 	containerImage string
 	// known deployments
-	deployments map[string]*api.Deployment
+	deployments map[string]*api.PmemCSIDeployment
 	// deploymentsMutex protects concurrent access to deployments
 	deploymentsMutex sync.Mutex
 	// reconcileMutex synchronizes concurrent reconcile calls
@@ -246,7 +246,7 @@ func NewReconcileDeployment(ctx context.Context, client client.Client, opts pmem
 		k8sVersion:     opts.K8sVersion,
 		namespace:      opts.Namespace,
 		containerImage: opts.DriverImage,
-		deployments:    map[string]*api.Deployment{},
+		deployments:    map[string]*api.PmemCSIDeployment{},
 		reconcileHooks: map[ReconcileHook]struct{}{},
 	}, nil
 }
@@ -268,7 +268,7 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 	ctx := logger.Set(r.ctx, l)
 
 	// Fetch the Deployment instance
-	deployment := &api.Deployment{}
+	deployment := &api.PmemCSIDeployment{}
 	err = r.client.Get(ctx, request.NamespacedName, deployment)
 	if err != nil {
 		l.Error(err, "failed to retrieve CR to reconcile", "deployment", request.Name)
@@ -375,7 +375,7 @@ func (r *ReconcileDeployment) Delete(obj runtime.Object) error {
 }
 
 // PatchDeploymentStatus patches the give given deployment CR status
-func (r *ReconcileDeployment) patchDeploymentStatus(dep *api.Deployment, patch client.Patch) error {
+func (r *ReconcileDeployment) patchDeploymentStatus(dep *api.PmemCSIDeployment, patch client.Patch) error {
 	dep.Status.LastUpdated = metav1.Now()
 	// Passing a copy of CR to patch as the fake client used in tests
 	// will write back the changes to both status and spec.
@@ -387,13 +387,13 @@ func (r *ReconcileDeployment) patchDeploymentStatus(dep *api.Deployment, patch c
 	return nil
 }
 
-func (r *ReconcileDeployment) saveDeployment(d *api.Deployment) {
+func (r *ReconcileDeployment) saveDeployment(d *api.PmemCSIDeployment) {
 	r.deploymentsMutex.Lock()
 	defer r.deploymentsMutex.Unlock()
 	r.deployments[d.Name] = d
 }
 
-func (r *ReconcileDeployment) getDeployment(name string) *api.Deployment {
+func (r *ReconcileDeployment) getDeployment(name string) *api.PmemCSIDeployment {
 	r.deploymentsMutex.Lock()
 	defer r.deploymentsMutex.Unlock()
 	return r.deployments[name]

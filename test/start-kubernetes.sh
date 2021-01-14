@@ -415,9 +415,6 @@ function init_kubernetes_cluster() (
     ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/node-feature-discovery/$NFD_VERSION/nfd-master.yaml.template
     ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/node-feature-discovery/$NFD_VERSION/nfd-worker-daemonset.yaml.template
 
-    # Install cert manager. YAML file must have been downloaded by make earlier.
-    ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} kubectl apply -f - <_work/cert-manager.yaml || die "install cert manager"
-
     #get kubernetes join token
     join_token=$(ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} "$ENV_VARS kubeadm token create --print-join-command") || die "could not get kubeadm join token"
     pids=""

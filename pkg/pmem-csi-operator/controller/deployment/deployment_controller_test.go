@@ -57,10 +57,10 @@ type pmemDeployment struct {
 	kubeletDir                                          string
 }
 
-func getDeployment(d *pmemDeployment) *api.Deployment {
-	dep := &api.Deployment{
+func getDeployment(d *pmemDeployment) *api.PmemCSIDeployment {
+	dep := &api.PmemCSIDeployment{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       "Deployment",
+			Kind:       "PmemCSIDeployment",
 			APIVersion: api.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -126,7 +126,7 @@ func getDeployment(d *pmemDeployment) *api.Deployment {
 }
 
 func testDeploymentPhase(t *testing.T, c client.Client, name string, expectedPhase api.DeploymentPhase) {
-	depObject := &api.Deployment{
+	depObject := &api.PmemCSIDeployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
@@ -179,7 +179,7 @@ func objectKey(name string, namespace ...string) client.ObjectKey {
 }
 
 func deleteDeployment(c client.Client, name, ns string) error {
-	dep := &api.Deployment{}
+	dep := &api.PmemCSIDeployment{}
 	key := objectKey(name)
 	if err := c.Get(context.TODO(), key, dep); err != nil {
 		return err
@@ -262,7 +262,7 @@ func TestDeploymentController(t *testing.T) {
 			}
 		}
 
-		validateEvents := func(tc *testContext, dep *api.Deployment, expectedEvents []string) {
+		validateEvents := func(tc *testContext, dep *api.PmemCSIDeployment, expectedEvents []string) {
 			require.Eventually(tc.t, func() bool {
 				return len(tc.events) >= len(expectedEvents)
 			}, 30*time.Second, time.Second, "receive all expected events")
@@ -276,7 +276,7 @@ func TestDeploymentController(t *testing.T) {
 		}
 
 		validateConditions := func(tc *testContext, name string, expected map[api.DeploymentConditionType]corev1.ConditionStatus) {
-			dep := &api.Deployment{
+			dep := &api.PmemCSIDeployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: name,
 				},
@@ -290,9 +290,9 @@ func TestDeploymentController(t *testing.T) {
 			}
 		}
 
-		validateDriver := func(tc *testContext, dep *api.Deployment, expectedEvents []string, wasUpdated bool) {
+		validateDriver := func(tc *testContext, dep *api.PmemCSIDeployment, expectedEvents []string, wasUpdated bool) {
 			// We may have to fill in some defaults, so make a copy first.
-			dep = dep.DeepCopyObject().(*api.Deployment)
+			dep = dep.DeepCopyObject().(*api.PmemCSIDeployment)
 			if dep.Spec.Image == "" {
 				dep.Spec.Image = testDriverImage
 			}
@@ -595,13 +595,13 @@ func TestDeploymentController(t *testing.T) {
 				name: "modified-deployment",
 			}
 
-			var updatedDep *api.Deployment
+			var updatedDep *api.PmemCSIDeployment
 
 			dep := getDeployment(d)
 			err := tc.c.Create(tc.ctx, dep)
 			require.NoError(t, err, "failed to create deployment")
 
-			hook := func(d *api.Deployment) {
+			hook := func(d *api.PmemCSIDeployment) {
 				updatedDep = d.DeepCopy()
 				updatedDep.Spec.LogLevel++
 				err := tc.c.Update(tc.ctx, updatedDep)
@@ -634,7 +634,7 @@ func TestDeploymentController(t *testing.T) {
 					testIt := func(restart bool) {
 						tc := setup(t)
 						defer teardown(tc)
-						dep := testcase.Deployment.DeepCopyObject().(*api.Deployment)
+						dep := testcase.Deployment.DeepCopyObject().(*api.PmemCSIDeployment)
 
 						// Assumption is that all the testcases are positive cases.
 						conditions := map[api.DeploymentConditionType]corev1.ConditionStatus{

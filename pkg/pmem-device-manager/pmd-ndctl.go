@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	"k8s.io/klog/v2"

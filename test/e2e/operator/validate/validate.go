@@ -36,7 +36,7 @@ import (
 // objects for a certain deployment spec. deploymentSpec should only have those fields
 // set which are not the defaults. This call will wait for the expected objects until
 // the context times out.
-func DriverDeploymentEventually(ctx context.Context, client client.Client, k8sver version.Version, namespace string, deployment api.Deployment, initialCreation bool) error {
+func DriverDeploymentEventually(ctx context.Context, client client.Client, k8sver version.Version, namespace string, deployment api.PmemCSIDeployment, initialCreation bool) error {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -106,7 +106,7 @@ func DriverDeploymentEventually(ctx context.Context, client client.Client, k8sve
 //
 // A final error is returned when observing a problem that is not going to go away,
 // like an unexpected update of an object.
-func DriverDeployment(client client.Client, k8sver version.Version, namespace string, deployment api.Deployment, resourceVersions map[string]string) (final bool, finalErr error) {
+func DriverDeployment(client client.Client, k8sver version.Version, namespace string, deployment api.PmemCSIDeployment, resourceVersions map[string]string) (final bool, finalErr error) {
 	if deployment.GetUID() == "" {
 		return true, errors.New("deployment not an object that was stored in the API server, no UID")
 	}
@@ -495,7 +495,7 @@ func prettyPrintObjectID(object unstructured.Unstructured) string {
 		object.GetNamespace())
 }
 
-func listAllDeployedObjects(c client.Client, deployment api.Deployment, namespace string) ([]unstructured.Unstructured, error) {
+func listAllDeployedObjects(c client.Client, deployment api.PmemCSIDeployment, namespace string) ([]unstructured.Unstructured, error) {
 	objects := []unstructured.Unstructured{}
 
 	for _, list := range operatordeployment.AllObjectLists() {
