@@ -269,6 +269,12 @@ $ kubectl create -f https://github.com/intel/pmem-csi/raw/devel/deploy/operator/
 ```
 The operator gets deployed in a namespace called 'pmem-csi' which gets created by that YAML file.
 
+**WARNING:** This YAML file cannot be used to stop just the operator while
+keeping the PMEM-CSI deployments running. That's because something like
+`kubectl delete -f pmem-csi-operator.yaml` will delete the `pmem-csi`
+namespace which then also causes all PMEM-CSI deployments that might have
+been created in that namespace to be deleted.
+
 ##### Create a driver deployment
 
 Once the operator is installed and running, it is ready to handle
