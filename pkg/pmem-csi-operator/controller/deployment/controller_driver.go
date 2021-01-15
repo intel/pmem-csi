@@ -73,6 +73,12 @@ var currentObjects = []apiruntime.Object{
 	&appsv1.StatefulSet{TypeMeta: typeMeta(appsv1.SchemeGroupVersion, "StatefulSet")},
 }
 
+// CurrentObjects returns the active sub-object types used by the operator
+// for a driver deployment.
+func CurrentObjects() []apiruntime.Object {
+	return currentObjects
+}
+
 // A list of objects that may have been created by a previous release
 // of the operator. This is relevant when updating from such an older
 // release to the current one, because the current one must remove

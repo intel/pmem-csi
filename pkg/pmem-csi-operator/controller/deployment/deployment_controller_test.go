@@ -8,6 +8,7 @@ package deployment_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
@@ -201,65 +203,78 @@ func deleteDeployment(c client.Client, name, ns string) error {
 	return c.Delete(context.TODO(), driver)
 }
 
+const (
+	testNamespace   = "test-namespace"
+	testDriverImage = "fake-driver-image"
+)
+
+type testContext struct {
+	ctx              context.Context
+	t                *testing.T
+	c                client.Client
+	cs               kubernetes.Interface
+	rc               reconcile.Reconciler
+	evWatcher        watch.Interface
+	events           []*corev1.Event
+	resourceVersions map[string]string
+	k8sVersion       version.Version
+}
+
+func newTestContext(t *testing.T, k8sVersion version.Version) *testContext {
+	ctx := logger.Set(context.Background(), testinglogger.New(t))
+	tc := &testContext{
+		ctx:              ctx,
+		t:                t,
+		c:                newTestClient(),
+		cs:               cgfake.NewSimpleClientset(),
+		resourceVersions: map[string]string{},
+		k8sVersion:       k8sVersion,
+	}
+
+	tc.ResetReconciler()
+
+	return tc
+}
+
+func (tc *testContext) ResetReconciler() {
+	rc, err := deployment.NewReconcileDeployment(tc.ctx, tc.c, pmemcontroller.ControllerOptions{
+		Namespace:    testNamespace,
+		K8sVersion:   tc.k8sVersion,
+		DriverImage:  testDriverImage,
+		EventsClient: tc.cs.CoreV1().Events(metav1.NamespaceDefault),
+	})
+	require.NoError(tc.t, err, "create new reconciler")
+	tc.rc = rc
+	tc.UnsetEventWatcher()
+	tc.evWatcher = rc.(*deployment.ReconcileDeployment).EventBroadcaster().StartEventWatcher(func(ev *corev1.Event) {
+		// Discard consecutive duplicate events, mimicking the EventAggregator behavior
+		if len(tc.events) != 0 {
+			lastEvent := tc.events[len(tc.events)-1]
+			if lastEvent.Reason == ev.Reason && lastEvent.InvolvedObject.UID == ev.InvolvedObject.UID {
+				return
+			}
+		}
+		tc.events = append(tc.events, ev)
+	})
+}
+
+func (tc *testContext) UnsetEventWatcher() {
+	if tc != nil && tc.evWatcher != nil {
+		tc.evWatcher.Stop()
+	}
+}
+
 func TestDeploymentController(t *testing.T) {
 	err := apis.AddToScheme(scheme.Scheme)
 	require.NoError(t, err, "add api schema")
 
 	testIt := func(t *testing.T, testK8sVersion version.Version) {
-		type testContext struct {
-			ctx              context.Context
-			t                *testing.T
-			c                client.Client
-			cs               kubernetes.Interface
-			rc               reconcile.Reconciler
-			evWatcher        watch.Interface
-			events           []*corev1.Event
-			resourceVersions map[string]string
-		}
-		const (
-			testNamespace   = "test-namespace"
-			testDriverImage = "fake-driver-image"
-		)
-
-		newReconcileDeployment := func(ctx context.Context, c client.Client, cs kubernetes.Interface) reconcile.Reconciler {
-			rc, err := deployment.NewReconcileDeployment(ctx, c, pmemcontroller.ControllerOptions{
-				Namespace:    testNamespace,
-				K8sVersion:   testK8sVersion,
-				DriverImage:  testDriverImage,
-				EventsClient: cs.CoreV1().Events(metav1.NamespaceDefault),
-			})
-			require.NoError(t, err, "create new reconciler")
-
-			return rc
-		}
-
 		setup := func(t *testing.T) *testContext {
-			ctx := logger.Set(context.Background(), testinglogger.New(t))
-			tc := &testContext{
-				ctx:              ctx,
-				t:                t,
-				c:                fake.NewFakeClient(),
-				cs:               cgfake.NewSimpleClientset(),
-				resourceVersions: map[string]string{},
-			}
-			tc.rc = newReconcileDeployment(ctx, tc.c, tc.cs)
-			tc.evWatcher = tc.rc.(*deployment.ReconcileDeployment).EventBroadcaster().StartEventWatcher(func(ev *corev1.Event) {
-				// Discard consecutive duplicate events, mimicking the EventAggregator behavior
-				if len(tc.events) != 0 {
-					lastEvent := tc.events[len(tc.events)-1]
-					if lastEvent.Reason == ev.Reason && lastEvent.InvolvedObject.UID == ev.InvolvedObject.UID {
-						return
-					}
-				}
-				tc.events = append(tc.events, ev)
-			})
-			return tc
+			return newTestContext(t, testK8sVersion)
 		}
 
 		teardown := func(tc *testContext) {
-			if tc != nil && tc.evWatcher != nil {
-				tc.evWatcher.Stop()
-			}
+			tc.UnsetEventWatcher()
 		}
 
 		validateEvents := func(tc *testContext, dep *api.PmemCSIDeployment, expectedEvents []string) {
@@ -666,7 +681,7 @@ func TestDeploymentController(t *testing.T) {
 
 						if restart {
 							// Simulate restarting the operator by creating a new instance.
-							tc.rc = newReconcileDeployment(tc.ctx, tc.c, tc.cs)
+							tc.ResetReconciler()
 						}
 
 						// Update.
@@ -747,7 +762,7 @@ func TestDeploymentController(t *testing.T) {
 			require.NoError(t, err, "create configmap: %s", cm2.Name)
 
 			// Use a fresh reconciler to mimic operator restart
-			tc.rc = newReconcileDeployment(tc.ctx, tc.c, tc.cs)
+			tc.ResetReconciler()
 
 			// A fresh reconcile should delete the newly created above ConfigMap
 			testReconcilePhase(t, tc.rc, tc.c, d.name, false, false, api.DeploymentPhaseRunning)
@@ -766,6 +781,42 @@ func TestDeploymentController(t *testing.T) {
 			err = tc.c.Get(tc.ctx, client.ObjectKey{Name: cm2.Name, Namespace: testNamespace}, cm)
 			require.NoErrorf(t, err, "get '%s' config map after reconcile", cm2.Name)
 		})
+
+		t.Run("recover from unexpected shutdown", func(t *testing.T) {
+			tc := setup(t)
+			defer teardown(tc)
+
+			for _, obj := range deployment.CurrentObjects() {
+				gvk := obj.GetObjectKind().GroupVersionKind()
+				tc.c.(*testClient).InjectPanicOn(&gvk)
+
+				d := &pmemDeployment{
+					name: "test-panic-" + strings.ToLower(gvk.Kind),
+				}
+				dep := getDeployment(d)
+				err := tc.c.Create(tc.ctx, dep)
+				require.NoError(t, err, "create deployment")
+
+				req := reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name: d.name,
+					},
+				}
+
+				defer func() {
+					r := recover()
+					require.NotNil(t, r, "expected to recover from panic")
+
+					tc.c.(*testClient).InjectPanicOn(nil)
+					// mimic operator restart
+					tc.ResetReconciler()
+					testReconcilePhase(t, tc.rc, tc.c, d.name, false, false, api.DeploymentPhaseRunning)
+					validateDriver(tc, dep, []string{api.EventReasonNew, api.EventReasonRunning}, false)
+				}()
+
+				tc.rc.Reconcile(req)
+			}
+		})
 	}
 
 	t.Parallel()
@@ -781,4 +832,27 @@ func TestDeploymentController(t *testing.T) {
 			testIt(t, version)
 		})
 	}
+}
+
+type testClient struct {
+	client.Client
+	assertOn *schema.GroupVersionKind
+}
+
+func newTestClient(initObjs ...runtime.Object) client.Client {
+	return &testClient{Client: fake.NewFakeClient(initObjs...)}
+}
+
+func (t *testClient) InjectPanicOn(gvk *schema.GroupVersionKind) {
+	t.assertOn = gvk
+}
+
+// Create adds given obj to its object tracking list.
+// It panics if the object type matches with the type of 'assertOn'
+// that was previously set using InjectPanicOn()
+func (t *testClient) Create(ctx context.Context, obj runtime.Object, opts ...client.CreateOption) error {
+	if t.assertOn != nil && obj.GetObjectKind().GroupVersionKind() == *t.assertOn {
+		panic(fmt.Sprintf("assert: %v", obj.GetObjectKind()))
+	}
+	return t.Client.Create(ctx, obj, opts...)
 }
