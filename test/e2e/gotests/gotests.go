@@ -65,7 +65,7 @@ func runGoTest(f *framework.Framework, pkg string) {
 	pod.RunInPod(f, root,
 		[]string{"_work/test.test", "_work/evil-ca", "_work/pmem-ca", "deploy/crd/"},
 		"if _work/test.test -h 2>&1 | grep -q ginkgo; then "+
-			"TEST_WORK=_work REPO_ROOT=. _work/test.test -test.v -ginkgo.v; else "+
-			"TEST_WORK=_work REPO_ROOT=. _work/test.test -test.v; fi",
+			"TEST_WORK=_work REPO_ROOT=. _work/test.test -ginkgo.v; else "+
+			"TEST_WORK=_work REPO_ROOT=. _work/test.test; fi",
 		pmem.Namespace, pmem.Name, "pmem-driver")
 }
