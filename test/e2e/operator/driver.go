@@ -14,6 +14,7 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 	"github.com/intel/pmem-csi/test/e2e/driver"
 	"github.com/intel/pmem-csi/test/e2e/operator/validate"
+	"github.com/intel/pmem-csi/test/e2e/storage"
 	"github.com/intel/pmem-csi/test/e2e/storage/dax"
 	"github.com/intel/pmem-csi/test/e2e/storage/scheduler"
 
@@ -64,4 +65,8 @@ var _ = deploy.DescribeForSome("driver", func(d *deploy.Deployment) bool {
 	}
 
 	testsuites.DefineTestSuite(csiTestDriver, csiTestSuites)
+
+	// Late binding must work, regardless of the driver name and whether we have
+	// a scheduler extender.
+	storage.DefineLateBindingTests(d)
 })

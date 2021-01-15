@@ -1,5 +1,10 @@
 # Generated with "make kustomize", do not edit!
 
+allowedTopologies:
+- matchLabelExpressions:
+  - key: pmem-csi.intel.com/driver
+    values:
+    - started
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:

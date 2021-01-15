@@ -3,3 +3,12 @@ kind: StorageClass
 metadata:
   name: pmem-csi-sc
 provisioner: pmem-csi.intel.com
+# Setting allowedTopology ensures that pods using volumes
+# with late binding only get scheduled to pmem
+allowedTopologies:
+- matchLabelExpressions:
+  # The "pmem-csi.intel.com" part is the driver name.
+  # It must match the "provisioner" field above.
+  - key: pmem-csi.intel.com/driver
+    values:
+    - started

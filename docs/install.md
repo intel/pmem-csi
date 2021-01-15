@@ -58,6 +58,11 @@ installation by name, which indirectly determines the device mode. A
 storage class also chooses which filesystem is used (xfs or ext4) and
 enables [Kata Containers support](#kata-containers-support).
 
+It is recommended that storage classes use `allowedTopologies` as in
+the [`pmem-storageclass.yaml`](/deploy/kustomize/storageclass/pmem-storageclass.yaml)
+to ensure that pods with volumes that use late binding land on a node
+where the driver is available.
+
 Optionally, the administrator can enable [the scheduler
 extensions](#enable-scheduler-extensions) (recommended) and monitoring
 of resource usage via the [metrics support](#metrics-support).

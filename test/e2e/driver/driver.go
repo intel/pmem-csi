@@ -136,6 +136,7 @@ func (m *manifestDriver) GetDynamicProvisionStorageClass(config *testsuites.PerT
 	Expect(ok).To(BeTrue(), "storage class from %s", scManifest)
 	sc.Provisioner = m.csiDriverName
 	sc.Name = config.Prefix + "-" + sc.Name
+	sc.AllowedTopologies[0].MatchLabelExpressions[0].Key = m.csiDriverName + "/driver"
 
 	// Add additional parameters, if any.
 	for name, value := range m.parameters {
