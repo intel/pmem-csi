@@ -28,12 +28,10 @@ import (
 	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
-	apiruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -176,15 +174,13 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		}, 2*time.Minute, time.Second, what, ": ", expected)
 	}
 
-	ensureObjectRecovered := func(obj apiruntime.Object) {
-		meta, err := meta.Accessor(obj)
-		Expect(err).ShouldNot(HaveOccurred(), "get meta object")
-		framework.Logf("Waiting for deleted object recovered %T/%s", obj, meta.GetName())
-		key := runtime.ObjectKey{Name: meta.GetName(), Namespace: meta.GetNamespace()}
+	ensureObjectRecovered := func(obj runtime.Object) {
+		framework.Logf("Waiting for deleted object recovered %T/%s", obj, obj.GetName())
+		key := runtime.ObjectKey{Name: obj.GetName(), Namespace: obj.GetNamespace()}
 		Eventually(func() error {
 			return client.Get(context.TODO(), key, obj)
 		}, "2m", "1s").ShouldNot(HaveOccurred(), "failed to recover object")
-		framework.Logf("Object %T/%s recovered", obj, meta.GetName())
+		framework.Logf("Object %T/%s recovered", obj, obj.GetName())
 	}
 
 	Context("deployment", func() {
@@ -731,105 +727,103 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 	Context("recover", func() {
 		Context("deleted sub-resources", func() {
-			tests := map[string]func(*api.PmemCSIDeployment) apiruntime.Object{
-				"provisioner service account": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+			tests := map[string]func(*api.PmemCSIDeployment) runtime.Object{
+				"provisioner service account": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &corev1.ServiceAccount{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerServiceAccountName(), Namespace: d.Namespace},
 					}
 				},
-				"webhooks service account": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"webhooks service account": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &corev1.ServiceAccount{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksServiceAccountName(), Namespace: d.Namespace},
 					}
 				},
-				"scheduler service": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"scheduler service": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &corev1.Service{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.SchedulerServiceName(), Namespace: d.Namespace},
 					}
 				},
-				"controller service": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"controller service": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &corev1.Service{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ControllerServiceName(), Namespace: d.Namespace},
 					}
 				},
-				"metrics service": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"metrics service": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &corev1.Service{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.MetricsServiceName(), Namespace: d.Namespace},
 					}
 				},
-				"webhooks role": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"webhooks role": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &rbacv1.Role{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksRoleName(), Namespace: d.Namespace},
 					}
 				},
-				"webhooks role binding": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"webhooks role binding": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &rbacv1.RoleBinding{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksRoleBindingName(), Namespace: d.Namespace},
 					}
 				},
-				"webhooks cluster role": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"webhooks cluster role": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &rbacv1.ClusterRole{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksClusterRoleName()},
 					}
 				},
-				"webhooks cluster role binding": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"webhooks cluster role binding": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &rbacv1.ClusterRoleBinding{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksClusterRoleBindingName()},
 					}
 				},
-				"mutating webhook config": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"mutating webhook config": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &admissionregistrationv1beta1.MutatingWebhookConfiguration{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.MutatingWebhookName()},
 					}
 				},
-				"provisioner role": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"provisioner role": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &rbacv1.Role{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerRoleName(), Namespace: d.Namespace},
 					}
 				},
-				"provisioner role binding": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"provisioner role binding": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &rbacv1.RoleBinding{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerRoleBindingName(), Namespace: d.Namespace},
 					}
 				},
-				"provisioner cluster role": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"provisioner cluster role": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &rbacv1.ClusterRole{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerClusterRoleName()},
 					}
 				},
-				"provisioner cluster role binding": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"provisioner cluster role binding": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &rbacv1.ClusterRoleBinding{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerClusterRoleBindingName()},
 					}
 				},
-				"csi driver": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"csi driver": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &storagev1beta1.CSIDriver{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.GetName()},
 					}
 				},
-				"controller driver": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"controller driver": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &appsv1.StatefulSet{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ControllerDriverName(), Namespace: d.Namespace},
 					}
 				},
-				"node driver": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"node driver": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &appsv1.DaemonSet{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.NodeDriverName(), Namespace: d.Namespace},
 					}
 				},
 			}
 
-			delete := func(obj apiruntime.Object) {
-				meta, err := meta.Accessor(obj)
-				Expect(err).ShouldNot(HaveOccurred(), "get meta object")
+			delete := func(obj runtime.Object) {
 				Eventually(func() error {
 					err := client.Delete(context.TODO(), obj)
 					if err == nil || errors.IsNotFound(err) {
 						return nil
 					}
 					return err
-				}, "3m", "1s").ShouldNot(HaveOccurred(), "delete object '%T/%s", obj, meta.GetName())
-				framework.Logf("Deleted object %T/%s", obj, meta.GetName())
+				}, "3m", "1s").ShouldNot(HaveOccurred(), "delete object '%T/%s", obj, obj.GetName())
+				framework.Logf("Deleted object %T/%s", obj, obj.GetName())
 			}
 			for name, getter := range tests {
 				name, getter := name, getter
@@ -851,8 +845,8 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		})
 
 		Context("conflicting update", func() {
-			tests := map[string]func(dep *api.PmemCSIDeployment) apiruntime.Object{
-				"controller": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+			tests := map[string]func(dep *api.PmemCSIDeployment) runtime.Object{
+				"controller": func(dep *api.PmemCSIDeployment) runtime.Object {
 					obj := &appsv1.StatefulSet{}
 					key := runtime.ObjectKey{Name: dep.ControllerDriverName(), Namespace: d.Namespace}
 					EventuallyWithOffset(1, func() error {
@@ -867,7 +861,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					}
 					return obj
 				},
-				"node driver": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"node driver": func(dep *api.PmemCSIDeployment) runtime.Object {
 					obj := &appsv1.DaemonSet{}
 					key := runtime.ObjectKey{Name: dep.NodeDriverName(), Namespace: d.Namespace}
 					EventuallyWithOffset(1, func() error {
@@ -882,7 +876,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					}
 					return obj
 				},
-				"metrics service": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"metrics service": func(dep *api.PmemCSIDeployment) runtime.Object {
 					obj := &corev1.Service{}
 					key := runtime.ObjectKey{Name: dep.MetricsServiceName(), Namespace: d.Namespace}
 					EventuallyWithOffset(1, func() error {
@@ -898,7 +892,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					}
 					return obj
 				},
-				"controller service": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"controller service": func(dep *api.PmemCSIDeployment) runtime.Object {
 					obj := &corev1.Service{}
 					key := runtime.ObjectKey{Name: dep.ControllerServiceName(), Namespace: d.Namespace}
 					EventuallyWithOffset(1, func() error {

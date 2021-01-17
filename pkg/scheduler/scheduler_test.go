@@ -22,7 +22,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	admissionv1beta1 "k8s.io/api/admission/v1beta1"
+	admissionv1 "k8s.io/api/admission/v1"
 	v1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -670,7 +670,7 @@ func TestMutatePod(t *testing.T) {
 		obj, err := json.Marshal(pod)
 		require.NoError(t, err, "encode pod")
 		req := admission.Request{
-			AdmissionRequest: admissionv1beta1.AdmissionRequest{
+			AdmissionRequest: admissionv1.AdmissionRequest{
 				Namespace: "default",
 				Object: runtime.RawExtension{
 					Raw: obj,

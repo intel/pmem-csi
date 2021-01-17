@@ -27,7 +27,6 @@ import (
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/kubectl/pkg/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -53,7 +52,7 @@ func typeMeta(gv schema.GroupVersion, kind string) metav1.TypeMeta {
 //
 // The RBAC rules in deploy/kustomize/operator/operator.yaml must
 // allow all of the operations (creation, patching, etc.).
-var currentObjects = []apiruntime.Object{
+var currentObjects = []client.Object{
 	&rbacv1.ClusterRole{TypeMeta: typeMeta(rbacv1.SchemeGroupVersion, "ClusterRole")},
 	&rbacv1.ClusterRoleBinding{TypeMeta: typeMeta(rbacv1.SchemeGroupVersion, "ClusterRoleBinding")},
 	&storagev1beta1.CSIDriver{TypeMeta: typeMeta(storagev1beta1.SchemeGroupVersion, "CSIDriver")},
@@ -69,7 +68,7 @@ var currentObjects = []apiruntime.Object{
 
 // CurrentObjects returns the active sub-object types used by the operator
 // for a driver deployment.
-func CurrentObjects() []apiruntime.Object {
+func CurrentObjects() []client.Object {
 	return currentObjects
 }
 
@@ -80,7 +79,7 @@ func CurrentObjects() []apiruntime.Object {
 //
 // The RBAC rules in deploy/kustomize/operator/operator.yaml must
 // allow listing and removing of these objects.
-var obsoleteObjects = []apiruntime.Object{
+var obsoleteObjects = []client.Object{
 	&corev1.ConfigMap{TypeMeta: typeMeta(corev1.SchemeGroupVersion, "ConfigMap")}, // included only for testing purposes
 }
 
@@ -118,11 +117,11 @@ type pmemCSIDeployment struct {
 // the current revision of that object that produces the modified
 // object.
 type objectPatch struct {
-	obj   apiruntime.Object
+	obj   client.Object
 	patch client.Patch
 }
 
-func newObjectPatch(obj, copy apiruntime.Object) *objectPatch {
+func newObjectPatch(obj client.Object, copy apiruntime.Object) *objectPatch {
 	return &objectPatch{
 		obj:   obj,
 		patch: client.MergeFrom(copy),
@@ -258,7 +257,7 @@ func (d *pmemCSIDeployment) reconcile(ctx context.Context, r *ReconcileDeploymen
 
 // getSubObject retrieves the latest revision of given object type from the API server
 // And checks if that object is owned by the current deployment CR
-func (d *pmemCSIDeployment) getSubObject(ctx context.Context, r *ReconcileDeployment, obj apiruntime.Object) error {
+func (d *pmemCSIDeployment) getSubObject(ctx context.Context, r *ReconcileDeployment, obj client.Object) error {
 	objMeta, err := meta.Accessor(obj)
 	if err != nil {
 		return fmt.Errorf("internal error %T: %v", obj, err)
@@ -284,9 +283,9 @@ func (d *pmemCSIDeployment) getSubObject(ctx context.Context, r *ReconcileDeploy
 type redeployObject struct {
 	objType    reflect.Type
 	enabled    func(*pmemCSIDeployment) bool
-	object     func(*pmemCSIDeployment) apiruntime.Object
-	modify     func(*pmemCSIDeployment, apiruntime.Object) error
-	postUpdate func(*pmemCSIDeployment, apiruntime.Object) error
+	object     func(*pmemCSIDeployment) client.Object
+	modify     func(*pmemCSIDeployment, client.Object) error
+	postUpdate func(*pmemCSIDeployment, client.Object) error
 }
 
 // redeploy resets/patches the object returned by ro.object()
@@ -299,7 +298,7 @@ type redeployObject struct {
 //  5. Call objectPatch.Apply() to submit the chanages to the APIServer.
 //  6. If the update in step-5 was success, then call the ro.postUpdate() callback
 //     to run any post update steps.
-func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment, ro redeployObject) (apiruntime.Object, error) {
+func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment, ro redeployObject) (client.Object, error) {
 	o := ro.object(d)
 	if o == nil {
 		return nil, fmt.Errorf("nil object")
@@ -350,17 +349,17 @@ func mutatingWebhookEnabled(d *pmemCSIDeployment) bool {
 var subObjectHandlers = map[string]redeployObject{
 	"node driver": {
 		objType: reflect.TypeOf(&appsv1.DaemonSet{}),
-		object: func(d *pmemCSIDeployment) apiruntime.Object {
+		object: func(d *pmemCSIDeployment) client.Object {
 			return &appsv1.DaemonSet{
 				TypeMeta:   metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 				ObjectMeta: d.getObjectMeta(d.NodeDriverName(), false),
 			}
 		},
-		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			d.getNodeDaemonSet(o.(*appsv1.DaemonSet))
 			return nil
 		},
-		postUpdate: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+		postUpdate: func(d *pmemCSIDeployment, o client.Object) error {
 			ds := o.(*appsv1.DaemonSet)
 			// Update node driver status is status object
 			status := "NotReady"
@@ -380,17 +379,17 @@ var subObjectHandlers = map[string]redeployObject{
 	"controller driver": {
 		objType: reflect.TypeOf(&appsv1.StatefulSet{}),
 		enabled: controllerEnabled,
-		object: func(d *pmemCSIDeployment) apiruntime.Object {
+		object: func(d *pmemCSIDeployment) client.Object {
 			return &appsv1.StatefulSet{
 				TypeMeta:   metav1.TypeMeta{Kind: "StatefulSet", APIVersion: "apps/v1"},
 				ObjectMeta: d.getObjectMeta(d.ControllerDriverName(), false),
 			}
 		},
-		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			d.getControllerStatefulSet(o.(*appsv1.StatefulSet))
 			return nil
 		},
-		postUpdate: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+		postUpdate: func(d *pmemCSIDeployment, o client.Object) error {
 			ss := o.(*appsv1.StatefulSet)
 			// Update controller status is status object
 			status := "NotReady"
@@ -411,13 +410,13 @@ var subObjectHandlers = map[string]redeployObject{
 	"controller service": {
 		objType: reflect.TypeOf(&corev1.Service{}),
 		enabled: controllerEnabled,
-		object: func(d *pmemCSIDeployment) apiruntime.Object {
+		object: func(d *pmemCSIDeployment) client.Object {
 			return &corev1.Service{
 				TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 				ObjectMeta: d.getObjectMeta(d.ControllerServiceName(), false),
 			}
 		},
-		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			d.getControllerService(o.(*corev1.Service))
 			return nil
 		},
@@ -425,26 +424,26 @@ var subObjectHandlers = map[string]redeployObject{
 	"metrics service": {
 		objType: reflect.TypeOf(&corev1.Service{}),
 		enabled: controllerEnabled,
-		object: func(d *pmemCSIDeployment) apiruntime.Object {
+		object: func(d *pmemCSIDeployment) client.Object {
 			return &corev1.Service{
 				TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 				ObjectMeta: d.getObjectMeta(d.MetricsServiceName(), false),
 			}
 		},
-		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			d.getMetricsService(o.(*corev1.Service))
 			return nil
 		},
 	},
 	"CSIDriver": {
 		objType: reflect.TypeOf(&storagev1beta1.CSIDriver{}),
-		object: func(d *pmemCSIDeployment) apiruntime.Object {
+		object: func(d *pmemCSIDeployment) client.Object {
 			return &storagev1beta1.CSIDriver{
 				TypeMeta:   metav1.TypeMeta{Kind: "CSIDriver", APIVersion: "storage.k8s.io/v1beta1"},
 				ObjectMeta: d.getObjectMeta(d.CSIDriverName(), true),
 			}
 		},
-		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			d.getCSIDriver(o.(*storagev1beta1.CSIDriver))
 			return nil
 		},
@@ -452,13 +451,13 @@ var subObjectHandlers = map[string]redeployObject{
 	"webhooks role": {
 		objType: reflect.TypeOf(&rbacv1.Role{}),
 		enabled: controllerEnabled,
-		object: func(d *pmemCSIDeployment) apiruntime.Object {
+		object: func(d *pmemCSIDeployment) client.Object {
 			return &rbacv1.Role{
 				TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 				ObjectMeta: d.getObjectMeta(d.WebhooksRoleName(), false),
 			}
 		},
-		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			d.getWebhooksRole(o.(*rbacv1.Role))
 			return nil
 		},
@@ -466,13 +465,13 @@ var subObjectHandlers = map[string]redeployObject{
 	"webhooks role binding": {
 		objType: reflect.TypeOf(&rbacv1.RoleBinding{}),
 		enabled: controllerEnabled,
-		object: func(d *pmemCSIDeployment) apiruntime.Object {
+		object: func(d *pmemCSIDeployment) client.Object {
 			return &rbacv1.RoleBinding{
 				TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 				ObjectMeta: d.getObjectMeta(d.WebhooksRoleBindingName(), false),
 			}
 		},
-		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			d.getWebhooksRoleBinding(o.(*rbacv1.RoleBinding))
 			return nil
 		},
@@ -480,13 +479,13 @@ var subObjectHandlers = map[string]redeployObject{
 	"webhooks cluster role": {
 		objType: reflect.TypeOf(&rbacv1.ClusterRole{}),
 		enabled: controllerEnabled,
-		object: func(d *pmemCSIDeployment) apiruntime.Object {
+		object: func(d *pmemCSIDeployment) client.Object {
 			return &rbacv1.ClusterRole{
 				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 				ObjectMeta: d.getObjectMeta(d.WebhooksClusterRoleName(), true),
 			}
 		},
-		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			d.getWebhooksClusterRole(o.(*rbacv1.ClusterRole))
 			return nil
 		},
@@ -494,13 +493,13 @@ var subObjectHandlers = map[string]redeployObject{
 	"webhooks cluster role binding": {
 		objType: reflect.TypeOf(&rbacv1.ClusterRoleBinding{}),
 		enabled: controllerEnabled,
-		object: func(d *pmemCSIDeployment) apiruntime.Object {
+		object: func(d *pmemCSIDeployment) client.Object {
 			return &rbacv1.ClusterRoleBinding{
 				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 				ObjectMeta: d.getObjectMeta(d.WebhooksClusterRoleBindingName(), true),
 			}
 		},
-		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			d.getWebhooksClusterRoleBinding(o.(*rbacv1.ClusterRoleBinding))
 			return nil
 		},
@@ -508,13 +507,13 @@ var subObjectHandlers = map[string]redeployObject{
 	"webhooks service account": {
 		objType: reflect.TypeOf(&corev1.ServiceAccount{}),
 		enabled: controllerEnabled,
-		object: func(d *pmemCSIDeployment) apiruntime.Object {
+		object: func(d *pmemCSIDeployment) client.Object {
 			return &corev1.ServiceAccount{
 				TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 				ObjectMeta: d.getObjectMeta(d.WebhooksServiceAccountName(), false),
 			}
 		},
-		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			// nothing to customize for service account
 			return nil
 		},
@@ -522,13 +521,13 @@ var subObjectHandlers = map[string]redeployObject{
 	"mutating webhook configuration": {
 		objType: reflect.TypeOf(&admissionregistrationv1beta1.MutatingWebhookConfiguration{}),
 		enabled: mutatingWebhookEnabled,
-		object: func(d *pmemCSIDeployment) apiruntime.Object {
+		object: func(d *pmemCSIDeployment) client.Object {
 			return &admissionregistrationv1beta1.MutatingWebhookConfiguration{
 				TypeMeta:   metav1.TypeMeta{Kind: "MutatingWebhookConfiguration", APIVersion: "admissionregistration.k8s.io/v1beta1"},
 				ObjectMeta: d.getObjectMeta(d.MutatingWebhookName(), true),
 			}
 		},
-		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			d.getMutatingWebhookConfig(o.(*admissionregistrationv1beta1.MutatingWebhookConfiguration))
 			return nil
 		},
@@ -536,78 +535,78 @@ var subObjectHandlers = map[string]redeployObject{
 	"scheduler service": {
 		objType: reflect.TypeOf(&corev1.Service{}),
 		enabled: controllerEnabled,
-		object: func(d *pmemCSIDeployment) apiruntime.Object {
+		object: func(d *pmemCSIDeployment) client.Object {
 			return &corev1.Service{
 				TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 				ObjectMeta: d.getObjectMeta(d.SchedulerServiceName(), false),
 			}
 		},
-		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			d.getSchedulerService(o.(*corev1.Service))
 			return nil
 		},
 	},
 	"provisioner role": {
 		objType: reflect.TypeOf(&rbacv1.Role{}),
-		object: func(d *pmemCSIDeployment) apiruntime.Object {
+		object: func(d *pmemCSIDeployment) client.Object {
 			return &rbacv1.Role{
 				TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 				ObjectMeta: d.getObjectMeta(d.ProvisionerRoleName(), false),
 			}
 		},
-		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			d.getControllerProvisionerRole(o.(*rbacv1.Role))
 			return nil
 		},
 	},
 	"provisioner role binding": {
 		objType: reflect.TypeOf(&rbacv1.RoleBinding{}),
-		object: func(d *pmemCSIDeployment) apiruntime.Object {
+		object: func(d *pmemCSIDeployment) client.Object {
 			return &rbacv1.RoleBinding{
 				TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 				ObjectMeta: d.getObjectMeta(d.ProvisionerRoleBindingName(), false),
 			}
 		},
-		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			d.getControllerProvisionerRoleBinding(o.(*rbacv1.RoleBinding))
 			return nil
 		},
 	},
 	"provisioner cluster role": {
 		objType: reflect.TypeOf(&rbacv1.ClusterRole{}),
-		object: func(d *pmemCSIDeployment) apiruntime.Object {
+		object: func(d *pmemCSIDeployment) client.Object {
 			return &rbacv1.ClusterRole{
 				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 				ObjectMeta: d.getObjectMeta(d.ProvisionerClusterRoleName(), true),
 			}
 		},
-		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			d.getControllerProvisionerClusterRole(o.(*rbacv1.ClusterRole))
 			return nil
 		},
 	},
 	"provisioner cluster role binding": {
 		objType: reflect.TypeOf(&rbacv1.ClusterRoleBinding{}),
-		object: func(d *pmemCSIDeployment) apiruntime.Object {
+		object: func(d *pmemCSIDeployment) client.Object {
 			return &rbacv1.ClusterRoleBinding{
 				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 				ObjectMeta: d.getObjectMeta(d.ProvisionerClusterRoleBindingName(), true),
 			}
 		},
-		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			d.getControllerProvisionerClusterRoleBinding(o.(*rbacv1.ClusterRoleBinding))
 			return nil
 		},
 	},
 	"provisioner service account": {
 		objType: reflect.TypeOf(&corev1.ServiceAccount{}),
-		object: func(d *pmemCSIDeployment) apiruntime.Object {
+		object: func(d *pmemCSIDeployment) client.Object {
 			return &corev1.ServiceAccount{
 				TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 				ObjectMeta: d.getObjectMeta(d.ProvisionerServiceAccountName(), false),
 			}
 		},
-		modify: func(d *pmemCSIDeployment, o apiruntime.Object) error {
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			// nothing to customize for service account
 			return nil
 		},
@@ -704,19 +703,7 @@ func (d *pmemCSIDeployment) deleteObsoleteObjects(ctx context.Context, r *Reconc
 				continue
 			}
 			l.V(3).Info("deleting obsolete object", "name", obj.GetName(), "gkv", obj.GetObjectKind().GroupVersionKind())
-
-			o, err := scheme.Scheme.New(obj.GetObjectKind().GroupVersionKind())
-			if err != nil {
-				return err
-			}
-			metaObj, err := meta.Accessor(o)
-			if err != nil {
-				return err
-			}
-			metaObj.SetName(obj.GetName())
-			metaObj.SetNamespace(obj.GetNamespace())
-
-			if err := r.Delete(o); err != nil && !errors.IsNotFound(err) {
+			if err := r.Delete(&obj); err != nil && !errors.IsNotFound(err) {
 				return err
 			}
 		}
