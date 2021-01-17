@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -221,9 +222,11 @@ type testContext struct {
 	cs               kubernetes.Interface
 	rc               reconcile.Reconciler
 	evWatcher        watch.Interface
-	events           []*corev1.Event
 	resourceVersions map[string]string
 	k8sVersion       version.Version
+
+	eventsMutex sync.Mutex
+	events      []*corev1.Event
 }
 
 func newTestContext(t *testing.T, k8sVersion version.Version, initObjs ...runtime.Object) *testContext {
@@ -253,6 +256,9 @@ func (tc *testContext) ResetReconciler() {
 	tc.rc = rc
 	tc.UnsetEventWatcher()
 	tc.evWatcher = rc.(*deployment.ReconcileDeployment).EventBroadcaster().StartEventWatcher(func(ev *corev1.Event) {
+		tc.eventsMutex.Lock()
+		defer tc.eventsMutex.Unlock()
+
 		// Discard consecutive duplicate events, mimicking the EventAggregator behavior
 		if len(tc.events) != 0 {
 			lastEvent := tc.events[len(tc.events)-1]
@@ -299,15 +305,21 @@ func TestDeploymentController(t *testing.T) {
 
 		validateEvents := func(tc *testContext, dep *api.PmemCSIDeployment, expectedEvents []string) {
 			require.Eventually(tc.t, func() bool {
-				return len(tc.events) >= len(expectedEvents)
-			}, 30*time.Second, time.Second, "receive all expected events")
-			events := []string{}
-			for _, e := range tc.events {
-				if e.InvolvedObject.UID == dep.GetUID() {
-					events = append(events, e.Reason)
+				tc.eventsMutex.Lock()
+				defer tc.eventsMutex.Unlock()
+
+				if len(tc.events) < len(expectedEvents) {
+					return false
 				}
-			}
-			require.ElementsMatch(tc.t, events, expectedEvents, "events must match")
+				events := []string{}
+				for _, e := range tc.events {
+					if e.InvolvedObject.UID == dep.GetUID() {
+						events = append(events, e.Reason)
+					}
+				}
+				require.ElementsMatch(tc.t, events, expectedEvents, "events must match")
+				return true
+			}, 30*time.Second, time.Second, "receive all expected events")
 		}
 
 		validateConditions := func(tc *testContext, name string, expected map[api.DeploymentConditionType]corev1.ConditionStatus) {
