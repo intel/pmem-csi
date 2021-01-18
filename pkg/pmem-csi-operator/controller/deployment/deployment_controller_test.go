@@ -8,6 +8,7 @@ package deployment_test
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -226,7 +227,7 @@ type testContext struct {
 	k8sVersion       version.Version
 
 	eventsMutex sync.Mutex
-	events      []*corev1.Event
+	events      []corev1.Event
 }
 
 func newTestContext(t *testing.T, k8sVersion version.Version, initObjs ...runtime.Object) *testContext {
@@ -264,15 +265,7 @@ func (tc *testContext) ResetReconciler() {
 	tc.evWatcher = rc.(*deployment.ReconcileDeployment).EventBroadcaster().StartEventWatcher(func(ev *corev1.Event) {
 		tc.eventsMutex.Lock()
 		defer tc.eventsMutex.Unlock()
-
-		// Discard consecutive duplicate events, mimicking the EventAggregator behavior
-		if len(tc.events) != 0 {
-			lastEvent := tc.events[len(tc.events)-1]
-			if lastEvent.Reason == ev.Reason && lastEvent.InvolvedObject.UID == ev.InvolvedObject.UID {
-				return
-			}
-		}
-		tc.events = append(tc.events, ev)
+		tc.events = append(tc.events, *ev)
 	})
 }
 
@@ -314,16 +307,24 @@ func TestDeploymentController(t *testing.T) {
 				tc.eventsMutex.Lock()
 				defer tc.eventsMutex.Unlock()
 
-				if len(tc.events) < len(expectedEvents) {
-					return false
-				}
+				// Before comparing against expected
+				// events, we must sort by the "first
+				// seen", time stamp because events
+				// may get delivered out-of-order.
+				sort.Slice(tc.events, func(i, j int) bool {
+					return tc.events[i].FirstTimestamp.Before(&tc.events[j].FirstTimestamp)
+				})
+
+				// Then we need to filter out events for the
+				// right deployment and remove duplicates.
 				events := []string{}
 				for _, e := range tc.events {
-					if e.InvolvedObject.UID == dep.GetUID() {
+					if e.InvolvedObject.UID == dep.GetUID() &&
+						(len(events) == 0 || events[len(events)-1] != e.Reason) {
 						events = append(events, e.Reason)
 					}
 				}
-				require.ElementsMatch(tc.t, events, expectedEvents, "events must match")
+				require.Equal(tc.t, events, expectedEvents, "events must match")
 				return true
 			}, 30*time.Second, time.Second, "receive all expected events")
 		}
