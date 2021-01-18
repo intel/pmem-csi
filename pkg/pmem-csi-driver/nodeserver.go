@@ -93,12 +93,7 @@ func (ns *nodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoReque
 		NodeId: ns.cs.nodeID,
 		AccessibleTopology: &csi.Topology{
 			Segments: map[string]string{
-				// This part varies by node.
 				DriverTopologyKey: ns.cs.nodeID,
-				// This part is the same on all nodes. It is used
-				// by storage class label selectors to choose
-				// nodes which have the driver.
-				DriverStartedKey: DriverStartedValue,
 			},
 		},
 	}, nil

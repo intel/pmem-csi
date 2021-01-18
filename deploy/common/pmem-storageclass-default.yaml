@@ -2,9 +2,9 @@
 
 allowedTopologies:
 - matchLabelExpressions:
-  - key: pmem-csi.intel.com/driver
+  - key: storage
     values:
-    - started
+    - pmem
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:

@@ -69,7 +69,17 @@ for deploy in ${DEPLOY[@]}; do
         paths+=" $path"
     fi
     if [ -f "$path" ]; then
-        ${KUBECTL} apply -f - <"$path"
+        case "$path" in
+            *storageclass*)
+                # Patch the node selector label into the storage class instead of the default storage=pmem.
+                sed -e "s;: storage\$;: \"$(echo $TEST_PMEM_NODE_LABEL | cut -d= -f1)\";" \
+                    -e "s;- pmem\$;- \"$(echo $TEST_PMEM_NODE_LABEL | cut -d= -f2)\";" \
+                    "$path" | ${KUBECTL} apply -f -
+                ;;
+            *)
+                ${KUBECTL} apply -f - <"$path"
+                ;;
+            esac
     elif [ -d "$path" ]; then
         # A kustomize base. We need to copy all files over into the cluster, otherwise
         # `kubectl kustomize` won't work.

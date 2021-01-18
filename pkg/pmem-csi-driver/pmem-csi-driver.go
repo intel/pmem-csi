@@ -70,19 +70,11 @@ const (
 	Node DriverMode = "node"
 	// Just the webhooks, using metrics instead of gRPC over TCP.
 	Webhooks DriverMode = "webhooks"
-
-	// DriverStartedValue is the fixed key used for DriverStartedKey.
-	DriverStartedValue = "started"
 )
 
 var (
-	// DriverTopologyKey is the key to use for per-node topology constraints.
+	//PmemDriverTopologyKey key to use for topology constraint
 	DriverTopologyKey = ""
-
-	// DriverStartedKey is an additional key with the same value on each node.
-	// It's useful for selecting nodes with PMEM-CSI in cases (like storage
-	// classes) where a value is required because "key exists" is not valid.
-	DriverStartedKey = ""
 
 	// Mirrored after https://github.com/kubernetes/component-base/blob/dae26a37dccb958eac96bc9dedcecf0eb0690f0f/metrics/version.go#L21-L37
 	// just with less information.
@@ -160,7 +152,6 @@ func GetCSIDriver(cfg Config) (*csiDriver, error) {
 	}
 
 	DriverTopologyKey = cfg.DriverName + "/node"
-	DriverStartedKey = cfg.DriverName + "/driver"
 
 	// Should GetCSIDriver get called more than once per process,
 	// all of them will record their version.
