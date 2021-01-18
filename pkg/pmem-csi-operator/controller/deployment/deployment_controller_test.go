@@ -230,11 +230,17 @@ type testContext struct {
 }
 
 func newTestContext(t *testing.T, k8sVersion version.Version, initObjs ...runtime.Object) *testContext {
+	// Make a copy of the initial objects, just to be on the safe side.
+	var objs []runtime.Object
+
+	for _, obj := range initObjs {
+		objs = append(objs, obj.DeepCopyObject())
+	}
 	ctx := logger.Set(context.Background(), testinglogger.New(t))
 	tc := &testContext{
 		ctx:              ctx,
 		t:                t,
-		c:                newTestClient(initObjs...),
+		c:                newTestClient(objs...),
 		cs:               cgfake.NewSimpleClientset(),
 		resourceVersions: map[string]string{},
 		k8sVersion:       k8sVersion,
