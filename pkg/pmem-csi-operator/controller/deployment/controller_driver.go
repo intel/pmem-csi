@@ -13,6 +13,7 @@ import (
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	"github.com/intel/pmem-csi/pkg/logger"
+	"github.com/intel/pmem-csi/pkg/types"
 	"github.com/intel/pmem-csi/pkg/version"
 
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
@@ -336,14 +337,8 @@ func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment
 	return o, nil
 }
 
-func controllerEnabled(d *pmemCSIDeployment) bool {
-	// The controller part only contains the scheduler webhooks
-	// and is enabled only when the necessary secret is provided.
-	return d.Spec.ControllerTLSSecret != ""
-}
-
 func mutatingWebhookEnabled(d *pmemCSIDeployment) bool {
-	return controllerEnabled(d) && d.Spec.MutatePods != api.MutatePodsNever
+	return d.Spec.ControllerTLSSecret != "" && d.Spec.MutatePods != api.MutatePodsNever
 }
 
 var subObjectHandlers = map[string]redeployObject{
@@ -378,7 +373,6 @@ var subObjectHandlers = map[string]redeployObject{
 	},
 	"controller driver": {
 		objType: reflect.TypeOf(&appsv1.StatefulSet{}),
-		enabled: controllerEnabled,
 		object: func(d *pmemCSIDeployment) client.Object {
 			return &appsv1.StatefulSet{
 				TypeMeta:   metav1.TypeMeta{Kind: "StatefulSet", APIVersion: "apps/v1"},
@@ -409,7 +403,6 @@ var subObjectHandlers = map[string]redeployObject{
 	},
 	"controller service": {
 		objType: reflect.TypeOf(&corev1.Service{}),
-		enabled: controllerEnabled,
 		object: func(d *pmemCSIDeployment) client.Object {
 			return &corev1.Service{
 				TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
@@ -423,7 +416,6 @@ var subObjectHandlers = map[string]redeployObject{
 	},
 	"metrics service": {
 		objType: reflect.TypeOf(&corev1.Service{}),
-		enabled: controllerEnabled,
 		object: func(d *pmemCSIDeployment) client.Object {
 			return &corev1.Service{
 				TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
@@ -450,7 +442,6 @@ var subObjectHandlers = map[string]redeployObject{
 	},
 	"webhooks role": {
 		objType: reflect.TypeOf(&rbacv1.Role{}),
-		enabled: controllerEnabled,
 		object: func(d *pmemCSIDeployment) client.Object {
 			return &rbacv1.Role{
 				TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -464,7 +455,6 @@ var subObjectHandlers = map[string]redeployObject{
 	},
 	"webhooks role binding": {
 		objType: reflect.TypeOf(&rbacv1.RoleBinding{}),
-		enabled: controllerEnabled,
 		object: func(d *pmemCSIDeployment) client.Object {
 			return &rbacv1.RoleBinding{
 				TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -478,7 +468,6 @@ var subObjectHandlers = map[string]redeployObject{
 	},
 	"webhooks cluster role": {
 		objType: reflect.TypeOf(&rbacv1.ClusterRole{}),
-		enabled: controllerEnabled,
 		object: func(d *pmemCSIDeployment) client.Object {
 			return &rbacv1.ClusterRole{
 				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -492,7 +481,6 @@ var subObjectHandlers = map[string]redeployObject{
 	},
 	"webhooks cluster role binding": {
 		objType: reflect.TypeOf(&rbacv1.ClusterRoleBinding{}),
-		enabled: controllerEnabled,
 		object: func(d *pmemCSIDeployment) client.Object {
 			return &rbacv1.ClusterRoleBinding{
 				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -506,7 +494,6 @@ var subObjectHandlers = map[string]redeployObject{
 	},
 	"webhooks service account": {
 		objType: reflect.TypeOf(&corev1.ServiceAccount{}),
-		enabled: controllerEnabled,
 		object: func(d *pmemCSIDeployment) client.Object {
 			return &corev1.ServiceAccount{
 				TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
@@ -534,7 +521,6 @@ var subObjectHandlers = map[string]redeployObject{
 	},
 	"scheduler service": {
 		objType: reflect.TypeOf(&corev1.Service{}),
-		enabled: controllerEnabled,
 		object: func(d *pmemCSIDeployment) client.Object {
 			return &corev1.Service{
 				TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
@@ -783,14 +769,28 @@ func (d *pmemCSIDeployment) getWebhooksClusterRole(cr *rbacv1.ClusterRole) {
 	cr.Rules = []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{""},
-			Resources: []string{"persistentvolumeclaims"},
+			Resources: []string{"persistentvolumes", "nodes"},
 			Verbs: []string{
 				"get", "list", "watch",
 			},
 		},
 		{
+			APIGroups: []string{""},
+			Resources: []string{"persistentvolumeclaims"},
+			Verbs: []string{
+				"get", "list", "watch", "patch", "update",
+			},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"events"},
+			Verbs: []string{
+				"get", "list", "watch", "patch", "update", "create",
+			},
+		},
+		{
 			APIGroups: []string{"storage.k8s.io"},
-			Resources: []string{"storageclasses"},
+			Resources: []string{"storageclasses", "csinodes"},
 			Verbs: []string{
 				"get", "list", "watch",
 			},
@@ -1056,18 +1056,19 @@ func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 						Effect: "NoSchedule",
 					},
 				},
-				Volumes: []corev1.Volume{
-					{
-						Name: "webhook-cert",
-						VolumeSource: corev1.VolumeSource{
-							Secret: &corev1.SecretVolumeSource{
-								SecretName: d.Spec.ControllerTLSSecret,
-							},
-						},
-					},
-				},
 			},
 		},
+	}
+	if d.Spec.ControllerTLSSecret != "" {
+		ss.Spec.Template.Spec.Volumes = append(ss.Spec.Template.Spec.Volumes,
+			corev1.Volume{
+				Name: "webhook-cert",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: d.Spec.ControllerTLSSecret,
+					},
+				},
+			})
 	}
 }
 
@@ -1183,18 +1184,28 @@ func (d *pmemCSIDeployment) getNodeDaemonSet(ds *appsv1.DaemonSet) {
 }
 
 func (d *pmemCSIDeployment) getControllerCommand() []string {
-	return []string{
+	nodeSelector := types.NodeSelector(d.Spec.NodeSelector)
+	args := []string{
 		"/usr/local/bin/pmem-csi-driver",
 		fmt.Sprintf("-v=%d", d.Spec.LogLevel),
 		"-logging-format=" + string(d.Spec.LogFormat),
 		"-mode=webhooks",
-		fmt.Sprintf("-schedulerListen=:%d", schedulerPort),
 		"-drivername=$(PMEM_CSI_DRIVER_NAME)",
-		"-caFile=/certs/ca.crt",
-		"-certFile=/certs/tls.crt",
-		"-keyFile=/certs/tls.key",
-		fmt.Sprintf("-metricsListen=:%d", controllerMetricsPort),
+		"-nodeSelector=" + nodeSelector.String(),
 	}
+
+	if d.Spec.ControllerTLSSecret != "" {
+		args = append(args,
+			"-caFile=/certs/ca.crt",
+			"-certFile=/certs/tls.crt",
+			"-keyFile=/certs/tls.key",
+			fmt.Sprintf("-schedulerListen=:%d", schedulerPort),
+		)
+	}
+
+	args = append(args, fmt.Sprintf("-metricsListen=:%d", controllerMetricsPort))
+
+	return args
 }
 
 func (d *pmemCSIDeployment) getNodeDriverCommand() []string {
@@ -1215,7 +1226,7 @@ func (d *pmemCSIDeployment) getNodeDriverCommand() []string {
 
 func (d *pmemCSIDeployment) getControllerContainer() corev1.Container {
 	true := true
-	return corev1.Container{
+	c := corev1.Container{
 		Name:            "pmem-driver",
 		Image:           d.Spec.Image,
 		ImagePullPolicy: d.Spec.PullPolicy,
@@ -1239,12 +1250,6 @@ func (d *pmemCSIDeployment) getControllerContainer() corev1.Container {
 				},
 			},
 		},
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      "webhook-cert",
-				MountPath: "/certs",
-			},
-		},
 		Ports:                  d.getMetricsPorts(controllerMetricsPort),
 		Resources:              *d.Spec.ControllerDriverResources,
 		TerminationMessagePath: "/dev/termination-log",
@@ -1252,6 +1257,16 @@ func (d *pmemCSIDeployment) getControllerContainer() corev1.Container {
 			ReadOnlyRootFilesystem: &true,
 		},
 	}
+
+	if d.Spec.ControllerTLSSecret != "" {
+		c.VolumeMounts = append(c.VolumeMounts,
+			corev1.VolumeMount{
+				Name:      "webhook-cert",
+				MountPath: "/certs",
+			})
+	}
+
+	return c
 }
 
 func (d *pmemCSIDeployment) getNodeDriverContainer() corev1.Container {

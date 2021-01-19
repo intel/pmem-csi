@@ -38,3 +38,13 @@ func GetOrFail(name string) string {
 	}
 	return value
 }
+
+// GetNodeLabelOrFail is a convenience function which returns TEST_PMEM_NODE_LABEL as string pair.
+func GetNodeLabelOrFail() (name, value string) {
+	nodeLabel := GetOrFail("TEST_PMEM_NODE_LABEL")
+	parts := strings.SplitN(nodeLabel, "=", 2)
+	if len(parts) < 2 {
+		panic(fmt.Sprintf("expected label=value: TEST_PMEM_NODE_LABEL=%q", nodeLabel))
+	}
+	return parts[0], parts[1]
+}

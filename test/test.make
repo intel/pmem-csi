@@ -118,8 +118,7 @@ RUNTIME_DEPS += sed \
 	-e 's;gopkg.in/fsnotify.*;golang-github-fsnotify-fsnotify,https://github.com/fsnotify/fsnotify;' \
 	-e 's;gopkg.in/inf\.v.*;go-inf,https://github.com/go-inf/inf;' \
 	-e 's;gopkg.in/yaml\.v.*;go-yaml,https://https://github.com/go-yaml/yaml,9476;' \
-	-e 's;sigs.k8s.io/controller-runtime;kubernetes-sigs/controller-runtime,https://github.com/kubernetes-sigs/controller-runtime;' \
-	-e 's;sigs.k8s.io/yaml;kubernetes-sigs/yaml,https://github.com/kubernetes-sigs/yaml;' \
+	-e 's;sigs.k8s.io/\(.*\);kubernetes-sigs/\1,https://github.com/kubernetes-sigs/\1;' \
 	| cat |
 # - ensure that we have three columns
 RUNTIME_DEPS += sed -e 's;^\([^,]*\),\([^,]*\)$$;\1,\2,;' |

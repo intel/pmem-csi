@@ -15,6 +15,7 @@ import (
 
 	"github.com/intel/pmem-csi/deploy"
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
+	"github.com/intel/pmem-csi/pkg/types"
 	"github.com/intel/pmem-csi/pkg/version"
 
 	corev1 "k8s.io/api/core/v1"
@@ -77,28 +78,19 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 				[]byte(fmt.Sprintf("-logging-format=%s", deployment.Spec.LogFormat)))
 		}
 
+		nodeSelector := types.NodeSelector(deployment.Spec.NodeSelector)
+		*yaml = bytes.ReplaceAll(*yaml,
+			[]byte(`-nodeSelector={"storage":"pmem"}`),
+			[]byte("-nodeSelector="+nodeSelector.String()))
+
 		*yaml = pmemImage.ReplaceAll(*yaml, []byte("image: "+deployment.Spec.Image))
 	}
 
 	enabled := func(obj *unstructured.Unstructured) bool {
-		if deployment.Spec.ControllerTLSSecret != "" {
-			// Shortcut: all objects enabled.
-			return true
-		}
-
-		// Controller is disabled.
+		// The controller is always enabled, but the mutating webhook depends on the spec.
 		switch obj.GetKind() + "/" + obj.GetName() {
-		case "StatefulSet/" + deployment.ControllerDriverName(),
-			"Service/" + deployment.ControllerServiceName(),
-			"Service/" + deployment.MetricsServiceName(),
-			"Service/" + deployment.SchedulerServiceName(),
-			"ServiceAccount/" + deployment.WebhooksServiceAccountName(),
-			"Role/" + deployment.WebhooksRoleName(),
-			"RoleBinding/" + deployment.WebhooksRoleBindingName(),
-			"ClusterRole/" + deployment.WebhooksClusterRoleName(),
-			"ClusterRoleBinding/" + deployment.WebhooksClusterRoleBindingName(),
-			"MutatingWebhookConfiguration/" + deployment.MutatingWebhookName():
-			return false
+		case "MutatingWebhookConfiguration/" + deployment.MutatingWebhookName():
+			return deployment.Spec.ControllerTLSSecret != "" && deployment.Spec.MutatePods != api.MutatePodsNever
 		default:
 			return true
 		}
@@ -197,6 +189,10 @@ func patchPodTemplate(obj *unstructured.Unstructured, deployment api.PmemCSIDepl
 	spec := template["spec"].(map[string]interface{})
 	metadata := template["metadata"].(map[string]interface{})
 
+	// isController := strings.Contains(obj.Object["metadata"].(map[string]interface{})["name"].(string), "controller")
+	isController := strings.Contains(obj.GetName(), "controller")
+	stripTLS := isController && deployment.Spec.ControllerTLSSecret == ""
+
 	if deployment.Spec.Labels != nil {
 		labels := metadata["labels"]
 		var labelsMap map[string]interface{}
@@ -224,6 +220,10 @@ func patchPodTemplate(obj *unstructured.Unstructured, deployment api.PmemCSIDepl
 		return obj, nil
 	}
 
+	if stripTLS {
+		spec["volumes"] = nil
+	}
+
 	containers := spec["containers"].([]interface{})
 	for _, container := range containers {
 		container := container.(map[string]interface{})
@@ -233,6 +233,23 @@ func patchPodTemplate(obj *unstructured.Unstructured, deployment api.PmemCSIDepl
 			return err
 		}
 		container["resources"] = obj
+
+		if stripTLS && container["name"].(string) == "pmem-driver" {
+			container["volumeMounts"] = nil
+			var command []interface{}
+			for _, arg := range container["command"].([]interface{}) {
+				switch arg.(string) {
+				case "-caFile=/certs/ca.crt",
+					"-certFile=/certs/tls.crt",
+					"-keyFile=/certs/tls.key",
+					"-schedulerListen=:8000":
+					// remove these parameters
+				default:
+					command = append(command, arg)
+				}
+			}
+			container["command"] = command
+		}
 
 		// Override driver name in env var.
 		env := container["env"]
@@ -268,12 +285,14 @@ func patchPodTemplate(obj *unstructured.Unstructured, deployment api.PmemCSIDepl
 		}
 	}
 
-	volumes := spec["volumes"].([]interface{})
-	for _, volume := range volumes {
-		volume := volume.(map[string]interface{})
-		volumeName := volume["name"].(string)
-		if volumeName == "webhook-cert" {
-			volume["secret"].(map[string]interface{})["secretName"] = deployment.Spec.ControllerTLSSecret
+	if deployment.Spec.ControllerTLSSecret != "" {
+		volumes := spec["volumes"].([]interface{})
+		for _, volume := range volumes {
+			volume := volume.(map[string]interface{})
+			volumeName := volume["name"].(string)
+			if volumeName == "webhook-cert" {
+				volume["secret"].(map[string]interface{})["secretName"] = deployment.Spec.ControllerTLSSecret
+			}
 		}
 	}
 	return nil

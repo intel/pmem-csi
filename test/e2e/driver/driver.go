@@ -31,8 +31,6 @@ import (
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
 	"k8s.io/kubernetes/test/e2e/storage/utils"
 
-	"github.com/intel/pmem-csi/test/test-config"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -138,13 +136,6 @@ func (m *manifestDriver) GetDynamicProvisionStorageClass(config *testsuites.PerT
 	Expect(ok).To(BeTrue(), "storage class from %s", scManifest)
 	sc.Provisioner = m.csiDriverName
 	sc.Name = config.Prefix + "-" + sc.Name
-	nodeLabel := testconfig.GetOrFail("TEST_PMEM_NODE_LABEL")
-	parts := strings.SplitN(nodeLabel, "=", 2)
-	if len(parts) < 2 {
-		panic(fmt.Sprintf("expected label=value: TEST_PMEM_NODE_LABEL=%q", nodeLabel))
-	}
-	sc.AllowedTopologies[0].MatchLabelExpressions[0].Key = parts[0]
-	sc.AllowedTopologies[0].MatchLabelExpressions[0].Values[0] = parts[1]
 
 	// Add additional parameters, if any.
 	for name, value := range m.parameters {

@@ -29,6 +29,7 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/storage/dax"
 	"github.com/intel/pmem-csi/test/e2e/storage/scheduler"
 	"github.com/intel/pmem-csi/test/e2e/versionskew"
+	"github.com/intel/pmem-csi/test/test-config"
 
 	v1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -40,6 +41,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
 var (
@@ -128,6 +130,25 @@ func DefineLateBindingTests(d *deploy.Deployment) {
 		})
 
 		It("works", func() {
+			TestDynamicLateBindingProvisioning(f.ClientSet, &claim, "latebinding")
+		})
+
+		It("unsets unsuitable selected node", func() {
+			nodes, err := f.ClientSet.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+			framework.ExpectNoError(err, "list nodes")
+			selectedNode := ""
+			nodeLabelName, nodeLabelValue := testconfig.GetNodeLabelOrFail()
+			for _, node := range nodes.Items {
+				if node.Labels[nodeLabelName] != nodeLabelValue {
+					selectedNode = node.Name
+					break
+				}
+			}
+			Expect(selectedNode).NotTo(BeEmpty(), "have a node without PMEM-CSI")
+			claim.Annotations = map[string]string{
+				"volume.kubernetes.io/selected-node":            selectedNode,
+				"volume.beta.kubernetes.io/storage-provisioner": d.DriverName,
+			}
 			TestDynamicLateBindingProvisioning(f.ClientSet, &claim, "latebinding")
 		})
 

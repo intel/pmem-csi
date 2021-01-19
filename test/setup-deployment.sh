@@ -118,6 +118,9 @@ EOF
 - op: add
   path: /spec/template/spec/containers/0/command/-
   value: "--schedulerListen=:8000" # Exposed to kube-scheduler via the pmem-csi-scheduler service.
+- op: add
+  path: /spec/template/spec/containers/0/command/-
+  value: -nodeSelector={$(echo ${TEST_PMEM_NODE_LABEL} | sed -e 's/\([^=]*\)=\(.*\)/"\1":"\2"/')}
 EOF
                 if [ "${TEST_DEVICEMODE}" = "lvm" ]; then
                     # Test these options and kustomization by injecting some non-default values.

@@ -27,12 +27,12 @@ import (
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	pmemstate "github.com/intel/pmem-csi/pkg/pmem-state"
 	"github.com/intel/pmem-csi/pkg/scheduler"
+	"github.com/intel/pmem-csi/pkg/types"
 	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 )
 
@@ -127,6 +127,9 @@ type Config struct {
 	// parameters for Kubernetes scheduler extender
 	schedulerListen string
 
+	// parameters for rescheduler
+	nodeSelector types.NodeSelector
+
 	// parameters for Prometheus metrics
 	metricsListen string
 	metricsPath   string
@@ -182,26 +185,84 @@ func (csid *csiDriver) Run() error {
 
 	switch csid.cfg.Mode {
 	case Webhooks:
-		namespace := os.Getenv("POD_NAMESPACE")
-		if namespace == "" {
-			return errors.New("POD_NAMESPACE env variable is not set")
-		}
-		// Just the scheduler extender!
-		if csid.cfg.schedulerListen == "" {
-			return errors.New("webhooks mode needs a scheduler listen address")
-		}
 		client, err := k8sutil.NewClient(config.KubeAPIQPS, config.KubeAPIBurst)
 		if err != nil {
 			return fmt.Errorf("connect to apiserver: %v", err)
 		}
-		factory := informers.NewSharedInformerFactoryWithOptions(client, resyncPeriod,
-			informers.WithNamespace(namespace),
-		)
-		podLister := factory.Core().V1().Pods().Lister()
-		c := scheduler.CapacityViaMetrics(namespace, csid.cfg.DriverName, podLister)
-		factory.Start(ctx.Done())
-		if _, err := csid.startScheduler(ctx, cancel, client, c); err != nil {
-			return err
+
+		// A factory for all namespaces. Some of these are only needed by
+		// scheduler webhooks or deprovisioner, but because the normal
+		// setup is to have both enabled, the logic here is simplified so that
+		// everything gets initialized.
+		//
+		// The PV informer is not really needed, but there is no good way to
+		// tell the lib that it should watch PVs. An informer for a fake client
+		// did not work:
+		// Failed to watch *v1.PersistentVolume: unhandled watch: testing.WatchActionImpl
+		globalFactory := informers.NewSharedInformerFactory(client, resyncPeriod)
+		pvcInformer := globalFactory.Core().V1().PersistentVolumeClaims().Informer()
+		pvcLister := globalFactory.Core().V1().PersistentVolumeClaims().Lister()
+		scLister := globalFactory.Storage().V1().StorageClasses().Lister()
+		scInformer := globalFactory.Storage().V1().StorageClasses().Informer()
+		pvInformer := globalFactory.Core().V1().PersistentVolumes().Informer()
+		csiNodeLister := globalFactory.Storage().V1().CSINodes().Lister()
+
+		var pcp *pmemCSIProvisioner
+		if csid.cfg.nodeSelector != nil {
+			serverVersion, err := client.Discovery().ServerVersion()
+			if err != nil {
+				return fmt.Errorf("discover server version: %v", err)
+			}
+
+			// Create rescheduler. This has to be done before starting the factory
+			// because it will indirectly add a new index.
+			pcp = newRescheduler(ctx,
+				csid.cfg.DriverName,
+				client, pvcInformer, scInformer, pvInformer, csiNodeLister,
+				csid.cfg.nodeSelector,
+				serverVersion.GitVersion)
+		}
+
+		// Now that all informers and indices are created we can run the factory.
+		globalFactory.Start(ctx.Done())
+		cacheSyncResult := globalFactory.WaitForCacheSync(ctx.Done())
+		klog.V(5).Infof("synchronized caches: %+v", cacheSyncResult)
+		for t, v := range cacheSyncResult {
+			if !v {
+				return fmt.Errorf("failed to sync informer for type %v", t)
+			}
+		}
+
+		if csid.cfg.schedulerListen != "" {
+			// Factory for the driver's namespace.
+			namespace := os.Getenv("POD_NAMESPACE")
+			if namespace == "" {
+				return errors.New("POD_NAMESPACE env variable is not set")
+			}
+			localFactory := informers.NewSharedInformerFactoryWithOptions(client, resyncPeriod,
+				informers.WithNamespace(namespace),
+			)
+			podLister := localFactory.Core().V1().Pods().Lister()
+			c := scheduler.CapacityViaMetrics(namespace, csid.cfg.DriverName, podLister)
+			localFactory.Start(ctx.Done())
+
+			sched, err := scheduler.NewScheduler(
+				csid.cfg.DriverName,
+				c,
+				client,
+				pvcLister,
+				scLister,
+			)
+			if err != nil {
+				return fmt.Errorf("create scheduler: %v", err)
+			}
+			if _, err := csid.startHTTPSServer(ctx, cancel, csid.cfg.schedulerListen, sched, true /* TLS */); err != nil {
+				return err
+			}
+		}
+
+		if pcp != nil {
+			pcp.startRescheduler(ctx, cancel)
 		}
 	case Node:
 		dm, err := pmdmanager.New(csid.cfg.DeviceManager, csid.cfg.PmemPercentage)
@@ -250,46 +311,23 @@ func (csid *csiDriver) Run() error {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	select {
 	case sig := <-c:
-		// Here we want to shut down cleanly, i.e. let running
-		// gRPC calls complete.
 		klog.V(3).Infof("Caught signal %s, terminating.", sig)
+		// We sleep briefly to give sidecars a chance to shut down cleanly
+		// before we close the CSI socket and force them to shut down
+		// abnormally, because the latter causes lots of debug output
+		// due to usage of klog.Fatal (https://github.com/intel/pmem-csi/issues/856).
+		time.Sleep(time.Second)
 	case <-ctx.Done():
 		// The scheduler HTTP server must have failed (to start).
-		// We quit in that case.
+		// We quit directly in that case.
 	}
+
+	// Here (in contrast to the s.ForceStop() above) we let the gRPC server finish
+	// its work on any pending call.
 	s.Stop()
 	s.Wait()
 
 	return nil
-}
-
-// startScheduler starts the scheduler extender if it is enabled. It
-// logs errors and cancels the context when it runs into a problem,
-// either during the startup phase (blocking) or later at runtime (in
-// a go routine).
-func (csid *csiDriver) startScheduler(ctx context.Context, cancel func(), client kubernetes.Interface, c scheduler.Capacity) (string, error) {
-	factory := informers.NewSharedInformerFactory(client, resyncPeriod)
-	pvcLister := factory.Core().V1().PersistentVolumeClaims().Lister()
-	scLister := factory.Storage().V1().StorageClasses().Lister()
-	sched, err := scheduler.NewScheduler(
-		csid.cfg.DriverName,
-		c,
-		client,
-		pvcLister,
-		scLister,
-	)
-	if err != nil {
-		return "", fmt.Errorf("create scheduler: %v", err)
-	}
-	factory.Start(ctx.Done())
-	cacheSyncResult := factory.WaitForCacheSync(ctx.Done())
-	klog.V(5).Infof("synchronized caches: %+v", cacheSyncResult)
-	for t, v := range cacheSyncResult {
-		if !v {
-			return "", fmt.Errorf("failed to sync informer for type %v", t)
-		}
-	}
-	return csid.startHTTPSServer(ctx, cancel, csid.cfg.schedulerListen, sched, true /* TLS */)
 }
 
 // startMetrics starts the HTTPS server for the Prometheus endpoint, if one is configured.

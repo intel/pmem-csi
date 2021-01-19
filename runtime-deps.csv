@@ -5,5 +5,6 @@ google uuid,https://github.com/google/uuid,
 grpc-go,https://github.com/grpc/grpc-go,
 kubernetes,https://github.com/kubernetes/kubernetes,12141
 kubernetes-sigs/controller-runtime,https://github.com/kubernetes-sigs/controller-runtime,
+kubernetes-sigs/sig-storage-lib-external-provisioner,https://github.com/kubernetes-sigs/sig-storage-lib-external-provisioner,
 prometheus client_model,https://github.com/prometheus/client_model,
 prometheus_common,https://github.com/prometheus/common,

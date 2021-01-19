@@ -48,6 +48,7 @@ func init() {
 
 	/* Controller mode options */
 	flag.StringVar(&config.schedulerListen, "schedulerListen", "", "controller: listen address (like :8000) for scheduler extender and mutating webhook, disabled by default")
+	flag.Var(&config.nodeSelector, "nodeSelector", "controller: reschedule PVCs with a selected node where PMEM-CSI is not meant to run because the node does not have these labels (represented as JSON map)")
 
 	/* Node mode options */
 	flag.Var(&config.DeviceManager, "deviceManager", "node: device manager to use to manage pmem devices, supported types: 'lvm' or 'direct' (= 'ndctl')")

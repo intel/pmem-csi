@@ -173,15 +173,38 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - persistentvolumeclaims
+  - persistentvolumes
+  - nodes
   verbs:
   - get
   - list
   - watch
 - apiGroups:
+  - ""
+  resources:
+  - persistentvolumeclaims
+  verbs:
+  - get
+  - list
+  - watch
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - get
+  - list
+  - watch
+  - patch
+  - update
+  - create
+- apiGroups:
   - storage.k8s.io
   resources:
   - storageclasses
+  - csinodes
   verbs:
   - get
   - list
@@ -335,11 +358,12 @@ spec:
         - -v=3
         - -logging-format=text
         - -mode=webhooks
-        - -schedulerListen=:8000
         - -drivername=$(PMEM_CSI_DRIVER_NAME)
+        - -nodeSelector={"storage":"pmem"}
         - -caFile=/certs/ca.crt
         - -certFile=/certs/tls.crt
         - -keyFile=/certs/tls.key
+        - -schedulerListen=:8000
         - -metricsListen=:10010
         - -v=5
         - -coverprofile=/var/lib/pmem-csi-coverage/pmem-csi-driver-controller-*.out
