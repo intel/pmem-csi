@@ -5,7 +5,15 @@ kind: ServiceAccount
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-controller
+  name: pmem-csi-intel-com-controller
+  namespace: pmem-csi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    pmem-csi.intel.com/deployment: direct-production
+  name: pmem-csi-intel-com-webhooks
   namespace: pmem-csi
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -13,7 +21,7 @@ kind: Role
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-external-provisioner-cfg
+  name: pmem-csi-intel-com-external-provisioner-cfg
   namespace: pmem-csi
 rules:
 - apiGroups:
@@ -64,11 +72,28 @@ rules:
   - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    pmem-csi.intel.com/deployment: direct-production
+  name: pmem-csi-intel-com-webhooks-cfg
+  namespace: pmem-csi
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - watch
+  - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-external-provisioner-runner
+  name: pmem-csi-intel-com-external-provisioner-runner
 rules:
 - apiGroups:
   - ""
@@ -139,19 +164,82 @@ rules:
   - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    pmem-csi.intel.com/deployment: direct-production
+  name: pmem-csi-intel-com-webhooks-runner
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumes
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumeclaims
+  verbs:
+  - get
+  - list
+  - watch
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - get
+  - list
+  - watch
+  - patch
+  - update
+  - create
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - storageclasses
+  - csinodes
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-csi-provisioner-role-cfg
+  name: pmem-csi-intel-com-csi-provisioner-role-cfg
   namespace: pmem-csi
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: pmem-csi-external-provisioner-cfg
+  name: pmem-csi-intel-com-external-provisioner-cfg
 subjects:
 - kind: ServiceAccount
-  name: pmem-csi-controller
+  name: pmem-csi-intel-com-controller
+  namespace: pmem-csi
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    pmem-csi.intel.com/deployment: direct-production
+  name: pmem-csi-intel-com-webhooks-role-cfg
+  namespace: pmem-csi
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pmem-csi-intel-com-webhooks-cfg
+subjects:
+- kind: ServiceAccount
+  name: pmem-csi-intel-com-webhooks
   namespace: pmem-csi
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -159,14 +247,29 @@ kind: ClusterRoleBinding
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-csi-provisioner-role
+  name: pmem-csi-intel-com-csi-provisioner-role
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: pmem-csi-external-provisioner-runner
+  name: pmem-csi-intel-com-external-provisioner-runner
 subjects:
 - kind: ServiceAccount
-  name: pmem-csi-controller
+  name: pmem-csi-intel-com-controller
+  namespace: pmem-csi
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    pmem-csi.intel.com/deployment: direct-production
+  name: pmem-csi-intel-com-webhooks-role
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pmem-csi-intel-com-webhooks-runner
+subjects:
+- kind: ServiceAccount
+  name: pmem-csi-intel-com-webhooks
   namespace: pmem-csi
 ---
 apiVersion: v1
@@ -174,14 +277,15 @@ kind: Service
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-controller
+  name: pmem-csi-intel-com-controller
   namespace: pmem-csi
 spec:
   ports:
   - port: 10000
     targetPort: 10000
   selector:
-    app: pmem-csi-controller
+    app.kubernetes.io/instance: pmem-csi.intel.com
+    app.kubernetes.io/name: pmem-csi-controller
     pmem-csi.intel.com/deployment: direct-production
 ---
 apiVersion: v1
@@ -189,14 +293,15 @@ kind: Service
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-metrics
+  name: pmem-csi-intel-com-metrics
   namespace: pmem-csi
 spec:
   ports:
   - port: 10010
     targetPort: 10010
   selector:
-    app: pmem-csi-controller
+    app.kubernetes.io/instance: pmem-csi.intel.com
+    app.kubernetes.io/name: pmem-csi-controller
     pmem-csi.intel.com/deployment: direct-production
   type: NodePort
 ---
@@ -204,61 +309,55 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   labels:
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: pmem-csi.intel.com
+    app.kubernetes.io/name: pmem-csi-controller
+    app.kubernetes.io/part-of: pmem-csi
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-controller
+  name: pmem-csi-intel-com-controller
   namespace: pmem-csi
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: pmem-csi-controller
+      app.kubernetes.io/instance: pmem-csi.intel.com
+      app.kubernetes.io/name: pmem-csi-controller
       pmem-csi.intel.com/deployment: direct-production
-  serviceName: pmem-csi-controller
+  serviceName: pmem-csi-intel-com-controller
   template:
     metadata:
       annotations:
         pmem-csi.intel.com/scrape: containers
       labels:
-        app: pmem-csi-controller
+        app.kubernetes.io/component: controller
+        app.kubernetes.io/instance: pmem-csi.intel.com
+        app.kubernetes.io/name: pmem-csi-controller
+        app.kubernetes.io/part-of: pmem-csi
         pmem-csi.intel.com/deployment: direct-production
         pmem-csi.intel.com/webhook: ignore
     spec:
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: pmem-csi.intel.com/controller
-                operator: NotIn
-                values:
-                - "no"
-                - "false"
       containers:
       - command:
         - /usr/local/bin/pmem-csi-driver
         - -v=3
         - -logging-format=text
-        - -mode=controller
-        - -endpoint=unix:///csi/csi-controller.sock
-        - -registryEndpoint=tcp://0.0.0.0:10000
-        - -nodeid=$(KUBE_NODE_NAME)
+        - -mode=webhooks
+        - -drivername=$(PMEM_CSI_DRIVER_NAME)
+        - -nodeSelector={"storage":"pmem"}
         - -caFile=/certs/ca.crt
         - -certFile=/certs/tls.crt
         - -keyFile=/certs/tls.key
-        - -drivername=$(PMEM_CSI_DRIVER_NAME)
+        - -schedulerListen=:8000
         - -metricsListen=:10010
         env:
-        - name: KUBE_NODE_NAME
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: spec.nodeName
         - name: TERMINATION_LOG_PATH
-          value: /tmp/termination-log
+          value: /dev/termination-log
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
-        - name: GODEBUG
-          value: x509ignoreCN=0
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
         image: intel/pmem-csi-driver:canary
         imagePullPolicy: IfNotPresent
         name: pmem-driver
@@ -267,67 +366,48 @@ spec:
           name: metrics
         securityContext:
           readOnlyRootFilesystem: true
-        terminationMessagePath: /tmp/termination-log
+        terminationMessagePath: /dev/termination-log
         volumeMounts:
         - mountPath: /certs
-          name: registry-cert
-        - mountPath: /csi
-          name: plugin-socket-dir
-        - mountPath: /tmp
-          name: tmp-dir
-      - args:
-        - -v=3
-        - --csi-address=/csi/csi-controller.sock
-        - --feature-gates=Topology=true
-        - --strict-topology=true
-        - --timeout=5m
-        - --default-fstype=ext4
-        - --metrics-address=:10011
-        image: k8s.gcr.io/sig-storage/csi-provisioner:v2.0.2
-        imagePullPolicy: IfNotPresent
-        name: external-provisioner
-        ports:
-        - containerPort: 10011
-          name: metrics
-        securityContext:
-          readOnlyRootFilesystem: true
-        volumeMounts:
-        - mountPath: /csi
-          name: plugin-socket-dir
+          name: webhook-cert
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
-      serviceAccountName: pmem-csi-controller
+      serviceAccountName: pmem-csi-intel-com-webhooks
       tolerations:
       - effect: NoSchedule
         key: node-role.kubernetes.io/master
       volumes:
-      - emptyDir: null
-        name: plugin-socket-dir
-      - name: registry-cert
+      - name: webhook-cert
         secret:
-          secretName: pmem-csi-registry-secrets
-      - emptyDir: {}
-        name: tmp-dir
+          secretName: pmem-csi-intel-com-controller-secret
 ---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   labels:
+    app.kubernetes.io/component: node
+    app.kubernetes.io/instance: pmem-csi.intel.com
+    app.kubernetes.io/name: pmem-csi-node
+    app.kubernetes.io/part-of: pmem-csi
     pmem-csi.intel.com/deployment: direct-production
-  name: pmem-csi-node
+  name: pmem-csi-intel-com-node
   namespace: pmem-csi
 spec:
   selector:
     matchLabels:
-      app: pmem-csi-node
+      app.kubernetes.io/instance: pmem-csi.intel.com
+      app.kubernetes.io/name: pmem-csi-node
       pmem-csi.intel.com/deployment: direct-production
   template:
     metadata:
       annotations:
         pmem-csi.intel.com/scrape: containers
       labels:
-        app: pmem-csi-node
+        app.kubernetes.io/component: node
+        app.kubernetes.io/instance: pmem-csi.intel.com
+        app.kubernetes.io/name: pmem-csi-node
+        app.kubernetes.io/part-of: pmem-csi
         pmem-csi.intel.com/deployment: direct-production
         pmem-csi.intel.com/webhook: ignore
     spec:
@@ -340,11 +420,6 @@ spec:
         - -mode=node
         - -endpoint=unix:///csi/csi.sock
         - -nodeid=$(KUBE_NODE_NAME)
-        - -controllerEndpoint=tcp://$(KUBE_POD_IP):10001
-        - -registryEndpoint=tcp://pmem-csi-controller:10000
-        - -caFile=/certs/ca.crt
-        - -certFile=/certs/tls.crt
-        - -keyFile=/certs/tls.key
         - -statePath=/var/lib/$(PMEM_CSI_DRIVER_NAME)
         - -drivername=$(PMEM_CSI_DRIVER_NAME)
         - -pmemPercentage=100
@@ -355,17 +430,10 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: spec.nodeName
-        - name: KUBE_POD_IP
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: status.podIP
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
         - name: TERMINATION_LOG_PATH
           value: /tmp/termination-log
-        - name: GODEBUG
-          value: x509ignoreCN=0
         image: intel/pmem-csi-driver:canary
         imagePullPolicy: IfNotPresent
         name: pmem-driver
@@ -383,8 +451,6 @@ spec:
         - mountPath: /var/lib/kubelet/pods
           mountPropagation: Bidirectional
           name: pods-dir
-        - mountPath: /certs
-          name: node-cert
         - mountPath: /dev
           name: dev-dir
         - mountPath: /sys
@@ -411,8 +477,36 @@ spec:
           name: socket-dir
         - mountPath: /registration
           name: registration-dir
+      - args:
+        - -v=3
+        - --csi-address=/csi/csi.sock
+        - --feature-gates=Topology=true
+        - --node-deployment=true
+        - --strict-topology=true
+        - --immediate-topology=false
+        - --timeout=5m
+        - --default-fstype=ext4
+        - --metrics-address=:10011
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        image: gcr.io/k8s-staging-sig-storage/csi-provisioner:canary
+        imagePullPolicy: IfNotPresent
+        name: external-provisioner
+        ports:
+        - containerPort: 10011
+          name: metrics
+        securityContext:
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - mountPath: /csi
+          name: socket-dir
       nodeSelector:
         storage: pmem
+      serviceAccountName: pmem-csi-intel-com-controller
       volumes:
       - hostPath:
           path: /var/lib/kubelet/plugins/pmem-csi.intel.com
@@ -430,9 +524,6 @@ spec:
           path: /var/lib/kubelet/pods
           type: DirectoryOrCreate
         name: pods-dir
-      - name: node-cert
-        secret:
-          secretName: pmem-csi-node-secrets
       - hostPath:
           path: /var/lib/pmem-csi.intel.com
           type: DirectoryOrCreate

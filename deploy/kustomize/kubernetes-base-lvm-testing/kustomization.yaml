@@ -10,19 +10,12 @@ patchesJson6902:
     group: apps
     version: v1
     kind: StatefulSet
-    name: pmem-csi-controller
-  path: ../testing/controller-socat-patch.yaml
-
-- target:
-    group: apps
-    version: v1
-    kind: StatefulSet
-    name: pmem-csi-controller
-  path: ../testing/args-two-containers-patch.yaml
+    name: pmem-csi-intel-com-controller
+  path: ../testing/controller-verbosity-patch.yaml
 
 - target:
     group: apps
     version: v1
     kind: DaemonSet
-    name: pmem-csi-node
-  path: ../testing/args-two-containers-patch.yaml
+    name: pmem-csi-intel-com-node
+  path: ../testing/node-verbosity-patch.yaml

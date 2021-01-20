@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
-	"strings"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -178,17 +177,16 @@ func (s *scheduler) doFilter(args schedulerapi.ExtenderArgs) (*schedulerapi.Exte
 		nodeName := nodeName
 		waitgroup.Add(1)
 		go func() {
-			fits, failReasons, err := s.nodeHasEnoughCapacity(required, nodeName)
+			err := s.nodeHasEnoughCapacity(required, nodeName)
+
 			mutex.Lock()
 			defer mutex.Unlock()
 			defer waitgroup.Done()
-			switch {
-			case fits:
+			switch err {
+			case nil:
 				filteredNodes = append(filteredNodes, nodeName)
-			case failReasons != nil:
-				failedNodes[nodeName] = strings.Join(failReasons, ",")
-			case err != nil:
-				failedNodes[nodeName] = fmt.Sprintf("checking for capacity: %v", err)
+			default:
+				failedNodes[nodeName] = err.Error()
 			}
 		}()
 	}
@@ -274,23 +272,22 @@ func (s *scheduler) requiredStorage(pod *v1.Pod) (int64, error) {
 	return total, nil
 }
 
-// nodeHasEnoughCapacity determines whether a node has enough storage available. It either returns
-// true if yes, a list of explanations why not, or an error if checking failed.
-func (s *scheduler) nodeHasEnoughCapacity(required int64, nodeName string) (bool, []string, error) {
+// nodeHasEnoughCapacity determines whether a node has enough storage available. It returns
+// an error if not, otherwise nil.
+func (s *scheduler) nodeHasEnoughCapacity(required int64, nodeName string) error {
 	available, err := s.capacity.NodeCapacity(nodeName)
 	if err != nil {
-		return false, nil, fmt.Errorf("retrieve capacity: %v", err)
+		return fmt.Errorf("retrieve capacity: %v", err)
 	}
 
 	if available < required {
-		return false, []string{fmt.Sprintf("only %vB of PMEM available, need %vB",
+		return fmt.Errorf("only %vB of PMEM available, need %vB",
 			resource.NewQuantity(available, resource.BinarySI),
-			resource.NewQuantity(required, resource.BinarySI)),
-		}, nil
+			resource.NewQuantity(required, resource.BinarySI))
 	}
 
 	// Success!
-	return true, nil, nil
+	return nil
 }
 
 func listNodeNames(nodes []v1.Node) []string {

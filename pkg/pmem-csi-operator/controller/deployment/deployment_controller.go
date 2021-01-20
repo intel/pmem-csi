@@ -21,10 +21,7 @@ import (
 	"github.com/intel/pmem-csi/pkg/version"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	apiruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
@@ -67,14 +64,14 @@ func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			r.reconcileMutex.Lock()
 			defer r.reconcileMutex.Unlock()
-			l.V(3).Info("UPDATED", "object", logger.KObjWithType(e.MetaOld), "generation", e.MetaNew.GetGeneration())
-			if e.MetaNew.GetDeletionTimestamp() != nil {
+			l.V(3).Info("UPDATED", "object", logger.KObjWithType(e.ObjectOld), "generation", e.ObjectNew.GetGeneration())
+			if e.ObjectNew.GetDeletionTimestamp() != nil {
 				// Deployment CR deleted, remove it's reference from cache.
 				// Objects owned by it are automatically garbage collected.
-				r.deleteDeployment(e.MetaOld.GetName())
+				r.deleteDeployment(e.ObjectOld.GetName())
 				return false
 			}
-			if e.MetaOld.GetGeneration() == e.MetaNew.GetGeneration() {
+			if e.ObjectOld.GetGeneration() == e.ObjectNew.GetGeneration() {
 				// No changes registered
 				return false
 			}
@@ -99,10 +96,10 @@ func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			r.reconcileMutex.Lock()
 			defer r.reconcileMutex.Unlock()
-			l.V(3).Info("DELETED", "object", logger.KObjWithType(e.Meta))
+			l.V(3).Info("DELETED", "object", logger.KObjWithType(e.Object))
 			// Deployment CR deleted, remove it's reference from cache.
 			// Objects owned by it are automatically garbage collected.
-			r.deleteDeployment(e.Meta.GetName())
+			r.deleteDeployment(e.Object.GetName())
 			// We already handled the event here,
 			// so no more further reconcile required.
 			return false
@@ -122,22 +119,23 @@ func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error
 	// One exception is: If we fail to handle here, then we pass this
 	// event to reconcile loop, where it should recognize these requests
 	// and just requeue. Expecting that the failure is retried.
-	eventFunc := func(what string, meta metav1.Object, obj apiruntime.Object) bool {
+	eventFunc := func(what string, obj client.Object) bool {
 		// TODO:
 		// - check that this output is okay
 		// - check why "go test" does not cover this code
-		l.V(3).Info(what, "object", logger.KObjWithType(meta))
+		l.V(3).Info(what, "object", logger.KObjWithType(obj))
 		// Get the owned deployment
-		d, err := r.getDeploymentFor(meta)
+		d, err := r.getDeploymentFor(obj)
 		if err != nil {
-			l.V(3).Info("not owned by any deployment", "object", logger.KObjWithType(meta))
+			l.V(3).Info("not owned by any deployment", "object", logger.KObjWithType(obj))
 			// The owner might have deleted already
 			// we can safely ignore this event
 			return false
 		}
 		r.reconcileMutex.Lock()
 		defer r.reconcileMutex.Unlock()
-		if err := d.handleEvent(ctx, meta, obj, r); err != nil {
+		// TODO (?): single parameter
+		if err := d.handleEvent(ctx, obj, obj, r); err != nil {
 			l.Error(err, "while handling the event, requeuing the event")
 			return true
 		}
@@ -145,14 +143,14 @@ func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error
 	}
 	sop := predicate.Funcs{
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			return eventFunc("DELETED", e.Meta, e.Object)
+			return eventFunc("DELETED", e.Object)
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			if e.MetaNew.GetDeletionTimestamp() != nil {
+			if e.ObjectNew.GetDeletionTimestamp() != nil {
 				// We can handle this in delete handler
 				return false
 			}
-			return eventFunc("UPDATED", e.MetaOld, e.ObjectOld)
+			return eventFunc("UPDATED", e.ObjectOld)
 		},
 		CreateFunc: func(e event.CreateEvent) bool {
 			// Do not handle sub-object create events as the object was create by us.
@@ -256,7 +254,7 @@ func NewReconcileDeployment(ctx context.Context, client client.Client, opts pmem
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileDeployment) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	var requeue bool
 	var err error
 	r.reconcileMutex.Lock()
@@ -265,7 +263,7 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 
 	requeueDelayOnError := 2 * time.Minute
 	l := logger.Get(r.ctx).WithValues("deployment", request.NamespacedName.Name)
-	ctx := logger.Set(r.ctx, l)
+	ctx = logger.Set(ctx, l)
 
 	// Fetch the Deployment instance
 	deployment := &api.PmemCSIDeployment{}
@@ -320,7 +318,7 @@ func (r *ReconcileDeployment) Reconcile(request reconcile.Request) (reconcile.Re
 		l.V(3).Info("reconcile done", "duration", time.Since(startTime))
 	}()
 
-	d := &pmemCSIDeployment{dep, r.namespace, r.k8sVersion}
+	d := &pmemCSIDeployment{dep, r.namespace, r.k8sVersion, []byte{}}
 	if err := d.reconcile(ctx, r); err != nil {
 		l.Error(err, "reconcile failed")
 		dep.Status.Phase = api.DeploymentPhaseFailed
@@ -356,21 +354,14 @@ func (r *ReconcileDeployment) RemoveHook(h ReconcileHook) {
 }
 
 //Get tries to retrives the Kubernetes objects
-func (r *ReconcileDeployment) Get(obj runtime.Object) error {
-	key, err := client.ObjectKeyFromObject(obj)
-	if err != nil {
-		return fmt.Errorf("internal error %T: %v", obj, err)
-	}
+func (r *ReconcileDeployment) Get(obj client.Object) error {
+	key := client.ObjectKeyFromObject(obj)
 	return r.client.Get(r.ctx, key, obj)
 }
 
 // Delete delete existing Kubernetes object
-func (r *ReconcileDeployment) Delete(obj runtime.Object) error {
-	metaObj, err := meta.Accessor(obj)
-	if err != nil {
-		return fmt.Errorf("internal error %T: %v", obj, err)
-	}
-	logger.Get(r.ctx).Info("deleting", "object", logger.KObjWithType(metaObj))
+func (r *ReconcileDeployment) Delete(obj client.Object) error {
+	logger.Get(r.ctx).Info("deleting", "object", logger.KObjWithType(obj))
 	return r.client.Delete(r.ctx, obj)
 }
 
@@ -423,7 +414,7 @@ func (r *ReconcileDeployment) getDeploymentFor(obj metav1.Object) (*pmemCSIDeplo
 			if err := deployment.EnsureDefaults(r.containerImage); err != nil {
 				return nil, err
 			}
-			return &pmemCSIDeployment{deployment, r.namespace, r.k8sVersion}, nil
+			return &pmemCSIDeployment{deployment, r.namespace, r.k8sVersion, []byte{}}, nil
 		}
 	}
 

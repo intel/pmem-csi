@@ -5,7 +5,7 @@
 set -ex
 
 if ! [ -d _work/autoscaler ]; then
-    git clone git@github.com:kubernetes/autoscaler.git _work/autoscaler
+    git clone https://github.com/kubernetes/autoscaler _work/autoscaler
 fi
 cd _work/autoscaler
 git fetch origin

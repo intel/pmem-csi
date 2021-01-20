@@ -16,8 +16,9 @@ tmpdir=`mktemp -d`
 trap 'rm -r $tmpdir' EXIT
 
 # Generate certificates. They are not going to be needed again and will
-# be deleted together with the temp directory.
-WORKDIR="$tmpdir" "$TEST_DIRECTORY/setup-ca.sh"
+# be deleted together with the temp directory. Only the root CA is
+# stored in a permanent location.
+WORKDIR="$tmpdir" CA="$TEST_CA" NS="${TEST_DRIVER_NAMESPACE}" PREFIX="${TEST_DRIVER_PREFIX}" "$TEST_DIRECTORY/setup-ca.sh"
 
 # This reads a file and encodes it for use in a secret.
 read_key () {
@@ -26,8 +27,13 @@ read_key () {
 
 # Read certificate files and turn them into Kubernetes secrets.
 #
+# The "registry" part in the file and variable names is historic.
+# PMEM-CSI < 0.9.0 used that certificate for the node registry
+# and webhooks. PMEM-CSI >= 0.9.0 only uses it for the webhooks
+# and no longer has such a registry.
+#
 # -caFile (controller and all nodes)
-CA=$(read_key "$tmpdir/ca.pem")
+CA=$(read_key "${TEST_CA}.pem")
 # -certFile (controller)
 REGISTRY_CERT=$(read_key "$tmpdir/pmem-registry.pem")
 # -keyFile (controller)
@@ -37,12 +43,13 @@ NODE_CERT=$(read_key "$tmpdir/pmem-node-controller.pem")
 # -keyFile (same for all nodes)
 NODE_KEY=$(read_key "$tmpdir/pmem-node-controller-key.pem")
 
-kubectl get ns ${TEST_DRIVER_NAMESPACE} 2>/dev/null >/dev/null || kubectl create ns ${TEST_DRIVER_NAMESPACE}
+${KUBECTL} get ns ${TEST_DRIVER_NAMESPACE} 2>/dev/null >/dev/null || ${KUBECTL} create ns ${TEST_DRIVER_NAMESPACE}
 
 ${KUBECTL} apply -f - <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
+    # Historic name for PMEM-CSI deployments < 0.9.0.
     name: pmem-csi-registry-secrets
     namespace: ${TEST_DRIVER_NAMESPACE}
 type: kubernetes.io/tls
@@ -54,8 +61,21 @@ data:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: pmem-csi-node-secrets
-  namespace: ${TEST_DRIVER_NAMESPACE}
+    name: ${TEST_DRIVER_PREFIX}-controller-secret
+    namespace: ${TEST_DRIVER_NAMESPACE}
+type: kubernetes.io/tls
+data:
+    ca.crt: ${CA}
+    tls.crt: ${REGISTRY_CERT}
+    tls.key: ${REGISTRY_KEY}
+---
+# This secret is not used anymore since PMEM-CSI >= 0.9.0.
+# It still gets created to support downgrades.
+apiVersion: v1
+kind: Secret
+metadata:
+    name: pmem-csi-node-secrets
+    namespace: ${TEST_DRIVER_NAMESPACE}
 type: Opaque
 data:
     ca.crt: ${CA}

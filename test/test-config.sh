@@ -101,8 +101,14 @@ fi
 # Allowed values: IfNotPresent, Always, Never
 : ${TEST_IMAGE_PULL_POLICY:=IfNotPresent}
 
-# Namespace used to deploy the PMRM-CSI driver
+# Namespace used to deploy the PMEM-CSI driver
 : ${TEST_DRIVER_NAMESPACE:=pmem-csi}
+
+# Common prefix for deployed PMEM-CSI objects. The operator
+# and the YAML files use the CSI driver name with dots replaced
+# by hyphens, i.e. "pmem-csi-intel-com" for the default
+# pmem-csi.intel.com.
+: ${TEST_DRIVER_PREFIX:=pmem-csi-intel-com}
 
 # Namespace used by test/start-operator.sh for the operator
 # itself.
@@ -112,12 +118,10 @@ fi
 # set for all objects created by test/start-operator.sh.
 : ${TEST_OPERATOR_DEPLOYMENT_LABEL:=operator}
 
-# TLS certificates installed by test/setup-deployment.sh.
-: ${TEST_CA:=_work/pmem-ca/ca.pem}
-: ${TEST_REGISTRY_CERT:=_work/pmem-ca/pmem-registry.pem}
-: ${TEST_REGISTRY_KEY:=_work/pmem-ca/pmem-registry-key.pem}
-: ${TEST_NODE_CERT:=_work/pmem-ca/pmem-node-controller.pem}
-: ${TEST_NODE_KEY:=_work/pmem-ca/pmem-node-controller-key.pem}
+# Root CA created and/or used by test/setup-deployment.sh
+# and test/setup-ca-kubernetes.sh. ca.pem is the public
+# and ca-key.pem is the private key.
+: ${TEST_CA:=$(pwd)/_work/pmem-ca/ca}
 
 # Initialize "region0" as required by PMEM-CSI.
 : ${TEST_INIT_REGION:=true}
@@ -173,5 +177,5 @@ $(case ${TEST_KUBERNETES_VERSION} in 1.19) echo ',CSIStorageCapacity=true,Generi
 # Kubernetes node port number
 # (https://kubernetes.io/docs/concepts/services-networking/service/#nodeport)
 # that is going to be used by kube-scheduler to reach the scheduler
-# extender service (see deploy/scheduler/scheduler-service.yaml).
+# extender service (see test/setup-kubernetes.sh)
 : ${TEST_SCHEDULER_EXTENDER_NODE_PORT:=32000}

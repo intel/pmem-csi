@@ -1,28 +1,38 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: pmem-csi-controller-testing
+  name: pmem-csi-intel-com-controller-testing
   namespace: default
 spec:
   type: NodePort
   selector:
-    app: pmem-csi-controller
+    app.kubernetes.io/name: pmem-csi-controller
+    app.kubernetes.io/instance: pmem-csi.intel.com
   ports:
   - port: 10002 # port inside the pod where controller-socat-path.yaml forwards the csi.sock
 ---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: pmem-csi-node-testing
+  name: pmem-csi-intel-com-node-testing
   namespace: default
+  labels:
+    app.kubernetes.io/name: pmem-csi-node-testing
+    app.kubernetes.io/part-of: pmem-csi
+    app.kubernetes.io/component: node-testing
+    app.kubernetes.io/instance: pmem-csi.intel.com
 spec:
   selector:
     matchLabels:
-      app: pmem-csi-node-testing
+      app.kubernetes.io/name: pmem-csi-node-testing
+      app.kubernetes.io/instance: pmem-csi.intel.com
   template:
     metadata:
       labels:
-        app: pmem-csi-node-testing
+        app.kubernetes.io/name: pmem-csi-node-testing
+        app.kubernetes.io/part-of: pmem-csi
+        app.kubernetes.io/component: node-testing
+        app.kubernetes.io/instance: pmem-csi.intel.com
         pmem-csi.intel.com/webhook: ignore
     spec:
       hostNetwork: true

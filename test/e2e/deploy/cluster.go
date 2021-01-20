@@ -15,6 +15,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	e2essh "k8s.io/kubernetes/test/e2e/framework/ssh"
@@ -90,33 +91,32 @@ func (c *Cluster) WaitForServicePort(serviceName, namespace string) int {
 	return port
 }
 
-// GetAppInstance looks for a pod with a certain app label and a specific host or pod IP.
+// GetAppInstance looks for a pod with certain labels and a specific host or pod IP.
 // The IP may also be empty.
-func (c *Cluster) GetAppInstance(ctx context.Context, app, ip, namespace string) (*v1.Pod, error) {
-	pods, err := c.cs.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
+func (c *Cluster) GetAppInstance(ctx context.Context, appLabels labels.Set, ip, namespace string) (*v1.Pod, error) {
+	pods, err := c.cs.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: appLabels.String()})
 	if err != nil {
 		return nil, err
 	}
 	for _, p := range pods.Items {
-		if p.Labels["app"] == app &&
-			(ip == "" || p.Status.HostIP == ip || p.Status.PodIP == ip) {
+		if ip == "" || p.Status.HostIP == ip || p.Status.PodIP == ip {
 			return &p, nil
 		}
 	}
-	return nil, fmt.Errorf("no app %q in namespace %q with IP %q found", app, namespace, ip)
+	return nil, fmt.Errorf("no app %s in namespace %q with IP %q found", appLabels, namespace, ip)
 }
 
 // WaitForAppInstance waits for a running pod which matches the app
 // label, optional host or pod IP, and namespace.
-func (c *Cluster) WaitForAppInstance(app, ip, namespace string) *v1.Pod {
+func (c *Cluster) WaitForAppInstance(appLabels labels.Set, ip, namespace string) *v1.Pod {
 	var pod *v1.Pod
 	Eventually(func() bool {
 		var err error
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
-		pod, err = c.GetAppInstance(ctx, app, ip, namespace)
+		pod, err = c.GetAppInstance(ctx, appLabels, ip, namespace)
 		return err == nil && pod.Status.Phase == v1.PodRunning
-	}, "3m").Should(BeTrue(), "%s app running on host %s in '%s' namespace", app, ip, namespace)
+	}, "3m").Should(BeTrue(), "%s app running on host %s in '%s' namespace", appLabels, ip, namespace)
 	return pod
 }
 

@@ -16,3 +16,17 @@
   value: -metricsListen=:10010
 
 # TODO: node-driver-registrar once it has metrics support.
+
+# external-provisioner:
+- op: add
+  path: /spec/template/metadata/annotations
+  value:
+    pmem-csi.intel.com/scrape: containers
+- op: add
+  path: /spec/template/spec/containers/2/ports
+  value:
+  - name: metrics
+    containerPort: 10011
+- op: add
+  path: /spec/template/spec/containers/2/args/-
+  value: --metrics-address=:10011

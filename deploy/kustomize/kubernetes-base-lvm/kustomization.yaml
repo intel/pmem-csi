@@ -11,5 +11,5 @@ patchesJson6902:
     group: apps
     version: v1
     kind: DaemonSet
-    name: pmem-csi-node
+    name: pmem-csi-intel-com-node
   path: ../patches/lvm-patch.yaml

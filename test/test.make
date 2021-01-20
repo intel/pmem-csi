@@ -74,9 +74,9 @@ RUNTIME_DEPS += sed -e 's;^sigs.k8s.io/\([^/]*\).*;sigs.k8s.io/\1;' |
 # - everything from gRPC is one project
 RUNTIME_DEPS += sed -e 's;google.golang.org/grpc/*.*;grpc-go,https://github.com/grpc/grpc-go;' |
 # - Kubernetes is split across several repos.
-RUNTIME_DEPS += sed -e 's;^k8s.io/.*\|github.com/kubernetes-csi/.*;kubernetes,https://github.com/kubernetes/kubernetes,9641;' | \
+RUNTIME_DEPS += sed -e 's;^k8s.io/.*\|github.com/kubernetes-csi/.*;kubernetes,https://github.com/kubernetes/kubernetes,12141;' | \
 # - additional Golang repos
-RUNTIME_DEPS += sed -e 's;\(golang.org/x/.*\);Go,https://github.com/golang/go,9051;' | \
+RUNTIME_DEPS += sed -e 's;\(golang.org/x/.*\);Go,https://golang.org/,11382;' | \
 # - various other projects (sorted alphabetically)
 RUNTIME_DEPS += sed \
 	-e 's;\(github.com/PuerkitoBio/purell\);purell,https://\1;' \
@@ -118,8 +118,7 @@ RUNTIME_DEPS += sed \
 	-e 's;gopkg.in/fsnotify.*;golang-github-fsnotify-fsnotify,https://github.com/fsnotify/fsnotify;' \
 	-e 's;gopkg.in/inf\.v.*;go-inf,https://github.com/go-inf/inf;' \
 	-e 's;gopkg.in/yaml\.v.*;go-yaml,https://https://github.com/go-yaml/yaml,9476;' \
-	-e 's;sigs.k8s.io/controller-runtime;kubernetes-sigs/controller-runtime,https://github.com/kubernetes-sigs/controller-runtime;' \
-	-e 's;sigs.k8s.io/yaml;kubernetes-sigs/yaml,https://github.com/kubernetes-sigs/yaml;' \
+	-e 's;sigs.k8s.io/\(.*\);kubernetes-sigs/\1,https://github.com/kubernetes-sigs/\1;' \
 	| cat |
 # - ensure that we have three columns
 RUNTIME_DEPS += sed -e 's;^\([^,]*\),\([^,]*\)$$;\1,\2,;' |

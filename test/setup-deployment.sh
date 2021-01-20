@@ -40,66 +40,8 @@ DEPLOY=(
 )
 echo "INFO: deploying from ${DEPLOYMENT_DIRECTORY}/${TEST_DEVICEMODE}${deployment_suffix}"
 
-# Generate certificates if not deploying in 'default' namespace.
-# Because the default certificates in _work/pmem-ca/ are generated
-# for the default namespace, so we can reuse them for driver running
-# in the default namespace. For other namespaces we create new
-# certificates using the existing CA.
-if [ ${TEST_DRIVER_NAMESPACE} != "default" ]; then
-    CA_DIR="${REPO_DIRECTORY}/_work/pmem-ca"
-    WORK_DIR="${CA_DIR}/${TEST_DRIVER_NAMESPACE}"
-    if ! [ -d "${WORK_DIR}" ]; then
-        # Generate new certificates using existing CA
-        PATH="${REPO_DIRECTORY}/_work/bin:$PATH" WORKDIR="${WORK_DIR}" CA="${CA_DIR}/ca" NS="${TEST_DRIVER_NAMESPACE}" ${TEST_DIRECTORY}/setup-ca.sh
-    fi
-    TEST_REGISTRY_CERT="${WORK_DIR}/pmem-registry.pem"
-    TEST_REGISTRY_KEY="${WORK_DIR}/pmem-registry-key.pem"
-    TEST_NODE_CERT="${WORK_DIR}/pmem-node-controller.pem"
-    TEST_NODE_KEY="${WORK_DIR}/pmem-node-controller-key.pem"
-fi
-
-# Read certificate files and turn them into Kubernetes secrets.
-#
-# -caFile (controller and all nodes)
-CA=$(read_key "${TEST_CA}")
-# -certFile (controller)
-REGISTRY_CERT=$(read_key "${TEST_REGISTRY_CERT}")
-# -keyFile (controller)
-REGISTRY_KEY=$(read_key "${TEST_REGISTRY_KEY}")
-# -certFile (same for all nodes)
-NODE_CERT=$(read_key "${TEST_NODE_CERT}")
-# -keyFile (same for all nodes)
-NODE_KEY=$(read_key "${TEST_NODE_KEY}")
-
-${KUBECTL} get ns ${TEST_DRIVER_NAMESPACE} 2>/dev/null >/dev/null || ${KUBECTL} create ns ${TEST_DRIVER_NAMESPACE}
-
-${KUBECTL} apply -f - <<EOF
-apiVersion: v1
-kind: Secret
-metadata:
-    name: pmem-csi-registry-secrets
-    namespace: ${TEST_DRIVER_NAMESPACE}
-    labels:
-        pmem-csi.intel.com/deployment: ${TEST_DEVICEMODE}-${TEST_DEPLOYMENTMODE}
-type: kubernetes.io/tls
-data:
-    ca.crt: ${CA}
-    tls.crt: ${REGISTRY_CERT}
-    tls.key: ${REGISTRY_KEY}
----
-apiVersion: v1
-kind: Secret
-metadata:
-    name: pmem-csi-node-secrets
-    namespace: ${TEST_DRIVER_NAMESPACE}
-    labels:
-        pmem-csi.intel.com/deployment: ${TEST_DEVICEMODE}-${TEST_DEPLOYMENTMODE}
-type: Opaque
-data:
-    ca.crt: ${CA}
-    tls.crt: ${NODE_CERT}
-    tls.key: ${NODE_KEY}
-EOF
+# Set up TLS secrets in the TEST_DRIVER_NAMESPACE.
+PATH="${REPO_DIRECTORY}/_work/bin:$PATH" KUBECTL="${KUBECTL}" ${TEST_DIRECTORY}/setup-ca-kubernetes.sh
 
 case "$KUBERNETES_VERSION" in
     1.1[01234])
@@ -117,14 +59,27 @@ for deploy in ${DEPLOY[@]}; do
     # 2. deploy/common
     # 3. deploy/kustomize directly
     path="${DEPLOYMENT_DIRECTORY}/${deploy}"
+    paths="$path"
     if ! [ -e "$path" ]; then
         path="${REPO_DIRECTORY}/deploy/common/${deploy}"
+        paths+=" $path"
     fi
     if ! [ -e "$path" ]; then
         path="${REPO_DIRECTORY}/deploy/kustomize/${deploy}"
+        paths+=" $path"
     fi
     if [ -f "$path" ]; then
-        ${KUBECTL} apply -f - <"$path"
+        case "$path" in
+            *storageclass*)
+                # Patch the node selector label into the storage class instead of the default storage=pmem.
+                sed -e "s;: storage\$;: \"$(echo $TEST_PMEM_NODE_LABEL | cut -d= -f1)\";" \
+                    -e "s;- pmem\$;- \"$(echo $TEST_PMEM_NODE_LABEL | cut -d= -f2)\";" \
+                    "$path" | ${KUBECTL} apply -f -
+                ;;
+            *)
+                ${KUBECTL} apply -f - <"$path"
+                ;;
+            esac
     elif [ -d "$path" ]; then
         # A kustomize base. We need to copy all files over into the cluster, otherwise
         # `kubectl kustomize` won't work.
@@ -156,13 +111,16 @@ patchesJson6902:
       group: apps
       version: v1
       kind: StatefulSet
-      name: pmem-csi-controller
+      name: pmem-csi-intel-com-controller
     path: scheduler-patch.yaml
 EOF
                 ${SSH} "cat >'$tmpdir/my-deployment/scheduler-patch.yaml'" <<EOF
 - op: add
   path: /spec/template/spec/containers/0/command/-
   value: "--schedulerListen=:8000" # Exposed to kube-scheduler via the pmem-csi-scheduler service.
+- op: add
+  path: /spec/template/spec/containers/0/command/-
+  value: -nodeSelector={$(echo ${TEST_PMEM_NODE_LABEL} | sed -e 's/\([^=]*\)=\(.*\)/"\1":"\2"/')}
 EOF
                 if [ "${TEST_DEVICEMODE}" = "lvm" ]; then
                     # Test these options and kustomization by injecting some non-default values.
@@ -173,7 +131,7 @@ EOF
       group: apps
       version: v1
       kind: DaemonSet
-      name: pmem-csi-node
+      name: pmem-csi-intel-com-node
     path: lvm-parameters-patch.yaml
 EOF
                     ${SSH} "cat >'$tmpdir/my-deployment/lvm-parameters-patch.yaml'" <<EOF
@@ -189,7 +147,7 @@ EOF
       group: apps
       version: v1
       kind: DaemonSet
-      name: pmem-csi-node
+      name: pmem-csi-intel-com-node
     path: node-label-patch.yaml
 EOF
                 ${SSH} "cat >>'$tmpdir/my-deployment/node-label-patch.yaml'" <<EOF
@@ -208,13 +166,16 @@ patchesJson6902:
   - target:
       version: v1
       kind: Service
-      name: pmem-csi-scheduler
+      name: pmem-csi-intel-com-scheduler
     path: scheduler-patch.yaml
 EOF
                 ${SSH} "cat >'$tmpdir/my-deployment/scheduler-patch.yaml'" <<EOF
 - op: add
   path: /spec/ports/0/nodePort
   value: ${TEST_SCHEDULER_EXTENDER_NODE_PORT}
+- op: add
+  path: /spec/type
+  value: NodePort
 EOF
                 ;;
             webhook)
@@ -226,16 +187,19 @@ patchesJson6902:
       group: admissionregistration.k8s.io
       version: v1beta1
       kind: MutatingWebhookConfiguration
-      name: pmem-csi-hook
+      name: pmem-csi-intel-com-hook
     path: webhook-patch.yaml
 EOF
                 ${SSH} "cat >'$tmpdir/my-deployment/webhook-patch.yaml'" <<EOF
 - op: replace
   path: /webhooks/0/clientConfig/caBundle
-  value: $(base64 -w 0 ${TEST_CA})
+  value: $(base64 -w 0 ${TEST_CA}.pem)
 - op: replace
   path: /webhooks/0/clientConfig/service/namespace
   value: ${TEST_DRIVER_NAMESPACE}
+- op: replace
+  path: /webhooks/0/failurePolicy
+  value: Fail # This is not the default anymore in PMEM-CSI, but for testing we want it.
 EOF
                 ;;
         esac
@@ -271,7 +235,7 @@ EOF
                 ;;
             *)
                 # Should be there, fail.
-                echo >&2 "$path is missing."
+                echo >&2 "$paths are all missing."
                 exit 1
                 ;;
         esac

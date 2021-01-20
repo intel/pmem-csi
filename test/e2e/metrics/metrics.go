@@ -50,7 +50,7 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 	BeforeEach(func() {
 		cluster, err := deploy.NewCluster(f.ClientSet, f.DynamicClient)
 		framework.ExpectNoError(err, "get cluster information")
-		metricsURL = deploy.WaitForPMEMDriver(cluster, "pmem-csi", d)
+		metricsURL = deploy.WaitForPMEMDriver(cluster, d)
 	})
 
 	It("works", func() {
@@ -67,7 +67,7 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 		// "testing" deployment. We just need to find one of
 		// those pods...
 		socatPods, err := f.ClientSet.CoreV1().Pods(d.Namespace).List(context.Background(), metav1.ListOptions{
-			LabelSelector: "app in ( pmem-csi-node-testing )",
+			LabelSelector: "app.kubernetes.io/name in ( pmem-csi-node-testing )",
 		})
 		framework.ExpectNoError(err, "list socat pods")
 		Expect(pods.Items).NotTo(BeEmpty(), "at least one socat pod should be running")
@@ -115,16 +115,13 @@ Accept: */*
 						if strings.HasPrefix(container.Name, "pmem") {
 							Expect(stdout).To(ContainSubstring("go_threads "), name)
 							Expect(stdout).To(ContainSubstring("process_open_fds "), name)
-							Expect(stdout).To(ContainSubstring("csi_plugin_operations_seconds "), name)
-							if strings.HasPrefix(pod.Name, "pmem-csi-controller") {
-								Expect(stdout).To(ContainSubstring("pmem_nodes "), name)
-								Expect(stdout).To(ContainSubstring("pmem_csi_controller_operations_seconds "), name)
-							} else {
+							if !strings.Contains(pod.Name, "controller") {
+								// Only the node driver implements CSI and manages volumes.
+								Expect(stdout).To(ContainSubstring("csi_plugin_operations_seconds "), name)
 								Expect(stdout).To(ContainSubstring("pmem_amount_available "), name)
 								Expect(stdout).To(ContainSubstring("pmem_amount_managed "), name)
 								Expect(stdout).To(ContainSubstring("pmem_amount_max_volume_size "), name)
 								Expect(stdout).To(ContainSubstring("pmem_amount_total "), name)
-								Expect(stdout).To(ContainSubstring("pmem_csi_node_operations_seconds "), name)
 							}
 						} else {
 							Expect(stdout).To(ContainSubstring("csi_sidecar_operations_seconds "), name)

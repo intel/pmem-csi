@@ -15,6 +15,7 @@ package versionskew
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
@@ -39,8 +40,11 @@ import (
 )
 
 const (
+	// TODO: remove this and all code using it when no longer testing against 0.8
+	base_08 = "0.8"
+
 	// base is the release branch used for version skew testing. Empty if none.
-	base = "0.8"
+	base = base_08
 )
 
 func baseSupportsKubernetes(ver version.Version) bool {
@@ -263,15 +267,17 @@ func (p *skewTestSuite) DefineTests(driver testsuites.TestDriver, pattern testpa
 		}
 		deploy.EnsureDeploymentNow(f, deployment)
 
-		// Work around volume leak (https://github.com/intel/pmem-csi/issues/733) by
-		// waiting for controller to know about all volumes.
-		switch pattern.VolType {
-		case testpatterns.CSIInlineVolume:
-			// One running pod -> one volume.
-			waitForVolumes(1)
-		default:
-			// Three stand-alone volumes.
-			waitForVolumes(3)
+		if strings.Contains(otherName, base_08) {
+			// Work around volume leak (https://github.com/intel/pmem-csi/issues/733) by
+			// waiting for controller to know about all volumes.
+			switch pattern.VolType {
+			case testpatterns.CSIInlineVolume:
+				// One running pod -> one volume.
+				waitForVolumes(1)
+			default:
+				// Three stand-alone volumes.
+				waitForVolumes(3)
+			}
 		}
 
 		// Use some other volume.
@@ -309,6 +315,10 @@ func (p *skewTestSuite) DefineTests(driver testsuites.TestDriver, pattern testpa
 	// and if there compatibility issues, then hopefully the direction
 	// of the skew won't matter.
 	It("controller [Slow]", func() {
+		if base == base_08 {
+			skipper.Skipf("current controller not compatible with PMEM-CSI 0.8")
+		}
+
 		withKataContainers := false
 		c, err := deploy.NewCluster(f.ClientSet, f.DynamicClient)
 
@@ -363,7 +373,7 @@ func (p *skewTestSuite) DefineTests(driver testsuites.TestDriver, pattern testpa
 		framework.ExpectNoError(err, "get cluster information")
 		mixedDeployment := *deployment
 		mixedDeployment.Version = ""
-		deploy.WaitForPMEMDriver(c, "pmem-csi", &mixedDeployment)
+		deploy.WaitForPMEMDriver(c, &mixedDeployment)
 
 		// This relies on FindDeployment getting the version number from the image.
 		deployment, err = deploy.FindDeployment(c)

@@ -24,7 +24,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -47,7 +46,6 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	clientexec "k8s.io/client-go/util/exec"
 	"k8s.io/kubernetes/test/e2e/framework"
-	e2enode "k8s.io/kubernetes/test/e2e/framework/node"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
 	testutils "k8s.io/kubernetes/test/utils"
@@ -130,7 +128,11 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			if socat != nil {
 				return socat
 			}
-			socat = cluster.WaitForAppInstance("pmem-csi-node-testing", cluster.NodeIP(1), d.Namespace)
+			socat = cluster.WaitForAppInstance(labels.Set{
+				"app.kubernetes.io/component": "node-testing",
+				"app.kubernetes.io/part-of":   "pmem-csi",
+			},
+				cluster.NodeIP(1), d.Namespace)
 			return socat
 		}
 
@@ -333,7 +335,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			v.namePrefix = "mount-volume"
 
 			pods, err := WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,
-				labels.Set{"app": "pmem-csi-node"}.AsSelector(), cluster.NumNodes()-1, time.Minute)
+				labels.Set{"app.kubernetes.io/name": "pmem-csi-node"}.AsSelector(), cluster.NumNodes()-1, time.Minute)
 			framework.ExpectNoError(err, "All node drivers are not ready")
 
 			name, vol := v.create(22*1024*1024, nodeID)
@@ -366,7 +368,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 		It("capacity is restored after controller restart", func() {
 			By("Fetching pmem-csi-controller pod name")
 			pods, err := WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,
-				labels.Set{"app": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, time.Minute)
+				labels.Set{"app.kubernetes.io/name": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, time.Minute)
 			framework.ExpectNoError(err, "PMEM-CSI controller running with one replica")
 			controllerNode := pods.Items[0].Spec.NodeName
 			canRestartNode(controllerNode)
@@ -379,7 +381,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			restartNode(f.ClientSet, controllerNode, sc)
 
 			_, err = WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,
-				labels.Set{"app": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, 5*time.Minute)
+				labels.Set{"app.kubernetes.io/name": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, 5*time.Minute)
 			framework.ExpectNoError(err, "PMEM-CSI controller running again with one replica")
 
 			By("waiting for full capacity")
@@ -708,64 +710,6 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 				// end of test cleanup
 				v.unpublish(vol, nodeID)
 				v.remove(vol, volName)
-			})
-
-			It("supports cache volumes", func() {
-				v.namePrefix = "cache"
-
-				// Create a cache volume with as many instances as nodes.
-				sc.Config.TestVolumeParameters = map[string]string{
-					"persistencyModel": "cache",
-					"cacheSize":        fmt.Sprintf("%d", len(nodes)),
-				}
-				sizeInBytes := int64(33 * 1024 * 1024)
-				volName, vol := v.create(sizeInBytes, "")
-				sc.Config.TestVolumeParameters = map[string]string{}
-				var expectedTopology []*csi.Topology
-				// These node names are sorted.
-				readyNodes, err := e2enode.GetReadySchedulableNodes(f.ClientSet)
-				framework.ExpectNoError(err, "get schedulable nodes")
-				for _, node := range readyNodes.Items {
-					if node.Labels["storage"] != "pmem" {
-						continue
-					}
-					expectedTopology = append(expectedTopology, &csi.Topology{
-						Segments: map[string]string{
-							"pmem-csi.intel.com/node": node.Name,
-						},
-					})
-				}
-				// vol.AccessibleTopology isn't, so we have to sort before comparing.
-				sort.Slice(vol.AccessibleTopology, func(i, j int) bool {
-					return strings.Compare(
-						vol.AccessibleTopology[i].Segments["pmem-csi.intel.com/node"],
-						vol.AccessibleTopology[j].Segments["pmem-csi.intel.com/node"],
-					) < 0
-				})
-				Expect(vol.AccessibleTopology).To(Equal(expectedTopology), "cache volume topology")
-
-				// Each node now should have one additional volume,
-				// and its size should match the requested one.
-				for nodeName, node := range nodes {
-					currentVolumes, err := node.cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
-					framework.ExpectNoError(err, "list volumes on node %s via %s", nodeName)
-					Expect(len(currentVolumes.Entries)).To(Equal(len(node.volumes)+1), "one additional volume on node %s", nodeName)
-					for _, e := range currentVolumes.Entries {
-						if e.Volume.VolumeId == vol.VolumeId {
-							Expect(e.Volume.CapacityBytes).To(Equal(sizeInBytes), "additional volume size on node %s(%s)", nodeName, node.host)
-							break
-						}
-					}
-				}
-
-				v.remove(vol, volName)
-
-				// Now those volumes are gone again.
-				for nodeName, node := range nodes {
-					currentVolumes, err := node.cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
-					framework.ExpectNoError(err, "list volumes on node %s", nodeName)
-					Expect(len(currentVolumes.Entries)).To(Equal(len(node.volumes)), "same volumes as before on node %s", nodeName)
-				}
 			})
 
 			Context("ephemeral volumes", func() {

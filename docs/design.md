@@ -5,8 +5,7 @@
     - [LVM device mode](#lvm-device-mode)
     - [Direct device mode](#direct-device-mode)
     - [Kata Containers support](#kata-containers-support)
-    - [Driver modes](#driver-modes)
-    - [Driver Components](#driver-components)
+    - [Dynamic provisioning of local volumes](#dynamic-provisioning-of-local-volumes)
     - [Communication between components](#communication-between-components)
     - [Security](#security)
     - [Volume Persistency](#volume-persistency)
@@ -155,88 +154,35 @@ Kata Containers support has to be enabled explicitly via a [storage
 class parameter and Kata Containers must be set up
 appropriately](install.md#kata-containers-support).
 
-## Driver modes
+## Dynamic provisioning of local volumes
 
-The PMEM-CSI driver supports running in different modes, which can be
-controlled by passing one of the below options to the driver's
-'_-mode_' command line option. In each mode, it starts a different set
-of open source Remote Procedure Call (gRPC)
-[servers](#driver-components) on given driver endpoint(s).
+Traditionally, Kubernetes expects that a driver deployment has a
+central component, usually implemented with the `external-provisioner`
+and a custom CSI driver component which implements volume creation.
+That central component is hard to implement for a CSI driver that
+creates volumes locally on a node.
 
-* **_Controller_** should run as a single instance in cluster level. When the
-  driver is running in _Controller_ mode, it forwards the pmem volume
-  create/delete requests to the registered node controller servers
-  running on the worker node. In this mode, the driver starts the
-  following gRPC servers:
+PMEM-CSI solves this problem by deploying `external-provisioner`
+alongside each node driver and enabling ["distributed
+provisioning"](https://github.com/kubernetes-csi/external-provisioner/tree/v2.1.0#deployment-on-each-node):
+- For volumes with storage classes that use late binding (aka "wait
+  for first consumer"), a volume is tentatively assigned to a node
+  before creating it, in which case the `external-provisioner` running
+  on that node can tell that it is responsible for provisioning.
+- For volumes with storage classes that use immediate binding, the
+  different `external-provisioner` instances compete with each for
+  ownership of the volume by setting the "selected node"
+  annotation. Delays are used to avoid the thundering herd problem.
+  Once a node has been selected, provisioning continues as with late
+  binding. This is less efficient and therefore "late binding" is the
+  recommended binding mode.
 
-    * [IdentityServer](#identity-server)
-    * [NodeRegistryServer](#node-registry-server)
-    * [MasterControllerServer](#master-controller-server)
-
-* One **_Node_** instance should run on each
-  worker node that has persistent memory devices installed. When the
-  driver starts in such mode, it registers with the _Controller_
-  driver running on a given _-registryEndpoint_. In this mode, the
-  driver starts the following servers:
-
-    * [IdentityServer](#identity-server)
-    * [NodeControllerServer](#node-controller-server)
-    * [NodeServer](#node-server)
-
-## Driver Components
-
-### Identity Server
-
-This gRPC server operates on a given endpoint in all driver modes and
-implements the CSI [Identity
-interface](https://github.com/container-storage-interface/spec/blob/master/spec.md#identity-service-rpc).
-
-### Node Registry Server
-
-When the PMEM-CSI driver runs in _Controller_ mode, it starts a gRPC
-server on a given endpoint(_-registryEndpoint_) and serves the
-[RegistryServer](/pkg/pmem-registry/pmem-registry.proto) interface. The
-driver(s) running in _Node_ mode can register themselves with node
-specific information such as node id,
-[NodeControllerServer](#node-controller-server) endpoint, and their
-available persistent memory capacity.
-
-### Master Controller Server
-
-This gRPC server is started by the PMEM-CSI driver running in
-_Controller_ mode and serves the
-[Controller](https://github.com/container-storage-interface/spec/blob/master/spec.md#controller-service-rpc)
-interface defined by the CSI specification. The server responds to
-CreateVolume(), DeleteVolume(), ControllerPublishVolume(),
-ControllerUnpublishVolume(), and ListVolumes() calls coming from
-external-provisioner() and external-attacher() sidecars. It
-forwards the publish and unpublish volume requests to the appropriate
-[Node controller server](#node-controller-server) running on a worker
-node that was registered with the driver.
-
-### Node Controller Server
-
-This gRPC server is started by the PMEM-CSI driver running in _Node_
-mode and implements the
-[ControllerPublishVolume](https://github.com/container-storage-interface/spec/blob/master/spec.md#controllerpublishvolume)
-and
-[ControllerUnpublishVolume](https://github.com/container-storage-interface/spec/blob/master/spec.md#controllerunpublishvolume)
-methods of the [Controller
-service](https://github.com/container-storage-interface/spec/blob/master/spec.md#controller-service-rpc)
-interface defined by the CSI specification. It serves the
-ControllerPublishVolume() and ControllerUnpublish() requests coming
-from the [Master controller server](#master-controller-server) and
-creates/deletes persistent memory devices.
-
-### Node Server
-
-This gRPC server is started by the driver running in _Node_ mode and
-implements the [Node
-service](https://github.com/container-storage-interface/spec/blob/master/spec.md#node-service-rpc)
-interface defined in the CSI specification. It serves the
-NodeStageVolume(), NodeUnstageVolume(), NodePublishVolume(), and
-NodeUnpublishVolume() requests coming from the Container Orchestrator
-(CO).
+PMEM-CSI also has a central component which implements the [scheduler
+extender](#scheduler-extender) webhook. That component needs to know
+on which nodes the PMEM-CSI driver is running and how much capacity is
+available there. This information is retrieved by dynamically
+discovering PMEM-CSI pods and connecting to their [metrics
+endpoint](/docs/install.md#metrics-support).
 
 ## Communication between components
 
@@ -245,18 +191,17 @@ The following diagram illustrates the communication channels between driver comp
 
 ## Security
 
-All PMEM-CSI specific communication [shown in above
-section](#communication-between-components) between Master
-Controller([RegistryServer](#node-registry-server),
-[MasterControllerServer](#master-controller-server)) and
-NodeControllers([NodeControllerServer](#node-controller-server)) is
-protected by mutual TLS. Both client and server must identify
-themselves and the certificate they present must be trusted. The
-host name in each certificate is used to identify the different
-components. The following host names have a special meaning:
+The data exposed via the [metrics
+endpoint](/docs/install.md#metrics-support) is not considered
+confidential and therefore offered without access control via
+HTTP. This also simplifies scraping that data with tools like
+Prometheus.
 
-- `pmem-registry` is used by the [RegistryServer](#node-registry-server).
-- `pmem-node-controller` is used by [NodeControllerServers](#node-controller-server)
+The communication between Kubernetes and the scheduler extender
+webhook is protected by TLS because this is encouraged and supported
+by Kubernetes. But as the webhook only exposes information that is
+already available, it accepts all incoming connection without
+checking the client certificate.
 
 The [`test/setup-ca.sh`](/test/setup-ca.sh)
 script shows how to generate self-signed certificates. The test cluster is set
@@ -297,19 +242,10 @@ created for it on that node. When the application stops, the volume is
 deleted. The volume cannot be shared with other applications. Data on
 this volume is retained only while the application runs.
 
-* **Cache volumes**  
-Volumes are pre-created on a certain set of nodes, each with its own
-local data. Applications are started on those nodes and then get to
-use the volume on their node. Data persists across application
-restarts. This is useful when the data is only cached information that
-can be discarded and reconstructed at any time *and* the application
-can reuse existing local data when restarting.
-
 Volume | Kubernetes | PMEM-CSI | Limitations
 --- | --- | --- | ---
 Persistent | supported | supported | topology aware scheduling<sup>1</sup>
 Ephemeral | supported<sup>2</sup> | supported | resource constraints<sup>3</sup>
-Cache | supported | supported | topology aware scheduling<sup>1</sup>
 
 <sup>1 </sup>[Topology aware
 scheduling](https://github.com/kubernetes/enhancements/issues/490)
@@ -321,12 +257,16 @@ onto the right node(s).
 <sup>2 </sup> [CSI ephemeral volumes](https://kubernetes.io/docs/concepts/storage/volumes/#csi-ephemeral-volumes)
 feature support is alpha in Kubernetes v1.15, and beta in v1.16.
 
-<sup>3 </sup>The upstream design for ephemeral volumes currently does
-not take [resource
+<sup>3 </sup>The upstream design for CSI ephemeral volumes does not
+take [resource
 constraints](https://github.com/kubernetes/enhancements/pull/716#discussion_r250536632)
 into account. If an application gets scheduled onto a node and then
 creating the ephemeral volume on that node fails, the application on
-the node cannot start until resources become available.
+the node cannot start until resources become available. This will be
+solved with [generic ephemeral
+volumes](https://kubernetes.io/docs/concepts/storage/ephemeral-volumes/#generic-ephemeral-volumes)
+which are an alpha feature in Kubernetes 1.19 and supported by
+PMEM-CSI because they use the normal volume provisioning process.
 
 See [exposing persistent and cache volumes](install.md#expose-persistent-and-cache-volumes-to-applications) for configuration information.
 
@@ -336,30 +276,37 @@ PMEM-CSI implements the CSI `GetCapacity` call, but Kubernetes
 currently doesn't call that and schedules pods onto nodes without
 being aware of available storage capacity on the nodes. The effect is
 that pods using volumes with late binding may get tentatively assigned
-to a node and then get stuck because that decision is not reconsidered
-when the volume cannot be created there ([a
-bug](https://github.com/kubernetes/kubernetes/issues/72031)). Even if
-that decision is reconsidered, the same node may get selected again
-because Kubernetes does not get informed about the insufficient
-storage. Pods with ephemeral inline volumes always get stuck because
-the decision to use the node [is final](https://github.com/kubernetes-sigs/descheduler/issues/62).
+to a node and then may have to be rescheduled repeatedly until by
+chance they land on a node with enough capacity. Pods using multiple
+volumes with immediate binding may be unable to run permanently if
+those volumes were created on different nodes.
 
-Work is [under
-way](https://github.com/kubernetes/enhancements/pull/1353) to enhance
-scheduling in Kubernetes. In the meantime, PMEM-CSI provides two components
-that help with pod scheduling:
+[Storage capacity
+tracking](https://kubernetes.io/docs/concepts/storage/storage-capacity/)
+was added as alpha feature in Kubernetes 1.19 to enhance support for
+pod scheduling with late binding of volumes.
+
+Until that feature becomes generally available, PMEM-CSI provides two
+components that help with pod scheduling:
 
 ### Scheduler extender
 
-When a pod requests the special [extended
+When a pod requests a special [extended
 resource](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#extended-resources)
-called `pmem-csi.intel.com/scheduler`, the Kubernetes scheduler calls
+, the Kubernetes scheduler calls
 a [scheduler
 extender](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/scheduling/scheduler_extender.md)
 provided by PMEM-CSI with a list of nodes that a pod might run
-on. This extender is implemented in the master controller and thus can
-connect to the controller on each of these nodes to check for
-capacity. PMEM-CSI then filters out all nodes which currently do not
+on.
+
+The name of that special resource is `<CSI driver name>/scheduler`,
+i.e. `pmem-csi.intel.com/scheduler` when the default PMEM-CSI driver
+name is used. It is possible to configure one extender per PMEM-CSI
+deployment because each deployment has its own unique driver name.
+
+This extender is implemented in the PMEM-CSI controller and retrieves
+metrics data from each PMEM-CSI node driver instance to filter out all
+nodes which currently do not
 have enough storage left for the volumes that still need to be
 created. This considers inline ephemeral volumes and all unbound
 volumes, regardless whether they use late binding or immediate
@@ -387,7 +334,7 @@ See our [implementation](http://github.com/intel/pmem-csi/tree/devel/pkg/schedul
 
 ### Pod admission webhook
 
-Having to add `pmem-csi.intel.com/scheduler` manually is not
+Having to add the `<CSI driver name>/scheduler` extended resource manually is not
 user-friendly. To simplify this, PMEM-CSI provides a [mutating
 admission
 webhook](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/)

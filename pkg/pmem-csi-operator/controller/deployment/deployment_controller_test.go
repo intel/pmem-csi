@@ -8,7 +8,9 @@ package deployment_test
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,7 +25,6 @@ import (
 	pmemcontroller "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment/testcases"
-	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
 	"github.com/intel/pmem-csi/pkg/version"
 	"github.com/intel/pmem-csi/test/e2e/operator/validate"
 
@@ -46,6 +47,7 @@ import (
 )
 
 type pmemDeployment struct {
+	// input parameters for test
 	name                                                string
 	deviceMode                                          string
 	logLevel                                            uint16
@@ -55,8 +57,15 @@ type pmemDeployment struct {
 	nodeCPU, nodeMemory                                 string
 	provisionerCPU, provisionerMemory                   string
 	nodeRegistarCPU, nodeRegistrarMemory                string
-	caCert, regCert, regKey, ncCert, ncKey              []byte
+	controllerTLSSecret                                 string
+	mutatePods                                          api.MutatePods
+	schedulerNodePort                                   int32
 	kubeletDir                                          string
+
+	objects []runtime.Object
+
+	// expected result
+	expectFailure bool
 }
 
 func getDeployment(d *pmemDeployment) *api.PmemCSIDeployment {
@@ -74,15 +83,19 @@ func getDeployment(d *pmemDeployment) *api.PmemCSIDeployment {
 	// TODO (?): embed DeploymentSpec inside pmemDeployment instead of splitting it up into individual values.
 	// The entire copying block below then collapses into a single line.
 
-	dep.Spec = api.DeploymentSpec{}
+	dep.Spec = api.DeploymentSpec{
+		DeviceMode:          api.DeviceMode(d.deviceMode),
+		LogLevel:            d.logLevel,
+		LogFormat:           api.LogFormat(d.logFormat),
+		Image:               d.image,
+		PullPolicy:          corev1.PullPolicy(d.pullPolicy),
+		ProvisionerImage:    d.provisionerImage,
+		NodeRegistrarImage:  d.registrarImage,
+		ControllerTLSSecret: d.controllerTLSSecret,
+		MutatePods:          d.mutatePods,
+		SchedulerNodePort:   d.schedulerNodePort,
+	}
 	spec := &dep.Spec
-	spec.DeviceMode = api.DeviceMode(d.deviceMode)
-	spec.LogLevel = d.logLevel
-	spec.LogFormat = api.LogFormat(d.logFormat)
-	spec.Image = d.image
-	spec.PullPolicy = corev1.PullPolicy(d.pullPolicy)
-	spec.ProvisionerImage = d.provisionerImage
-	spec.NodeRegistrarImage = d.registrarImage
 	if d.controllerCPU != "" || d.controllerMemory != "" {
 		spec.ControllerDriverResources = &corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
@@ -115,11 +128,6 @@ func getDeployment(d *pmemDeployment) *api.PmemCSIDeployment {
 			},
 		}
 	}
-	spec.CACert = d.caCert
-	spec.RegistryCert = d.regCert
-	spec.RegistryPrivateKey = d.regKey
-	spec.NodeControllerCert = d.ncCert
-	spec.NodeControllerPrivateKey = d.ncKey
 	if d.kubeletDir != "" {
 		spec.KubeletDir = d.kubeletDir
 	}
@@ -127,44 +135,44 @@ func getDeployment(d *pmemDeployment) *api.PmemCSIDeployment {
 	return dep
 }
 
-func testDeploymentPhase(t *testing.T, c client.Client, name string, expectedPhase api.DeploymentPhase) {
+func (tc *testContext) testDeploymentPhase(name string, expectedPhase api.DeploymentPhase) {
 	depObject := &api.PmemCSIDeployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
 	}
-	err := c.Get(context.TODO(), namespacedNameWithOffset(t, 3, depObject), depObject)
-	require.NoError(t, err, "failed to retrive deployment object")
-	require.Equal(t, expectedPhase, depObject.Status.Phase, "Unexpected status phase")
+	err := tc.c.Get(tc.ctx, tc.namespacedNameWithOffset(3, depObject), depObject)
+	require.NoError(tc.t, err, "failed to retrive deployment object")
+	require.Equal(tc.t, expectedPhase, depObject.Status.Phase, "Unexpected status phase")
 }
 
-func testReconcile(t *testing.T, rc reconcile.Reconciler, name string, expectErr bool, expectedRequeue bool) {
+func (tc *testContext) testReconcile(name string, expectErr bool, expectedRequeue bool) {
 	req := reconcile.Request{
 		NamespacedName: types.NamespacedName{
 			Name: name,
 		},
 	}
-	resp, err := rc.Reconcile(req)
+	resp, err := tc.rc.Reconcile(tc.ctx, req)
 	if expectErr {
-		require.Error(t, err, "expected reconcile failure")
+		require.Error(tc.t, err, "expected reconcile failure")
 	} else {
-		require.NoError(t, err, "reconcile failed with error")
+		require.NoError(tc.t, err, "reconcile failed with error")
 	}
-	require.Equal(t, expectedRequeue, resp.Requeue, "expected requeue reconcile")
+	require.Equal(tc.t, expectedRequeue, resp.Requeue, "expected requeue reconcile")
 }
 
-func testReconcilePhase(t *testing.T, rc reconcile.Reconciler, c client.Client, name string, expectErr bool, expectedRequeue bool, expectedPhase api.DeploymentPhase) {
-	testReconcile(t, rc, name, expectErr, expectedRequeue)
-	testDeploymentPhase(t, c, name, expectedPhase)
+func (tc *testContext) testReconcilePhase(name string, expectErr bool, expectedRequeue bool, expectedPhase api.DeploymentPhase) {
+	tc.testReconcile(name, expectErr, expectedRequeue)
+	tc.testDeploymentPhase(name, expectedPhase)
 }
 
-func namespacedName(t *testing.T, obj runtime.Object) types.NamespacedName {
-	return namespacedNameWithOffset(t, 2, obj)
+func (tc *testContext) namespacedName(t *testing.T, obj runtime.Object) types.NamespacedName {
+	return tc.namespacedNameWithOffset(2, obj)
 }
 
-func namespacedNameWithOffset(t *testing.T, offset int, obj runtime.Object) types.NamespacedName {
+func (tc *testContext) namespacedNameWithOffset(offset int, obj runtime.Object) types.NamespacedName {
 	metaObj, err := meta.Accessor(obj)
-	require.NoError(t, err, "failed to get accessor")
+	require.NoError(tc.t, err, "failed to get accessor")
 
 	return types.NamespacedName{Name: metaObj.GetName(), Namespace: metaObj.GetNamespace()}
 }
@@ -215,17 +223,25 @@ type testContext struct {
 	cs               kubernetes.Interface
 	rc               reconcile.Reconciler
 	evWatcher        watch.Interface
-	events           []*corev1.Event
 	resourceVersions map[string]string
 	k8sVersion       version.Version
+
+	eventsMutex sync.Mutex
+	events      []corev1.Event
 }
 
-func newTestContext(t *testing.T, k8sVersion version.Version) *testContext {
+func newTestContext(t *testing.T, k8sVersion version.Version, initObjs ...runtime.Object) *testContext {
+	// Make a copy of the initial objects, just to be on the safe side.
+	var objs []runtime.Object
+
+	for _, obj := range initObjs {
+		objs = append(objs, obj.DeepCopyObject())
+	}
 	ctx := logger.Set(context.Background(), testinglogger.New(t))
 	tc := &testContext{
 		ctx:              ctx,
 		t:                t,
-		c:                newTestClient(),
+		c:                newTestClient(objs...),
 		cs:               cgfake.NewSimpleClientset(),
 		resourceVersions: map[string]string{},
 		k8sVersion:       k8sVersion,
@@ -247,14 +263,9 @@ func (tc *testContext) ResetReconciler() {
 	tc.rc = rc
 	tc.UnsetEventWatcher()
 	tc.evWatcher = rc.(*deployment.ReconcileDeployment).EventBroadcaster().StartEventWatcher(func(ev *corev1.Event) {
-		// Discard consecutive duplicate events, mimicking the EventAggregator behavior
-		if len(tc.events) != 0 {
-			lastEvent := tc.events[len(tc.events)-1]
-			if lastEvent.Reason == ev.Reason && lastEvent.InvolvedObject.UID == ev.InvolvedObject.UID {
-				return
-			}
-		}
-		tc.events = append(tc.events, ev)
+		tc.eventsMutex.Lock()
+		defer tc.eventsMutex.Unlock()
+		tc.events = append(tc.events, *ev)
 	})
 }
 
@@ -264,13 +275,27 @@ func (tc *testContext) UnsetEventWatcher() {
 	}
 }
 
+func createSecret(name, namespace string, data map[string][]byte) *corev1.Secret {
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: corev1.SchemeGroupVersion.String(),
+			Kind:       "Secret",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Data: data,
+	}
+}
+
 func TestDeploymentController(t *testing.T) {
 	err := apis.AddToScheme(scheme.Scheme)
 	require.NoError(t, err, "add api schema")
 
 	testIt := func(t *testing.T, testK8sVersion version.Version) {
-		setup := func(t *testing.T) *testContext {
-			return newTestContext(t, testK8sVersion)
+		setup := func(t *testing.T, initObjs ...runtime.Object) *testContext {
+			return newTestContext(t, testK8sVersion, initObjs...)
 		}
 
 		teardown := func(tc *testContext) {
@@ -279,15 +304,29 @@ func TestDeploymentController(t *testing.T) {
 
 		validateEvents := func(tc *testContext, dep *api.PmemCSIDeployment, expectedEvents []string) {
 			require.Eventually(tc.t, func() bool {
-				return len(tc.events) >= len(expectedEvents)
-			}, 30*time.Second, time.Second, "receive all expected events")
-			events := []string{}
-			for _, e := range tc.events {
-				if e.InvolvedObject.UID == dep.GetUID() {
-					events = append(events, e.Reason)
+				tc.eventsMutex.Lock()
+				defer tc.eventsMutex.Unlock()
+
+				// Before comparing against expected
+				// events, we must sort by the "first
+				// seen", time stamp because events
+				// may get delivered out-of-order.
+				sort.Slice(tc.events, func(i, j int) bool {
+					return tc.events[i].FirstTimestamp.Before(&tc.events[j].FirstTimestamp)
+				})
+
+				// Then we need to filter out events for the
+				// right deployment and remove duplicates.
+				events := []string{}
+				for _, e := range tc.events {
+					if e.InvolvedObject.UID == dep.GetUID() &&
+						(len(events) == 0 || events[len(events)-1] != e.Reason) {
+						events = append(events, e.Reason)
+					}
 				}
-			}
-			require.ElementsMatch(tc.t, events, expectedEvents, "events must match")
+				require.Equal(tc.t, events, expectedEvents, "events must match")
+				return true
+			}, 30*time.Second, time.Second, "receive all expected events")
 		}
 
 		validateConditions := func(tc *testContext, name string, expected map[api.DeploymentConditionType]corev1.ConditionStatus) {
@@ -324,30 +363,17 @@ func TestDeploymentController(t *testing.T) {
 
 		t.Parallel()
 
-		t.Run("deployment with defaults", func(t *testing.T) {
-			tc := setup(t)
-			defer teardown(tc)
-			d := &pmemDeployment{
+		dataOkay := map[string][]byte{
+			api.TLSSecretCA:   []byte("ca"),
+			api.TLSSecretKey:  []byte("key"),
+			api.TLSSecretCert: []byte("cert"),
+		}
+
+		cases := map[string]pmemDeployment{
+			"deployment with defaults": pmemDeployment{
 				name: "test-deployment",
-			}
-
-			dep := getDeployment(d)
-
-			err := tc.c.Create(tc.ctx, dep)
-			require.NoError(t, err, "failed to create deployment")
-
-			testReconcilePhase(t, tc.rc, tc.c, d.name, false, false, api.DeploymentPhaseRunning)
-			validateDriver(tc, dep, []string{api.EventReasonNew, api.EventReasonRunning}, false)
-			validateConditions(tc, d.name, map[api.DeploymentConditionType]corev1.ConditionStatus{
-				api.CertsReady:     corev1.ConditionTrue,
-				api.DriverDeployed: corev1.ConditionTrue,
-			})
-		})
-
-		t.Run("deployment with explicit values", func(t *testing.T) {
-			tc := setup(t)
-			defer teardown(tc)
-			d := &pmemDeployment{
+			},
+			"deployment with explicit values": pmemDeployment{
 				name:             "test-deployment",
 				image:            "test-driver:v0.0.0",
 				provisionerImage: "test-provisioner-image:v0.0.0",
@@ -360,20 +386,85 @@ func TestDeploymentController(t *testing.T) {
 				nodeCPU:          "1000m",
 				nodeMemory:       "500Mi",
 				kubeletDir:       "/some/directory",
-			}
+			},
+			"invalid device mode": pmemDeployment{
+				name:          "test-driver-modes",
+				deviceMode:    "foobar",
+				expectFailure: true,
+			},
+			"LVM mode": pmemDeployment{
+				name:       "test-driver-modes",
+				deviceMode: "lvm",
+			},
+			"direct mode": pmemDeployment{
+				name:       "test-driver-modes",
+				deviceMode: "direct",
+			},
+			"with controller, no secret": pmemDeployment{
+				name:                "test-controller",
+				controllerTLSSecret: "controller-secret",
+				expectFailure:       true,
+			},
+			"with controller, wrong secret content": pmemDeployment{
+				name:                "test-controller",
+				controllerTLSSecret: "controller-secret",
+				objects:             []runtime.Object{createSecret("controller-secret", testNamespace, nil)},
+				expectFailure:       true,
+			},
+			"with controller, secret okay": pmemDeployment{
+				name:                "test-controller",
+				controllerTLSSecret: "controller-secret",
+				objects:             []runtime.Object{createSecret("controller-secret", testNamespace, dataOkay)},
+			},
+			"controller, no mutate": pmemDeployment{
+				name:                "test-controller",
+				controllerTLSSecret: "controller-secret",
+				mutatePods:          api.MutatePodsNever,
+				objects:             []runtime.Object{createSecret("controller-secret", testNamespace, dataOkay)},
+			},
+			"controller, try mutate": pmemDeployment{
+				name:                "test-controller",
+				controllerTLSSecret: "controller-secret",
+				mutatePods:          api.MutatePodsTry,
+				objects:             []runtime.Object{createSecret("controller-secret", testNamespace, dataOkay)},
+			},
+			"controller, always mutate": pmemDeployment{
+				name:                "test-controller",
+				controllerTLSSecret: "controller-secret",
+				mutatePods:          api.MutatePodsAlways,
+				objects:             []runtime.Object{createSecret("controller-secret", testNamespace, dataOkay)},
+			},
+			"controller, port 31000": pmemDeployment{
+				name:                "test-controller",
+				controllerTLSSecret: "controller-secret",
+				schedulerNodePort:   31000,
+				objects:             []runtime.Object{createSecret("controller-secret", testNamespace, dataOkay)},
+			},
+		}
 
-			dep := getDeployment(d)
-			err := tc.c.Create(tc.ctx, dep)
-			require.NoError(t, err, "failed to create deployment")
+		for name, d := range cases {
+			d := d
+			t.Run(name, func(t *testing.T) {
+				tc := setup(t, d.objects...)
+				defer teardown(tc)
+				dep := getDeployment(&d)
 
-			// Reconcile now should change Phase to running
-			testReconcilePhase(t, tc.rc, tc.c, d.name, false, false, api.DeploymentPhaseRunning)
-			validateDriver(tc, dep, []string{api.EventReasonNew, api.EventReasonRunning}, false)
-			validateConditions(tc, d.name, map[api.DeploymentConditionType]corev1.ConditionStatus{
-				api.CertsReady:     corev1.ConditionTrue,
-				api.DriverDeployed: corev1.ConditionTrue,
+				err := tc.c.Create(tc.ctx, dep)
+				require.NoError(t, err, "failed to create deployment")
+
+				if d.expectFailure {
+					tc.testReconcilePhase(d.name, true, true, api.DeploymentPhaseFailed)
+					validateEvents(tc, dep, []string{api.EventReasonNew, api.EventReasonFailed})
+					validateConditions(tc, d.name, map[api.DeploymentConditionType]corev1.ConditionStatus{})
+				} else {
+					tc.testReconcilePhase(d.name, false, false, api.DeploymentPhaseRunning)
+					validateDriver(tc, dep, []string{api.EventReasonNew, api.EventReasonRunning}, false)
+					validateConditions(tc, d.name, map[api.DeploymentConditionType]corev1.ConditionStatus{
+						api.DriverDeployed: corev1.ConditionTrue,
+					})
+				}
 			})
-		})
+		}
 
 		t.Run("multiple deployments", func(t *testing.T) {
 			tc := setup(t)
@@ -395,211 +486,15 @@ func TestDeploymentController(t *testing.T) {
 			require.NoError(t, err, "failed to create deployment2")
 
 			conditions := map[api.DeploymentConditionType]corev1.ConditionStatus{
-				api.CertsReady:     corev1.ConditionTrue,
 				api.DriverDeployed: corev1.ConditionTrue,
 			}
 
-			testReconcilePhase(t, tc.rc, tc.c, d1.name, false, false, api.DeploymentPhaseRunning)
+			tc.testReconcilePhase(d1.name, false, false, api.DeploymentPhaseRunning)
 			validateDriver(tc, dep1, []string{api.EventReasonNew, api.EventReasonRunning}, false)
 			validateConditions(tc, d1.name, conditions)
-			testReconcilePhase(t, tc.rc, tc.c, d2.name, false, false, api.DeploymentPhaseRunning)
+			tc.testReconcilePhase(d2.name, false, false, api.DeploymentPhaseRunning)
 			validateDriver(tc, dep2, []string{api.EventReasonNew, api.EventReasonRunning}, false)
 			validateConditions(tc, d2.name, conditions)
-		})
-
-		t.Run("invalid device mode", func(t *testing.T) {
-			tc := setup(t)
-			defer teardown(tc)
-			d := &pmemDeployment{
-				name:       "test-driver-modes",
-				deviceMode: "foobar",
-			}
-
-			dep := getDeployment(d)
-
-			err := tc.c.Create(tc.ctx, dep)
-			require.NoError(t, err, "failed to create deployment")
-			// Deployment should failed with an error
-			testReconcilePhase(t, tc.rc, tc.c, d.name, true, true, api.DeploymentPhaseFailed)
-			validateEvents(tc, dep, []string{api.EventReasonNew, api.EventReasonFailed})
-			validateConditions(tc, d.name, map[api.DeploymentConditionType]corev1.ConditionStatus{})
-		})
-
-		t.Run("LVM mode", func(t *testing.T) {
-			tc := setup(t)
-			d := &pmemDeployment{
-				name:       "test-driver-modes",
-				deviceMode: "lvm",
-			}
-
-			dep := getDeployment(d)
-
-			err := tc.c.Create(tc.ctx, dep)
-			require.NoError(t, err, "failed to create deployment")
-			testReconcilePhase(t, tc.rc, tc.c, d.name, false, false, api.DeploymentPhaseRunning)
-			validateDriver(tc, dep, []string{api.EventReasonNew, api.EventReasonRunning}, false)
-			validateConditions(tc, d.name, map[api.DeploymentConditionType]corev1.ConditionStatus{
-				api.CertsReady:     corev1.ConditionTrue,
-				api.DriverDeployed: corev1.ConditionTrue,
-			})
-		})
-
-		t.Run("direct mode", func(t *testing.T) {
-			tc := setup(t)
-			d := &pmemDeployment{
-				name:       "test-driver-modes",
-				deviceMode: "direct",
-			}
-
-			dep := getDeployment(d)
-
-			err := tc.c.Create(tc.ctx, dep)
-			require.NoError(t, err, "failed to create deployment")
-			testReconcilePhase(t, tc.rc, tc.c, d.name, false, false, api.DeploymentPhaseRunning)
-			validateDriver(tc, dep, []string{api.EventReasonNew, api.EventReasonRunning}, false)
-			validateConditions(tc, d.name, map[api.DeploymentConditionType]corev1.ConditionStatus{
-				api.CertsReady:     corev1.ConditionTrue,
-				api.DriverDeployed: corev1.ConditionTrue,
-			})
-		})
-
-		t.Run("provided private keys", func(t *testing.T) {
-			tc := setup(t)
-			defer teardown(tc)
-			// Generate private key
-			regKey, err := pmemtls.NewPrivateKey()
-			require.NoError(t, err, "Failed to generate a private key: %v", err)
-
-			encodedKey := pmemtls.EncodeKey(regKey)
-
-			d := &pmemDeployment{
-				name:   "test-deployment",
-				regKey: encodedKey,
-			}
-			dep := getDeployment(d)
-			err = tc.c.Create(tc.ctx, dep)
-			require.NoError(t, err, "failed to create deployment")
-
-			// First deployment expected to be successful
-			testReconcilePhase(t, tc.rc, tc.c, d.name, false, false, api.DeploymentPhaseRunning)
-			validateDriver(tc, dep, []string{api.EventReasonNew, api.EventReasonRunning}, false)
-			validateConditions(tc, d.name, map[api.DeploymentConditionType]corev1.ConditionStatus{
-				api.CertsReady:     corev1.ConditionTrue,
-				api.DriverDeployed: corev1.ConditionTrue,
-			})
-		})
-
-		t.Run("provided private keys and certificates", func(t *testing.T) {
-			tc := setup(t)
-			defer teardown(tc)
-			ca, err := pmemtls.NewCA(nil, nil)
-			require.NoError(t, err, "failed to instantiate CA")
-
-			regKey, err := pmemtls.NewPrivateKey()
-			require.NoError(t, err, "failed to generate a private key: %v", err)
-			regCert, err := ca.GenerateCertificate("pmem-registry", regKey.Public())
-			require.NoError(t, err, "failed to sign registry key")
-
-			ncKey, err := pmemtls.NewPrivateKey()
-			require.NoError(t, err, "failed to generate a private key: %v", err)
-			ncCert, err := ca.GenerateCertificate("pmem-node-controller", ncKey.Public())
-			require.NoError(t, err, "failed to sign node controller key")
-
-			d := &pmemDeployment{
-				name:    "test-deployment",
-				caCert:  ca.EncodedCertificate(),
-				regKey:  pmemtls.EncodeKey(regKey),
-				regCert: pmemtls.EncodeCert(regCert),
-				ncKey:   pmemtls.EncodeKey(ncKey),
-				ncCert:  pmemtls.EncodeCert(ncCert),
-			}
-			dep := getDeployment(d)
-			err = tc.c.Create(tc.ctx, dep)
-			require.NoError(t, err, "failed to create deployment")
-
-			// First deployment expected to be successful
-			testReconcilePhase(t, tc.rc, tc.c, d.name, false, false, api.DeploymentPhaseRunning)
-			validateDriver(tc, dep, []string{api.EventReasonNew, api.EventReasonRunning}, false)
-			validateConditions(tc, d.name, map[api.DeploymentConditionType]corev1.ConditionStatus{
-				api.CertsReady:     corev1.ConditionTrue,
-				api.CertsVerified:  corev1.ConditionTrue,
-				api.DriverDeployed: corev1.ConditionTrue,
-			})
-		})
-
-		t.Run("invalid private keys and certificates", func(t *testing.T) {
-			tc := setup(t)
-			defer teardown(tc)
-			ca, err := pmemtls.NewCA(nil, nil)
-			require.NoError(t, err, "faield to instantiate CA")
-
-			regKey, err := pmemtls.NewPrivateKey()
-			require.NoError(t, err, "failed to generate a private key: %v", err)
-			regCert, err := ca.GenerateCertificate("invalid-registry", regKey.Public())
-			require.NoError(t, err, "failed to sign registry key")
-
-			ncKey, err := pmemtls.NewPrivateKey()
-			require.NoError(t, err, "failed to generate a private key: %v", err)
-			ncCert, err := ca.GenerateCertificate("invalid-node-controller", ncKey.Public())
-			require.NoError(t, err, "failed to sign node key")
-
-			d := &pmemDeployment{
-				name:    "test-deployment-cert-invalid",
-				caCert:  ca.EncodedCertificate(),
-				regKey:  pmemtls.EncodeKey(regKey),
-				regCert: pmemtls.EncodeCert(regCert),
-				ncKey:   pmemtls.EncodeKey(ncKey),
-				ncCert:  pmemtls.EncodeCert(ncCert),
-			}
-			dep := getDeployment(d)
-			err = tc.c.Create(tc.ctx, dep)
-			require.NoError(t, err, "failed to create deployment")
-
-			testReconcilePhase(t, tc.rc, tc.c, d.name, true, true, api.DeploymentPhaseFailed)
-			validateEvents(tc, dep, []string{api.EventReasonNew, api.EventReasonFailed})
-			validateConditions(tc, d.name, map[api.DeploymentConditionType]corev1.ConditionStatus{
-				api.CertsVerified:  corev1.ConditionFalse,
-				api.DriverDeployed: corev1.ConditionFalse,
-			})
-		})
-
-		t.Run("expired certificates", func(t *testing.T) {
-			tc := setup(t)
-			defer teardown(tc)
-			oneDayAgo := time.Now().Add(-24 * time.Hour)
-			oneMinuteAgo := time.Now().Add(-1 * time.Minute)
-
-			ca, err := pmemtls.NewCA(nil, nil)
-			require.NoError(t, err, "faield to instantiate CA")
-
-			regKey, err := pmemtls.NewPrivateKey()
-			require.NoError(t, err, "failed to generate a private key: %v", err)
-			regCert, err := ca.GenerateCertificateWithDuration("pmem-registry", oneDayAgo, oneMinuteAgo, regKey.Public())
-			require.NoError(t, err, "failed to registry sign key")
-
-			ncKey, err := pmemtls.NewPrivateKey()
-			require.NoError(t, err, "failed to generate a private key: %v", err)
-			ncCert, err := ca.GenerateCertificateWithDuration("pmem-node-controller", oneDayAgo, oneMinuteAgo, ncKey.Public())
-			require.NoError(t, err, "failed to sign node controller key")
-
-			d := &pmemDeployment{
-				name:    "test-deployment-cert-expired",
-				caCert:  ca.EncodedCertificate(),
-				regKey:  pmemtls.EncodeKey(regKey),
-				regCert: pmemtls.EncodeCert(regCert),
-				ncKey:   pmemtls.EncodeKey(ncKey),
-				ncCert:  pmemtls.EncodeCert(ncCert),
-			}
-			dep := getDeployment(d)
-			err = tc.c.Create(tc.ctx, dep)
-			require.NoError(t, err, "failed to create deployment")
-
-			testReconcilePhase(t, tc.rc, tc.c, d.name, true, true, api.DeploymentPhaseFailed)
-			validateEvents(tc, dep, []string{api.EventReasonNew, api.EventReasonFailed})
-			validateConditions(tc, d.name, map[api.DeploymentConditionType]corev1.ConditionStatus{
-				api.CertsVerified:  corev1.ConditionFalse,
-				api.DriverDeployed: corev1.ConditionFalse,
-			})
 		})
 
 		t.Run("modified deployment under reconcile", func(t *testing.T) {
@@ -625,18 +520,17 @@ func TestDeploymentController(t *testing.T) {
 			tc.rc.(*deployment.ReconcileDeployment).AddHook(&hook)
 
 			conditions := map[api.DeploymentConditionType]corev1.ConditionStatus{
-				api.CertsReady:     corev1.ConditionTrue,
 				api.DriverDeployed: corev1.ConditionTrue,
 			}
 
-			testReconcilePhase(t, tc.rc, tc.c, d.name, false, false, api.DeploymentPhaseRunning)
+			tc.testReconcilePhase(d.name, false, false, api.DeploymentPhaseRunning)
 			validateDriver(tc, dep, []string{api.EventReasonNew, api.EventReasonRunning}, false)
 			validateConditions(tc, d.name, conditions)
 
 			tc.rc.(*deployment.ReconcileDeployment).RemoveHook(&hook)
 
 			// Next reconcile phase should catch the deployment changes
-			testReconcilePhase(t, tc.rc, tc.c, d.name, false, false, api.DeploymentPhaseRunning)
+			tc.testReconcilePhase(d.name, false, false, api.DeploymentPhaseRunning)
 			validateDriver(tc, updatedDep, []string{api.EventReasonNew, api.EventReasonRunning}, true)
 			validateConditions(tc, d.name, conditions)
 		})
@@ -653,24 +547,19 @@ func TestDeploymentController(t *testing.T) {
 
 						// Assumption is that all the testcases are positive cases.
 						conditions := map[api.DeploymentConditionType]corev1.ConditionStatus{
-							api.CertsReady:     corev1.ConditionTrue,
 							api.DriverDeployed: corev1.ConditionTrue,
 						}
-						if yes, _ := dep.HaveCertificatesConfigured(); yes {
-							conditions[api.CertsVerified] = corev1.ConditionTrue
-						}
-
 						// When working with the fake client, we need to make up a UID.
 						dep.UID = types.UID("fake-uid-" + dep.Name)
 
 						err := tc.c.Create(tc.ctx, dep)
 						require.NoError(t, err, "create deployment")
 
-						testReconcilePhase(t, tc.rc, tc.c, dep.Name, false, false, api.DeploymentPhaseRunning)
+						tc.testReconcilePhase(dep.Name, false, false, api.DeploymentPhaseRunning)
 						validateDriver(tc, dep, []string{api.EventReasonNew, api.EventReasonRunning}, false)
 
 						// Reconcile now should keep phase as running.
-						testReconcilePhase(t, tc.rc, tc.c, dep.Name, false, false, api.DeploymentPhaseRunning)
+						tc.testReconcilePhase(dep.Name, false, false, api.DeploymentPhaseRunning)
 						validateDriver(tc, dep, []string{api.EventReasonNew, api.EventReasonRunning}, false)
 						validateEvents(tc, dep, []string{api.EventReasonNew, api.EventReasonRunning})
 						validateConditions(tc, dep.Name, conditions)
@@ -690,7 +579,7 @@ func TestDeploymentController(t *testing.T) {
 						require.NoError(t, err, "update deployment")
 
 						// Reconcile is expected to not fail.
-						testReconcilePhase(t, tc.rc, tc.c, dep.Name, false, false, api.DeploymentPhaseRunning)
+						tc.testReconcilePhase(dep.Name, false, false, api.DeploymentPhaseRunning)
 
 						// Recheck the container resources are updated
 						validateDriver(tc, dep, []string{api.EventReasonNew, api.EventReasonRunning}, true)
@@ -720,10 +609,9 @@ func TestDeploymentController(t *testing.T) {
 
 			err := tc.c.Create(tc.ctx, dep)
 			require.NoError(t, err, "failed to create deployment")
-			testReconcilePhase(t, tc.rc, tc.c, d.name, false, false, api.DeploymentPhaseRunning)
+			tc.testReconcilePhase(d.name, false, false, api.DeploymentPhaseRunning)
 			validateDriver(tc, dep, []string{api.EventReasonNew, api.EventReasonRunning}, false)
 			validateConditions(tc, d.name, map[api.DeploymentConditionType]corev1.ConditionStatus{
-				api.CertsReady:     corev1.ConditionTrue,
 				api.DriverDeployed: corev1.ConditionTrue,
 			})
 
@@ -765,7 +653,7 @@ func TestDeploymentController(t *testing.T) {
 			tc.ResetReconciler()
 
 			// A fresh reconcile should delete the newly created above ConfigMap
-			testReconcilePhase(t, tc.rc, tc.c, d.name, false, false, api.DeploymentPhaseRunning)
+			tc.testReconcilePhase(d.name, false, false, api.DeploymentPhaseRunning)
 			err = tc.c.Get(tc.ctx, client.ObjectKey{Name: d.name}, dep)
 			require.NoError(t, err, "get deployment")
 			// It is debatable whether the operator should update all objects after
@@ -810,11 +698,11 @@ func TestDeploymentController(t *testing.T) {
 					tc.c.(*testClient).InjectPanicOn(nil)
 					// mimic operator restart
 					tc.ResetReconciler()
-					testReconcilePhase(t, tc.rc, tc.c, d.name, false, false, api.DeploymentPhaseRunning)
+					tc.testReconcilePhase(d.name, false, false, api.DeploymentPhaseRunning)
 					validateDriver(tc, dep, []string{api.EventReasonNew, api.EventReasonRunning}, false)
 				}()
 
-				tc.rc.Reconcile(req)
+				tc.rc.Reconcile(tc.ctx, req)
 			}
 		})
 	}
@@ -834,6 +722,11 @@ func TestDeploymentController(t *testing.T) {
 	}
 }
 
+// patchMutex is used to serialize the patch operation because
+// of concurrency issues in controller-runtime and/or json-iterator
+// (https://github.com/intel/pmem-csi/issues/852).
+var patchMutex sync.Mutex
+
 type testClient struct {
 	client.Client
 	assertOn *schema.GroupVersionKind
@@ -850,9 +743,15 @@ func (t *testClient) InjectPanicOn(gvk *schema.GroupVersionKind) {
 // Create adds given obj to its object tracking list.
 // It panics if the object type matches with the type of 'assertOn'
 // that was previously set using InjectPanicOn()
-func (t *testClient) Create(ctx context.Context, obj runtime.Object, opts ...client.CreateOption) error {
+func (t *testClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	if t.assertOn != nil && obj.GetObjectKind().GroupVersionKind() == *t.assertOn {
 		panic(fmt.Sprintf("assert: %v", obj.GetObjectKind()))
 	}
 	return t.Client.Create(ctx, obj, opts...)
+}
+
+func (t *testClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	patchMutex.Lock()
+	defer patchMutex.Unlock()
+	return t.Client.Patch(ctx, obj, patch, opts...)
 }

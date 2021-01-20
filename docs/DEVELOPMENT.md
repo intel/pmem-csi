@@ -195,17 +195,8 @@ GetCapacity, GetCapabilities, GetPluginInfo, GetPluginCapabilities.
 
 Network ports are opened as configured in manifest files:
 
-- registry endpoint: typical port value 10000, used for PMEM-CSI internal communication
-- controller endpoint: typical port value 10001, used by the nodes for
-  providing the serving CSI API to the PMEM-CSI controller
 - metrics endpoint: typical port values 10010 (PMEM-CSI) and 10011 (external-provisioner)
 - webhook endpoint: disabled by default, port chosen when [enabling the scheduler extensions](../README.md#enable-scheduler-extensions)
-
-Except for the metrics and webhook endpoint, all ports are protected
-via mutual TLS. The metrics endpoint and webhook are supposed to be
-easily usable and expose no confidential data, therefore TLS is not
-used.
-
 
 ### Local sockets
 
@@ -218,37 +209,16 @@ Kubernetes CSI API used over local socket inside same host.
 
 ### Command line arguments
 
-argument name            | meaning                                           | type   | range
--------------------------|---------------------------------------------------|--------|---
--alsologtostderr         | log to standard error as well as files            |        |
--log_backtrace_at value  | when logging hits line file:N, emit a stack trace |        |
--log_dir string          | If non-empty, write log files in this directory   | string |
--log_file string         | If non-empty, use this log file                   | string |
--logtostderr             | log to standard error instead of files            |        |
--skip_headers            | avoid header prefixes in the log messages         |        |
--stderrthreshold value   | logs at or above this threshold go to stderr (default 2) | |
--v value                 | log level for V logs                              | int    |
--vmodule value           | comma-separated list of pattern=N settings for file-filtered logging | string |
--caFile string           | Root CA certificate file to use for verifying connections | string | |
--certFile string         | SSL certificate file to use for authenticating client connections(RegistryServer/NodeControllerServer) | string | |
--clientCertFile string   | Client SSL certificate file to use for authenticating peer connections | string | | certFile
--clientKeyFile string    | Client private key associated to client certificate | string |              | keyFile
--controllerEndpoint string | internal node controller endpoint              | string |              |
--deviceManager string      | device mode to use. ndctl selects mode which is described as direct mode in documentation. | string | lvm or ndctl | lvm
--drivername string         | name of the driver                             | string |              | pmem-csi
--endpoint string           | PMEM CSI endpoint                              | string |              | unix:///tmp/pmem-csi.sock
--keyFile string            | Private key file associated to certificate     | string |              |
--mode string               | driver run mode                                | string | controller, node |
--nodeid string             | node id                                        | string |              | nodeid
--registryEndpoint string   | endpoint to connect/listen registry server     | string |              |
--statePath                 | Directory path where to persist the state of the driver running on a node | string | absolute directory path on node | /var/lib/<drivername>
--schedulerListen           | listen address for scheduler extender and mutating webhook | [address string](https://golang.org/pkg/net/#Listen) | controller | empty (= disabled)
--pmemPercentage value      | represents the percentage of space to be used by the driver in each PMEM region<br>(currently only supported by the driver in LVM mode) | int | 0-100
+See the `main.go` files of the [pmem-csi-driver](./pkg/pmem-csi-driver/main.go) and
+the [pmem-csi-operator](./pkg/pmem-csi-operator/main.go) commands.
 
 ### Environment variables
 
-TEST_WORK is used by registry server unit-test code to specify path to certificates in test system. 
-Note, THIS IS NOT USED IN PRODUCTION
+TEST_WORK is used by registry server unit-test code to specify path to certificates in test system.
+Note, THIS IS NOT USED IN PRODUCTION.
+
+NODE_NAME is a copy of the node name set for the pod which runs the
+`external-provisioner` on each node.
 
 ### Logging
 
@@ -307,35 +277,6 @@ The default resource requirements used for the driver deployments by the operato
 are chosen from the VPA recommendations described in this section when using the
 `stress-driver.sh` script.
 
-## Switching device mode
-
-If device mode is switched between LVM and direct(aka ndctl), please keep
-in mind that PMEM-CSI driver does not clean up or reclaim namespaces,
-therefore namespaces plus other related context (LVM state)
-created in previous mode will remain stored on device and most likely
-will create trouble in another device mode.
-
-### Going from LVM device mode to direct device mode
-
-- examine LV groups state on a node: `vgs`
-- examine LV physical volumes state on a node: `pvs`
-- delete LV groups before deleting namespaces to avoid orphaned volume groups: `vgremove VGNAME`
-
-NOTE: The following **WILL DELETE ALL NAMESPACES** so be careful!
-
-- Delete namespaces on a node using CLI: `ndctl destroy-namespace all --force`
-
-### Going from direct device mode to LVM device mode
-
-No special steps are needed to clean up namespaces state.
-
-If PMEM-CSI driver has been operating correctly, there should not be
-existing namespaces as CSI volume lifecycle should have been deleted
-those after end of life of volume. If there are, you can either keep
-those (LVM device mode does honor "foreign" namespaces and leaves those
-alone) if you have enough space, or you can choose to delete those
-using `ndctl` on node.
-
 ## Accessing system directories in a container
 
 The PMEM-CSI driver will run as container, but it needs access to
@@ -390,23 +331,6 @@ Source files:
 - [source file for cache sequence](/docs/diagrams/sequence-cache.wsd)
 
 The PNG files are committed as repository elements in docs/images/sequence/.
-
-### RegistryServer spec
-
-pkg/pmem-registry/pmem-registry.pb.go is generated from pkg/pmem-registry/pmem-registry.proto
-
-protoc comes from package _protobuf-compiler_ on Ubuntu 18.04
-- get protobuf for Go:
-``` console
-$ git clone https://github.com/golang/protobuf.git && cd protobuf
-$ make # installs needed binary in $GOPATH/bin/protoc-gen-go
-```
-
-- generate by running in \~/go/src/github.com/intel/pmem-csi/pkg/pmem-registry:
-
-``` console
-$ protoc --plugin=protoc-gen-go=$GOPATH/bin/protoc-gen-go --go_out=plugins=grpc:./ pmem-registry.proto
-```
 
 ### Table of Contents in README and DEVELOPMENT
 

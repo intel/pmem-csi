@@ -12,7 +12,6 @@ import (
 	"fmt"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
-	pmemtls "github.com/intel/pmem-csi/pkg/pmem-csi-operator/pmem-tls"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -72,9 +71,6 @@ func UpdateTests() []UpdateTest {
 					corev1.ResourceMemory: resource.MustParse("301Mi"),
 				},
 			}
-		},
-		"TLS": func(d *api.PmemCSIDeployment) {
-			SetTLSOrDie(&d.Spec)
 		},
 		"logLevel": func(d *api.PmemCSIDeployment) {
 			d.Spec.LogLevel++
@@ -166,7 +162,6 @@ func UpdateTests() []UpdateTest {
 			},
 		},
 	}
-	SetTLSOrDie(&full.Spec)
 
 	baseDeployments := map[string]api.PmemCSIDeployment{
 		"default deployment": {
@@ -201,44 +196,4 @@ func UpdateTests() []UpdateTest {
 	}
 
 	return tests
-}
-
-func SetTLSOrDie(spec *api.DeploymentSpec) {
-	err := SetTLS(spec)
-	if err != nil {
-		panic(err)
-	}
-}
-
-func SetTLS(spec *api.DeploymentSpec) error {
-	ca, err := pmemtls.NewCA(nil, nil)
-	if err != nil {
-		return fmt.Errorf("instantiate CA: %v", err)
-	}
-
-	regKey, err := pmemtls.NewPrivateKey()
-	if err != nil {
-		return fmt.Errorf("generate a private key: %v", err)
-	}
-	regCert, err := ca.GenerateCertificate("pmem-registry", regKey.Public())
-	if err != nil {
-		return fmt.Errorf("sign registry key: %v", err)
-	}
-
-	ncKey, err := pmemtls.NewPrivateKey()
-	if err != nil {
-		return fmt.Errorf("generate a private key: %v", err)
-	}
-	ncCert, err := ca.GenerateCertificate("pmem-node-controller", ncKey.Public())
-	if err != nil {
-		return fmt.Errorf("sign node controller key: %v", err)
-	}
-
-	spec.CACert = ca.EncodedCertificate()
-	spec.RegistryPrivateKey = pmemtls.EncodeKey(regKey)
-	spec.RegistryCert = pmemtls.EncodeCert(regCert)
-	spec.NodeControllerPrivateKey = pmemtls.EncodeKey(ncKey)
-	spec.NodeControllerCert = pmemtls.EncodeCert(ncCert)
-
-	return nil
 }

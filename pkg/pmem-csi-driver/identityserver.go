@@ -21,7 +21,7 @@ type identityServer struct {
 
 var _ grpcserver.Service = &identityServer{}
 
-func NewIdentityServer(name, version string) (*identityServer, error) {
+func NewIdentityServer(name, version string) *identityServer {
 	return &identityServer{
 		name:    name,
 		version: version,
@@ -41,7 +41,7 @@ func NewIdentityServer(name, version string) (*identityServer, error) {
 				},
 			},
 		},
-	}, nil
+	}
 }
 
 func (ids *identityServer) RegisterService(rpcServer *grpc.Server) {

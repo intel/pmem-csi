@@ -21,17 +21,17 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 	"github.com/intel/pmem-csi/test/e2e/operator/validate"
 
+	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	storagev1beta1 "k8s.io/api/storage/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	apiruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -174,15 +174,13 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		}, 2*time.Minute, time.Second, what, ": ", expected)
 	}
 
-	ensureObjectRecovered := func(obj apiruntime.Object) {
-		meta, err := meta.Accessor(obj)
-		Expect(err).ShouldNot(HaveOccurred(), "get meta object")
-		framework.Logf("Waiting for deleted object recovered %T/%s", obj, meta.GetName())
-		key := runtime.ObjectKey{Name: meta.GetName(), Namespace: meta.GetNamespace()}
+	ensureObjectRecovered := func(obj runtime.Object) {
+		framework.Logf("Waiting for deleted object recovered %T/%s", obj, obj.GetName())
+		key := runtime.ObjectKey{Name: obj.GetName(), Namespace: obj.GetNamespace()}
 		Eventually(func() error {
 			return client.Get(context.TODO(), key, obj)
 		}, "2m", "1s").ShouldNot(HaveOccurred(), "failed to recover object")
-		framework.Logf("Object %T/%s recovered", obj, meta.GetName())
+		framework.Logf("Object %T/%s recovered", obj, obj.GetName())
 	}
 
 	Context("deployment", func() {
@@ -232,7 +230,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				defer deploy.DeleteDeploymentCR(f, deployment.Name)
 				validateDriver(deployment)
 				validateConditions(deployment.Name, map[api.DeploymentConditionType]corev1.ConditionStatus{
-					api.CertsReady:     corev1.ConditionTrue,
 					api.DriverDeployed: corev1.ConditionTrue,
 				})
 				validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonRunning})
@@ -295,6 +292,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					deployment.Spec.Image = ""
 					deployment.Spec.PMEMPercentage = 50
 					deployment.Spec.LogFormat = format
+					deployment.Spec.ControllerTLSSecret = "pmem-csi-intel-com-controller-secret"
 
 					deployment = deploy.CreateDeploymentCR(f, deployment)
 					defer deploy.DeleteDeploymentCR(f, deployment.Name)
@@ -355,7 +353,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					corev1.ResourceMemory: resource.MustParse("200Mi"),
 				},
 			}
-			testcases.SetTLSOrDie(spec)
 
 			deployment = deploy.UpdateDeploymentCR(f, deployment)
 
@@ -387,14 +384,10 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 		It("shall be able to use custom CA certificates", func() {
 			deployment := getDeployment("test-deployment-with-certificates")
-			testcases.SetTLSOrDie(&deployment.Spec)
-
 			deployment = deploy.CreateDeploymentCR(f, deployment)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 			validateDriver(deployment, true)
 			validateConditions(deployment.Name, map[api.DeploymentConditionType]corev1.ConditionStatus{
-				api.CertsReady:     corev1.ConditionTrue,
-				api.CertsVerified:  corev1.ConditionTrue,
 				api.DriverDeployed: corev1.ConditionTrue,
 			})
 			validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonRunning})
@@ -408,7 +401,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 			validateDriver(deployment, true)
 			validateConditions(deployment.Name, map[api.DeploymentConditionType]corev1.ConditionStatus{
-				api.CertsReady:     corev1.ConditionTrue,
 				api.DriverDeployed: corev1.ConditionTrue,
 			})
 
@@ -430,13 +422,59 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 		It("shall recover from conflicts", func() {
 			deployment := getDeployment("test-recover-from-conflicts")
-			sec := &corev1.Secret{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Secret",
-					APIVersion: "v1",
-				},
+			deployment.Spec.ControllerTLSSecret = "pmem-csi-intel-com-controller-secret"
+			se := &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      deployment.GetHyphenedName() + "-registry-secrets",
+					Name:      deployment.GetHyphenedName() + "-scheduler",
+					Namespace: d.Namespace,
+				},
+				Spec: corev1.ServiceSpec{
+					Selector: map[string]string{"app": "foobar"},
+					Type:     corev1.ServiceTypeClusterIP,
+					Ports: []corev1.ServicePort{
+						{Port: 433},
+					},
+				},
+			}
+			deleteService := func() {
+				Eventually(func() error {
+					err := f.ClientSet.CoreV1().Services(d.Namespace).Delete(context.Background(), se.Name, metav1.DeleteOptions{})
+					deploy.LogError(err, "Delete service error: %v, will retry...", err)
+					if errors.IsNotFound(err) {
+						return nil
+					}
+					return err
+				}, "3m", "1s").ShouldNot(HaveOccurred(), "delete service %s", se.Name)
+			}
+			Eventually(func() error {
+				_, err := f.ClientSet.CoreV1().Services(d.Namespace).Create(context.Background(), se, metav1.CreateOptions{})
+				deploy.LogError(err, "create service error: %v, will retry...", err)
+				return err
+			}, "3m", "1s").ShouldNot(HaveOccurred(), "create service %s", se.Name)
+			defer deleteService()
+
+			deployment = deploy.CreateDeploymentCR(f, deployment)
+			defer deploy.DeleteDeploymentCR(f, deployment.Name)
+
+			// The deployment should fail to create the required service as it already
+			// exists and is owned by others.
+			Eventually(func() bool {
+				out := deploy.GetDeploymentCR(f, deployment.Name)
+				return out.Status.Phase == api.DeploymentPhaseFailed
+			}, "3m", "1s").Should(BeTrue(), "deployment should fail %q", deployment.Name)
+			validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonFailed})
+
+			// Deleting the existing service should make the deployment succeed.
+			deleteService()
+			validateDriver(deployment, true)
+			validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonRunning})
+		})
+
+		It("shall recover from missing secret", func() {
+			deployment := getDeployment("test-recover-from-missing-secret")
+			sec := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-controller-secret",
 					Namespace: d.Namespace,
 				},
 				Type: corev1.SecretTypeTLS,
@@ -446,36 +484,34 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					"tls.crt": []byte("fake crt"),
 				},
 			}
-			deleteSecret := func(name string) {
-				Eventually(func() error {
-					err := f.ClientSet.CoreV1().Secrets(d.Namespace).Delete(context.Background(), name, metav1.DeleteOptions{})
-					deploy.LogError(err, "Delete secret error: %v, will retry...", err)
-					if errors.IsNotFound(err) {
-						return nil
-					}
-					return err
-				}, "3m", "1s").ShouldNot(HaveOccurred(), "delete secret %q", name)
-			}
-			Eventually(func() error {
-				_, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Create(context.Background(), sec, metav1.CreateOptions{})
-				deploy.LogError(err, "create secret error: %v, will retry...", err)
-				return err
-			}, "3m", "1s").ShouldNot(HaveOccurred(), "create secret %q", sec.Name)
-			defer deleteSecret(sec.Name)
-
+			deployment.Spec.ControllerTLSSecret = sec.Name
 			deployment = deploy.CreateDeploymentCR(f, deployment)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
 
-			// The deployment should fail to create required secret(s) as it already
-			// exists and is owned by others.
+			// The deployment should fail because the required secret is missing.
 			Eventually(func() bool {
 				out := deploy.GetDeploymentCR(f, deployment.Name)
 				return out.Status.Phase == api.DeploymentPhaseFailed
 			}, "3m", "1s").Should(BeTrue(), "deployment should fail %q", deployment.Name)
 			validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonFailed})
 
-			// Deleting the existing secret should make the deployment succeed.
-			deleteSecret(sec.Name)
+			// Creating the secret should make the deployment succeed.
+			deleteSecret := func() {
+				Eventually(func() error {
+					err := f.ClientSet.CoreV1().Secrets(d.Namespace).Delete(context.Background(), sec.Name, metav1.DeleteOptions{})
+					deploy.LogError(err, "Delete secret error: %v, will retry...", err)
+					if errors.IsNotFound(err) {
+						return nil
+					}
+					return err
+				}, "3m", "1s").ShouldNot(HaveOccurred(), "delete secret %s", sec.Name)
+			}
+			Eventually(func() error {
+				_, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Create(context.Background(), sec, metav1.CreateOptions{})
+				deploy.LogError(err, "create secret error: %v, will retry...", err)
+				return err
+			}, "3m", "1s").ShouldNot(HaveOccurred(), "create secret %s", sec.Name)
+			defer deleteSecret()
 			validateDriver(deployment, true)
 			validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonRunning})
 		})
@@ -591,9 +627,10 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 						deployment = deploy.CreateDeploymentCR(f, deployment)
 						defer deploy.DeleteDeploymentCR(f, deployment.Name)
-						deploy.WaitForPMEMDriver(c, deployment.Name,
+						deploy.WaitForPMEMDriver(c,
 							&deploy.Deployment{
-								Namespace: d.Namespace,
+								Namespace:  d.Namespace,
+								DriverName: driverName,
 							})
 						validateDriver(deployment, true)
 
@@ -690,87 +727,111 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 	Context("recover", func() {
 		Context("deleted sub-resources", func() {
-			tests := map[string]func(*api.PmemCSIDeployment) apiruntime.Object{
-				"registry secret": func(dep *api.PmemCSIDeployment) apiruntime.Object {
-					return &corev1.Secret{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: dep.RegistrySecretName(), Namespace: d.Namespace,
-						},
-					}
-				},
-				"node secret": func(dep *api.PmemCSIDeployment) apiruntime.Object {
-					return &corev1.Secret{
-						ObjectMeta: metav1.ObjectMeta{Name: dep.NodeSecretName(), Namespace: d.Namespace},
-					}
-				},
-				"service account": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+			tests := map[string]func(*api.PmemCSIDeployment) runtime.Object{
+				"provisioner service account": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &corev1.ServiceAccount{
-						ObjectMeta: metav1.ObjectMeta{Name: dep.ServiceAccountName(), Namespace: d.Namespace},
+						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerServiceAccountName(), Namespace: d.Namespace},
 					}
 				},
-				"controller service": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"webhooks service account": func(dep *api.PmemCSIDeployment) runtime.Object {
+					return &corev1.ServiceAccount{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksServiceAccountName(), Namespace: d.Namespace},
+					}
+				},
+				"scheduler service": func(dep *api.PmemCSIDeployment) runtime.Object {
+					return &corev1.Service{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.SchedulerServiceName(), Namespace: d.Namespace},
+					}
+				},
+				"controller service": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &corev1.Service{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ControllerServiceName(), Namespace: d.Namespace},
 					}
 				},
-				"metrics service": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"metrics service": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &corev1.Service{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.MetricsServiceName(), Namespace: d.Namespace},
 					}
 				},
-				"provisioner role": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"webhooks role": func(dep *api.PmemCSIDeployment) runtime.Object {
+					return &rbacv1.Role{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksRoleName(), Namespace: d.Namespace},
+					}
+				},
+				"webhooks role binding": func(dep *api.PmemCSIDeployment) runtime.Object {
+					return &rbacv1.RoleBinding{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksRoleBindingName(), Namespace: d.Namespace},
+					}
+				},
+				"webhooks cluster role": func(dep *api.PmemCSIDeployment) runtime.Object {
+					return &rbacv1.ClusterRole{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksClusterRoleName()},
+					}
+				},
+				"webhooks cluster role binding": func(dep *api.PmemCSIDeployment) runtime.Object {
+					return &rbacv1.ClusterRoleBinding{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksClusterRoleBindingName()},
+					}
+				},
+				"mutating webhook config": func(dep *api.PmemCSIDeployment) runtime.Object {
+					return &admissionregistrationv1beta1.MutatingWebhookConfiguration{
+						ObjectMeta: metav1.ObjectMeta{Name: dep.MutatingWebhookName()},
+					}
+				},
+				"provisioner role": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &rbacv1.Role{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerRoleName(), Namespace: d.Namespace},
 					}
 				},
-				"provisioner role binding": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"provisioner role binding": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &rbacv1.RoleBinding{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerRoleBindingName(), Namespace: d.Namespace},
 					}
 				},
-				"provisioner cluster role": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"provisioner cluster role": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &rbacv1.ClusterRole{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerClusterRoleName()},
 					}
 				},
-				"provisioner cluster role binding": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"provisioner cluster role binding": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &rbacv1.ClusterRoleBinding{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ProvisionerClusterRoleBindingName()},
 					}
 				},
-				"csi driver": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"csi driver": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &storagev1beta1.CSIDriver{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.GetName()},
 					}
 				},
-				"controller driver": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"controller driver": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &appsv1.StatefulSet{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ControllerDriverName(), Namespace: d.Namespace},
 					}
 				},
-				"node driver": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"node driver": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &appsv1.DaemonSet{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.NodeDriverName(), Namespace: d.Namespace},
 					}
 				},
 			}
 
-			delete := func(obj apiruntime.Object) {
-				meta, err := meta.Accessor(obj)
-				Expect(err).ShouldNot(HaveOccurred(), "get meta object")
+			delete := func(obj runtime.Object) {
 				Eventually(func() error {
 					err := client.Delete(context.TODO(), obj)
 					if err == nil || errors.IsNotFound(err) {
 						return nil
 					}
 					return err
-				}, "3m", "1s").ShouldNot(HaveOccurred(), "delete object '%T/%s", obj, meta.GetName())
-				framework.Logf("Deleted object %T/%s", obj, meta.GetName())
+				}, "3m", "1s").ShouldNot(HaveOccurred(), "delete object '%T/%s", obj, obj.GetName())
+				framework.Logf("Deleted object %T/%s", obj, obj.GetName())
 			}
 			for name, getter := range tests {
 				name, getter := name, getter
 				It(name, func() {
+					// Create a deployment with controller and webhook config.
 					dep := getDeployment("recover-" + strings.ReplaceAll(name, " ", "-"))
+					dep.Spec.ControllerTLSSecret = "pmem-csi-intel-com-controller-secret"
+					dep.Spec.MutatePods = api.MutatePodsAlways
 					deployment := deploy.CreateDeploymentCR(f, dep)
 					defer deploy.DeleteDeploymentCR(f, dep.Name)
 					validateDriver(deployment)
@@ -784,8 +845,8 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		})
 
 		Context("conflicting update", func() {
-			tests := map[string]func(dep *api.PmemCSIDeployment) apiruntime.Object{
-				"controller": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+			tests := map[string]func(dep *api.PmemCSIDeployment) runtime.Object{
+				"controller": func(dep *api.PmemCSIDeployment) runtime.Object {
 					obj := &appsv1.StatefulSet{}
 					key := runtime.ObjectKey{Name: dep.ControllerDriverName(), Namespace: d.Namespace}
 					EventuallyWithOffset(1, func() error {
@@ -800,7 +861,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					}
 					return obj
 				},
-				"node driver": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"node driver": func(dep *api.PmemCSIDeployment) runtime.Object {
 					obj := &appsv1.DaemonSet{}
 					key := runtime.ObjectKey{Name: dep.NodeDriverName(), Namespace: d.Namespace}
 					EventuallyWithOffset(1, func() error {
@@ -815,7 +876,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					}
 					return obj
 				},
-				"metrics service": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"metrics service": func(dep *api.PmemCSIDeployment) runtime.Object {
 					obj := &corev1.Service{}
 					key := runtime.ObjectKey{Name: dep.MetricsServiceName(), Namespace: d.Namespace}
 					EventuallyWithOffset(1, func() error {
@@ -831,7 +892,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					}
 					return obj
 				},
-				"controller service": func(dep *api.PmemCSIDeployment) apiruntime.Object {
+				"controller service": func(dep *api.PmemCSIDeployment) runtime.Object {
 					obj := &corev1.Service{}
 					key := runtime.ObjectKey{Name: dep.ControllerServiceName(), Namespace: d.Namespace}
 					EventuallyWithOffset(1, func() error {
@@ -853,6 +914,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				name, mutate := name, mutate
 				It(name, func() {
 					dep := getDeployment("recover-" + strings.ReplaceAll(name, " ", "-"))
+					dep.Spec.ControllerTLSSecret = "pmem-csi-intel-com-controller-secret"
 					deployment := deploy.CreateDeploymentCR(f, dep)
 					defer deploy.DeleteDeploymentCR(f, dep.Name)
 					validateDriver(deployment)
@@ -1015,7 +1077,7 @@ func stopOperator(c *deploy.Cluster, d *deploy.Deployment) error {
 	Eventually(func() bool {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		_, err := c.GetAppInstance(ctx, "pmem-csi-operator", "", d.Namespace)
+		_, err := c.GetAppInstance(ctx, labels.Set{"app": "pmem-csi-operator"}, "", d.Namespace)
 		deploy.LogError(err, "get operator error: %v, will retry...", err)
 		return err != nil && strings.HasPrefix(err.Error(), "no app")
 	}, "3m", "1s").Should(BeTrue(), "delete operator pod")
@@ -1057,7 +1119,10 @@ func switchDeploymentMode(c *deploy.Cluster, f *framework.Framework, depName, ns
 
 	for i := 1; i < c.NumNodes(); i++ {
 		Eventually(func() error {
-			pod, err := c.GetAppInstance(context.Background(), depName+"-node", c.NodeIP(i), ns)
+			pod, err := c.GetAppInstance(context.Background(),
+				labels.Set{"app.kubernetes.io/name": "pmem-csi-node",
+					"app.kubernetes.io/instance": depName},
+				c.NodeIP(i), ns)
 			if err != nil {
 				return err
 			}
@@ -1082,9 +1147,10 @@ func switchDeploymentMode(c *deploy.Cluster, f *framework.Framework, depName, ns
 		}, "3m", "1s").Should(BeTrue(), "Pod restart '%s'", pod)
 	}
 
-	deploy.WaitForPMEMDriver(c, depName,
+	deploy.WaitForPMEMDriver(c,
 		&deploy.Deployment{
-			Namespace: ns,
+			Namespace:  ns,
+			DriverName: depName,
 		})
 
 	return deployment

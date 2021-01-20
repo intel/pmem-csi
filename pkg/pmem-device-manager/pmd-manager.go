@@ -41,13 +41,24 @@ type Capacity struct {
 	Total uint64
 }
 
-//PmemDeviceManager interface to manage the PMEM block devices
-type PmemDeviceManager interface {
-	// GetName returns current device manager's operation mode
-	GetMode() api.DeviceMode
+func (c Capacity) GetCapacity() (Capacity, error) {
+	return c, nil
+}
 
+var _ PmemDeviceCapacity = Capacity{}
+
+// PmemDeviceCapacity interface just returns capacity information.
+type PmemDeviceCapacity interface {
 	// GetCapacity returns information about local capacity.
 	GetCapacity() (Capacity, error)
+}
+
+//PmemDeviceManager interface to manage the PMEM block devices
+type PmemDeviceManager interface {
+	PmemDeviceCapacity
+
+	// GetName returns current device manager's operation mode
+	GetMode() api.DeviceMode
 
 	// CreateDevice creates a new block device with give name, size and namespace mode
 	// Possible errors: ErrNotEnoughSpace, ErrDeviceExists

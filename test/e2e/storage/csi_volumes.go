@@ -29,17 +29,19 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/storage/dax"
 	"github.com/intel/pmem-csi/test/e2e/storage/scheduler"
 	"github.com/intel/pmem-csi/test/e2e/versionskew"
+	"github.com/intel/pmem-csi/test/test-config"
 
 	v1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/test/e2e/framework"
-	"k8s.io/kubernetes/test/e2e/framework/skipper"
 	"k8s.io/kubernetes/test/e2e/storage/podlogs"
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
 var (
@@ -48,7 +50,7 @@ var (
 )
 
 var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
-	csiTestDriver := driver.New(d.Name(), "pmem-csi.intel.com", nil, nil)
+	csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil)
 
 	// List of testSuites to be added below.
 	var csiTestSuites = []func() testsuites.TestSuite{
@@ -70,20 +72,35 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 	}
 
 	testsuites.DefineTestSuite(csiTestDriver, csiTestSuites)
+	DefineLateBindingTests(d)
+	DefineKataTests(d)
+})
+
+func DefineLateBindingTests(d *deploy.Deployment) {
+	f := framework.NewDefaultFramework("latebinding")
 
 	Context("late binding", func() {
 		var (
-			storageClassLateBindingName = "pmem-csi-sc-late-binding" // from deploy/common/pmem-storageclass-late-binding.yaml
-			claim                       v1.PersistentVolumeClaim
+			cleanup func()
+			sc      *storagev1.StorageClass
+			claim   v1.PersistentVolumeClaim
 		)
-		f := framework.NewDefaultFramework("latebinding")
+
 		BeforeEach(func() {
-			// Check whether storage class exists before trying to use it.
-			_, err := f.ClientSet.StorageV1().StorageClasses().Get(context.Background(), storageClassLateBindingName, metav1.GetOptions{})
-			if errors.IsNotFound(err) {
-				skipper.Skipf("storage class %s not found, late binding not supported", storageClassLateBindingName)
+			csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil)
+			config, cl := csiTestDriver.PrepareTest(f)
+			cleanup = cl
+			sc = csiTestDriver.(testsuites.DynamicPVTestDriver).GetDynamicProvisionStorageClass(config, "ext4")
+			lateBindingMode := storagev1.VolumeBindingWaitForFirstConsumer
+			sc.VolumeBindingMode = &lateBindingMode
+
+			// Create or replace storage class.
+			err := f.ClientSet.StorageV1().StorageClasses().Delete(context.Background(), sc.Name, metav1.DeleteOptions{})
+			if !errors.IsNotFound(err) {
+				framework.ExpectNoError(err, "delete old storage class %s", sc.Name)
 			}
-			framework.ExpectNoError(err, "get storage class %s", storageClassLateBindingName)
+			_, err = f.ClientSet.StorageV1().StorageClasses().Create(context.Background(), sc, metav1.CreateOptions{})
+			framework.ExpectNoError(err, "create storage class %s", sc.Name)
 
 			claim = v1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
@@ -99,8 +116,16 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 							v1.ResourceName(v1.ResourceStorage): resource.MustParse("1Mi"),
 						},
 					},
-					StorageClassName: &storageClassLateBindingName,
+					StorageClassName: &sc.Name,
 				},
+			}
+		})
+
+		AfterEach(func() {
+			err := f.ClientSet.StorageV1().StorageClasses().Delete(context.Background(), sc.Name, metav1.DeleteOptions{})
+			framework.ExpectNoError(err, "delete old storage class %s", sc.Name)
+			if cleanup != nil {
+				cleanup()
 			}
 		})
 
@@ -108,10 +133,26 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 			TestDynamicLateBindingProvisioning(f.ClientSet, &claim, "latebinding")
 		})
 
-		// This test is pending because it triggers volumes leaks
-		// in PMEM-CSI (https://github.com/intel/pmem-csi/issues/823).
-		// We need to fix those before enabling the test again.
-		PIt("stress test", func() {
+		It("unsets unsuitable selected node", func() {
+			nodes, err := f.ClientSet.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+			framework.ExpectNoError(err, "list nodes")
+			selectedNode := ""
+			nodeLabelName, nodeLabelValue := testconfig.GetNodeLabelOrFail()
+			for _, node := range nodes.Items {
+				if node.Labels[nodeLabelName] != nodeLabelValue {
+					selectedNode = node.Name
+					break
+				}
+			}
+			Expect(selectedNode).NotTo(BeEmpty(), "have a node without PMEM-CSI")
+			claim.Annotations = map[string]string{
+				"volume.kubernetes.io/selected-node":            selectedNode,
+				"volume.beta.kubernetes.io/storage-provisioner": d.DriverName,
+			}
+			TestDynamicLateBindingProvisioning(f.ClientSet, &claim, "latebinding")
+		})
+
+		It("stress test [Slow]", func() {
 			// We cannot test directly whether pod and
 			// volume were created on the same node by
 			// chance or because the code enforces it.
@@ -156,7 +197,9 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 			wg.Wait()
 		})
 	})
+}
 
+func DefineKataTests(d *deploy.Deployment) {
 	// Also run some limited tests with Kata Containers, using different
 	// storage classes than usual.
 	kataDriver := driver.New(d.Name()+"-pmem-csi-kata", "pmem-csi.intel.com",
@@ -171,4 +214,4 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 			dax.InitDaxTestSuite,
 		})
 	})
-})
+}

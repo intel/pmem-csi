@@ -82,6 +82,14 @@ list_gates () (
 # filter, the extender is only going to be called for pods which
 # explicitly enable it and thus other pods (including PMEM-CSI
 # itself!)  can be scheduled without it.
+#
+# In order to reach the scheduler extender, a fixed node port
+# is used regardless of the driver name, so only one deployment
+# can be active at once. In production this has to be solved
+# differently.
+#
+# Usually the driver name will be "pmem-csi.intel.com", but for testing
+# purposed we also configure a second extender.
 sudo mkdir -p /var/lib/scheduler/
 sudo cp ca.crt /var/lib/scheduler/
 
@@ -118,6 +126,18 @@ EOF
         "name": "pmem-csi.intel.com/scheduler",
         "ignoredByScheduler": true
       }]
+    },
+    {
+      "urlPrefix": "https://127.0.0.1:${TEST_SCHEDULER_EXTENDER_NODE_PORT}",
+      "filterVerb": "filter",
+      "prioritizeVerb": "prioritize",
+      "nodeCacheCapable": true,
+      "weight": 1,
+      "managedResources":
+      [{
+        "name": "second.pmem-csi.intel.com/scheduler",
+        "ignoredByScheduler": true
+      }]
     }]
 }
 EOF
@@ -138,6 +158,14 @@ extenders:
   weight: 1
   managedResources:
   - name: pmem-csi.intel.com/scheduler
+    ignoredByScheduler: true
+- urlPrefix: https://127.0.0.1:${TEST_SCHEDULER_EXTENDER_NODE_PORT}
+  filterVerb: filter
+  prioritizeVerb: prioritize
+  nodeCacheCapable: true
+  weight: 1
+  managedResources:
+  - name: second.pmem-csi.intel.com/scheduler
     ignoredByScheduler: true
 EOF
         ;;
@@ -165,6 +193,9 @@ apiServer:
 controllerManager:
   extraArgs:
     feature-gates: ${TEST_FEATURE_GATES}
+    # Let the kube-controller-manager run as fast as it can.
+    kube-api-burst: \"100000\"
+    kube-api-qps: \"100000\"
 scheduler:
   extraVolumes:
     - name: config

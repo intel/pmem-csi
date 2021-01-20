@@ -147,25 +147,6 @@ func DriverDeployment(client client.Client, k8sver version.Version, namespace st
 		}
 		expected := findObject(expectedObjects, actual)
 		if expected == nil {
-			if actual.GetKind() == "Secret" {
-				// Custom comparison against expected
-				// content of secrets, which aren't
-				// part of the reference objects.
-				switch actual.GetName() {
-				case deployment.GetHyphenedName() + "-registry-secrets":
-					diffs = append(diffs, compareSecrets(actual,
-						deployment.Spec.CACert,
-						deployment.Spec.RegistryPrivateKey,
-						deployment.Spec.RegistryCert)...)
-					continue
-				case deployment.GetHyphenedName() + "-node-secrets":
-					diffs = append(diffs, compareSecrets(actual,
-						deployment.Spec.CACert,
-						deployment.Spec.NodeControllerPrivateKey,
-						deployment.Spec.NodeControllerCert)...)
-					continue
-				}
-			}
 			diffs = append(diffs, fmt.Sprintf("unexpected object was deployed: %s", prettyPrintObjectID(actual)))
 			continue
 		}
@@ -215,14 +196,7 @@ func DriverDeployment(client client.Client, k8sver version.Version, namespace st
 			}
 		}
 	}
-	gvk := schema.GroupVersionKind{
-		Kind:    "Secret",
-		Version: "v1",
-	}
-	for _, expected := range append(expectedObjects,
-		// Content doesn't matter, we just want to be sure they exist.
-		createObject(gvk, deployment.GetHyphenedName()+"-registry-secrets", namespace),
-		createObject(gvk, deployment.GetHyphenedName()+"-node-secrets", namespace)) {
+	for _, expected := range expectedObjects {
 		if findObject(objects, expected) == nil {
 			diffs = append(diffs, fmt.Sprintf("expected object was not deployed: %v", prettyPrintObjectID(expected)))
 		}
@@ -315,6 +289,10 @@ func parseDefaultValues() map[string]interface{} {
           imagePullPolicy: IfNotPresent
           ports:
             protocol: TCP
+          env:
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
         volumes:
           secret:
             defaultMode: 420`
@@ -340,6 +318,20 @@ StatefulSet:` + defaultsApps + `
 CSIDriver:
   spec:
     storageCapacity: false
+MutatingWebhookConfiguration:
+  webhooks:
+    clientConfig:
+      caBundle: ignore # content varies, correctness is validated during E2E testing
+      service:
+        port: 443
+    admissionReviewVersions:
+    - v1beta1
+    matchPolicy: Exact
+    reinvocationPolicy: Never
+    rules:
+      scope: "*"
+    sideEffects: Unknown
+    timeoutSeconds: 30
 `
 
 	err := yaml.UnmarshalStrict([]byte(defaultsYAML), &defaults)
@@ -505,7 +497,7 @@ func listAllDeployedObjects(c client.Client, deployment api.PmemCSIDeployment, n
 		// Test client does not support differentiating cluster-scoped objects
 		// and the query fails when fetch those object by setting the namespace-
 		switch list.GetKind() {
-		case "CSIDriverList", "ClusterRoleList", "ClusterRoleBindingList":
+		case "CSIDriverList", "ClusterRoleList", "ClusterRoleBindingList", "MutatingWebhookConfigurationList":
 			opts = &client.ListOptions{}
 		}
 		// Filtering by owner doesn't work, so we have to use brute-force and look at all

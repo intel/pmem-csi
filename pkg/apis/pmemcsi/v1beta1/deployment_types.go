@@ -59,6 +59,20 @@ const (
 	LogFormatJSON LogFormat = "json"
 )
 
+type MutatePods string
+
+const (
+	// MutatePodsAlways enables the mutating pod webhook so that a failure is considered fatal.
+	MutatePodsAlways MutatePods = "Always"
+
+	// MutatePodsTry enables the mutating pod webhook so that it a pod can be created even
+	// when the webhook fails.
+	MutatePodsTry MutatePods = "Try"
+
+	// MutatePodsNever disables the mutating pod webhook.
+	MutatePodsNever MutatePods = "Never"
+)
+
 // +k8s:deepcopy-gen=true
 // DeploymentSpec defines the desired state of Deployment
 type DeploymentSpec struct {
@@ -78,8 +92,24 @@ type DeploymentSpec struct {
 	NodeRegistrarResources *corev1.ResourceRequirements `json:"nodeRegistrarResources,omitempty"`
 	// NodeDriverResources Compute resources required by driver container running on worker nodes
 	NodeDriverResources *corev1.ResourceRequirements `json:"nodeDriverResources,omitempty"`
-	// ControllerDriverResources Compute resources required by driver container running on master node
+	// ControllerDriverResources Compute resources required by central driver container
 	ControllerDriverResources *corev1.ResourceRequirements `json:"controllerDriverResources,omitempty"`
+	// ControllerTLSSecret is the name of a secret which contains ca.crt, tls.crt and tls.key data
+	// for the scheduler extender and pod mutation webhook. A controller is started if (and only if)
+	// this secret is specified.
+	ControllerTLSSecret string `json:"controllerTLSSecret,omitempty"`
+	// MutatePod defines how a mutating pod webhook is configured if a controller
+	// is started. The field is ignored if the controller is not enabled.
+	// The default is "Try".
+	// +kubebuilder:validation:Enum=Always;Try;Never
+	MutatePods MutatePods `json:"mutatePods,omitempty"`
+	// SchedulerNodePort, if non-zero, ensures that the "scheduler" service
+	// is created as a NodeService with that fixed port number. Otherwise
+	// that service is created as a cluster service. The number must be
+	// from the range reserved by Kubernetes for
+	// node ports. This is useful if the kube-scheduler cannot reach the scheduler
+	// extender via a cluster service.
+	SchedulerNodePort int32 `json:"schedulerNodePort,omitempty"`
 	// DeviceMode to use to manage PMEM devices.
 	// +kubebuilder:validation:Enum=lvm;direct
 	DeviceMode DeviceMode `json:"deviceMode,omitempty"`
@@ -89,21 +119,6 @@ type DeploymentSpec struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Enum=text;json
 	LogFormat LogFormat `json:"logFormat,omitempty"`
-	// RegistryCert encoded certificate signed by a CA for registry server authentication
-	// If not provided, provisioned one by the operator using self-signed CA
-	RegistryCert []byte `json:"registryCert,omitempty"`
-	// RegistryPrivateKey encoded private key used for registry server certificate
-	// If not provided, provisioned one by the operator
-	RegistryPrivateKey []byte `json:"registryKey,omitempty"`
-	// NodeControllerCert encoded certificate signed by a CA for node controller server authentication
-	// If not provided, provisioned one by the operator using self-signed CA
-	NodeControllerCert []byte `json:"nodeControllerCert,omitempty"`
-	// NodeControllerPrivateKey encoded private key used for node controller server certificate
-	// If not provided, provisioned one by the operator
-	NodeControllerPrivateKey []byte `json:"nodeControllerKey,omitempty"`
-	// CACert encoded root certificate of the CA by which the registry and node controller certificates are signed
-	// If not provided operator uses a self-signed CA certificate
-	CACert []byte `json:"caCert,omitempty"`
 	// NodeSelector node labels to use for selection of driver node
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 	// PMEMPercentage represents the percentage of space to be used by the driver in each PMEM region
@@ -122,11 +137,6 @@ type DeploymentSpec struct {
 type DeploymentConditionType string
 
 const (
-	// CertsVerified means the provided deployment secrets are verified and valid for usage
-	CertsVerified DeploymentConditionType = "CertsVerified"
-	// CertsReady means secrests/certificates required for running the PMEM-CSI driver
-	// are ready and the deployment could progress further
-	CertsReady DeploymentConditionType = "CertsReady"
 	// DriverDeployed means that the all the sub-resources required for the deployment CR
 	// got created
 	DriverDeployed DeploymentConditionType = "DriverDeployed"
@@ -248,11 +258,14 @@ const (
 	// DefaultDriverImage default PMEM-CSI driver docker image
 	DefaultDriverImage = defaultDriverImageName + ":" + defaultDriverImageTag
 
+	DefaultMutatePods = MutatePodsTry
+
 	// The sidecar versions must be kept in sync with the
 	// deploy/kustomize YAML files!
 
-	defaultProvisionerImageName = "k8s.gcr.io/sig-storage/csi-provisioner"
-	defaultProvisionerImageTag  = "v2.0.2"
+	// TODO: use released image
+	defaultProvisionerImageName = "gcr.io/k8s-staging-sig-storage/csi-provisioner"
+	defaultProvisionerImageTag  = "canary"
 	// DefaultProvisionerImage default external provisioner image to use
 	DefaultProvisionerImage = defaultProvisionerImageName + ":" + defaultProvisionerImageTag
 
@@ -324,6 +337,16 @@ const (
 	DeploymentPhaseFailed DeploymentPhase = "Failed"
 )
 
+// A TLS secret must contain three data items.
+const (
+	// TLSSecretCA is the CA bundle.
+	TLSSecretCA = "ca.crt"
+	// TLSSecretKey is the secret key to be used by the server.
+	TLSSecretKey = "tls.key"
+	// TLSSecretCert is the public key to used by the server.
+	TLSSecretCert = "tls.crt"
+)
+
 func (d *PmemCSIDeployment) SetCondition(t DeploymentConditionType, state corev1.ConditionStatus, reason string) {
 	for _, c := range d.Status.Conditions {
 		if c.Type == t {
@@ -364,6 +387,14 @@ func (d *PmemCSIDeployment) EnsureDefaults(operatorImage string) error {
 	case DeviceModeDirect, DeviceModeLVM:
 	default:
 		return fmt.Errorf("invalid device mode %q", d.Spec.DeviceMode)
+	}
+
+	switch d.Spec.MutatePods {
+	case "":
+		d.Spec.MutatePods = DefaultMutatePods
+	case MutatePodsAlways, MutatePodsTry, MutatePodsNever:
+	default:
+		return fmt.Errorf("invalid MutatePods value: %s", d.Spec.MutatePods)
 	}
 
 	if d.Spec.Image == "" {
@@ -497,9 +528,51 @@ func (d *PmemCSIDeployment) MetricsServiceName() string {
 	return d.GetHyphenedName() + "-metrics"
 }
 
-// ServiceAccountName returns the name of the ServiceAccount
-// object used by the deployment
-func (d *PmemCSIDeployment) ServiceAccountName() string {
+// SchedulerServiceName returns the name of the controller's scheduler
+// Service object
+func (d *PmemCSIDeployment) SchedulerServiceName() string {
+	return d.GetHyphenedName() + "-scheduler"
+}
+
+// WebhooksServiceAccountName returns the name of the service account
+// used by the StatefulSet with the webhooks.
+func (d *PmemCSIDeployment) WebhooksServiceAccountName() string {
+	return d.GetHyphenedName() + "-webhooks"
+}
+
+// WebhooksRoleName returns the name of the webhooks'
+// RBAC Role object name used by the deployment
+func (d *PmemCSIDeployment) WebhooksRoleName() string {
+	return d.GetHyphenedName() + "-webhooks-cfg"
+}
+
+// WebhooksRoleBindingName returns the name of the webhooks'
+// RoleBinding object name used by the deployment
+func (d *PmemCSIDeployment) WebhooksRoleBindingName() string {
+	return d.GetHyphenedName() + "-webhooks-role-cfg"
+}
+
+// WebhooksClusterRoleName returns the name of the
+// webhooks' ClusterRole object name used by the deployment
+func (d *PmemCSIDeployment) WebhooksClusterRoleName() string {
+	return d.GetHyphenedName() + "-webhooks-runner"
+}
+
+// WebhooksClusterRoleBindingName returns the name of the
+// webhooks' ClusterRoleBinding object name used by the deployment
+func (d *PmemCSIDeployment) WebhooksClusterRoleBindingName() string {
+	return d.GetHyphenedName() + "-webhooks-role"
+}
+
+// MutatingWebhookName returns the name of the
+// MutatingWebhookConfiguration
+func (d *PmemCSIDeployment) MutatingWebhookName() string {
+	return d.GetHyphenedName() + "-hook"
+}
+
+// NodeServiceAccountName returns the name of the service account
+// used by the DaemonSet with the external-provisioner
+func (d *PmemCSIDeployment) ProvisionerServiceAccountName() string {
 	return d.GetHyphenedName() + "-controller"
 }
 
@@ -552,30 +625,4 @@ func (d *PmemCSIDeployment) GetOwnerReference() metav1.OwnerReference {
 		BlockOwnerDeletion: &blockOwnerDeletion,
 		Controller:         &isController,
 	}
-}
-
-// HaveCertificatesConfigured checks if the configured deployment
-// certificate fields are valid. Returns
-// - true with nil error if provided certificates are valid.
-// - false with nil error if no certificates are provided.
-// - false with appropriate error if invalid/incomplete certificates provided.
-func (d *PmemCSIDeployment) HaveCertificatesConfigured() (bool, error) {
-	// Encoded private keys and certificates
-	caCert := d.Spec.CACert
-	registryPrKey := d.Spec.RegistryPrivateKey
-	ncPrKey := d.Spec.NodeControllerPrivateKey
-	registryCert := d.Spec.RegistryCert
-	ncCert := d.Spec.NodeControllerCert
-
-	// sanity check
-	if caCert == nil {
-		if registryCert != nil || ncCert != nil {
-			return false, fmt.Errorf("incomplete deployment configuration: missing root CA certificate by which the provided certificates are signed")
-		}
-		return false, nil
-	} else if registryCert == nil || registryPrKey == nil || ncCert == nil || ncPrKey == nil {
-		return false, fmt.Errorf("incomplete deployment configuration: certificates and corresponding private keys must be provided")
-	}
-
-	return true, nil
 }

@@ -8,7 +8,7 @@
     - [Install PMEM-CSI driver](#install-pmem-csi-driver)
       - [Install using the operator](#install-using-the-operator)
       - [Install from source](#install-from-source)
-    - [Expose persistent and cache volumes to applications](#expose-persistent-and-cache-volumes-to-applications)
+    - [Volume parameters](#volume-parameters)
     - [Kata Containers support](#kata-containers-support)
     - [Ephemeral inline volumes](#ephemeral-inline-volumes)
     - [Raw block volumes](#raw-block-volumes)
@@ -58,6 +58,11 @@ installation by name, which indirectly determines the device mode. A
 storage class also chooses which filesystem is used (xfs or ext4) and
 enables [Kata Containers support](#kata-containers-support).
 
+It is recommended that storage classes use `allowedTopologies` as in
+the [`pmem-storageclass.yaml`](/deploy/kustomize/storageclass/pmem-storageclass.yaml)
+to ensure that pods with volumes that use late binding land on a node
+where the driver is available.
+
 Optionally, the administrator can enable [the scheduler
 extensions](#enable-scheduler-extensions) (recommended) and monitoring
 of resource usage via the [metrics support](#metrics-support).
@@ -76,8 +81,8 @@ release notes.
 When using YAML files, the only reliable way of up- or downgrading is
 to remove the installation and install anew.
 
-Users can then create PMEM volumes via [volume
-claims](#expose-persistent-and-cache-volumes-to-applications) that
+Users can then create PMEM volumes via [persistent volume
+claims](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) that
 reference the storage classes or via [ephemeral inline
 volumes](#ephemeral-inline-volumes).
 
@@ -426,11 +431,15 @@ This can be changed by:
 
 - **Set up certificates**
 
-Certificates are required as explained in [Security](design.md#security).
-If you are not using the test cluster described in
-[Starting and stopping a test cluster](autotest.md#starting-and-stopping-a-test-cluster)
-where certificates are created automatically, you must set up certificates manually.
-This can be done by running the `./test/setup-ca-kubernetes.sh` script for your cluster.
+Certificates are required as explained in [Security](design.md#security) for
+running the PMEM-CSI [scheduler extender](design.md#scheduler-extender) and
+[webhook](design.md#pod-admission-webhook). If those are not used, then certificate
+creation can be skipped. However, the YAML deployment files always create the PMEM-CSI
+controller StatefulSet which needs the certificates. Without them, the
+`pmem-csi-intel-com-controller-0` pod cannot start, so it is recommended to create
+certificates or customize the deployment so that this StatefulSet is not created.
+
+Certificates can be created by running the `./test/setup-ca-kubernetes.sh` script for your cluster.
 This script requires "cfssl" tools which can be downloaded.
 These are the steps for manual set-up of certificates:
 
@@ -521,14 +530,14 @@ for `kubectl kustomize`. For example:
 ``` console
 $ kubectl get pods -n pmem-csi
 NAME                    READY   STATUS    RESTARTS   AGE
-pmem-csi-node-8kmxf     2/2     Running   0          3m15s
-pmem-csi-node-bvx7m     2/2     Running   0          3m15s
-pmem-csi-controller-0   2/2     Running   0          3m15s
-pmem-csi-node-fbmpg     2/2     Running   0          3m15s
+pmem-csi-intel-com-node-8kmxf     2/2     Running   0          3m15s
+pmem-csi-intel-com-node-bvx7m     2/2     Running   0          3m15s
+pmem-csi-intel-com-controller-0   2/2     Running   0          3m15s
+pmem-csi-intel-com-node-fbmpg     2/2     Running   0          3m15s
 ```
 
-Once after the driver deployed using one of the methods mentioned above
-verify that the node labels have been configured correctly
+After the driver is deployed using one of the methods mentioned above,
+verify that the node labels have been updated correctly:
 
 ``` console
 $ kubectl get nodes --show-labels
@@ -608,74 +617,38 @@ $ kubectl exec my-csi-app-2 -- mount |grep /data
 /dev/ndbus0region0fsdax/5cc9b19e-551d-11e9-a584-928299ac4b17 on /data type xfs (rw,relatime,attr2,dax,inode64,noquota)
 ```
 
-#### Expose persistent and cache volumes to applications
+#### Volume parameters
 
-Kubernetes cluster administrators can expose persistent and cache volumes
-to applications using
-[`StorageClass
-Parameters`](https://kubernetes.io/docs/concepts/storage/storage-classes/#parameters). An
-optional `persistencyModel` parameter differentiates how the
-provisioned volume can be used:
+Kubernetes cluster administrators can make persistent volumes available
+to applications using storage classes, with the behavior of the volumes
+determined by [`StorageClass
+Parameters`](https://kubernetes.io/docs/concepts/storage/storage-classes/#parameters).
 
-* no `persistencyModel` parameter or `persistencyModel: normal` in `StorageClass`  
+In addition to the normal parameters defined by Kubernetes, PMEM-CSI supports
+the following custom parameters in a storage class:
 
-  A normal Kubernetes persistent volume. In this case
-  PMEM-CSI creates PMEM volume on a node and the application that
-  claims to use this volume is supposed to be scheduled onto this node
-  by Kubernetes. Choosing of node is depend on StorageClass
-  `volumeBindingMode`. In case of `volumeBindingMode: Immediate`
-  PMEM-CSI chooses a node randomly, and in case of `volumeBindingMode:
-  WaitForFirstConsumer` (also known as late binding) Kubernetes first chooses a node for scheduling
-  the application, and PMEM-CSI creates the volume on that
-  node. Applications which claim a normal persistent volume has to use
-  `ReadOnlyOnce` access mode in its `accessModes` list. This
-  [diagram](/docs/images/sequence/pmem-csi-persistent-sequence-diagram.png)
-  illustrates how a normal persistent volume gets provisioned in
-  Kubernetes using PMEM-CSI driver.
+|key|meaning|optional|values|
+|---|-------|--------|-------------|
+|`eraseAfter`|Clear all data after use and before<br> deleting the volume|Yes|`true` (default),<br> `false`|
+|`kataContainers`|Prepare volume for use with DAX in Kata Containers.|Yes|`false/0/f/FALSE` (default),<br> `true/1/t/TRUE`|
 
-* `persistencyModel: cache`  
-
-  Volumes of this type shall be used in combination with
-  `volumeBindingMode: Immediate`. In this case, PMEM-CSI creates a set
-  of PMEM volumes each volume on different node. The number of PMEM
-  volumes to create can be specified by `cacheSize` StorageClass
-  parameter. Applications which claim a `cache` volume can use
-  `ReadWriteMany` in its `accessModes` list. Try it out with the provided
-  [cache storage class](/deploy/common/pmem-storageclass-cache.yaml)
-  example. This
-  [diagram](/docs/images/sequence/pmem-csi-cache-sequence-diagram.png)
-  illustrates how a cache volume gets provisioned in Kubernetes using
-  PMEM-CSI driver.
-
-**NOTE**: Cache volumes are associated with a node, not a pod. Multiple
-pods using the same cache volume on the same node will not get their
-own instance but will end up sharing the same PMEM volume instead.
-Application deployment has to consider this and use available Kubernetes
-mechanisms like [node
-anti-affinity](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity).
-Try it out with provided
-[cache application](/deploy/common/pmem-app-cache.yaml) example.
-
-**WARNING**: late binding (`volumeBindingMode:WaitForFirstConsume`) has some caveats:
-* Pod creation may get stuck when there isn't enough capacity left for
-  the volumes; see the next section for details.
-* A node is only chosen the first time a pod starts. After that it will always restart
-  on that node, because that is where the persistent volume was created.
 
 ### Kata Containers support
 
 [Kata Containers support](design.md#kata-containers-support) gets enabled via
-the `kataContainers` storage class parameter. It accepts the following
-values:
-* `true/1/t/TRUE`  
-  Create the filesystem inside a partition inside a file, try to mount
-  on the host through a loop device with `-o dax` but proceed without
-  `-o dax` when the kernel does not support that. Currently Linux up
-  to and including 5.4 do not support it. In other words, on the host
-  such volumes are usable, but only without DAX. Inside Kata
-  Containers, DAX works.
-* `false/0/f/FALSE` (default)  
-  Create the filesystem directly on the volume.
+the `kataContainers` storage class parameter. PMEM-CSI then
+creates a filesystem inside a partition inside a file. When such a volume
+is used inside Kata Containers, the Kata Containers runtime makes sure that
+the filesystem is mounted on an emulated NVDIMM device with full DAX support.
+
+On the host, PMEM-CSI will try to mount through a loop device with `-o
+dax` but proceed without `-o dax` when the kernel does not support
+that. Currently Linux up to and including 5.4 do not support it and it
+is unclear when that support will be added In other words, on the host
+such volumes are usable, but only without DAX.
+
+When disabled, volumes support DAX on the host and are usable without
+DAX inside Kata Containers.
 
 [Raw block volumes](#raw-block-volumes) are only supported with
 `kataContainers: false`. Attempts to create them with `kataContainers:
@@ -784,41 +757,27 @@ The PMEM-CSI scheduler extender and admission webhook are provided by
 the PMEM-CSI controller. They need to be enabled during deployment via
 the `--schedulerListen=[<listen address>]:<port>` parameter. The
 listen address is optional and can be left out. The port is where a
-HTTPS server will run. It uses the same certificates as the internal
-gRPC service. When using the CA creation script described above, they
-will contain alternative names for the URLs described in this section
-(service names, `127.0.0.1` IP address).
+HTTPS server will run.
 
-This parameter can be added to one of the existing deployment files
-with `kustomize`. All of the following examples assume that the
-current directory contains the `deploy` directory from the PMEM-CSI
-repository. It is also possible to reference the base via a
-[URL](https://github.com/kubernetes-sigs/kustomize/blob/master/examples/remoteBuild.md).
+The controller needs TLS certificates which must be created in
+advance. The YAML files expects them in a secret called
+`pmem-csi-intel-com-controller-secret` and will not work without one.
+The operator is more flexible and creates a driver without the
+controller by default. This can be changed by setting the
+`controllerTLSSecret` field in the `PmemCSIDeployment` API.
 
-``` ShellSession
-$ mkdir my-pmem-csi-deployment
+That secret must contain the following data items:
+- `ca.crt`: root CA certificate
+- `tls.key`: secret key of the webhook
+- `tls.crt`: public key of the webhook
 
-$ cat >my-pmem-csi-deployment/kustomization.yaml <<EOF
-bases:
-  - ../deploy/kubernetes-1.16/lvm
-patchesJson6902:
-  - target:
-      group: apps
-      version: v1
-      kind: StatefulSet
-      name: pmem-csi-controller
-      namespace: pmem-csi
-    path: scheduler-patch.yaml
-EOF
-
-$ cat >my-pmem-csi-deployment/scheduler-patch.yaml <<EOF
-- op: add
-  path: /spec/template/spec/containers/0/command/-
-  value: "--schedulerListen=:8000"
-EOF
-
-$ kubectl create --kustomize my-pmem-csi-deployment
-```
+The webhook certificate must include host names that match how the
+webhooks are going to be called by the `kube-apiserver`
+(i.e. `pmem-csi-intel-com-scheduler.pmem-csi.svc` for a
+deployment with the `pmem-csi.intel.com` driver name in the `pmem-csi`
+namespace) and by the `kube-scheduler` (might be the same service name, through some external
+load balancer or `127.0.0.1` when using the node port workaround
+described below).
 
 To enable the PMEM-CSI scheduler extender, a configuration file and an
 additional `--config` parameter for `kube-scheduler` must be added to
@@ -854,7 +813,7 @@ patchesJson6902:
   - target:
       version: v1
       kind: Service
-      name: pmem-csi-scheduler
+      name: pmem-csi-intel-com-scheduler
       namespace: pmem-csi
     path: node-port-patch.yaml
 EOF
@@ -863,14 +822,26 @@ $ cat >my-scheduler/node-port-patch.yaml <<EOF
 - op: add
   path: /spec/ports/0/nodePort
   value: 32000
+- op: add
+  path: /spec/type
+  value: NodePort
 EOF
 
 $ kubectl create --kustomize my-scheduler
 ```
 
+When the node port is not needed, the scheduler service can be
+created directly with:
+``` console
+kubectl create --kustomize deploy/kustomize/scheduler
+```
+
 How to (re)configure `kube-scheduler` depends on the cluster. With
 kubeadm it is possible to set all necessary options in advance before
-creating the master node with `kubeadm init`. One additional
+creating the master node with `kubeadm init`. A running cluster can
+be modified with `kubeadm upgrade`.
+
+One additional
 complication with kubeadm is that `kube-scheduler` by default doesn't
 trust any root CA. The following kubeadm config file solves
 this together with enabling the scheduler configuration by
@@ -1010,7 +981,7 @@ patchesJson6902:
       group: admissionregistration.k8s.io
       version: v1beta1
       kind: MutatingWebhookConfiguration
-      name: pmem-csi-hook
+      name: pmem-csi-intel-com-hook
     path: webhook-patch.yaml
 EOF
 
@@ -1022,6 +993,7 @@ EOF
 
 $ kubectl create --kustomize my-webhook
 ```
+
 ### Storage capacity tracking
 
 [Kubernetes
@@ -1081,8 +1053,6 @@ Name | Type | Explanation
 `pmem_amount_managed` | gauge | Amount of PMEM on the host that is managed by PMEM-CSI.
 `pmem_amount_max_volume_size` | gauge | The size of the largest PMEM volume that can be created.
 `pmem_amount_total` | gauge | Total amount of PMEM on the host.
-`pmem_csi_[controller\|node]_operations_seconds` | histogram | gRPC call duration and error code, for the PMEM-CSI internal controller to node communication. The `node` label identifies the node.
-`pmem_nodes` | gauge | The number of PMEM-CSI nodes registered in the controller.
 `process_*` | | [Process information](https://github.com/prometheus/client_golang/blob/master/prometheus/process_collector.go)
 `promhttp_metric_handler_requests_in_flight` | gauge | Current number of scrapes being served.
 `promhttp_metric_handler_requests_total` | counter | Total number of scrapes by HTTP status code.
@@ -1093,7 +1063,7 @@ containers provide different data. For example, the controller
 provides:
 
 ``` ShellSession
-$ kubectl port-forward pmem-csi-controller-0 10010
+$ kubectl port-forward pmem-csi-intel-com-controller-0 10010
 Forwarding from 127.0.0.1:10010 -> 10010
 Forwarding from [::1]:10010 -> 10010
 ```
@@ -1104,12 +1074,6 @@ And in another shell:
 $ curl --silent http://localhost:10010/metrics | grep '# '
 # HELP build_info A metric with a constant '1' value labeled by version.
 # TYPE build_info gauge
-...
-# HELP csi_plugin_operations_seconds [ALPHA] Container Storage Interface operation duration with gRPC error code status total
-# TYPE csi_plugin_operations_seconds histogram
-...
-# HELP pmem_csi_controller_operations_seconds [ALPHA] Container Storage Interface operation duration with gRPC error code status total
-# TYPE pmem_csi_controller_operations_seconds histogram
 ...
 ```
 
@@ -1209,6 +1173,8 @@ pmem_csi_node_operations_seconds_count{method_name="/csi.v1.Controller/CreateVol
 
 ## PMEM-CSI Deployment CRD
 
+TODO update operator
+
 `PmemCSIDeployment` is a cluster-scoped Kubernetes resource in the
 `pmem-csi.intel.com` API group. It describes how a PMEM-CSI driver
 instance is to be created.
@@ -1263,6 +1229,9 @@ of the API specification.
 | logLevel | integer | PMEM-CSI driver logging level | 3 |
 | logFormat | text | log output format | "text" or "json" <sup>3</sup> |
 | deviceMode | string | Device management mode to use. Supports one of `lvm` or `direct` | `lvm`
+| controllerTLSSecret | string | Name of an existing secret in the driver's namespace which contains ca.crt, tls.crt and tls.key data for the scheduler extender and pod mutation webhook. A controller is started if (and only if) this secret is specified. | empty
+| mutatePods | Always/Try/Never | Defines how a mutating pod webhook is configured if a controller is started. The field is ignored if the controller is not enabled. "Never" disables pod mutation. "Try" configured it so that pod creation is allowed to proceed even when the webhook fails. "Always" requires that the webhook gets invoked successfully before creating a pod. | Try
+| schedulerNodePort | If non-zero, the scheduler service is created as a NodeService with that fixed port number. Otherwise that service is created as a cluster service. The number must be from the range reserved by Kubernetes for node ports. This is useful if the kube-scheduler cannot reach the scheduler extender via a cluster service. | 0
 | controllerResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for controller pod. <br/><sup>4</sup>_Deprecated and only available in `v1alpha1`._ |
 | nodeResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for the pods running on node(s). <br/>_<sup>4</sup>Deprecated and only available in `v1alpha1`._ |
 | controllerDriverResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for controller driver container running on master node. Available since `v1beta1`. |

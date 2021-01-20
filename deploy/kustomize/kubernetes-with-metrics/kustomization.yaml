@@ -8,12 +8,12 @@ patchesJson6902:
     group: apps
     version: v1
     kind: DaemonSet
-    name: pmem-csi-node
+    name: pmem-csi-intel-com-node
   path: ../patches/metrics-node.yaml
 
 - target:
     group: apps
     version: v1
     kind: StatefulSet
-    name: pmem-csi-controller
+    name: pmem-csi-intel-com-controller
   path: ../patches/metrics-controller.yaml

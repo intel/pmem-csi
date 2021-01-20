@@ -7,8 +7,12 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
+	"strconv"
 	"sync"
 
 	"golang.org/x/net/context"
@@ -215,19 +219,16 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 	}
 
 	klog.V(4).Infof("Node CreateVolume: Name:%q req.Required:%v req.Limit:%v", volumeName, asked, capacity.GetLimitBytes())
-	volumeID = p.GetVolumeID()
-	if volumeID == "" {
-		volumeID = GenerateVolumeID("Node CreateVolume", volumeName)
-		// Check do we have entry with newly generated VolumeID already
-		if vol := cs.getVolumeByID(volumeID); vol != nil {
-			// if we have, that has to be VolumeID collision, because above we checked
-			// that we don't have entry with such Name. VolumeID collision is very-very
-			// unlikely so we should not get here in any near future, if otherwise state is good.
-			klog.V(3).Infof("Controller CreateVolume: VolumeID:%s collision: existing name:%s new name:%s",
-				volumeID, vol.Params[parameters.Name], volumeName)
-			statusErr = status.Error(codes.Internal, "VolumeID/hash collision, can not create unique Volume")
-			return
-		}
+	volumeID = generateVolumeID("Node CreateVolume", volumeName)
+	// Check do we have entry with newly generated VolumeID already
+	if vol := cs.getVolumeByID(volumeID); vol != nil {
+		// if we have, that has to be VolumeID collision, because above we checked
+		// that we don't have entry with such Name. VolumeID collision is very-very
+		// unlikely so we should not get here in any near future, if otherwise state is good.
+		klog.V(3).Infof("Controller CreateVolume: VolumeID:%s collision: existing name:%s new name:%s",
+			volumeID, vol.Params[parameters.Name], volumeName)
+		statusErr = status.Error(codes.Internal, "VolumeID/hash collision, cannot create unique Volume")
+		return
 	}
 
 	// Set which device manager was used to create the volume
@@ -376,22 +377,78 @@ func (cs *nodeControllerServer) ListVolumes(ctx context.Context, req *csi.ListVo
 		klog.Errorf("invalid list volumes req: %v", req)
 		return nil, err
 	}
+
 	cs.mutex.Lock()
 	defer cs.mutex.Unlock()
-	// List namespaces
-	var entries []*csi.ListVolumesResponse_Entry
+
+	// Copy from map into array for pagination.
+	vols := make([]*nodeVolume, 0, len(cs.pmemVolumes))
 	for _, vol := range cs.pmemVolumes {
-		entries = append(entries, &csi.ListVolumesResponse_Entry{
+		vols = append(vols, vol)
+	}
+
+	// Code originally copied from https://github.com/kubernetes-csi/csi-test/blob/f14e3d32125274e0c3a3a5df380e1f89ff7c132b/mock/service/controller.go#L309-L365
+
+	var (
+		ulenVols      = int32(len(vols))
+		maxEntries    = req.MaxEntries
+		startingToken int32
+	)
+
+	if v := req.StartingToken; v != "" {
+		i, err := strconv.ParseUint(v, 10, 32)
+		if err != nil {
+			return nil, status.Errorf(
+				codes.Aborted,
+				"startingToken=%d !< int32=%d",
+				startingToken, math.MaxUint32)
+		}
+		startingToken = int32(i)
+	}
+
+	if startingToken > ulenVols {
+		return nil, status.Errorf(
+			codes.Aborted,
+			"startingToken=%d > len(vols)=%d",
+			startingToken, ulenVols)
+	}
+
+	// Discern the number of remaining entries.
+	rem := ulenVols - startingToken
+
+	// If maxEntries is 0 or greater than the number of remaining entries then
+	// set maxEntries to the number of remaining entries.
+	if maxEntries == 0 || maxEntries > rem {
+		maxEntries = rem
+	}
+
+	var (
+		i       int
+		j       = startingToken
+		entries = make(
+			[]*csi.ListVolumesResponse_Entry,
+			maxEntries)
+	)
+
+	for i = 0; i < len(entries); i++ {
+		vol := vols[j]
+		entries[i] = &csi.ListVolumesResponse_Entry{
 			Volume: &csi.Volume{
 				VolumeId:      vol.ID,
 				CapacityBytes: vol.Size,
-				VolumeContext: vol.Params,
 			},
-		})
+		}
+		j++
+	}
+
+	var nextToken string
+	if n := startingToken + int32(i); n < ulenVols {
+		nextToken = fmt.Sprintf("%d", n)
 	}
 
 	return &csi.ListVolumesResponse{
-		Entries: entries,
+		Entries:   entries,
+		NextToken: nextToken,
 	}, nil
 }
 
@@ -435,4 +492,30 @@ func (cs *nodeControllerServer) ControllerExpandVolume(context.Context, *csi.Con
 
 func (cs *nodeControllerServer) ControllerGetVolume(context.Context, *csi.ControllerGetVolumeRequest) (*csi.ControllerGetVolumeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
+}
+
+func generateVolumeID(caller string, name string) string {
+	// VolumeID is hashed from Volume Name.
+	// Hashing guarantees same ID for repeated requests.
+	// Why do we generate new VolumeID via hashing?
+	// We can not use Name directly as VolumeID because of at least 2 reasons:
+	// 1. allowed max. Name length by CSI spec is 128 chars, which does not fit
+	// into LVM volume name (for that we use VolumeID), where groupname+volumename
+	// must fit into 126 chars.
+	// Ndctl namespace name is even shorter, it can be 63 chars long.
+	// 2. CSI spec. allows characters in Name that are not allowed in LVM names.
+	hasher := sha256.New224()
+	hasher.Write([]byte(name))
+	hash := hex.EncodeToString(hasher.Sum(nil))
+	// Use first characters of Name in VolumeID to help humans.
+	// This also lowers collision probability even more, as an attacker
+	// attempting to cause VolumeID collision, has to find another Name
+	// producing same sha-224 hash, while also having common first N chars.
+	use := 6
+	if len(name) < 6 {
+		use = len(name)
+	}
+	id := name[0:use] + "-" + hash
+	klog.V(4).Infof("%s: Create VolumeID:%s based on name:%s", caller, id, name)
+	return id
 }

@@ -6,6 +6,7 @@ mkdir -p $WORKDIR
 cd $WORKDIR
 CA=${CA:="$WORKDIR/ca"}
 NS=${NS:-pmem-csi}
+PREFIX=${PREFIX:-pmem-csi-intel-com}
 
 # Check for cfssl utilities.
 cfssl_found=1
@@ -36,15 +37,21 @@ DEFAULT_CNS="pmem-registry pmem-node-controller"
 CNS="${DEFAULT_CNS} ${EXTRA_CNS:=""}"
 for name in ${CNS}; do
   echo "Generating Certificate for '$name'(NS=$NS) ..."
-  <<EOF cfssl gencert -ca=${CA_CRT} -ca-key=${CA_KEY} - | cfssljson -bare $name
+  tee /dev/stderr <<EOF | cfssl gencert -ca=${CA_CRT} -ca-key=${CA_KEY} - | cfssljson -bare $name
 {
     "CN": "$name",
     "hosts": [
         $(if [ "$name" = "pmem-registry" ]; then
              # Some extra names needed for scheduler extender and webhook.
-             echo '"pmem-csi-scheduler", "pmem-csi-scheduler.'$NS'", "pmem-csi-scheduler.'$NS'.svc", "127.0.0.1",'
+             # The version without intel-com was used by PMEM-CSI < 0.9.0,
+             # the version starting with 0.9.0 for the sake of consistency with
+             # the pmem-csi.intel.com driver name.
+             echo '"127.0.0.1",'
+             echo '"pmem-csi-scheduler", "pmem-csi-scheduler.'$NS'", "pmem-csi-scheduler.'$NS'.svc",'
+             echo '"'$PREFIX'-scheduler", "'$PREFIX'-scheduler.'$NS'", "'$PREFIX'-scheduler.'$NS'.svc",'
              # And for metrics server.
              echo '"pmem-csi-metrics", "pmem-csi-metrics.'$NS'", "pmem-csi-metrics.'$NS'.svc",'
+             echo '"'$PREFIX'-metrics", "'$PREFIX'-metrics.'$NS'", "'$PREFIX'-metrics.'$NS'.svc",'
           fi
         )
         "$name"

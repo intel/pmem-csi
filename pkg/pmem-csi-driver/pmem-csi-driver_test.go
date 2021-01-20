@@ -50,17 +50,16 @@ build_info{version="foo-bar-test"} 1
 		t.Run(n, func(t *testing.T) {
 			path := "/metrics2"
 			pmemd, err := GetCSIDriver(Config{
-				Mode:             Controller,
-				DriverName:       "pmem-csi",
-				NodeID:           "testnode",
-				Endpoint:         "unused",
-				RegistryEndpoint: "unused2",
-				Version:          "foo-bar-test",
-				CAFile:           caFile,
-				CertFile:         certFile,
-				KeyFile:          keyFile,
-				metricsPath:      path,
-				metricsListen:    "127.0.0.1:", // port allocated dynamically
+				Mode:          Webhooks,
+				DriverName:    "pmem-csi",
+				NodeID:        "testnode",
+				Endpoint:      "unused",
+				Version:       "foo-bar-test",
+				CAFile:        caFile,
+				CertFile:      certFile,
+				KeyFile:       keyFile,
+				metricsPath:   path,
+				metricsListen: "127.0.0.1:", // port allocated dynamically
 			})
 			require.NoError(t, err, "get PMEM-CSI driver")
 

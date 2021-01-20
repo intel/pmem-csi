@@ -14,7 +14,9 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 	"github.com/intel/pmem-csi/test/e2e/driver"
 	"github.com/intel/pmem-csi/test/e2e/operator/validate"
+	"github.com/intel/pmem-csi/test/e2e/storage"
 	"github.com/intel/pmem-csi/test/e2e/storage/dax"
+	"github.com/intel/pmem-csi/test/e2e/storage/scheduler"
 
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
@@ -57,6 +59,14 @@ var _ = deploy.DescribeForSome("driver", func(d *deploy.Deployment) bool {
 	var csiTestSuites = []func() testsuites.TestSuite{
 		dax.InitDaxTestSuite,
 	}
+	if d.HasController {
+		// Scheduler tests depend on the webhooks in the controller.
+		csiTestSuites = append(csiTestSuites, scheduler.InitSchedulerTestSuite)
+	}
 
 	testsuites.DefineTestSuite(csiTestDriver, csiTestSuites)
+
+	// Late binding must work, regardless of the driver name and whether we have
+	// a scheduler extender.
+	storage.DefineLateBindingTests(d)
 })

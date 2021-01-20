@@ -1,11 +1,11 @@
 apiVersion: autoscaling.k8s.io/v1
 kind: VerticalPodAutoscaler
 metadata:
-  name: pmem-csi-node
+  name: pmem-csi-intel-com-node
 spec:
   targetRef:
     apiVersion: "apps/v1"
     kind:       DaemonSet
-    name:       pmem-csi-node
+    name:       pmem-csi-intel-com-node
   updatePolicy:
     updateMode: "Off"
