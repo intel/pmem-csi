@@ -61,8 +61,9 @@ networking:
   podSubnet: \"10.244.0.0/16\""
 	;;
     fedora)
-	# Use weave on Fedora. Nothing to add to kubeconfig.
-	podnetworkingurl=https://cloud.weave.works/k8s/net?k8s-version=$k8sversion
+	# Use Calico on Fedora as it is the only CNI plugin that is tested by kubeadm.
+	# https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#pod-network
+	podnetworkingurl=https://docs.projectcalico.org/manifests/calico.yaml
 	;;
     *)
 	echo "ERROR: unsupported distro=$distro"
