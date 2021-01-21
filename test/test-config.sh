@@ -146,7 +146,7 @@ fi
 # is installed instead of the latest one. Ignored when
 # using Clear Linux as OS because with Clear Linux we have
 # to use the Kubernetes version that ships with it.
-: ${TEST_KUBERNETES_VERSION:=1.19}
+: ${TEST_KUBERNETES_VERSION:=1.20}
 
 # Can be used to pick one of potentially severally of the
 # pre-generated deploy/kubernetes-<version><flavor> deployment
@@ -162,9 +162,10 @@ fi
 # EndpointSlice is disabled because of https://github.com/kubernetes/kubernetes/issues/91287 (Kubernetes
 # < 1.19) and because there were random connection failures to node ports during sanity
 # testing (Kubernetes 1.19.0)
-: ${TEST_FEATURE_GATES:=CSINodeInfo=true,CSIDriverRegistry=true,CSIBlockVolume=true,CSIInlineVolume=true\
-$(case ${TEST_KUBERNETES_VERSION} in 1.1[0-5]) ;; *) echo ',EndpointSlice=false';; esac)\
-$(case ${TEST_KUBERNETES_VERSION} in 1.19) echo ',CSIStorageCapacity=true,GenericEphemeralVolume=true,EndpointSliceProxying=false';; esac)\
+: ${TEST_FEATURE_GATES:=CSINodeInfo=true,CSIDriverRegistry=true,CSIBlockVolume=true,CSIInlineVolume=true,\
+$(case ${TEST_KUBERNETES_VERSION} in 1.1[6-9]) echo 'EndpointSlice=false,';; esac)\
+$(case ${TEST_KUBERNETES_VERSION} in 1.1[8-9]) echo 'EndpointSliceProxying=false,';; esac)\
+$(case ${TEST_KUBERNETES_VERSION} in 1.19 | 1.20) echo 'CSIStorageCapacity=true,GenericEphemeralVolume=true,';; esac)\
 }
 
 # If non-empty, the version of Kata Containers which is to be installed
