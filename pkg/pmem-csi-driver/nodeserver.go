@@ -707,8 +707,8 @@ func (ns *nodeServer) mount(sourcePath, targetPath string, mountOptions []string
 // given id and returns the device manager which creates that volume.
 func (ns *nodeServer) getDeviceManagerForVolume(id string) (pmdmanager.PmemDeviceManager, error) {
 
-	vol, ok := ns.cs.pmemVolumes[id]
-	if !ok {
+	vol := ns.cs.getVolumeByID(id)
+	if vol == nil {
 		return nil, fmt.Errorf("unknown volume: %s", id)
 	}
 
