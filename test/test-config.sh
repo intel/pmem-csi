@@ -162,7 +162,7 @@ fi
 # EndpointSlice is disabled because of https://github.com/kubernetes/kubernetes/issues/91287 (Kubernetes
 # < 1.19) and because there were random connection failures to node ports during sanity
 # testing (Kubernetes 1.19.0)
-: ${TEST_FEATURE_GATES:=CSINodeInfo=true,CSIDriverRegistry=true,CSIBlockVolume=true,CSIInlineVolume=true,\
+: ${TEST_FEATURE_GATES:=\
 $(case ${TEST_KUBERNETES_VERSION} in 1.1[6-9]) echo 'EndpointSlice=false,';; esac)\
 $(case ${TEST_KUBERNETES_VERSION} in 1.1[8-9]) echo 'EndpointSliceProxying=false,';; esac)\
 $(case ${TEST_KUBERNETES_VERSION} in 1.19 | 1.20) echo 'CSIStorageCapacity=true,GenericEphemeralVolume=true,';; esac)\
