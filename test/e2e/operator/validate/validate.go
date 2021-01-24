@@ -301,6 +301,7 @@ func parseDefaultValues() map[string]interface{} {
 Service:
   spec:
     clusterIP: ignore
+    clusterIPs: ignore # since k8s v1.20
     externalTrafficPolicy: Cluster
     ports:
       protocol: TCP
@@ -318,6 +319,7 @@ StatefulSet:` + defaultsApps + `
 CSIDriver:
   spec:
     storageCapacity: false
+    fsGroupPolicy: ignore # currently PMEM-CSI driver does not support fsGroupPolicy
 MutatingWebhookConfiguration:
   webhooks:
     clientConfig:

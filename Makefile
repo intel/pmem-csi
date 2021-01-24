@@ -170,6 +170,7 @@ KUSTOMIZE_KUBERNETES_VERSIONS = \
     1.17 \
     1.18 \
     1.19 \
+    1.20 \
 
 KUSTOMIZE += $(foreach version,$(KUSTOMIZE_KUBERNETES_VERSIONS),$(subst X.XX,$(version),$(KUSTOMIZE_KUBERNETES_OUTPUT)))
 
