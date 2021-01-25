@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
@@ -72,6 +73,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		client     runtime.Client
 		k8sver     version.Version
 		evWatcher  watch.Interface
+		evWait     sync.WaitGroup
 		evCaptured map[types.UID]map[string]struct{}
 	)
 
@@ -96,7 +98,10 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		evWatcher, err = f.ClientSet.CoreV1().Events("").Watch(context.TODO(), metav1.ListOptions{})
 		Expect(err).ShouldNot(HaveOccurred(), "get events watcher")
 		evCaptured = map[types.UID]map[string]struct{}{}
+
+		evWait.Add(1)
 		go func() {
+			defer evWait.Done()
 			for watchEvent := range evWatcher.ResultChan() {
 				ev, ok := watchEvent.Object.(*corev1.Event)
 				if !ok || ev.Source.Component != "pmem-csi-operator" {
@@ -117,6 +122,9 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 	AfterEach(func() {
 		evWatcher.Stop()
+		// Wait till completion of event handler before
+		// making evCapture map to nil
+		evWait.Wait()
 		evCaptured = nil
 		cancel()
 	})
