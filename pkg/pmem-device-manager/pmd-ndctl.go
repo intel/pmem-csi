@@ -3,6 +3,7 @@ package pmdmanager
 import (
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
@@ -36,23 +37,64 @@ func newPmemDeviceManagerNdctl(pmemPercentage uint) (PmemDeviceManager, error) {
 	if pmemPercentage > 100 {
 		return nil, fmt.Errorf("invalid pmemPercentage '%d'. Value must be 0..100", pmemPercentage)
 	}
-	// Check is /sys writable. If not then there is no point starting
-	mounts, _ := mount.New("").List()
-	for _, mnt := range mounts {
-		if mnt.Device == "sysfs" && mnt.Path == "/sys" {
-			klog.V(5).Infof("NewPmemDeviceManagerNdctl: sysfs mount options:%s", mnt.Opts)
-			for _, opt := range mnt.Opts {
-				if opt == "rw" {
-					klog.V(4).Info("NewPmemDeviceManagerNdctl: /sys mounted read-write, good")
-					return &pmemNdctl{pmemPercentage: pmemPercentage}, nil
-				} else if opt == "ro" {
-					return nil, fmt.Errorf("FATAL: /sys mounted read-only, can not operate")
-				}
+
+	writable, err := sysIsWritable()
+	if err != nil {
+		return nil, fmt.Errorf("check for writable /sys: %v", err)
+	}
+
+	if !writable {
+		// If /host-sys exists, then bind mount it to /sys.  This is a
+		// workaround for /sys being read-only on OpenShift 4.5
+		// (https://github.com/intel/pmem-csi/issues/786 =
+		// https://github.com/containerd/containerd/issues/3221).
+		_, err := os.Stat("/host-sys")
+		switch {
+		case err == nil:
+			if err := mount.New("").Mount("/host-sys", "/sys", "", []string{"rw", "bind", "seclabel", "nosuid", "nodev", "noexec", "relatime"}); err != nil {
+				return nil, fmt.Errorf("bind-mount /host-sys onto /sys: %v", err)
 			}
-			return nil, fmt.Errorf("FATAL: /sys mount entry exists but does not have neither 'rw' or 'ro' option")
+
+			// Check again, just to be sure.
+			writable, err = sysIsWritable()
+			if err != nil {
+				return nil, fmt.Errorf("check for writable /sys: %v", err)
+			}
+			if !writable {
+				return nil, errors.New("bind-mounting /host-sys to /sys did not result in writable /sys")
+			}
+		case os.IsNotExist(err):
+			// Can't fix the write-only /sys.
+			return nil, errors.New("/sys mounted read-only, can not operate")
+		default:
+			return nil, fmt.Errorf("/sys mounted read-only and access to /host-sys fallback failed: %v", err)
 		}
 	}
-	return nil, fmt.Errorf("FATAL: /sys mount entry not present")
+
+	return &pmemNdctl{pmemPercentage: pmemPercentage}, nil
+}
+
+// sysIsWritable returns true if any of the /sys mounts is writable.
+func sysIsWritable() (bool, error) {
+	mounts, err := mount.New("").List()
+	if err != nil {
+		return false, fmt.Errorf("list mounts: %v", err)
+	}
+	for _, mnt := range mounts {
+		if mnt.Device == "sysfs" && mnt.Path == "/sys" {
+			klog.V(5).Infof("/sys mount options:%s", mnt.Opts)
+			for _, opt := range mnt.Opts {
+				if opt == "rw" {
+					klog.V(4).Info("/sys mounted read-write, good")
+					return true, nil
+				} else if opt == "ro" {
+					klog.V(4).Info("/sys mounted read-only, bad")
+				}
+			}
+			klog.V(4).Info("/sys mounted with unknown options, bad")
+		}
+	}
+	return false, nil
 }
 
 func (pmem *pmemNdctl) GetMode() api.DeviceMode {
