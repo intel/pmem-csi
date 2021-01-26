@@ -1,9 +1,9 @@
-OPERATOR_SDK_VERSION=1.2.0
+OPERATOR_SDK_VERSION=1.3.0
 
 # download operator-sdk binary
 _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION):
 	mkdir -p _work/bin/ 2> /dev/null
-	curl -L https://github.com/operator-framework/operator-sdk/releases/download/v$(OPERATOR_SDK_VERSION)/operator-sdk-v$(OPERATOR_SDK_VERSION)-x86_64-linux-gnu -o $(abspath $@)
+	curl -L https://github.com/operator-framework/operator-sdk/releases/download/v$(OPERATOR_SDK_VERSION)/operator-sdk_linux_amd64 -o $(abspath $@)
 	chmod a+x $(abspath $@)
 	cd $(dir $@); ln -sf operator-sdk-$(OPERATOR_SDK_VERSION) operator-sdk
 
