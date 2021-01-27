@@ -10,7 +10,7 @@ require (
 	github.com/docker/spdystream v0.0.0-20181023171402-6480d4af844c // indirect
 	github.com/emicklei/go-restful v2.9.6+incompatible // indirect
 	github.com/go-bindata/go-bindata v3.1.2+incompatible
-	github.com/go-logr/logr v0.3.0
+	github.com/go-logr/logr v0.4.0
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
 	github.com/google/go-cmp v0.5.2
 	github.com/google/gofuzz v1.2.0 // indirect
@@ -52,7 +52,7 @@ require (
 	k8s.io/cloud-provider v0.19.2 // indirect
 	k8s.io/component-base v0.20.1
 	k8s.io/csi-translation-lib v0.19.2 // indirect
-	k8s.io/klog/v2 v2.3.0
+	k8s.io/klog/v2 v2.5.0
 	k8s.io/kube-openapi v0.0.0-20200923155610-8b5066479488 // indirect
 	k8s.io/kube-scheduler v0.19.2
 	k8s.io/kubectl v0.19.2
