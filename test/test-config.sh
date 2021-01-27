@@ -114,6 +114,10 @@ fi
 # itself.
 : ${TEST_OPERATOR_NAMESPACE:=pmem-csi}
 
+# Log verbosity level used for operator deployed by
+# ./test/start-operator.sh script.
+: ${TEST_OPERATOR_LOGLEVEL:=5}
+
 # A value for the pmem-csi.intel.com/deployment label that is
 # set for all objects created by test/start-operator.sh.
 : ${TEST_OPERATOR_DEPLOYMENT_LABEL:=operator}

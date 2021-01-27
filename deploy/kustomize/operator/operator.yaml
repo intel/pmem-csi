@@ -135,6 +135,8 @@ spec:
           imagePullPolicy: IfNotPresent
           command:
           - /usr/local/bin/pmem-csi-operator
+          - -v=3
+          - -vmodule=*=3
           securityContext:
             readOnlyRootFilesystem: true
           env:
