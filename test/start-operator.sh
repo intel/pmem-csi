@@ -64,6 +64,9 @@ function deploy_using_olm() {
   if [ "${TEST_OPERATOR_DEPLOYMENT_LABEL}" != "" ]; then
     sed -i -r "/labels:$/{N; s|(\n\s+)(.*)|\1pmem-csi.intel.com/deployment: ${TEST_OPERATOR_DEPLOYMENT_LABEL}\1\2| }" ${CSV_FILE}
   fi
+  if [ "{TEST_OPERATOR_LOGLEVEL}" != "" ]; then
+      sed -i -e "s;-v=.*;-v=${TEST_OPERATOR_LOGLEVEL};g" -e "s;-vmodule=.*;-vmodule=*=${TEST_OPERATOR_LOGLEVEL};g" ${CSV_FILE}
+  fi
 
   NAMESPACE=""
   if [ "${TEST_OPERATOR_NAMESPACE}" != "" ]; then
@@ -107,6 +110,10 @@ EOF
     ${SSH} "sed -ie 's;\(namespace: \)pmem-csi$;\1${TEST_OPERATOR_NAMESPACE};g' $tmpdir/operator.yaml"
     # replace webservice secret dns names
     ${SSH} "sed -ie 's;pmem-csi.svc;${TEST_OPERATOR_NAMESPACE}.svc;g' $tmpdir/operator.yaml"
+  fi
+
+  if [ "${TEST_OPERATOR_LOGLEVEL}" != "" ]; then
+    ${SSH} "sed -i -e 's;-ve=.*;-v=*=${TEST_OPERATOR_LOGLEVEL};g' -e 's;-vmodule=.*;-vmodule=*=${TEST_OPERATOR_LOGLEVEL};g' $tmpdir/operator.yaml"
   fi
 
   ${SSH} "cat > $tmpdir/kustomization.yaml" <<EOF
