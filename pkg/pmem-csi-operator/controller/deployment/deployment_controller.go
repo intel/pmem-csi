@@ -345,11 +345,15 @@ func (r *ReconcileDeployment) EventBroadcaster() record.EventBroadcaster {
 
 // AddHook adds given reconcile hook to hooks list
 func (r *ReconcileDeployment) AddHook(h ReconcileHook) {
+	r.reconcileMutex.Lock()
+	defer r.reconcileMutex.Unlock()
 	r.reconcileHooks[h] = struct{}{}
 }
 
 // RemoveHook removes previously added hook
 func (r *ReconcileDeployment) RemoveHook(h ReconcileHook) {
+	r.reconcileMutex.Lock()
+	defer r.reconcileMutex.Unlock()
 	delete(r.reconcileHooks, h)
 }
 
