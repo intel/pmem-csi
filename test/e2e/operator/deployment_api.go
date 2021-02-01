@@ -46,9 +46,9 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-// We use intentionally use this non-existing driver image
+// We intentionally use this non-existing container registry for driver image
 // because these tests do not actually need a running driver.
-const dummyImage = "unexisting/pmem-csi-driver"
+const dummyImage = "127.0.0.1:270/unexisting/pmem-csi-driver"
 
 func getDeployment(name string) api.PmemCSIDeployment {
 	return api.PmemCSIDeployment{
