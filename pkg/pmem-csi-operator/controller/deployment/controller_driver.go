@@ -67,6 +67,35 @@ var currentObjects = []client.Object{
 	&admissionregistrationv1beta1.MutatingWebhookConfiguration{TypeMeta: typeMeta(admissionregistrationv1beta1.SchemeGroupVersion, "MutatingWebhookConfiguration")},
 }
 
+func cloneObject(from client.Object) (client.Object, error) {
+	switch t := from.(type) {
+	case *rbacv1.ClusterRole:
+		return t.DeepCopyObject().(*rbacv1.ClusterRole), nil
+	case *rbacv1.ClusterRoleBinding:
+		return t.DeepCopyObject().(*rbacv1.ClusterRoleBinding), nil
+	case *storagev1beta1.CSIDriver:
+		return t.DeepCopyObject().(*storagev1beta1.CSIDriver), nil
+	case *appsv1.DaemonSet:
+		return t.DeepCopyObject().(*appsv1.DaemonSet), nil
+	case *rbacv1.Role:
+		return t.DeepCopyObject().(*rbacv1.Role), nil
+	case *rbacv1.RoleBinding:
+		return t.DeepCopyObject().(*rbacv1.RoleBinding), nil
+	case *corev1.Secret:
+		return t.DeepCopyObject().(*corev1.Secret), nil
+	case *corev1.Service:
+		return t.DeepCopyObject().(*corev1.Service), nil
+	case *corev1.ServiceAccount:
+		return t.DeepCopyObject().(*corev1.ServiceAccount), nil
+	case *appsv1.StatefulSet:
+		return t.DeepCopyObject().(*appsv1.StatefulSet), nil
+	case *admissionregistrationv1beta1.MutatingWebhookConfiguration:
+		return t.DeepCopyObject().(*admissionregistrationv1beta1.MutatingWebhookConfiguration), nil
+	default:
+		return nil, fmt.Errorf("cannot clone client.Object of type %T", from)
+	}
+}
+
 // CurrentObjects returns the active sub-object types used by the operator
 // for a driver deployment.
 func CurrentObjects() []client.Object {
@@ -189,6 +218,15 @@ func (op *objectPatch) apply(ctx context.Context, c client.Client) error {
 		return nil
 	}
 
+	// Patch() will modify op.obj, which is an object that was
+	// generated from our PmemCSIDeployment object and shares some
+	// data structure with it. We don't want those to be modified,
+	// so here we have to do a deep copy first.
+	copy, err := cloneObject(op.obj)
+	if err != nil {
+		return fmt.Errorf("internal error: %v", err)
+	}
+	op.obj = copy
 	return c.Patch(ctx, op.obj, op.patch)
 }
 
