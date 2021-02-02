@@ -76,8 +76,8 @@ func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error
 				return false
 			}
 
-			op := newObjectPatch(e.ObjectOld, e.ObjectNew)
-			data, err := op.diff()
+			patch := client.MergeFrom(e.ObjectOld)
+			data, err := patch.Data(e.ObjectNew)
 			if err != nil {
 				l.Error(err, "find deployment changes")
 				return true

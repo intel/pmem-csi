@@ -28,6 +28,7 @@ import (
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -143,93 +144,6 @@ type pmemCSIDeployment struct {
 	controllerCABundle []byte
 }
 
-// objectPatch combines a modified object and the patch against
-// the current revision of that object that produces the modified
-// object.
-type objectPatch struct {
-	obj   client.Object
-	patch client.Patch
-}
-
-func newObjectPatch(obj client.Object, copy apiruntime.Object) *objectPatch {
-	return &objectPatch{
-		obj:   obj,
-		patch: client.MergeFrom(copy),
-	}
-}
-
-// IsNew checks if the object is a new object, i.e, the it is not
-// yet stored with the APIServer.
-func (op objectPatch) isNew() bool {
-	if op.obj != nil {
-		// We ignore only possible error - client.errNotObject
-		// and treat it's as new object
-		if o, err := meta.Accessor(op.obj); err == nil {
-			// An object registered with API serve will have
-			// a non-empty(zero) resource version
-			return o.GetResourceVersion() == ""
-		}
-	}
-	return false
-}
-
-// Diff returns the raw data representing the differences between
-// original object and the changed/patch object.
-func (op objectPatch) diff() ([]byte, error) {
-	data, err := op.patch.Data(op.obj)
-	if err != nil {
-		return nil, err
-	}
-
-	// No changes
-	if string(data) == "{}" {
-		return nil, nil
-	}
-	return data, nil
-}
-
-// Apply sends the changes to API Server
-// Creates new object if not existing, otherwise patches it with changes
-func (op *objectPatch) apply(ctx context.Context, c client.Client) error {
-	objMeta, err := meta.Accessor(op.obj)
-	if err != nil {
-		return fmt.Errorf("internal error %T: %v", op.obj, err)
-	}
-	l := logger.Get(ctx).WithName("objectPatch/apply")
-
-	if op.isNew() {
-		// For unknown reason client.Create() clearing off the
-		// GVK on obj, So restore it manually.
-		gvk := op.obj.GetObjectKind().GroupVersionKind()
-		l.V(3).Info("create", logger.KObjWithType(objMeta))
-		err := c.Create(ctx, op.obj)
-		op.obj.GetObjectKind().SetGroupVersionKind(gvk)
-		return err
-	}
-	l.V(3).Info("update", logger.KObjWithType(objMeta))
-	data, err := op.diff()
-	if err != nil {
-		return err
-	}
-	// NOTE(avalluri): Fake client used in tests can not handle the
-	// empty diff case, It treats every Patch() call as an update
-	// and that results in change in objects's resourceVersion.
-	if len(data) == 0 {
-		return nil
-	}
-
-	// Patch() will modify op.obj, which is an object that was
-	// generated from our PmemCSIDeployment object and shares some
-	// data structure with it. We don't want those to be modified,
-	// so here we have to do a deep copy first.
-	copy, err := cloneObject(op.obj)
-	if err != nil {
-		return fmt.Errorf("internal error: %v", err)
-	}
-	op.obj = copy
-	return c.Patch(ctx, op.obj, op.patch)
-}
-
 // Reconcile reconciles the driver deployment. When adding new
 // objects, extend also currentObjects above and the RBAC rules in
 // deploy/kustomize/operator/operator.yaml.
@@ -327,46 +241,85 @@ type redeployObject struct {
 	postUpdate func(*pmemCSIDeployment, client.Object) error
 }
 
-// redeploy resets/patches the object returned by ro.object()
-// with the updated data. The caller must set appropriate callabacks.
-// Here are the redeploy steps:
-//  1. Get the object by calling ro.object() which needs redeploying.
+// redeploy creates or patches one sub-object so that it matches
+// the PmemCSIDeployment spec.
+//  1.
 //  2. Retrieve the latest data saved at APIServer for that object.
 //  3. Create an objectPatch for that object to record the changes from this point.
 //  4. Call ro.modify() to modify the object's data.
 //  5. Call objectPatch.Apply() to submit the chanages to the APIServer.
 //  6. If the update in step-5 was success, then call the ro.postUpdate() callback
 //     to run any post update steps.
-func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment, ro redeployObject) (client.Object, error) {
+func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment, ro redeployObject) (finalObj client.Object, finalErr error) {
+	l := logger.Get(ctx).WithName("redeploy")
+
+	// Get an instance with right type and meta data, prepare for logging.
 	o := ro.object(d)
 	if o == nil {
 		return nil, fmt.Errorf("nil object")
 	}
+	l = l.WithValues("object", klog.KObj(o))
+	ctx = logger.Set(ctx, l)
+
+	// Retrieve actual object from APIserver, it it exists.
 	if err := d.getSubObject(ctx, r, o); err != nil {
 		return nil, err
 	}
-	op := newObjectPatch(o, o.DeepCopyObject())
+
+	// Prepare for patching by remembering the base object.
+	patch := client.MergeFrom(o.DeepCopyObject())
+
+	// Now set all values that we care about...
 	if err := ro.modify(d, o); err != nil {
 		return nil, err
 	}
 
-	// Add the additional labels before patching.
-	objMeta, err := meta.Accessor(o)
-	if err != nil {
-		return nil, fmt.Errorf("internal error %T: %v", op.obj, err)
-	}
-	labels := objMeta.GetLabels()
+	// ... and also the labels.
+	labels := o.GetLabels()
 	if labels == nil {
 		labels = map[string]string{}
 	}
 	for key, value := range d.Spec.Labels {
 		labels[key] = value
 	}
-	objMeta.SetLabels(labels)
+	o.SetLabels(labels)
 
-	if err := op.apply(ctx, r.client); err != nil {
-		return nil, err
+	// Now create or patch the object. If we have a resource
+	// version, then the object was retrieved from the apiserver
+	// and can be patched.
+	if o.GetResourceVersion() != "" {
+		// Patch.
+		data, err := patch.Data(o)
+		if err != nil {
+			return nil, fmt.Errorf("generate patch: %v", err)
+		}
+		// Check whether we really need to patch.
+		if string(data) != "{}" && len(data) >= 0 {
+			// Patch() will modify the object, which is an object that was
+			// generated from our PmemCSIDeployment object and shares some
+			// data structure with it. We don't want those to be modified,
+			// so here we have to do a deep copy first.
+			copy, err := cloneObject(o)
+			if err != nil {
+				return nil, fmt.Errorf("internal error: %v", err)
+			}
+			l.V(3).Info("update")
+			if err := r.client.Patch(ctx, copy, patch); err != nil {
+				return nil, fmt.Errorf("patch object: %v", err)
+			}
+		}
+	} else {
+		// For unknown reason client.Create() clearing off the
+		// GVK on obj, so restore it manually.
+		gvk := o.GetObjectKind().GroupVersionKind()
+		l.V(3).Info("create")
+		if err := r.client.Create(ctx, o); err != nil {
+			return nil, fmt.Errorf("create object: %v", err)
+		}
+		o.GetObjectKind().SetGroupVersionKind(gvk)
 	}
+
+	// Final per-object changes, like emitting events or setting status.
 	if ro.postUpdate != nil {
 		if err := ro.postUpdate(d, o); err != nil {
 			return nil, err
