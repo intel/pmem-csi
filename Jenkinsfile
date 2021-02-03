@@ -181,7 +181,7 @@ pipeline {
                 // This runs most tests and thus gets to use the initial worker immediately.
                 stage('1.19') {
                     options {
-                        timeout(time: 540, unit: "MINUTES")
+                        timeout(time: 14, unit: "HOURS")
                     }
                     steps {
                         TestInVM("", "fedora", "", "1.19", "Top.Level..[[:alpha:]]*-production[[:space:]]")
