@@ -37,7 +37,7 @@ EOF
 fi
 
 # Generate server and client certificates.
-DEFAULT_CNS="pmem-registry pmem-node-controller"
+DEFAULT_CNS="pmem-registry"
 CNS="${DEFAULT_CNS} ${EXTRA_CNS:=""}"
 for name in ${CNS}; do
   echo "Generating Certificate for '$name'(NS=$NS) ..."

@@ -38,26 +38,10 @@ CA=$(read_key "${TEST_CA}.pem")
 REGISTRY_CERT=$(read_key "$tmpdir/pmem-registry.pem")
 # -keyFile (controller)
 REGISTRY_KEY=$(read_key "$tmpdir/pmem-registry-key.pem")
-# -certFile (same for all nodes)
-NODE_CERT=$(read_key "$tmpdir/pmem-node-controller.pem")
-# -keyFile (same for all nodes)
-NODE_KEY=$(read_key "$tmpdir/pmem-node-controller-key.pem")
 
 ${KUBECTL} get ns ${TEST_DRIVER_NAMESPACE} 2>/dev/null >/dev/null || ${KUBECTL} create ns ${TEST_DRIVER_NAMESPACE}
 
 ${KUBECTL} apply -f - <<EOF
-apiVersion: v1
-kind: Secret
-metadata:
-    # Historic name for PMEM-CSI deployments < 0.9.0.
-    name: pmem-csi-registry-secrets
-    namespace: ${TEST_DRIVER_NAMESPACE}
-type: kubernetes.io/tls
-data:
-    ca.crt: ${CA}
-    tls.crt: ${REGISTRY_CERT}
-    tls.key: ${REGISTRY_KEY}
----
 apiVersion: v1
 kind: Secret
 metadata:
@@ -68,17 +52,4 @@ data:
     ca.crt: ${CA}
     tls.crt: ${REGISTRY_CERT}
     tls.key: ${REGISTRY_KEY}
----
-# This secret is not used anymore since PMEM-CSI >= 0.9.0.
-# It still gets created to support downgrades.
-apiVersion: v1
-kind: Secret
-metadata:
-    name: pmem-csi-node-secrets
-    namespace: ${TEST_DRIVER_NAMESPACE}
-type: Opaque
-data:
-    ca.crt: ${CA}
-    tls.crt: ${NODE_CERT}
-    tls.key: ${NODE_KEY}
 EOF
