@@ -152,6 +152,10 @@ TEST_E2E_SKIP_ALL += should.access.volume.from.different.nodes
 # Test is flawed and will become optional soon (probably csi-test 3.2.0): https://github.com/kubernetes-csi/csi-test/pull/258
 TEST_E2E_SKIP_ALL += NodeUnpublishVolume.*should.fail.when.the.volume.is.missing
 
+# Do not run driver stress tests in direct mode, they are consuming more time(~17m per test)
+# The reason is shredding the ndctl device is consuming most of the time.
+TEST_E2E_SKIP_ALL += direct.*.E2E.late.binding.stress.test
+
 # Add all Kubernetes version-specific suppressions.
 TEST_E2E_SKIP_ALL += $(TEST_E2E_SKIP_$(shell cat _work/$(CLUSTER)/kubernetes.version))
 
