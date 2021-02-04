@@ -135,7 +135,7 @@ RUNTIME_DEPS += LC_ALL=C LANG=C sort -u
 test: run_tests
 RUN_TESTS = TEST_WORK=$(abspath _work) REPO_ROOT=`pwd` \
 	env GODEBUG=x509ignoreCN=0 $(TEST_CMD) -timeout 0 $(filter-out %/pmem-device-manager %/imagefile/test,$(TEST_PKGS))
-RUN_TEST_DEPS = _work/pmem-ca/.ca-stamp _work/evil-ca/.ca-stamp check-go-version-$(GO_BINARY)
+RUN_TEST_DEPS = check-go-version-$(GO_BINARY)
 
 run_tests: $(RUN_TEST_DEPS)
 	$(RUN_TESTS)
@@ -215,7 +215,7 @@ run_dm_tests: _work/bin/govm start_test_vm
 
 _work/%/.ca-stamp: test/setup-ca.sh _work/.setupcfssl-stamp
 	rm -rf $(@D)
-	WORKDIR='$(@D)' PATH='$(PWD)/_work/bin/:$(PATH)' NS=default EXTRA_CNS="wrong-node-controller" $<
+	WORKDIR='$(@D)' PATH='$(PWD)/_work/bin/:$(PATH)' NS=default $<
 	touch $@
 
 
