@@ -50,8 +50,11 @@ func clearDevice(dev *PmemDeviceInfo, flush bool) error {
 
 	if blocks == 0 {
 		klog.V(5).Infof("Wiping entire device: %s", dev.Path)
-		// use one iteration instead of shred's default=3 for speed
-		if _, err := pmemexec.RunCommand("shred", "-n", "1", dev.Path); err != nil {
+		// shred would write n times using random data, followed by optional write of zeroes.
+		// For faster operation, and because we consider zeroing enough for
+		// reasonable clearing in case of a memory device, we force zero iterations
+		// with random data, followed by one pass writing zeroes.
+		if _, err := pmemexec.RunCommand("shred", "-n", "0", "-z", dev.Path); err != nil {
 			return fmt.Errorf("device shred failure: %v", err.Error())
 		}
 	} else {

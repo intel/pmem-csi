@@ -629,7 +629,7 @@ the following custom parameters in a storage class:
 
 |key|meaning|optional|values|
 |---|-------|--------|-------------|
-|`eraseAfter`|Clear all data after use and before<br> deleting the volume|Yes|`true` (default),<br> `false`|
+|`eraseAfter`|Clear all data by overwriting with zeroes after use and before<br> deleting the volume|Yes|`true` (default),<br> `false`|
 |`kataContainers`|Prepare volume for use with DAX in Kata Containers.|Yes|`false/0/f/FALSE` (default),<br> `true/1/t/TRUE`|
 
 
@@ -705,7 +705,7 @@ ephemeral volumes. The volume request could use below fields as
 |key|meaning|optional|values|
 |---|-------|--------|-------------|
 |`size`|Size of the requested ephemeral volume as [Kubernetes memory string](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory) ("1Mi" = 1024*1024 bytes, "1e3K = 1000000 bytes)|No||
-|`eraseAfter`|Clear all data after use and before<br> deleting the volume|Yes|`true` (default),<br> `false`|
+|`eraseAfter`|Clear all data by overwriting with zeroes after use and before<br> deleting the volume|Yes|`true` (default),<br> `false`|
 |`kataContainers`|Prepare volume for use in Kata Containers.|Yes|`false/0/f/FALSE` (default),<br> `true/1/t/TRUE`|
 
 Try out ephemeral volume usage with the provided [example
