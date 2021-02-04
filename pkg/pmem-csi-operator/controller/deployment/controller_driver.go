@@ -16,7 +16,7 @@ import (
 	"github.com/intel/pmem-csi/pkg/types"
 	"github.com/intel/pmem-csi/pkg/version"
 
-	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -65,7 +65,7 @@ var currentObjects = []client.Object{
 	&corev1.Service{TypeMeta: typeMeta(corev1.SchemeGroupVersion, "Service")},
 	&corev1.ServiceAccount{TypeMeta: typeMeta(corev1.SchemeGroupVersion, "ServiceAccount")},
 	&appsv1.StatefulSet{TypeMeta: typeMeta(appsv1.SchemeGroupVersion, "StatefulSet")},
-	&admissionregistrationv1beta1.MutatingWebhookConfiguration{TypeMeta: typeMeta(admissionregistrationv1beta1.SchemeGroupVersion, "MutatingWebhookConfiguration")},
+	&admissionregistrationv1.MutatingWebhookConfiguration{TypeMeta: typeMeta(admissionregistrationv1.SchemeGroupVersion, "MutatingWebhookConfiguration")},
 }
 
 func cloneObject(from client.Object) (client.Object, error) {
@@ -90,8 +90,8 @@ func cloneObject(from client.Object) (client.Object, error) {
 		return t.DeepCopyObject().(*corev1.ServiceAccount), nil
 	case *appsv1.StatefulSet:
 		return t.DeepCopyObject().(*appsv1.StatefulSet), nil
-	case *admissionregistrationv1beta1.MutatingWebhookConfiguration:
-		return t.DeepCopyObject().(*admissionregistrationv1beta1.MutatingWebhookConfiguration), nil
+	case *admissionregistrationv1.MutatingWebhookConfiguration:
+		return t.DeepCopyObject().(*admissionregistrationv1.MutatingWebhookConfiguration), nil
 	default:
 		return nil, fmt.Errorf("cannot clone client.Object of type %T", from)
 	}
@@ -497,16 +497,16 @@ var subObjectHandlers = map[string]redeployObject{
 		},
 	},
 	"mutating webhook configuration": {
-		objType: reflect.TypeOf(&admissionregistrationv1beta1.MutatingWebhookConfiguration{}),
+		objType: reflect.TypeOf(&admissionregistrationv1.MutatingWebhookConfiguration{}),
 		enabled: mutatingWebhookEnabled,
 		object: func(d *pmemCSIDeployment) client.Object {
-			return &admissionregistrationv1beta1.MutatingWebhookConfiguration{
-				TypeMeta:   metav1.TypeMeta{Kind: "MutatingWebhookConfiguration", APIVersion: "admissionregistration.k8s.io/v1beta1"},
+			return &admissionregistrationv1.MutatingWebhookConfiguration{
+				TypeMeta:   metav1.TypeMeta{Kind: "MutatingWebhookConfiguration", APIVersion: "admissionregistration.k8s.io/v1"},
 				ObjectMeta: d.getObjectMeta(d.MutatingWebhookName(), true),
 			}
 		},
 		modify: func(d *pmemCSIDeployment, o client.Object) error {
-			d.getMutatingWebhookConfig(o.(*admissionregistrationv1beta1.MutatingWebhookConfiguration))
+			d.getMutatingWebhookConfig(o.(*admissionregistrationv1.MutatingWebhookConfiguration))
 			return nil
 		},
 	},
@@ -804,7 +804,7 @@ func (d *pmemCSIDeployment) getWebhooksClusterRoleBinding(crb *rbacv1.ClusterRol
 	}
 }
 
-func (d *pmemCSIDeployment) getMutatingWebhookConfig(hook *admissionregistrationv1beta1.MutatingWebhookConfiguration) {
+func (d *pmemCSIDeployment) getMutatingWebhookConfig(hook *admissionregistrationv1.MutatingWebhookConfiguration) {
 	selector := &metav1.LabelSelector{
 		MatchExpressions: []metav1.LabelSelectorRequirement{
 			{
@@ -814,38 +814,41 @@ func (d *pmemCSIDeployment) getMutatingWebhookConfig(hook *admissionregistration
 			},
 		},
 	}
-	failurePolicy := admissionregistrationv1beta1.Ignore
+	failurePolicy := admissionregistrationv1.Ignore
 	if d.Spec.MutatePods == api.MutatePodsAlways {
-		failurePolicy = admissionregistrationv1beta1.Fail
+		failurePolicy = admissionregistrationv1.Fail
 	}
 	path := "/pod/mutate"
-	hook.Webhooks = []admissionregistrationv1beta1.MutatingWebhook{
+	none := admissionregistrationv1.SideEffectClassNone
+	hook.Webhooks = []admissionregistrationv1.MutatingWebhook{
 		{
 			// Name must be "fully-qualified" (i.e. with domain) but not unique, so
 			// here "pmem-csi.intel.com" is not the default driver name.
-			// https://pkg.go.dev/k8s.io/api/admissionregistration/v1beta1#MutatingWebhook
+			// https://pkg.go.dev/k8s.io/api/admissionregistration/v1#MutatingWebhook
 			Name:              "pod-hook.pmem-csi.intel.com",
 			NamespaceSelector: selector,
 			ObjectSelector:    selector,
 			FailurePolicy:     &failurePolicy,
-			ClientConfig: admissionregistrationv1beta1.WebhookClientConfig{
-				Service: &admissionregistrationv1beta1.ServiceReference{
+			ClientConfig: admissionregistrationv1.WebhookClientConfig{
+				Service: &admissionregistrationv1.ServiceReference{
 					Name:      d.SchedulerServiceName(),
 					Namespace: d.namespace,
 					Path:      &path,
 				},
 				CABundle: d.controllerCABundle, // loaded earlier in reconcile()
 			},
-			Rules: []admissionregistrationv1beta1.RuleWithOperations{
+			Rules: []admissionregistrationv1.RuleWithOperations{
 				{
-					Operations: []admissionregistrationv1beta1.OperationType{admissionregistrationv1beta1.Create},
-					Rule: admissionregistrationv1beta1.Rule{
+					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
+					Rule: admissionregistrationv1.Rule{
 						APIGroups:   []string{""},
 						APIVersions: []string{"v1"},
 						Resources:   []string{"pods"},
 					},
 				},
 			},
+			SideEffects:             &none,
+			AdmissionReviewVersions: []string{"v1"},
 		},
 	}
 }
