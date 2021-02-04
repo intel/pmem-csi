@@ -179,27 +179,16 @@ pipeline {
         stage('Testing') {
             parallel {
                 // This runs most tests and thus gets to use the initial worker immediately.
-                stage('1.20') {
+                stage('1.19') {
                     options {
-                        timeout(time: 540, unit: "MINUTES")
+                        timeout(time: 14, unit: "HOURS")
                     }
                     steps {
-                        TestInVM("", "fedora", "", "1.20", "Top.Level..[[:alpha:]]*-production[[:space:]]")
+                        TestInVM("", "fedora", "", "1.19", "Top.Level..[[:alpha:]]*-production[[:space:]]")
                     }
                 }
 
                 // All others set up their own worker.
-                stage('1.19') {
-                    options {
-                        timeout(time: 540, unit: "MINUTES")
-                    }
-                    agent {
-                        label "pmem-csi"
-                    }
-                    steps {
-                        TestInVM("fedora-1.19", "fedora", "", "1.19", "Top.Level..[[:alpha:]]*-production[[:space:]]")
-                    }
-                }
                 stage('1.18') {
                     when { not { changeRequest() } }
                     options {
