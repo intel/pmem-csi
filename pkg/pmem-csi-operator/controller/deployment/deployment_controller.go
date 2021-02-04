@@ -76,8 +76,8 @@ func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error
 				return false
 			}
 
-			op := newObjectPatch(e.ObjectOld, e.ObjectNew)
-			data, err := op.diff()
+			patch := client.MergeFrom(e.ObjectOld)
+			data, err := patch.Data(e.ObjectNew)
 			if err != nil {
 				l.Error(err, "find deployment changes")
 				return true
@@ -345,11 +345,15 @@ func (r *ReconcileDeployment) EventBroadcaster() record.EventBroadcaster {
 
 // AddHook adds given reconcile hook to hooks list
 func (r *ReconcileDeployment) AddHook(h ReconcileHook) {
+	r.reconcileMutex.Lock()
+	defer r.reconcileMutex.Unlock()
 	r.reconcileHooks[h] = struct{}{}
 }
 
 // RemoveHook removes previously added hook
 func (r *ReconcileDeployment) RemoveHook(h ReconcileHook) {
+	r.reconcileMutex.Lock()
+	defer r.reconcileMutex.Unlock()
 	delete(r.reconcileHooks, h)
 }
 

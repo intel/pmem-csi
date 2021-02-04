@@ -722,11 +722,6 @@ func TestDeploymentController(t *testing.T) {
 	}
 }
 
-// patchMutex is used to serialize the patch operation because
-// of concurrency issues in controller-runtime and/or json-iterator
-// (https://github.com/intel/pmem-csi/issues/852).
-var patchMutex sync.Mutex
-
 type testClient struct {
 	client.Client
 	assertOn *schema.GroupVersionKind
@@ -748,10 +743,4 @@ func (t *testClient) Create(ctx context.Context, obj client.Object, opts ...clie
 		panic(fmt.Sprintf("assert: %v", obj.GetObjectKind()))
 	}
 	return t.Client.Create(ctx, obj, opts...)
-}
-
-func (t *testClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
-	patchMutex.Lock()
-	defer patchMutex.Unlock()
-	return t.Client.Patch(ctx, obj, patch, opts...)
 }
