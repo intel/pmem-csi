@@ -23,7 +23,7 @@ func Logs(ctx context.Context, client kubernetes.Interface, namespace, pod, cont
 		if err == nil {
 			return
 		}
-		if ctx.Err() == nil {
+		if ctx.Err() != nil {
 			return "", fmt.Errorf("waiting for pod log of container %s in pod %s/%s: %v: %v", container, namespace, pod, ctx.Err(), err)
 		}
 		time.Sleep(5 * time.Second)
