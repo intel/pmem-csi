@@ -21,6 +21,7 @@ import (
 	"github.com/intel/pmem-csi/pkg/version"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 	"github.com/intel/pmem-csi/test/e2e/operator/validate"
+	"github.com/intel/pmem-csi/test/e2e/pod"
 
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -38,7 +39,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/kubernetes/test/e2e/framework"
-	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	e2epv "k8s.io/kubernetes/test/e2e/framework/pv"
 	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -307,8 +307,13 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 					validateDriver(deployment)
 
-					output, err := e2epod.GetPodLogs(f.ClientSet, d.Namespace, deployment.Name+"-controller-0", "pmem-driver")
-					framework.ExpectNoError(err, "get pod logs for controller-0")
+					controllerPodName := deployment.Name + "-controller-0"
+					controllerContainerName := "pmem-driver"
+
+					deadline, cancel := context.WithTimeout(ctx, 5*time.Minute)
+					defer cancel()
+					output, err := pod.Logs(deadline, f.ClientSet, d.Namespace, controllerPodName, controllerContainerName)
+					framework.ExpectNoError(err, "get pod logs for running controller-0")
 
 					if format == api.LogFormatJSON {
 						Expect(output).To(MatchRegexp(`\{"ts":\d+.\d+,"msg":"Version:`), "PMEM-CSI driver output in JSON")
