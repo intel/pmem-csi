@@ -1,4 +1,4 @@
-apiVersion: admissionregistration.k8s.io/v1beta1
+apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
   name: pmem-csi-intel-com-hook
@@ -20,6 +20,8 @@ webhooks:
     # Nonetheless, failing pod scheduling entirely when PMEM-CSI is down
     # seems worse, so we let the scheduler continue despite failures.
     failurePolicy: Ignore
+    sideEffects: None
+    admissionReviewVersions: ["v1"]
     clientConfig:
       service:
         name: pmem-csi-intel-com-scheduler

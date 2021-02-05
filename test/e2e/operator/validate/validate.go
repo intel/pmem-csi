@@ -328,12 +328,12 @@ MutatingWebhookConfiguration:
         port: 443
     admissionReviewVersions:
     - v1beta1
-    matchPolicy: Exact
+    matchPolicy: Equivalent # default policy in v1
     reinvocationPolicy: Never
     rules:
       scope: "*"
     sideEffects: Unknown
-    timeoutSeconds: 30
+    timeoutSeconds: 10 # default timeout in v1
 `
 
 	err := yaml.UnmarshalStrict([]byte(defaultsYAML), &defaults)
