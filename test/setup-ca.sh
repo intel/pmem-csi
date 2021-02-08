@@ -16,10 +16,13 @@ if [ $cfssl_found -eq 0 ]; then
     exit 1
 fi
 
+CADIR=$(dirname ${CA})
+mkdir -p "${CADIR}"
 CA_CRT=$(realpath ${CA}.pem)
 CA_KEY=$(realpath ${CA}-key.pem)
 if ! [ -f ${CA_CRT} -a -f ${CA_KEY} ]; then
-  echo "Generating CA certificate ..."
+  echo "Generating CA certificate in $CADIR ..."
+  (cd "$CADIR" &&
   <<EOF cfssl gencert -initca - | cfssljson -bare $(basename $CA)
 {
     "CN": "pmem-ca",
@@ -30,6 +33,7 @@ if ! [ -f ${CA_CRT} -a -f ${CA_KEY} ]; then
     }
 }
 EOF
+)
 fi
 
 # Generate server and client certificates.
