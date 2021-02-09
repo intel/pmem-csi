@@ -356,7 +356,7 @@ func TestDeploymentController(t *testing.T) {
 			if wasUpdated {
 				rv = nil
 			}
-			_, err := validate.DriverDeployment(tc.c, testK8sVersion, testNamespace, *dep, rv)
+			_, err := validate.DriverDeployment(tc.ctx, tc.c, testK8sVersion, testNamespace, *dep, rv)
 			require.NoError(tc.t, err, "validate deployment")
 			validateEvents(tc, dep, expectedEvents)
 		}

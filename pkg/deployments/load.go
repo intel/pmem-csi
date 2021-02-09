@@ -8,6 +8,7 @@ package deployments
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -35,7 +36,9 @@ var driverNameRegex = regexp.MustCompile(`(?m)(name|app\.kubernetes.io/instance)
 // LoadAndCustomizeObjects reads all objects stored in a pmem-csi.yaml reference file
 // and updates them on-the-fly according to the deployment spec, namespace and name.
 func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMode,
-	namespace string, deployment api.PmemCSIDeployment) ([]unstructured.Unstructured, error) {
+	namespace string, deployment api.PmemCSIDeployment,
+	controllerCABundle []byte,
+) ([]unstructured.Unstructured, error) {
 
 	// Conceptually this function is similar to calling "kustomize" for
 	// our deployments. But because we controll the input, we can do some
@@ -143,7 +146,13 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 			if deployment.Spec.MutatePods == api.MutatePodsAlways {
 				failurePolicy = "Fail"
 			}
-			webhooks[0].(map[string]interface{})["failurePolicy"] = failurePolicy
+			webhook := webhooks[0].(map[string]interface{})
+			webhook["failurePolicy"] = failurePolicy
+			clientConfig := webhook["clientConfig"].(map[string]interface{})
+			if controllerCABundle != nil {
+				clientConfig["caBundle"] = base64.StdEncoding.EncodeToString(controllerCABundle)
+
+			}
 		case "Service":
 			switch obj.GetName() {
 			case deployment.SchedulerServiceName():

@@ -425,7 +425,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			// Ensure that the driver is running consistently
 			resourceVersions := map[string]string{}
 			Consistently(func() error {
-				final, err := validate.DriverDeployment(client, k8sver, d.Namespace, deployment, resourceVersions)
+				final, err := validate.DriverDeployment(ctx, client, k8sver, d.Namespace, deployment, resourceVersions)
 				if final {
 					framework.Failf("final error during driver validation after restarting: %v", err)
 				}
