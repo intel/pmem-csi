@@ -42,13 +42,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/clock"
-	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	clientexec "k8s.io/client-go/util/exec"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
-	testutils "k8s.io/kubernetes/test/utils"
 
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 
@@ -334,7 +332,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			restartPod := ""
 			v.namePrefix = "mount-volume"
 
-			pods, err := WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,
+			pods, err := e2epod.WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,
 				labels.Set{"app.kubernetes.io/name": "pmem-csi-node"}.AsSelector(), cluster.NumNodes()-1, time.Minute)
 			framework.ExpectNoError(err, "All node drivers are not ready")
 
@@ -367,7 +365,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 
 		It("capacity is restored after controller restart", func() {
 			By("Fetching pmem-csi-controller pod name")
-			pods, err := WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,
+			pods, err := e2epod.WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,
 				labels.Set{"app.kubernetes.io/name": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, time.Minute)
 			framework.ExpectNoError(err, "PMEM-CSI controller running with one replica")
 			controllerNode := pods.Items[0].Spec.NodeName
@@ -380,7 +378,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			rebooted = true
 			restartNode(f.ClientSet, controllerNode, sc)
 
-			_, err = WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,
+			_, err = e2epod.WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,
 				labels.Set{"app.kubernetes.io/name": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, 5*time.Minute)
 			framework.ExpectNoError(err, "PMEM-CSI controller running again with one replica")
 
@@ -1101,33 +1099,4 @@ sudo sh -c 'echo b > /proc/sysrq-trigger'`)
 		By("Node driver: Probe success")
 		return true
 	}, "5m", "2s").Should(Equal(true), "node driver not ready")
-}
-
-// This is a copy from framework/utils.go with the fix from https://github.com/kubernetes/kubernetes/pull/78687
-// TODO: update to Kubernetes 1.15 (assuming that PR gets merged in time for that) and remove this function.
-func WaitForPodsWithLabelRunningReady(c clientset.Interface, ns string, label labels.Selector, num int, timeout time.Duration) (pods *v1.PodList, err error) {
-	var current int
-	err = wait.Poll(2*time.Second, timeout,
-		func() (bool, error) {
-			pods, err = e2epod.WaitForPodsWithLabel(c, ns, label)
-			if err != nil {
-				framework.Logf("Failed to list pods: %v", err)
-				if testutils.IsRetryableAPIError(err) {
-					return false, nil
-				}
-				return false, err
-			}
-			current = 0
-			for _, pod := range pods.Items {
-				if flag, err := testutils.PodRunningReady(&pod); err == nil && flag == true {
-					current++
-				}
-			}
-			if current != num {
-				framework.Logf("Got %v pods running and ready, expect: %v", current, num)
-				return false, nil
-			}
-			return true, nil
-		})
-	return pods, err
 }
