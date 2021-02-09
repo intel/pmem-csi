@@ -529,6 +529,7 @@ spec:
         - --immediate-topology=false
         - --timeout=5m
         - --default-fstype=ext4
+        - --worker-threads=5
         - --metrics-address=:10011
         - -v=5
         env:
