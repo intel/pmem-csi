@@ -1047,6 +1047,10 @@ method calls, and PMEM-CSI:
 Name | Type | Explanation
 -----|------|------------
 `build_info` | gauge | A metric with a constant '1' value labeled by version.
+`scheduler_request_duration_seconds` | histogram | Latencies for PMEM-CSI scheduler HTTP requests by operation ("mutate", "filter", "status") and method ("post").
+`scheduler_in_flight_requests` | gauge | Currently pending PMEM-CSI scheduler HTTP requests.
+`scheduler_requests_total` | counter | Number of HTTP requests to the PMEM-CSI scheduler, regardless of operation and method.
+`scheduler_response_size_bytes` | histogram | Histogram of response sizes for PMEM-CSI scheduler requests, regardless of operation and method.
 `csi_[sidecar\|plugin]_operations_seconds` | histogram | gRPC call duration and error code, for sidecar to driver (aka plugin) communication.
 `go_*` | | [Go runtime information](https://github.com/prometheus/client_golang/blob/master/prometheus/go_collector.go)
 `pmem_amount_available` | gauge | Remaining amount of PMEM on the host that can be used for new volumes.
