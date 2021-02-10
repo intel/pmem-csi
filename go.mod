@@ -24,10 +24,12 @@ require (
 	github.com/stretchr/testify v1.6.1
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.16.0 // indirect
-	golang.org/x/net v0.0.0-20201110031124-69a78807bb2b
+	golang.org/x/net v0.0.0-20210119194325-5f4716e94777
 	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c
+	golang.org/x/text v0.3.5 // indirect
 	golang.org/x/tools v0.0.0-20200825202427-b303f430e36d // indirect
-	google.golang.org/grpc v1.29.1
+	google.golang.org/genproto v0.0.0-20210207032614-bba0dbe2a9ea // indirect
+	google.golang.org/grpc v1.35.0
 	gopkg.in/freddierice/go-losetup.v1 v1.0.0-20170407175016-fc9adea44124
 	gopkg.in/yaml.v2 v2.3.0
 	honnef.co/go/tools v0.0.1-2020.1.4 // indirect
