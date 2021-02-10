@@ -1349,6 +1349,7 @@ func (d *pmemCSIDeployment) getProvisionerContainer() corev1.Container {
 			// TODO (?): make this configurable?
 			"--timeout=5m",
 			"--default-fstype=ext4",
+			"--worker-threads=5",
 			fmt.Sprintf("--metrics-address=:%d", provisionerMetricsPort),
 		},
 		Env: []corev1.EnvVar{

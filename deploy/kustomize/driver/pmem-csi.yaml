@@ -318,6 +318,7 @@ spec:
         - --immediate-topology=false
         - --timeout=5m
         - --default-fstype=ext4 # see https://github.com/kubernetes-csi/external-provisioner/issues/328#issuecomment-714801581
+        - --worker-threads=5 # We don't need much concurrency inside a node.
         securityContext:
           readOnlyRootFilesystem: true
         volumeMounts:
