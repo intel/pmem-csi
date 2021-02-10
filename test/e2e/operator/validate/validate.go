@@ -9,10 +9,7 @@ SPDX-License-Identifier: Apache-2.0
 package validate
 
 import (
-	"bytes"
 	"context"
-	"crypto/md5"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -214,45 +211,6 @@ func createObject(gvk schema.GroupVersionKind, name, namespace string) unstructu
 	obj.SetNamespace(namespace)
 
 	return obj
-}
-
-func compareSecrets(actual unstructured.Unstructured, ca, key, crt []byte) (diffs []string) {
-	data := actual.Object["data"]
-	if data == nil {
-		return []string{fmt.Sprintf("%s: no data in secret", actual.GetName())}
-	}
-	fields := data.(map[string]interface{})
-	diffs = append(diffs, compareSecretField(actual.GetName(), fields, "ca.crt", ca)...)
-	diffs = append(diffs, compareSecretField(actual.GetName(), fields, "tls.key", key)...)
-	diffs = append(diffs, compareSecretField(actual.GetName(), fields, "tls.crt", crt)...)
-	return
-}
-
-func compareSecretField(name string, fields map[string]interface{}, fieldName string, expectedData []byte) []string {
-	field := fields[fieldName]
-	if field == nil {
-		return []string{fmt.Sprintf("secret %s does not contain data field %s", name, fieldName)}
-	}
-	actualData, err := base64.StdEncoding.DecodeString(field.(string))
-	if err != nil {
-		return []string{fmt.Sprintf("decoding secret %s field %s: %v", name, fieldName, err)}
-	}
-	if expectedData == nil {
-		// We only know that there should be some data, but not what it should be.
-		if len(actualData) == 0 {
-			return []string{fmt.Sprintf("secret %s contains empty data field %s", name, fieldName)}
-		}
-	} else {
-		if bytes.Compare(actualData, expectedData) != 0 {
-			return []string{fmt.Sprintf("secret %s, field %s: data mismatch: got %s, expected %s",
-				name, fieldName, summarizeData(actualData), summarizeData(expectedData))}
-		}
-	}
-	return nil
-}
-
-func summarizeData(data []byte) string {
-	return fmt.Sprintf("len %d, hash %x", len(data), md5.Sum(data))
 }
 
 // When we get an object back from the apiserver, some fields get populated with generated
