@@ -51,7 +51,7 @@ func TestLoadObjects(t *testing.T) {
 					Name: "pmem-csi.example.org",
 				},
 			}
-			objects, err = deployments.LoadAndCustomizeObjects(testCase.Kubernetes, testCase.DeviceMode, namespace, deployment)
+			objects, err = deployments.LoadAndCustomizeObjects(testCase.Kubernetes, testCase.DeviceMode, namespace, deployment, nil)
 			if assert.NoError(t, err, "load and customize yaml") {
 				assert.NotEmpty(t, objects, "have customized objects")
 

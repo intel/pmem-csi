@@ -25,8 +25,11 @@ import (
 	"github.com/intel/pmem-csi/pkg/deployments"
 	operatordeployment "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment"
 	"github.com/intel/pmem-csi/pkg/version"
+	apierrs "k8s.io/apimachinery/pkg/api/errors"
 
 	"gopkg.in/yaml.v2"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -56,7 +59,7 @@ func DriverDeploymentEventually(ctx context.Context, client client.Client, k8sve
 	// As it stands now, permanent differences will only be
 	// reported when the test times out.
 	ready := func() (final bool, err error) {
-		return DriverDeployment(client, k8sver, namespace, deployment, resourceVersions)
+		return DriverDeployment(ctx, client, k8sver, namespace, deployment, resourceVersions)
 	}
 	if final, err := ready(); err != nil {
 		if final {
@@ -106,7 +109,7 @@ func DriverDeploymentEventually(ctx context.Context, client client.Client, k8sve
 //
 // A final error is returned when observing a problem that is not going to go away,
 // like an unexpected update of an object.
-func DriverDeployment(client client.Client, k8sver version.Version, namespace string, deployment api.PmemCSIDeployment, resourceVersions map[string]string) (final bool, finalErr error) {
+func DriverDeployment(ctx context.Context, c client.Client, k8sver version.Version, namespace string, deployment api.PmemCSIDeployment, resourceVersions map[string]string) (final bool, finalErr error) {
 	if deployment.GetUID() == "" {
 		return true, errors.New("deployment not an object that was stored in the API server, no UID")
 	}
@@ -117,12 +120,36 @@ func DriverDeployment(client client.Client, k8sver version.Version, namespace st
 	(&deployment).EnsureDefaults(driverImage)
 
 	// Validate sub-objects. A sub-object is anything that has the deployment object as owner.
-	objects, err := listAllDeployedObjects(client, deployment, namespace)
+	objects, err := listAllDeployedObjects(ctx, c, deployment, namespace)
 	if err != nil {
 		return false, err
 	}
 
-	expectedObjects, err := deployments.LoadAndCustomizeObjects(k8sver, deployment.Spec.DeviceMode, namespace, deployment)
+	// Load secret if it exists. If it doesn't, we validate without it.
+	var controllerCABundle []byte
+	if deployment.Spec.ControllerTLSSecret != "" {
+		secret := &corev1.Secret{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "Secret",
+			},
+		}
+		objKey := client.ObjectKey{
+			Namespace: namespace,
+			Name:      deployment.Spec.ControllerTLSSecret,
+		}
+		if err := c.Get(ctx, objKey, secret); err != nil {
+			if !apierrs.IsNotFound(err) {
+				return false, err
+			}
+		} else {
+			if ca, ok := secret.Data[api.TLSSecretCA]; ok {
+				controllerCABundle = ca
+			}
+		}
+	}
+
+	expectedObjects, err := deployments.LoadAndCustomizeObjects(k8sver, deployment.Spec.DeviceMode, namespace, deployment, controllerCABundle)
 	if err != nil {
 		return true, fmt.Errorf("customize expected objects: %v", err)
 	}
@@ -323,7 +350,6 @@ CSIDriver:
 MutatingWebhookConfiguration:
   webhooks:
     clientConfig:
-      caBundle: ignore # content varies, correctness is validated during E2E testing
       service:
         port: 443
     admissionReviewVersions:
@@ -489,7 +515,7 @@ func prettyPrintObjectID(object unstructured.Unstructured) string {
 		object.GetNamespace())
 }
 
-func listAllDeployedObjects(c client.Client, deployment api.PmemCSIDeployment, namespace string) ([]unstructured.Unstructured, error) {
+func listAllDeployedObjects(ctx context.Context, c client.Client, deployment api.PmemCSIDeployment, namespace string) ([]unstructured.Unstructured, error) {
 	objects := []unstructured.Unstructured{}
 
 	for _, list := range operatordeployment.AllObjectLists() {
@@ -504,7 +530,7 @@ func listAllDeployedObjects(c client.Client, deployment api.PmemCSIDeployment, n
 		}
 		// Filtering by owner doesn't work, so we have to use brute-force and look at all
 		// objects.
-		if err := c.List(context.Background(), list, opts); err != nil {
+		if err := c.List(ctx, list, opts); err != nil {
 			return objects, fmt.Errorf("list %s: %v", list.GetObjectKind(), err)
 		}
 	outer:

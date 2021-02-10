@@ -134,7 +134,7 @@ func AllObjectLists() []*unstructured.UnstructuredList {
 }
 
 // pmemCSIDeployment represents the desired state of a PMEM-CSI driver
-// deployment.
+// deployment. Conditions in the embedded PmemCSIDeployment will get updated.
 type pmemCSIDeployment struct {
 	*api.PmemCSIDeployment
 	// operator's namespace used for creating sub-resources
@@ -148,33 +148,7 @@ type pmemCSIDeployment struct {
 // objects, extend also currentObjects above and the RBAC rules in
 // deploy/kustomize/operator/operator.yaml.
 func (d *pmemCSIDeployment) reconcile(ctx context.Context, r *ReconcileDeployment) error {
-
-	if err := d.EnsureDefaults(r.containerImage); err != nil {
-		return err
-	}
 	l := logger.Get(ctx).WithName("reconcile")
-
-	if d.Spec.ControllerTLSSecret != "" {
-		secret := &corev1.Secret{
-			TypeMeta: metav1.TypeMeta{
-				APIVersion: "v1",
-				Kind:       "Secret",
-			},
-		}
-		if err := r.client.Get(ctx,
-			client.ObjectKey{
-				Namespace: d.namespace,
-				Name:      d.Spec.ControllerTLSSecret},
-			secret); err != nil {
-			return fmt.Errorf("loading ControllerTLSSecret %s from namespace %s: %v", d.Spec.ControllerTLSSecret, d.namespace, err)
-		}
-		ca, ok := secret.Data[api.TLSSecretCA]
-		if !ok {
-			return fmt.Errorf("ControllerTLSSecret %s in namespace %s contains no %s", d.Spec.ControllerTLSSecret, d.namespace, api.TLSSecretCA)
-		}
-		d.controllerCABundle = ca
-	}
-
 	l.V(3).Info("start", "deployment", d.Name, "phase", d.Status.Phase)
 	var allObjects []apiruntime.Object
 	redeployAll := func() error {
@@ -820,6 +794,9 @@ func (d *pmemCSIDeployment) getMutatingWebhookConfig(hook *admissionregistration
 	}
 	path := "/pod/mutate"
 	none := admissionregistrationv1.SideEffectClassNone
+	if len(d.controllerCABundle) == 0 {
+		panic("controller CA bundle empty, should have been loaded")
+	}
 	hook.Webhooks = []admissionregistrationv1.MutatingWebhook{
 		{
 			// Name must be "fully-qualified" (i.e. with domain) but not unique, so

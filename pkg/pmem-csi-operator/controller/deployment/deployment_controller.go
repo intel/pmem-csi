@@ -125,7 +125,7 @@ func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error
 		// - check why "go test" does not cover this code
 		l.V(3).Info(what, "object", logger.KObjWithType(obj))
 		// Get the owned deployment
-		d, err := r.getDeploymentFor(obj)
+		d, err := r.getDeploymentFor(ctx, obj)
 		if err != nil {
 			l.V(3).Info("not owned by any deployment", "object", logger.KObjWithType(obj))
 			// The owner might have deleted already
@@ -318,8 +318,11 @@ func (r *ReconcileDeployment) Reconcile(ctx context.Context, request reconcile.R
 		l.V(3).Info("reconcile done", "duration", time.Since(startTime))
 	}()
 
-	d := &pmemCSIDeployment{dep, r.namespace, r.k8sVersion, []byte{}}
-	if err := d.reconcile(ctx, r); err != nil {
+	d, err := r.newDeployment(ctx, dep)
+	if err == nil {
+		err = d.reconcile(ctx, r)
+	}
+	if err != nil {
 		l.Error(err, "reconcile failed")
 		dep.Status.Phase = api.DeploymentPhaseFailed
 		dep.Status.Reason = err.Error()
@@ -408,21 +411,62 @@ func (r *ReconcileDeployment) cacheDeploymentStatus(name string, status api.Depl
 	}
 }
 
-func (r *ReconcileDeployment) getDeploymentFor(obj metav1.Object) (*pmemCSIDeployment, error) {
+func (r *ReconcileDeployment) getDeploymentFor(ctx context.Context, obj metav1.Object) (*pmemCSIDeployment, error) {
 	r.deploymentsMutex.Lock()
 	defer r.deploymentsMutex.Unlock()
 	for _, d := range r.deployments {
 		selfRef := d.GetOwnerReference()
 		if isOwnedBy(obj, &selfRef) {
-			deployment := d.DeepCopy()
-			if err := deployment.EnsureDefaults(r.containerImage); err != nil {
-				return nil, err
-			}
-			return &pmemCSIDeployment{deployment, r.namespace, r.k8sVersion, []byte{}}, nil
+			// Don't modify the existing deployment, clone it first.
+			d := d.DeepCopy()
+			return r.newDeployment(ctx, d)
 		}
 	}
 
 	return nil, fmt.Errorf("Not found")
+}
+
+// newDeployment prepares for object creation and will modify the PmemCSIDeployment.
+// Callers who don't want that need to clone it first.
+func (r *ReconcileDeployment) newDeployment(ctx context.Context, deployment *api.PmemCSIDeployment) (*pmemCSIDeployment, error) {
+	l := logger.Get(ctx).WithName("newDeployment")
+
+	if err := deployment.EnsureDefaults(r.containerImage); err != nil {
+		return nil, err
+	}
+
+	d := &pmemCSIDeployment{
+		PmemCSIDeployment: deployment,
+		namespace:         r.namespace,
+		k8sVersion:        r.k8sVersion,
+	}
+
+	if d.Spec.ControllerTLSSecret != "" {
+		secret := &corev1.Secret{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "Secret",
+			},
+		}
+		objKey := client.ObjectKey{
+			Namespace: d.namespace,
+			Name:      d.Spec.ControllerTLSSecret,
+		}
+		if err := r.client.Get(ctx, objKey, secret); err != nil {
+			return nil, fmt.Errorf("loading ControllerTLSSecret %s from namespace %s: %v", d.Spec.ControllerTLSSecret, d.namespace, err)
+		}
+		ca, ok := secret.Data[api.TLSSecretCA]
+		if !ok {
+			return nil, fmt.Errorf("ControllerTLSSecret %s in namespace %s contains no %s", d.Spec.ControllerTLSSecret, d.namespace, api.TLSSecretCA)
+		}
+		d.controllerCABundle = ca
+		if len(d.controllerCABundle) == 0 {
+			return nil, fmt.Errorf("ControllerTLSSecret %s in namespace %s contains empty %s", d.Spec.ControllerTLSSecret, d.namespace, api.TLSSecretCA)
+		}
+		l.V(3).Info("load controller TLS secret", "secret", objKey, "CAlength", len(d.controllerCABundle))
+	}
+
+	return d, nil
 }
 
 // containerImage returns container image name used by operator Pod
