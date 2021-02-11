@@ -26,6 +26,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
@@ -36,8 +37,8 @@ import (
 )
 
 // TestDynamicLateBindingProvisioning is a variant of k8s.io/kubernetes/test/e2e/storage/testsuites/provisioning.go
-// which works with late binding.
-func TestDynamicLateBindingProvisioning(client clientset.Interface, claim *v1.PersistentVolumeClaim, id string) {
+// which works with late and immediate binding and can be invoked in parallel with different IDs.
+func TestDynamicProvisioning(client clientset.Interface, claim *v1.PersistentVolumeClaim, mode storagev1.VolumeBindingMode, id string) {
 	var err error
 
 	By(fmt.Sprintf("%s: creating a claim", id))
@@ -52,8 +53,10 @@ func TestDynamicLateBindingProvisioning(client clientset.Interface, claim *v1.Pe
 		}
 	}()
 
-	// Schedule a pod, otherwise there's not going to be a PV.
-	PVWriteReadSingleNodeCheck(client, claim, id)
+	if mode == storagev1.VolumeBindingWaitForFirstConsumer {
+		// Schedule a pod, otherwise there's not going to be a PV.
+		PVWriteReadSingleNodeCheck(client, claim, id)
+	}
 
 	err = e2epv.WaitForPersistentVolumeClaimPhase(v1.ClaimBound, client, claim.Namespace, claim.Name, framework.Poll, framework.ClaimProvisionTimeout)
 	Expect(err).NotTo(HaveOccurred())

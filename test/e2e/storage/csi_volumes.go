@@ -45,8 +45,8 @@ import (
 )
 
 var (
-	numWorkers = flag.Int("pmem.latebinding.workers", 10, "number of worker creating volumes in parallel and thus also the maximum number of volumes at any time")
-	numVolumes = flag.Int("pmem.latebinding.volumes", 100, "number of total volumes to create")
+	numWorkers = flag.Int("pmem.binding.workers", 10, "number of worker creating volumes in parallel and thus also the maximum number of volumes at any time")
+	numVolumes = flag.Int("pmem.binding.volumes", 100, "number of total volumes to create")
 )
 
 var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
@@ -73,6 +73,7 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 
 	testsuites.DefineTestSuite(csiTestDriver, csiTestSuites)
 	DefineLateBindingTests(d)
+	DefineImmediateBindingTests(d)
 	DefineKataTests(d)
 })
 
@@ -130,7 +131,7 @@ func DefineLateBindingTests(d *deploy.Deployment) {
 		})
 
 		It("works", func() {
-			TestDynamicLateBindingProvisioning(f.ClientSet, &claim, "latebinding")
+			TestDynamicProvisioning(f.ClientSet, &claim, *sc.VolumeBindingMode, "latebinding")
 		})
 
 		It("unsets unsuitable selected node", func() {
@@ -149,7 +150,7 @@ func DefineLateBindingTests(d *deploy.Deployment) {
 				"volume.kubernetes.io/selected-node":            selectedNode,
 				"volume.beta.kubernetes.io/storage-provisioner": d.DriverName,
 			}
-			TestDynamicLateBindingProvisioning(f.ClientSet, &claim, "latebinding")
+			TestDynamicProvisioning(f.ClientSet, &claim, *sc.VolumeBindingMode, "latebinding")
 		})
 
 		It("stress test [Slow]", func() {
@@ -190,7 +191,7 @@ func DefineLateBindingTests(d *deploy.Deployment) {
 							return
 						}
 						id := fmt.Sprintf("worker-%d-volume-%d", i, volume)
-						TestDynamicLateBindingProvisioning(f.ClientSet, &claim, id)
+						TestDynamicProvisioning(f.ClientSet, &claim, *sc.VolumeBindingMode, id)
 					}
 				}()
 			}
