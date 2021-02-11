@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 	v1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -197,11 +198,11 @@ func WaitForPMEMDriver(c *Cluster, d *Deployment) (metricsURL string) {
 			}
 			version = *label.Value
 
-			// With the older, centralized provisioning we
-			// can also check that the controller knows
-			// about all nodes.
 			switch d.Version {
 			case "0.7", "0.8":
+				// With the older, centralized provisioning we
+				// can also check that the controller knows
+				// about all nodes.
 				pmemNodes, ok := metrics["pmem_nodes"]
 				if !ok {
 					return fmt.Errorf("expected pmem_nodes not found in metrics: %v", metrics)
@@ -214,6 +215,65 @@ func WaitForPMEMDriver(c *Cluster, d *Deployment) (metricsURL string) {
 				actualNodes := int(*nodesMetric.Gauge.Value)
 				if actualNodes != c.NumNodes()-1 {
 					return fmt.Errorf("only %d of %d nodes have registered", actualNodes, c.NumNodes()-1)
+				}
+			default:
+				// It is possible that we just
+				// (re)configured the mutating pod
+				// webhook. We must be sure that
+				// apiserver has adapted to that
+				// change. We test that by submitting
+				// a pod and checking that the webhook
+				// was called, which is visible in its
+				// metrics data since PMEM-CSI 0.9.0.
+				oldCount, err := findHistogramCount(metrics, "scheduler_request_duration_seconds", map[string]string{"handler": "mutate"})
+				if err != nil {
+					return nil
+				}
+
+				// Pods get validated after
+				// mutation. We can therefore submit
+				// an invalid pod that will be sent to
+				// our webhook without having to worry
+				// about it actually getting created.
+				pod := &v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "#&^^%$%@%!@$@$##% invalid name",
+					},
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{
+							{Name: "fake"},
+						},
+					},
+				}
+				_, err = c.cs.CoreV1().Pods("default").Create(deadline, pod, metav1.CreateOptions{})
+				if err == nil {
+					return fmt.Errorf("invalid pod with name %q got created unexpectedly", pod.Name)
+				}
+				if !apierrs.IsInvalid(err) {
+					return fmt.Errorf("expected 'Invalid' as error for pod creation, got: %v", err)
+				}
+
+				// Now check that the webhook was called.
+				resp, err := client.Get(metricsURL)
+				if err != nil {
+					return fmt.Errorf("get controller metrics: %v", err)
+				}
+				if resp.StatusCode != 200 {
+					body, _ := ioutil.ReadAll(resp.Body)
+					suffix := ""
+					if len(body) > 0 {
+						suffix = "\n" + string(body)
+					}
+					return fmt.Errorf("HTTP GET %s failed: %d%s", metricsURL, resp.StatusCode, suffix)
+				}
+				metrics, err := parser.TextToMetricFamilies(resp.Body)
+				if err != nil {
+					return fmt.Errorf("parse metrics response: %v", err)
+				}
+
+				newCount, err := findHistogramCount(metrics, "scheduler_request_duration_seconds", map[string]string{"handler": "mutate"})
+				if newCount == oldCount {
+					return fmt.Errorf("mutating webhook was not called for pod %q, request count still %d", pod.Name, oldCount)
 				}
 			}
 		}
@@ -336,6 +396,42 @@ func podIsReady(podStatus v1.PodStatus) bool {
 func driverHasRegistered(csiNode storagev1.CSINode, driverName string) bool {
 	for _, driver := range csiNode.Spec.Drivers {
 		if driver.Name == driverName {
+			return true
+		}
+	}
+	return false
+}
+
+func findHistogramCount(metrics map[string]*dto.MetricFamily, name string, labels map[string]string) (uint64, error) {
+	family, ok := metrics[name]
+	if !ok {
+		return 0, nil
+	}
+	for _, metric := range family.Metric {
+		if hasAllLabels(metric.Label, labels) {
+			if metric.Histogram == nil {
+				return 0, fmt.Errorf("expected a histogram for %s, got: %v", name, metric)
+			}
+			return metric.Histogram.GetSampleCount(), nil
+		}
+	}
+
+	return 0, nil
+}
+
+func hasAllLabels(actualLabels []*dto.LabelPair, requiredLabels map[string]string) bool {
+	for key, value := range requiredLabels {
+		if !hasLabel(actualLabels, key, value) {
+			return false
+		}
+	}
+	return true
+}
+
+func hasLabel(labels []*dto.LabelPair, key, value string) bool {
+	for _, label := range labels {
+		if label.GetName() == key &&
+			label.GetValue() == value {
 			return true
 		}
 	}

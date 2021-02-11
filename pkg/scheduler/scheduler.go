@@ -15,6 +15,8 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -37,15 +39,64 @@ type Capacity interface {
 	NodeCapacity(nodeName string) (int64, error)
 }
 
+var (
+	inFlightGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "scheduler_in_flight_requests",
+		Help: "A gauge of HTTP requests currently being served by the PMEM-CSI scheduler.",
+	})
+
+	counter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "scheduler_requests_total",
+			Help: "A counter for HTTP requests to the PMEM-CSI scheduler.",
+		},
+		[]string{"code", "method"},
+	)
+
+	// duration is partitioned by the HTTP method and handler.
+	duration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "scheduler_request_duration_seconds",
+			Help: "A histogram of latencies for PMEM-CSI scheduler HTTP requests.",
+		},
+		[]string{"handler", "method"},
+	)
+
+	// responseSize has no labels, making it a zero-dimensional
+	// ObserverVec.
+	responseSize = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "scheduler_response_size_bytes",
+			Help:    "A histogram of response sizes for PMEM-CSI scheduler requests.",
+			Buckets: []float64{200, 500, 900, 1500},
+		},
+		[]string{},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(inFlightGauge, counter, duration, responseSize)
+}
+
+func wrapHTTPHandler(handlerName string, handler http.HandlerFunc) http.HandlerFunc {
+	return promhttp.InstrumentHandlerDuration(
+		duration.MustCurryWith(prometheus.Labels{"handler": handlerName}),
+		promhttp.InstrumentHandlerCounter(counter,
+			promhttp.InstrumentHandlerResponseSize(responseSize, handler),
+		),
+	)
+}
+
 type scheduler struct {
 	driverName string
 	capacity   Capacity
 	clientSet  kubernetes.Interface
 	pvcLister  corelisters.PersistentVolumeClaimLister
 	scLister   storagelisters.StorageClassLister
-	podMutator http.Handler
 	decoder    *admission.Decoder
 	log        logr.Logger
+
+	instrumentedFilter, instrumentedStatus, instrumentedMutate http.HandlerFunc
 }
 
 func NewScheduler(
@@ -74,7 +125,11 @@ func NewScheduler(
 	s.decoder = decoder
 	webhook := webhook.Admission{Handler: s}
 	webhook.InjectLogger(s.log.WithName("webhook"))
-	s.podMutator = &webhook
+
+	s.instrumentedFilter = wrapHTTPHandler("filter", s.filter)
+	s.instrumentedStatus = wrapHTTPHandler("status", s.status)
+	s.instrumentedMutate = wrapHTTPHandler("mutate", webhook.ServeHTTP)
+
 	return s, nil
 }
 
@@ -89,14 +144,14 @@ func (s *scheduler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch r.URL.Path {
 	case "/filter":
-		s.filter(w, r)
+		s.instrumentedFilter(w, r)
 	// TODO (?): prioritize nodes similar to https://github.com/cybozu-go/topolvm/blob/master/scheduler/prioritize.go
 	// case "/prioritize":
 	// 	s.prioritize(w, r)
 	case "/status":
-		s.status(w, r)
+		s.instrumentedStatus(w, r)
 	case "/pod/mutate":
-		s.podMutator.ServeHTTP(w, r)
+		s.instrumentedMutate(w, r)
 	default:
 		http.Error(w, "not found", http.StatusNotFound)
 	}
