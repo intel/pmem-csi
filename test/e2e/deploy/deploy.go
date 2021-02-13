@@ -36,7 +36,7 @@ import (
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
-	"github.com/intel/pmem-csi/test/test-config"
+	testconfig "github.com/intel/pmem-csi/test/test-config"
 
 	"github.com/onsi/ginkgo"
 	"github.com/onsi/gomega"
@@ -474,6 +474,7 @@ func CheckPMEMDriver(c *Cluster, deployment *Deployment) {
 // statefulsets, driver info, storage classes, etc.).
 func RemoveObjects(c *Cluster, deployment *Deployment) error {
 	// Try repeatedly, in case that communication with the API server fails temporarily.
+	start := time.Now().Unix()
 	deadline, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	ticker := time.NewTicker(time.Second)
@@ -678,6 +679,7 @@ func RemoveObjects(c *Cluster, deployment *Deployment) error {
 		}
 
 		if done && success {
+			framework.Logf("Deleted deployment took '%v' seconds", start-time.Now().Unix())
 			return nil
 		}
 
