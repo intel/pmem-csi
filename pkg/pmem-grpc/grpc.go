@@ -142,12 +142,21 @@ func serverConfig(certPool *x509.CertPool, peerCert *tls.Certificate, peerName s
 				}
 			}
 
-			config := &tls.Config{
+			clientAuth := tls.RequireAndVerifyClientCert
+			if peerName == "" {
+				// NOTE: allow the clients(APIServer) with no certificate
+				// to connect to mutation webhook.
+				// In practice this authentication type should not be used.
+				clientAuth = tls.VerifyClientCertIfGiven
+			}
+
+			return &tls.Config{
 				MinVersion:    tls.VersionTLS12,
 				Renegotiation: tls.RenegotiateNever,
 				Certificates:  []tls.Certificate{*peerCert},
 				ClientCAs:     certPool,
 				CipherSuites:  ciphers,
+				ClientAuth:    clientAuth,
 				VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 					// Common name check when accepting a connection from a client.
 					if peerName == "" {
@@ -174,11 +183,7 @@ func serverConfig(certPool *x509.CertPool, peerCert *tls.Certificate, peerName s
 					}
 					return fmt.Errorf("certificate is not signed for %q hostname", peerName)
 				},
-			}
-			if peerName != "" {
-				config.ClientAuth = tls.RequireAndVerifyClientCert
-			}
-			return config, nil
+			}, nil
 		},
 	}
 }
