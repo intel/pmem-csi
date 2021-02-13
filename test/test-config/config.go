@@ -23,6 +23,7 @@ func Get(name string) (string, error) {
 	}
 	config := fmt.Sprintf("%s/test/test-config.sh", root)
 	cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf(`. '%s' && echo "$%s"`, config, name))
+	cmd.Dir = root
 	value, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("read %s from %s: %v (%s)", name, config, err, string(value))
