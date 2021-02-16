@@ -18,7 +18,7 @@ pipeline {
         /*
           Delay in seconds between dumping system statistics.
         */
-        LOGGING_SAMPLING_DELAY = "60"
+        LOGGING_SAMPLING_DELAY = "infinite"
 
         /*
           Pod names in the kube-system namespace for which
@@ -461,7 +461,7 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
         */
         sh " \
            loggers=; \
-           atexit () { set -x; kill \$loggers; killall sleep; }; \
+           atexit () { set -x; kill \$loggers ||true; killall sleep; }; \
            trap atexit EXIT; \
            mkdir -p build/reports && \
            if ${env.LOGGING_JOURNALCTL}; then sudo journalctl -f; fi & \
@@ -480,7 +480,7 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
                   ${env.BUILD_CONTAINER} \
                   bash -c 'set -x; \
                            loggers=; \
-                           atexit () { set -x; kill \$loggers; }; \
+                           atexit () { set -x; kill \$loggers ||true; }; \
                            trap atexit EXIT; \
                            make stop && \
                            make start && \
