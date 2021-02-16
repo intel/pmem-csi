@@ -453,15 +453,11 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
         up ourselves. "make stop" was hanging and waiting for these processes to
         exit even though there were from a different "docker exec" invocation.
 
-        The default QEMU cpu enables nested virtualization with "-cpu
-        host".  However, that fails on some Azure machines
-        (`qemu-system-x86_64: error: failed to set MSR 0x48b to
-        0x1582e00000000`,
-        https://www.mail-archive.com/qemu-devel@nongnu.org/msg665051.html),
+        The default QEMU cpu enables nested virtualization with "-cpu host".
+        However, that fails on some Azure machines:
+        `qemu-system-x86_64: error: failed to set MSR 0x48b to 0x1582e00000000`,
+        https://www.mail-archive.com/qemu-devel@nongnu.org/msg665051.html,
         so for now we disable VMX with -vmx.
-
-        TODO: test in parallel (on different nodes? single node didn't work,
-        https://github.com/intel/pmem-CSI/pull/309#issuecomment-504659383)
         */
         sh " \
            loggers=; \
