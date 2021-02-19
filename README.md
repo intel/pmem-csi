@@ -1,10 +1,10 @@
-# Introduction to PMEM-CSI for Kubernetes
+# Introduction to PMEM-CSI for Kubernetes\*
 
 Intel PMEM-CSI is a [CSI](https://github.com/container-storage-interface/spec)
 storage driver for container orchestrators like
 Kubernetes. It makes local persistent memory
 ([PMEM](https://pmem.io/)) available as a filesystem volume to
-container applications. It can currently utilize non-volatile memory
+container applications. Currently, PMEM-CSI can utilize non-volatile memory
 devices that can be controlled via the [libndctl utility
 library](https://github.com/pmem/ndctl). In this readme, we use
 *persistent memory* to refer to a non-volatile dual in-line memory
@@ -58,19 +58,19 @@ supported officially by upstream anymore.
 
 ## Feature status
 
-PMEM-CSI is under active development. New features get added
-continuously and old features may get removed. To minimize the impact
-of feature changes on production usage, the project is using the
+PMEM-CSI is under active development. New features are added
+continuously and old features may be removed. To minimize the impact
+of feature changes on production usage, the project uses the
 following approach:
 - New features are considered alpha while their API and usage are
-  still under discussion.
+  under discussion.
 - Stable features are supported and tested across up- and downgrades
   between all supported PMEM-CSI releases. Whether a release is still
   supported is documented in the release notes.
-- Alpha features may get removed at any time. Stable features will be
-  marked as deprecated first and then may get removed after half a
+- Alpha features may be removed at any time. Stable features will be
+  marked as deprecated first and then may be removed after half a
   year. Deprecations are announced in the release notes of the release
-  which deprecates the feature.
+  that deprecates the feature.
 
 The following table lists the features that are stable:
 
@@ -83,8 +83,8 @@ Feature | Introduced in
 [Raw block volumes](https://intel.github.io/pmem-csi/latest/docs/install.html#raw-block-volumes) | [v0.6.0](https://github.com/intel/pmem-csi/releases/tag/v0.6.0)
 [Capacity-aware pod scheduling](https://intel.github.io/pmem-csi/latest/docs/design.html#capacity-aware-pod-scheduling) | [v0.7.0](https://github.com/intel/pmem-csi/releases/tag/v0.7.0)
 
-Release notes are prepared only for major new releases (like v0.6.0)
-but not for automatic updates (like v0.6.1). For more information on
+Release notes are prepared only for major new releases (such as v0.6.0)
+but not for automatic updates (such as v0.6.1). For more information on
 releases, see [release
 management](docs/DEVELOPMENT.md#release-management).
 
@@ -97,9 +97,9 @@ Click the image to watch the animated demo on asciinema.org:
 ## License
 
 All of the source code required to build PMEM-CSI is available under
-Open Source licenses.  The source code files identify external Go
-modules used. Binaries are distributed as container images on
-DockerHub. Those images contain license texts under
+Open Source licenses. The source code files identify the external Go
+modules that are used. Binaries are distributed as container images on
+Docker\* Hub. Those images contain license texts under
 `/usr/local/share/package-licenses` and source code under
 `/usr/local/share/package-sources`.
 
