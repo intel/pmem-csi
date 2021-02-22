@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 
@@ -44,15 +45,29 @@ func GetHostVolumes(d *Deployment) map[string][]string {
 	// script appears to be "no such file".
 	for worker := 1; ; worker++ {
 		sshcmd := fmt.Sprintf("%s/_work/%s/ssh.%d", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"), worker)
-		ssh := exec.Command(sshcmd, cmd)
-		// Intentional Output instead of CombinedOutput to dismiss warnings from stderr.
-		// lvs may emit lvmetad-related WARNING msg which can't be silenced using -q option.
-		out, err := ssh.Output()
-		if err != nil && os.IsNotExist(err) {
+		if _, err := os.Stat(sshcmd); err == nil {
+			i := 0
+			for {
+				ssh := exec.Command(sshcmd, cmd)
+				// Intentional Output instead of CombinedOutput to dismiss warnings from stderr.
+				// lvs may emit lvmetad-related WARNING msg which can't be silenced using -q option.
+				out, err := ssh.Output()
+				if err != nil {
+					if i >= 3 {
+						ginkgo.Fail(fmt.Sprintf("repeated ssh attempts to node %d failed: %v", worker, err.Error()))
+					}
+					ginkgo.By(fmt.Sprintf("ssh attempt No.%d to node %d failed: %v", i, worker, err.Error()))
+					time.Sleep(10 * time.Second)
+				} else {
+					buf := fmt.Sprintf("%s on Node %d", hdr, worker)
+					result[buf] = strings.Split(strings.TrimSpace(string(out)), "\n")
+					break
+				}
+			}
+		} else {
+			// ssh wrapper does not exist: all nodes handled.
 			break
 		}
-		buf := fmt.Sprintf("%s on Node %d", hdr, worker)
-		result[buf] = strings.Split(strings.TrimSpace(string(out)), "\n")
 	}
 	return result
 }
