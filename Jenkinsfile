@@ -18,7 +18,7 @@ pipeline {
         /*
           Delay in seconds between dumping system statistics.
         */
-        LOGGING_SAMPLING_DELAY = "60"
+        LOGGING_SAMPLING_DELAY = "infinite"
 
         /*
           Pod names in the kube-system namespace for which
@@ -453,19 +453,15 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
         up ourselves. "make stop" was hanging and waiting for these processes to
         exit even though there were from a different "docker exec" invocation.
 
-        The default QEMU cpu enables nested virtualization with "-cpu
-        host".  However, that fails on some Azure machines
-        (`qemu-system-x86_64: error: failed to set MSR 0x48b to
-        0x1582e00000000`,
-        https://www.mail-archive.com/qemu-devel@nongnu.org/msg665051.html),
+        The default QEMU cpu enables nested virtualization with "-cpu host".
+        However, that fails on some Azure machines:
+        `qemu-system-x86_64: error: failed to set MSR 0x48b to 0x1582e00000000`,
+        https://www.mail-archive.com/qemu-devel@nongnu.org/msg665051.html,
         so for now we disable VMX with -vmx.
-
-        TODO: test in parallel (on different nodes? single node didn't work,
-        https://github.com/intel/pmem-CSI/pull/309#issuecomment-504659383)
         */
         sh " \
            loggers=; \
-           atexit () { set -x; kill \$loggers; killall sleep; }; \
+           atexit () { set -x; kill \$loggers ||true; killall sleep; }; \
            trap atexit EXIT; \
            mkdir -p build/reports && \
            if ${env.LOGGING_JOURNALCTL}; then sudo journalctl -f; fi & \
@@ -484,7 +480,7 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
                   ${env.BUILD_CONTAINER} \
                   bash -c 'set -x; \
                            loggers=; \
-                           atexit () { set -x; kill \$loggers; }; \
+                           atexit () { set -x; kill \$loggers ||true; }; \
                            trap atexit EXIT; \
                            make stop && \
                            make start && \
@@ -509,12 +505,12 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
                            testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}' | sed -e s/--*/-/g | tr . _ ) && \
                            make test_e2e TEST_E2E_REPORT_DIR=${WORKSPACE}/build/reports.tmp/\$testrun \
                                          TEST_E2E_SKIP=\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]@${skipIfPR}; fi) \
-                           ' \
+                           ' |tee joblog-${BUILD_TAG}-test-${kubernetesVersion}.log |egrep 'Passed|FAIL:|^ERROR' 2>&1 \
            "
     } catch (exc) {
-        echo "Handling exception, get pod state and kubelet logs:"
-        sh "_work/${env.CLUSTER}/ssh.0 kubectl get pods --all-namespaces -o wide"
-        sh "for cmd in `ls _work/${env.CLUSTER}/ssh.*`; do \$cmd sudo journalctl -u kubelet; done"
+        echo "Handling exception, writing pod state and kubelet logs into joblog-${BUILD_TAG}-kubeletlogs-${kubernetesVersion}.log"
+        sh "_work/${env.CLUSTER}/ssh.0 kubectl get pods --all-namespaces -o wide > joblog-${BUILD_TAG}-kubeletlogs-${kubernetesVersion}.log"
+        sh "for cmd in `ls _work/${env.CLUSTER}/ssh.*`; do \$cmd sudo journalctl -u kubelet > joblog-${BUILD_TAG}-kubeletlogs-${kubernetesVersion}.log; done"
         // regular error handling
         throw exc
     } finally {
@@ -544,5 +540,6 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
                fi
            done'''
         junit 'build/reports/**/*.xml'
+        archiveArtifacts('**/joblog-*')
     }
 }
