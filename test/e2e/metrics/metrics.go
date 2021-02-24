@@ -73,65 +73,73 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 		Expect(pods.Items).NotTo(BeEmpty(), "at least one socat pod should be running")
 		socatPod := socatPods.Items[0]
 
-		numPods := 0
-		for _, pod := range pods.Items {
-			if pod.Annotations["pmem-csi.intel.com/scrape"] != "containers" {
-				continue
-			}
-			numPods++
+		test := func() {
+			numPods := 0
+			for _, pod := range pods.Items {
+				if pod.Annotations["pmem-csi.intel.com/scrape"] != "containers" {
+					continue
+				}
+				numPods++
 
-			numPorts := 0
-			for _, container := range pod.Spec.Containers {
-				for _, port := range container.Ports {
-					if port.Name == "metrics" {
-						numPorts++
+				numPorts := 0
+				for _, container := range pod.Spec.Containers {
+					for _, port := range container.Ports {
+						if port.Name == "metrics" {
+							numPorts++
 
-						ip := pod.Status.PodIP
-						portNum := port.ContainerPort
-						// We use HTTP 1.0 to prevent the server from sending the response in chunks.
-						// That way we don't need to decode the response...
-						request := fmt.Sprintf(`GET /metrics HTTP/1.0
+							ip := pod.Status.PodIP
+							portNum := port.ContainerPort
+							Expect(ip).ToNot(BeEmpty(), "have pod IP")
+							Expect(portNum).ToNot(Equal(0), "have container port")
+
+							// We use HTTP 1.0 to prevent the server from sending the response in chunks.
+							// That way we don't need to decode the response...
+							request := fmt.Sprintf(`GET /metrics HTTP/1.0
 Host: %s:%d
 User-Agent: e2e/1.0
 Accept: */*
 
 `, ip, portNum)
-						options := framework.ExecOptions{
-							Command: []string{
-								"socat",
-								"STDIO",
-								fmt.Sprintf("TCP:%s:%d", ip, portNum),
-							},
-							Namespace:     socatPod.Namespace,
-							PodName:       socatPod.Name,
-							Stdin:         bytes.NewBufferString(request),
-							CaptureStdout: true,
-							CaptureStderr: true,
-						}
-						stdout, stderr, err := f.ExecWithOptions(options)
-						framework.ExpectNoError(err, "command failed in namespace %s, pod %s:\nstderr:\n%s\nstdout:%s\n",
-							socatPod.Namespace, socatPod.Name, stderr, stdout)
-						name := pod.Name + "/" + container.Name
-						if strings.HasPrefix(container.Name, "pmem") {
-							Expect(stdout).To(ContainSubstring("go_threads "), name)
-							Expect(stdout).To(ContainSubstring("process_open_fds "), name)
-							if !strings.Contains(pod.Name, "controller") {
-								// Only the node driver implements CSI and manages volumes.
-								Expect(stdout).To(ContainSubstring("csi_plugin_operations_seconds "), name)
-								Expect(stdout).To(ContainSubstring("pmem_amount_available "), name)
-								Expect(stdout).To(ContainSubstring("pmem_amount_managed "), name)
-								Expect(stdout).To(ContainSubstring("pmem_amount_max_volume_size "), name)
-								Expect(stdout).To(ContainSubstring("pmem_amount_total "), name)
+							options := framework.ExecOptions{
+								Command: []string{
+									"socat",
+									"STDIO",
+									fmt.Sprintf("TCP:%s:%d", ip, portNum),
+								},
+								Namespace:     socatPod.Namespace,
+								PodName:       socatPod.Name,
+								Stdin:         bytes.NewBufferString(request),
+								CaptureStdout: true,
+								CaptureStderr: true,
 							}
-						} else {
-							Expect(stdout).To(ContainSubstring("csi_sidecar_operations_seconds "), name)
+							stdout, stderr, err := f.ExecWithOptions(options)
+							framework.ExpectNoError(err, "command failed in namespace %s, pod %s:\nstderr:\n%s\nstdout:%s\n",
+								socatPod.Namespace, socatPod.Name, stderr, stdout)
+							name := pod.Name + "/" + container.Name
+							if strings.HasPrefix(container.Name, "pmem") {
+								Expect(stdout).To(ContainSubstring("go_threads "), name)
+								Expect(stdout).To(ContainSubstring("process_open_fds "), name)
+								if !strings.Contains(pod.Name, "controller") {
+									// Only the node driver implements CSI and manages volumes.
+									Expect(stdout).To(ContainSubstring("csi_plugin_operations_seconds "), name)
+									Expect(stdout).To(ContainSubstring("pmem_amount_available "), name)
+									Expect(stdout).To(ContainSubstring("pmem_amount_managed "), name)
+									Expect(stdout).To(ContainSubstring("pmem_amount_max_volume_size "), name)
+									Expect(stdout).To(ContainSubstring("pmem_amount_total "), name)
+								}
+							} else {
+								Expect(stdout).To(ContainSubstring("csi_sidecar_operations_seconds "), name)
+							}
 						}
 					}
 				}
+				Expect(numPorts).NotTo(Equal(0), "at least one container should have a 'metrics' port")
 			}
-			Expect(numPorts).NotTo(Equal(0), "at least one container should have a 'metrics' port")
+			Expect(numPods).NotTo(Equal(0), "at least one container should have a 'metrics' port")
 		}
-		Expect(numPods).NotTo(Equal(0), "at least one pod should have a 'pmem-csi.intel.com/scrape: containers' annotation")
+		Eventually(func() string {
+			return strings.Join(InterceptGomegaFailures(test), "\n")
+		}, "10s", "1s").Should(BeEmpty())
 	})
 
 	It("rejects large headers", func() {
