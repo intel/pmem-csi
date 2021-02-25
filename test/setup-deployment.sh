@@ -197,9 +197,6 @@ EOF
 - op: replace
   path: /webhooks/0/clientConfig/service/namespace
   value: ${TEST_DRIVER_NAMESPACE}
-- op: replace
-  path: /webhooks/0/failurePolicy
-  value: Fail # This is not the default anymore in PMEM-CSI, but for testing we want it.
 EOF
                 ;;
         esac
