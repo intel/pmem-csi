@@ -461,7 +461,7 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
         */
         sh " \
            loggers=; \
-           atexit () { set -x; kill \$loggers ||true; killall sleep; }; \
+           atexit () { set -x; kill \$loggers ||true; killall sleep ||true; }; \
            trap atexit EXIT; \
            mkdir -p build/reports && \
            if ${env.LOGGING_JOURNALCTL}; then sudo journalctl -f; fi & \
