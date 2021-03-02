@@ -1288,6 +1288,10 @@ func (d *pmemCSIDeployment) getNodeDriverContainer() corev1.Container {
 				MountPath: "/sys",
 			},
 			{
+				Name:      "sys-dir",
+				MountPath: "/host-sys",
+			},
+			{
 				Name:      "socket-dir",
 				MountPath: "/csi",
 			},
