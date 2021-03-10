@@ -18,7 +18,7 @@ pipeline {
         /*
           Delay in seconds between dumping system statistics.
         */
-        LOGGING_SAMPLING_DELAY = "infinite"
+        LOGGING_SAMPLING_DELAY = "infinity"
 
         /*
           Pod names in the kube-system namespace for which
