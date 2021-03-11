@@ -262,10 +262,8 @@ const (
 
 	// The sidecar versions must be kept in sync with the
 	// deploy/kustomize YAML files!
-
-	// TODO: use released image
-	defaultProvisionerImageName = "gcr.io/k8s-staging-sig-storage/csi-provisioner"
-	defaultProvisionerImageTag  = "canary"
+	defaultProvisionerImageName = "k8s.gcr.io/sig-storage/csi-provisioner"
+	defaultProvisionerImageTag  = "v2.1.1"
 	// DefaultProvisionerImage default external provisioner image to use
 	DefaultProvisionerImage = defaultProvisionerImageName + ":" + defaultProvisionerImageTag
 

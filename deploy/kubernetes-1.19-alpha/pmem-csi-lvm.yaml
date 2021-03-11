@@ -506,7 +506,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: gcr.io/k8s-staging-sig-storage/csi-provisioner:canary
+        image: k8s.gcr.io/sig-storage/csi-provisioner:v2.1.1
         imagePullPolicy: IfNotPresent
         name: external-provisioner
         ports:
