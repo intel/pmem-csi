@@ -20,7 +20,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	storagev1beta1 "k8s.io/api/storage/v1beta1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -57,7 +57,7 @@ func typeMeta(gv schema.GroupVersion, kind string) metav1.TypeMeta {
 var currentObjects = []client.Object{
 	&rbacv1.ClusterRole{TypeMeta: typeMeta(rbacv1.SchemeGroupVersion, "ClusterRole")},
 	&rbacv1.ClusterRoleBinding{TypeMeta: typeMeta(rbacv1.SchemeGroupVersion, "ClusterRoleBinding")},
-	&storagev1beta1.CSIDriver{TypeMeta: typeMeta(storagev1beta1.SchemeGroupVersion, "CSIDriver")},
+	&storagev1.CSIDriver{TypeMeta: typeMeta(storagev1.SchemeGroupVersion, "CSIDriver")},
 	&appsv1.DaemonSet{TypeMeta: typeMeta(appsv1.SchemeGroupVersion, "DaemonSet")},
 	&rbacv1.Role{TypeMeta: typeMeta(rbacv1.SchemeGroupVersion, "Role")},
 	&rbacv1.RoleBinding{TypeMeta: typeMeta(rbacv1.SchemeGroupVersion, "RoleBinding")},
@@ -74,8 +74,8 @@ func cloneObject(from client.Object) (client.Object, error) {
 		return t.DeepCopyObject().(*rbacv1.ClusterRole), nil
 	case *rbacv1.ClusterRoleBinding:
 		return t.DeepCopyObject().(*rbacv1.ClusterRoleBinding), nil
-	case *storagev1beta1.CSIDriver:
-		return t.DeepCopyObject().(*storagev1beta1.CSIDriver), nil
+	case *storagev1.CSIDriver:
+		return t.DeepCopyObject().(*storagev1.CSIDriver), nil
 	case *appsv1.DaemonSet:
 		return t.DeepCopyObject().(*appsv1.DaemonSet), nil
 	case *rbacv1.Role:
@@ -393,15 +393,15 @@ var subObjectHandlers = map[string]redeployObject{
 		},
 	},
 	"CSIDriver": {
-		objType: reflect.TypeOf(&storagev1beta1.CSIDriver{}),
+		objType: reflect.TypeOf(&storagev1.CSIDriver{}),
 		object: func(d *pmemCSIDeployment) client.Object {
-			return &storagev1beta1.CSIDriver{
-				TypeMeta:   metav1.TypeMeta{Kind: "CSIDriver", APIVersion: "storage.k8s.io/v1beta1"},
+			return &storagev1.CSIDriver{
+				TypeMeta:   metav1.TypeMeta{Kind: "CSIDriver", APIVersion: "storage.k8s.io/v1"},
 				ObjectMeta: d.getObjectMeta(d.CSIDriverName(), true),
 			}
 		},
 		modify: func(d *pmemCSIDeployment, o client.Object) error {
-			d.getCSIDriver(o.(*storagev1beta1.CSIDriver))
+			d.getCSIDriver(o.(*storagev1.CSIDriver))
 			return nil
 		},
 	},
@@ -662,20 +662,20 @@ func (d *pmemCSIDeployment) deleteObsoleteObjects(ctx context.Context, r *Reconc
 	return nil
 }
 
-func (d *pmemCSIDeployment) getCSIDriver(csiDriver *storagev1beta1.CSIDriver) {
+func (d *pmemCSIDeployment) getCSIDriver(csiDriver *storagev1.CSIDriver) {
 	attachRequired := false
 	podInfoOnMount := true
 
-	csiDriver.Spec = storagev1beta1.CSIDriverSpec{
+	csiDriver.Spec = storagev1.CSIDriverSpec{
 		AttachRequired: &attachRequired,
 		PodInfoOnMount: &podInfoOnMount,
 	}
 
 	// Volume lifecycle modes are supported only after k8s v1.16
 	if d.k8sVersion.Compare(1, 16) >= 0 {
-		csiDriver.Spec.VolumeLifecycleModes = []storagev1beta1.VolumeLifecycleMode{
-			storagev1beta1.VolumeLifecyclePersistent,
-			storagev1beta1.VolumeLifecycleEphemeral,
+		csiDriver.Spec.VolumeLifecycleModes = []storagev1.VolumeLifecycleMode{
+			storagev1.VolumeLifecyclePersistent,
+			storagev1.VolumeLifecycleEphemeral,
 		}
 	}
 }

@@ -29,7 +29,7 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/operator/validate"
 
 	corev1 "k8s.io/api/core/v1"
-	storagev1beta1 "k8s.io/api/storage/v1beta1"
+	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -203,7 +203,7 @@ func deleteDeployment(c client.Client, name, ns string) error {
 	// This is supposed to handle by Kubernetes grabage collector
 	// but couldn't provided by fake client the tets are using
 	//
-	driver := &storagev1beta1.CSIDriver{
+	driver := &storagev1.CSIDriver{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: dep.Name,
 		},
@@ -370,10 +370,10 @@ func TestDeploymentController(t *testing.T) {
 		}
 
 		cases := map[string]pmemDeployment{
-			"deployment with defaults": pmemDeployment{
+			"deployment with defaults": {
 				name: "test-deployment",
 			},
-			"deployment with explicit values": pmemDeployment{
+			"deployment with explicit values": {
 				name:             "test-deployment",
 				image:            "test-driver:v0.0.0",
 				provisionerImage: "test-provisioner-image:v0.0.0",
@@ -387,54 +387,54 @@ func TestDeploymentController(t *testing.T) {
 				nodeMemory:       "500Mi",
 				kubeletDir:       "/some/directory",
 			},
-			"invalid device mode": pmemDeployment{
+			"invalid device mode": {
 				name:          "test-driver-modes",
 				deviceMode:    "foobar",
 				expectFailure: true,
 			},
-			"LVM mode": pmemDeployment{
+			"LVM mode": {
 				name:       "test-driver-modes",
 				deviceMode: "lvm",
 			},
-			"direct mode": pmemDeployment{
+			"direct mode": {
 				name:       "test-driver-modes",
 				deviceMode: "direct",
 			},
-			"with controller, no secret": pmemDeployment{
+			"with controller, no secret": {
 				name:                "test-controller",
 				controllerTLSSecret: "controller-secret",
 				expectFailure:       true,
 			},
-			"with controller, wrong secret content": pmemDeployment{
+			"with controller, wrong secret content": {
 				name:                "test-controller",
 				controllerTLSSecret: "controller-secret",
 				objects:             []runtime.Object{createSecret("controller-secret", testNamespace, nil)},
 				expectFailure:       true,
 			},
-			"with controller, secret okay": pmemDeployment{
+			"with controller, secret okay": {
 				name:                "test-controller",
 				controllerTLSSecret: "controller-secret",
 				objects:             []runtime.Object{createSecret("controller-secret", testNamespace, dataOkay)},
 			},
-			"controller, no mutate": pmemDeployment{
+			"controller, no mutate": {
 				name:                "test-controller",
 				controllerTLSSecret: "controller-secret",
 				mutatePods:          api.MutatePodsNever,
 				objects:             []runtime.Object{createSecret("controller-secret", testNamespace, dataOkay)},
 			},
-			"controller, try mutate": pmemDeployment{
+			"controller, try mutate": {
 				name:                "test-controller",
 				controllerTLSSecret: "controller-secret",
 				mutatePods:          api.MutatePodsTry,
 				objects:             []runtime.Object{createSecret("controller-secret", testNamespace, dataOkay)},
 			},
-			"controller, always mutate": pmemDeployment{
+			"controller, always mutate": {
 				name:                "test-controller",
 				controllerTLSSecret: "controller-secret",
 				mutatePods:          api.MutatePodsAlways,
 				objects:             []runtime.Object{createSecret("controller-secret", testNamespace, dataOkay)},
 			},
-			"controller, port 31000": pmemDeployment{
+			"controller, port 31000": {
 				name:                "test-controller",
 				controllerTLSSecret: "controller-secret",
 				schedulerNodePort:   31000,
