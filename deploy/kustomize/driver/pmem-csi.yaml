@@ -317,7 +317,7 @@ spec:
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
       - name: external-provisioner
-        image: gcr.io/k8s-staging-sig-storage/csi-provisioner:canary
+        image: k8s.gcr.io/sig-storage/csi-provisioner:v2.1.X
         imagePullPolicy: IfNotPresent
         args:
         - -v=3
