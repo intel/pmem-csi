@@ -33,7 +33,7 @@ versions:
 | 1.14               |                                | unsupported <sup>2</sup>
 | 1.15               | CSIInlineVolume                | unsupported <sup>3</sup>
 | 1.16               |                                | unsupported <sup>4</sup>
-| 1.17               |                                | supported
+| 1.17               |                                | unsupported <sup>5</sup>
 | 1.18               |                                | supported
 | 1.19               |                                | supported
 | 1.20               |                                | supported
@@ -56,6 +56,8 @@ Not supported officially by upstream anymore.
 [external-provisioner](https://github.com/kubernetes-csi/external-provisioner/)
 2.0.0 because support for the v1beta CSI APIs was removed. Also not
 supported officially by upstream anymore.
+
+<sup>5</sup> Kubernetes 1.17 uses deprecated beta storage APIs.
 
 ## Feature status
 

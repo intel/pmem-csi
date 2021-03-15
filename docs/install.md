@@ -472,10 +472,10 @@ For each Kubernetes version, four different deployment variants are provided:
    - `testing`: the variants with `testing` in the name enable debugging
      features and shouldn't be used in production.
 
-For example, to deploy for production with LVM device mode onto Kubernetes 1.17, use:
+For example, to deploy for production with LVM device mode onto Kubernetes 1.18, use:
 
 ``` console
-$ kubectl create -f deploy/kubernetes-1.17/pmem-csi-lvm.yaml
+$ kubectl create -f deploy/kubernetes-1.18/pmem-csi-lvm.yaml
 ```
 
 The PMEM-CSI [scheduler extender](design.md#scheduler-extender) and
@@ -495,7 +495,7 @@ for `kubectl kustomize`. For example:
      $ cat >my-pmem-csi-deployment/kustomization.yaml <<EOF
      namespace: pmem-driver
      bases:
-       - ../deploy/kubernetes-1.17/lvm
+       - ../deploy/kubernetes-1.18/lvm
      EOF
      $ kubectl create --kustomize my-pmem-csi-deployment
      ```
@@ -506,7 +506,7 @@ for `kubectl kustomize`. For example:
      $ mkdir -p my-pmem-csi-deployment
      $ cat >my-pmem-csi-deployment/kustomization.yaml <<EOF
      bases:
-       - ../deploy/kubernetes-1.17/lvm
+       - ../deploy/kubernetes-1.18/lvm
      patchesJson6902:
        - target:
            group: apps

@@ -212,32 +212,6 @@ pipeline {
                         TestInVM("fedora-1.18", "fedora", "", "1.18", "")
                     }
                 }
-                stage('1.17') {
-                    options {
-                        timeout(time: 540, unit: "MINUTES")
-                    }
-                    agent {
-                        label "pmem-csi"
-                    }
-                    steps {
-                        TestInVM("fedora-1.17", "fedora", "", "1.17", "Top.Level..[[:alpha:]]*-testing[[:space:]]")
-                    }
-                }
-
-                // Disabled because of stability issues:
-                // - https://github.com/clearlinux/distribution/issues/2007
-                // - https://github.com/clearlinux/distribution/issues/1980
-                // stage('Clear Linux, 1.17') {
-                //     options {
-                //         timeout(time: 240, unit: "MINUTES")
-                //     }
-                //     agent {
-                //         label "pmem-csi"
-                //     }
-                //     steps {
-                //         TestInVM("clear-1.17", "clear", "${env.CLEAR_LINUX_VERSION_1_17}", "",  "Top.Level..[[:alpha:]]*-testing[[:space:]]")
-                //     }
-                // }
             }
         }
 
