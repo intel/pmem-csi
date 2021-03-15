@@ -550,7 +550,7 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
                     diff $i build/reports/$testrun.xml || true
                fi
            done'''
-        junit 'build/reports/**/*.xml'
         archiveArtifacts('**/joblog-*')
+        junit 'build/reports/**/*.xml'
     }
 }
