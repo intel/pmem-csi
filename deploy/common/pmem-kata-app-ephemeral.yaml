@@ -11,7 +11,7 @@ spec:
     katacontainers.io/kata-runtime: "true"
   containers:
     - name: my-frontend
-      image: intel/pmem-csi-driver-test:canary
+      image: intel/pmem-csi-driver-test:v0.9.0
       command: [ "sleep", "100000" ]
       volumeMounts:
       - mountPath: "/data"
