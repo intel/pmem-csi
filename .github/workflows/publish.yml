@@ -43,6 +43,26 @@ jobs:
         rm -rf _work/venv
         make vhtml
         mv _output/html $HOME/output/0.7
+    - uses: actions/checkout@v2
+      with:
+        ref: release-0.8
+    - name: Build release-0.8
+      run: |
+        GITHUB_SHA=$(git rev-parse HEAD)
+        export GITHUB_SHA
+        rm -rf _work/venv
+        make vhtml
+        mv _output/html $HOME/output/0.8
+    - uses: actions/checkout@v2
+      with:
+        ref: release-0.9
+    - name: Build release-0.9
+      run: |
+        GITHUB_SHA=$(git rev-parse HEAD)
+        export GITHUB_SHA
+        rm -rf _work/venv
+        make vhtml
+        mv _output/html $HOME/output/0.9
     - name: Deploy the docs
       run: |
         cd $HOME/output
