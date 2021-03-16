@@ -58,14 +58,20 @@ installation by name, which indirectly determines the device mode. A
 storage class also chooses which filesystem is used (xfs or ext4) and
 enables [Kata Containers support](#kata-containers-support).
 
-It is recommended that storage classes use `allowedTopologies` as in
-the [`pmem-storageclass.yaml`](/deploy/kustomize/storageclass/pmem-storageclass.yaml)
-to ensure that pods with volumes that use late binding land on a node
-where the driver is available.
-
 Optionally, the administrator can enable [the scheduler
 extensions](#enable-scheduler-extensions) (recommended) and monitoring
 of resource usage via the [metrics support](#metrics-support).
+
+It is [recommended](./design.md#dynamic-provisioning-of-local-volumes)
+to enable the scheduler extensions in combination with
+`volumeBindingMode: WaitForFirstConsumer` as in the
+[`pmem-storageclass-late-binding.yaml`](/deploy/common/pmem-storageclass-late-binding.yaml)
+example. This ensures that pods get scheduled onto nodes that have
+sufficient RAM, CPU and PMEM. Without the scheduler extensions, it is
+random whether the scheduler picks a node that has PMEM available and
+immediate binding (the default volume binding mode) might work
+better. However, then pods might not be able to run when the node
+where volumes were created are overloaded.
 
 Optionally, the log output format can be changed from the default
 "text" format (= the traditional glog format) to "json" (= output via
