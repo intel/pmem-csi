@@ -169,13 +169,25 @@ provisioning"](https://github.com/kubernetes-csi/external-provisioner/tree/v2.1.
   for first consumer"), a volume is tentatively assigned to a node
   before creating it, in which case the `external-provisioner` running
   on that node can tell that it is responsible for provisioning.
+- The scheduler extensions help the scheduler with picking nodes where
+  volumes can be created. Without them, the risk of choosing nodes
+  without PMEM may be too high and manual pod scheduling may be needed
+  to avoid long delays when starting pods. In the future with
+  Kubernetes >= 1.21, [storage capacity
+  tracking](https://kubernetes.io/docs/concepts/storage/storage-capacity/)
+  will be another solution for that problem.
 - For volumes with storage classes that use immediate binding, the
   different `external-provisioner` instances compete with each for
   ownership of the volume by setting the "selected node"
   annotation. Delays are used to avoid the thundering herd problem.
   Once a node has been selected, provisioning continues as with late
   binding. This is less efficient and therefore "late binding" is the
-  recommended binding mode.
+  recommended binding mode. The advantage is that this mode does not
+  depend on scheduler extensions to put pods onto nodes with PMEM
+  because once a volume has been created, the pod will automatically
+  run on the node of the volume. The downside is that a volume might
+  have been created on a node which has insufficient RAM and CPU
+  resources for a pod.
 
 PMEM-CSI also has a central component which implements the [scheduler
 extender](#scheduler-extender) webhook. That component needs to know
