@@ -114,6 +114,12 @@ type Namespace interface {
 	SetEnforceMode(mode NamespaceMode) error
 	// Enable activates the namespace.
 	Enable() error
+	// Disable deactivates the namespace.
+	Disable() error
+	// RawMode enables or disables direct access to the block device.
+	SetRawMode(raw bool) error
+	// SetPfnSeed creates a PFN for the namespace.
+	SetPfnSeed(loc MapLocation, align uint64) error
 }
 
 type namespace = C.struct_ndctl_namespace
@@ -333,7 +339,27 @@ func (ns *namespace) SetEnforceMode(mode NamespaceMode) error {
 
 func (ns *namespace) Enable() error {
 	if rc := C.ndctl_namespace_enable(ns); rc < 0 {
-		return fmt.Errorf("failed to enable namespace:%s", cErrorString(rc))
+		return fmt.Errorf("failed to enable namespace: %s", cErrorString(rc))
+	}
+
+	return nil
+}
+
+func (ns *namespace) Disable() error {
+	if rc := C.ndctl_namespace_disable_safe(ns); rc < 0 {
+		return fmt.Errorf("failed to disable namespace: %s", cErrorString(rc))
+	}
+
+	return nil
+}
+
+func (ns *namespace) SetRawMode(raw bool) error {
+	var rawMode C.int
+	if raw {
+		rawMode = 1
+	}
+	if rc := C.ndctl_namespace_set_raw_mode(ns, rawMode); rc < 0 {
+		return fmt.Errorf("failed to set raw mode: %s", cErrorString(rc))
 	}
 
 	return nil
@@ -362,7 +388,7 @@ func (ns *namespace) String() string {
 	return marshal(props)
 }
 
-func (ns *namespace) setPfnSeed(loc MapLocation, align uint64) error {
+func (ns *namespace) SetPfnSeed(loc MapLocation, align uint64) error {
 	var rc C.int
 	r := (ns.Region()).(*region)
 	pfn := C.ndctl_region_get_pfn_seed(r)

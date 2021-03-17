@@ -61,6 +61,10 @@ type Region interface {
 	CreateNamespace(opts CreateNamespaceOpts) (Namespace, error)
 	// DestroyNamespace destroys the given namespace in the region.
 	DestroyNamespace(ns Namespace, force bool) error
+	// AdaptAlign modifies the alignment for the region.
+	AdaptAlign(align uint64) (uint64, error)
+	// FsdaxAlignment returns the default alignment for an fsdax namespace.
+	FsdaxAlignment() (uint64, error)
 }
 
 type region = C.struct_ndctl_region
@@ -190,31 +194,27 @@ func (r *region) CreateNamespace(opts CreateNamespaceOpts) (Namespace, error) {
 		}
 	}
 
+	align := defaultAlign
 	if opts.Align != 0 {
 		if opts.Mode == SectorMode || opts.Mode == RawMode {
 			klog.V(4).Infof("%s mode does not support setting an alignment, hence ignoring alignment", opts.Mode)
 		} else {
-			resource := uint64(C.ndctl_region_get_resource(r))
-			if resource < uint64(C.ULLONG_MAX) && resource&(mib2-1) != 0 {
-				klog.V(4).Infof("%s: falling back to a 4K alignment", regionName)
-				opts.Align = kib4
-			}
-			if opts.Align != kib4 && opts.Align != mib2 && opts.Align != gib {
-				return nil, fmt.Errorf("unsupported alignment: %v", opts.Align)
+			var err error
+			align, err = r.AdaptAlign(opts.Align)
+			if err != nil {
+				return nil, err
 			}
 		}
-	} else {
-		opts.Align = defaultAlign
 	}
 
 	if opts.Size != 0 {
 		ways := uint64(C.ndctl_region_get_interleave_ways(r))
-		align := opts.Align * ways
+		align = align * ways
 		if opts.Size%align != 0 {
 			// Round up size to align with next block boundary.
 			opts.Size = (opts.Size/align + 1) * align
 			klog.V(4).Infof("%s: namespace size must align to interleave-width:%d * alignment:%d, force-align to %d",
-				regionName, ways, opts.Align, opts.Size)
+				regionName, ways, align, opts.Size)
 		}
 	}
 
@@ -252,10 +252,10 @@ func (r *region) CreateNamespace(opts CreateNamespaceOpts) (Namespace, error) {
 		switch opts.Mode {
 		case FsdaxMode:
 			klog.V(5).Info("setting pfn")
-			err = ndns.setPfnSeed(opts.Location, opts.Align)
+			err = ndns.SetPfnSeed(opts.Location, align)
 		case DaxMode:
 			klog.V(5).Info("setting dax")
-			err = ndns.setDaxSeed(opts.Location, opts.Align)
+			err = ndns.setDaxSeed(opts.Location, align)
 		case SectorMode:
 			klog.V(5).Info("setting btt")
 			err = ndns.setBttSeed(opts.SectorSize)
@@ -274,6 +274,38 @@ func (r *region) CreateNamespace(opts CreateNamespaceOpts) (Namespace, error) {
 	}
 
 	return ns, nil
+}
+
+func (r *region) AdaptAlign(align uint64) (uint64, error) {
+	resource := uint64(C.ndctl_region_get_resource(r))
+	if resource < uint64(C.ULLONG_MAX) && resource&(mib2-1) != 0 {
+		klog.V(4).Infof("%s: falling back to a 4K alignment", r.DeviceName())
+		align = kib4
+	}
+	if align != kib4 && align != mib2 && align != gib {
+		return 0, fmt.Errorf("unsupported alignment: %v", align)
+	}
+	return align, nil
+}
+
+func (r *region) FsdaxAlignment() (uint64, error) {
+	var align uint64
+	// https://github.com/pmem/ndctl/blob/ea014c0c9ec8d0ef945d072dcc52b306c7a686f9/ndctl/namespace.c#L724-L732
+	pfn := C.ndctl_region_get_pfn_seed(r)
+
+	// https://github.com/pmem/ndctl/blob/ea014c0c9ec8d0ef945d072dcc52b306c7a686f9/ndctl/namespace.c#L799-L814
+	//
+	// The initial pfn device support in the kernel didn't
+	// have the 'align' sysfs attribute and assumed a 2MB
+	// alignment. Fall back to that if we don't have the
+	// attribute.
+	//
+	if pfn != nil && C.ndctl_pfn_has_align(pfn) != 0 {
+		align = (uint64)(C.ndctl_pfn_get_align(pfn))
+	} else {
+		align = mib2
+	}
+	return align, nil
 }
 
 func (r *region) DestroyNamespace(ns Namespace, force bool) error {
