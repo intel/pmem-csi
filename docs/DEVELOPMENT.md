@@ -152,6 +152,11 @@ Jenkinsfile ensures that.
 * Run `hack/merge-release.sh` on the "devel" branch and push the
   fabricated merge commit. This documents that "devel" is at least
   as recent as the new release.
+* On the devel branch, add the new release to the main README.md and
+  `.github/workflows/publish.yml`. Merge into devel, then cherry-pick
+  into *all* release branches that might still get changes. Otherwise
+  building the old release will cause the docsite to be generated
+  without the new release.
 
 ### Release PMEM-CSI operator
 
