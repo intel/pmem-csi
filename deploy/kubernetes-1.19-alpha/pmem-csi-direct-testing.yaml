@@ -13,6 +13,14 @@ kind: ServiceAccount
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-testing
+  name: pmem-csi-intel-com-node-setup
+  namespace: pmem-csi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    pmem-csi.intel.com/deployment: direct-testing
   name: pmem-csi-intel-com-webhooks
   namespace: pmem-csi
 ---
@@ -168,6 +176,20 @@ kind: ClusterRole
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-testing
+  name: pmem-csi-intel-com-node-setup-runner
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    pmem-csi.intel.com/deployment: direct-testing
   name: pmem-csi-intel-com-webhooks-runner
 rules:
 - apiGroups:
@@ -255,6 +277,21 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: pmem-csi-intel-com-controller
+  namespace: pmem-csi
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    pmem-csi.intel.com/deployment: direct-testing
+  name: pmem-csi-intel-com-node-setup-role
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pmem-csi-intel-com-node-setup-runner
+subjects:
+- kind: ServiceAccount
+  name: pmem-csi-intel-com-node-setup
   namespace: pmem-csi
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -564,6 +601,9 @@ spec:
       nodeSelector:
         storage: pmem
       serviceAccountName: pmem-csi-intel-com-controller
+      tolerations:
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/master
       volumes:
       - hostPath:
           path: /var/lib/kubelet/plugins/pmem-csi.intel.com
@@ -597,6 +637,79 @@ spec:
           path: /var/lib/pmem-csi-coverage
           type: DirectoryOrCreate
         name: coverage-dir
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app.kubernetes.io/component: node-setup
+    app.kubernetes.io/instance: pmem-csi.intel.com
+    app.kubernetes.io/name: pmem-csi-node-setup
+    app.kubernetes.io/part-of: pmem-csi
+    pmem-csi.intel.com/deployment: direct-testing
+  name: pmem-csi-intel-com-node-setup
+  namespace: pmem-csi
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: pmem-csi.intel.com
+      app.kubernetes.io/name: pmem-csi-node-setup
+      pmem-csi.intel.com/deployment: direct-testing
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: node-setup
+        app.kubernetes.io/instance: pmem-csi.intel.com
+        app.kubernetes.io/name: pmem-csi-node-setup
+        app.kubernetes.io/part-of: pmem-csi
+        pmem-csi.intel.com/deployment: direct-testing
+        pmem-csi.intel.com/webhook: ignore
+    spec:
+      containers:
+      - command:
+        - /usr/local/bin/pmem-csi-driver
+        - -v=3
+        - -logging-format=text
+        - -mode=force-convert-raw-namespaces
+        - -nodeSelector={"storage":"pmem"}
+        - -nodeid=$(KUBE_NODE_NAME)
+        env:
+        - name: KUBE_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: TERMINATION_LOG_PATH
+          value: /tmp/termination-log
+        image: intel/pmem-csi-driver-test:canary
+        imagePullPolicy: IfNotPresent
+        name: pmem-driver
+        securityContext:
+          privileged: true
+          runAsUser: 0
+        terminationMessagePath: /tmp/termination-log
+        volumeMounts:
+        - mountPath: /dev
+          name: dev-dir
+        - mountPath: /sys
+          name: sys-dir
+        - mountPath: /host-sys
+          name: sys-dir
+      nodeSelector:
+        pmem-csi.intel.com/convert-raw-namespaces: force
+      serviceAccountName: pmem-csi-intel-com-node-setup
+      tolerations:
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/master
+      volumes:
+      - hostPath:
+          path: /dev
+          type: DirectoryOrCreate
+        name: dev-dir
+      - hostPath:
+          path: /sys
+          type: DirectoryOrCreate
+        name: sys-dir
 ---
 apiVersion: apps/v1
 kind: DaemonSet

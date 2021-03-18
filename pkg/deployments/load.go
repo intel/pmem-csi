@@ -31,6 +31,7 @@ func LoadObjects(kubernetes version.Version, deviceMode api.DeviceMode) ([]unstr
 
 var pmemImage = regexp.MustCompile(`image: intel/pmem-csi-driver(-test)?:\S+`)
 var nameRegex = regexp.MustCompile(`(name|secretName|serviceName|serviceAccountName): pmem-csi-intel-com`)
+var labelRegex = regexp.MustCompile(`pmem-csi.intel.com/(convert-raw-namespace)`)
 var driverNameRegex = regexp.MustCompile(`(?m)(name|app\.kubernetes.io/instance): pmem-csi.intel.com$`)
 
 // LoadAndCustomizeObjects reads all objects stored in a pmem-csi.yaml reference file
@@ -47,6 +48,7 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 		// This renames the objects and labels. A hyphen is used instead of a dot,
 		// except for CSIDriver and instance label which need the exact name.
 		*yaml = nameRegex.ReplaceAll(*yaml, []byte("$1: "+deployment.GetHyphenedName()))
+		*yaml = labelRegex.ReplaceAll(*yaml, []byte(deployment.Name+"/$1"))
 		*yaml = driverNameRegex.ReplaceAll(*yaml, []byte("$1: "+deployment.Name))
 
 		// Update the driver name inside the state and socket dir.
@@ -121,24 +123,32 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 				panic(fmt.Errorf("set controller resources: %v", err))
 			}
 		case "DaemonSet":
-			resources := map[string]*corev1.ResourceRequirements{
-				"pmem-driver":          deployment.Spec.NodeDriverResources,
-				"external-provisioner": deployment.Spec.ProvisionerResources,
-				"driver-registrar":     deployment.Spec.NodeRegistrarResources,
-			}
-			if err := patchPodTemplate(obj, deployment, resources); err != nil {
-				// TODO: avoid panic
-				panic(fmt.Errorf("set node resources: %v", err))
-			}
-			outerSpec := obj.Object["spec"].(map[string]interface{})
-			template := outerSpec["template"].(map[string]interface{})
-			spec := template["spec"].(map[string]interface{})
-			if deployment.Spec.NodeSelector != nil {
-				selector := map[string]interface{}{}
-				for key, value := range deployment.Spec.NodeSelector {
-					selector[key] = value
+			switch obj.GetName() {
+			case deployment.NodeSetupName():
+				if err := patchPodTemplate(obj, deployment, nil); err != nil {
+					// TODO: avoid panic
+					panic(fmt.Errorf("set node resources: %v", err))
 				}
-				spec["nodeSelector"] = selector
+			case deployment.NodeDriverName():
+				resources := map[string]*corev1.ResourceRequirements{
+					"pmem-driver":          deployment.Spec.NodeDriverResources,
+					"external-provisioner": deployment.Spec.ProvisionerResources,
+					"driver-registrar":     deployment.Spec.NodeRegistrarResources,
+				}
+				if err := patchPodTemplate(obj, deployment, resources); err != nil {
+					// TODO: avoid panic
+					panic(fmt.Errorf("set node resources: %v", err))
+				}
+				outerSpec := obj.Object["spec"].(map[string]interface{})
+				template := outerSpec["template"].(map[string]interface{})
+				spec := template["spec"].(map[string]interface{})
+				if deployment.Spec.NodeSelector != nil {
+					selector := map[string]interface{}{}
+					for key, value := range deployment.Spec.NodeSelector {
+						selector[key] = value
+					}
+					spec["nodeSelector"] = selector
+				}
 			}
 		case "MutatingWebhookConfiguration":
 			webhooks := obj.Object["webhooks"].([]interface{})
@@ -189,10 +199,6 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 }
 
 func patchPodTemplate(obj *unstructured.Unstructured, deployment api.PmemCSIDeployment, resources map[string]*corev1.ResourceRequirements) error {
-	if resources == nil {
-		return nil
-	}
-
 	outerSpec := obj.Object["spec"].(map[string]interface{})
 	template := outerSpec["template"].(map[string]interface{})
 	spec := template["spec"].(map[string]interface{})
@@ -214,6 +220,10 @@ func patchPodTemplate(obj *unstructured.Unstructured, deployment api.PmemCSIDepl
 			labelsMap[key] = value
 		}
 		metadata["labels"] = labelsMap
+	}
+
+	if resources == nil {
+		return nil
 	}
 
 	// Convert through JSON.

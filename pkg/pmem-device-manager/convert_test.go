@@ -76,7 +76,7 @@ func TestConvert(t *testing.T) {
 			expectNum: 1,
 		},
 		"convert-two-namespaces": {
-			hardware:  func() ndctl.Context {
+			hardware: func() ndctl.Context {
 				hardware := makeRawNamespace()
 				region := hardware.Buses[0].(*ndctlfake.Bus).Regions_[0].(*ndctlfake.Region)
 				ns := *region.Namespaces_[0].(*ndctlfake.Namespace)
@@ -86,14 +86,14 @@ func TestConvert(t *testing.T) {
 			expectNum: 2,
 		},
 		"convert-two-regions": {
-			hardware:  func() ndctl.Context {
+			hardware: func() ndctl.Context {
 				hardware := makeRawNamespace()
 				bus := hardware.Buses[0].(*ndctlfake.Bus)
 				region := bus.Regions_[0].(*ndctlfake.Region)
 				ns := *region.Namespaces_[0].(*ndctlfake.Namespace)
 				bus.Regions_ = append(bus.Regions_,
 					&ndctlfake.Region{
-						Type_: ndctl.PmemRegion,
+						Type_:       ndctl.PmemRegion,
 						Namespaces_: []ndctl.Namespace{&ns},
 					})
 				return hardware

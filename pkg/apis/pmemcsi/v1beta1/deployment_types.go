@@ -610,6 +610,30 @@ func (d *PmemCSIDeployment) ControllerDriverName() string {
 	return d.GetHyphenedName() + "-controller"
 }
 
+// NodeSetupServiceAccountName returns the name of the service account
+// used by the StatefulSet with the webhooks.
+func (d *PmemCSIDeployment) NodeSetupServiceAccountName() string {
+	return d.GetHyphenedName() + "-node-setup"
+}
+
+// NodeSetupClusterRoleName returns the name of the
+// webhooks' ClusterRole object name used by the deployment
+func (d *PmemCSIDeployment) NodeSetupClusterRoleName() string {
+	return d.GetHyphenedName() + "-node-setup-runner"
+}
+
+// NodeSetupClusterRoleBindingName returns the name of the
+// webhooks' ClusterRoleBinding object name used by the deployment
+func (d *PmemCSIDeployment) NodeSetupClusterRoleBindingName() string {
+	return d.GetHyphenedName() + "-node-setup-role"
+}
+
+// NodeSetupName returns the name of the node setup
+// DaemonSet object name used by the deployment
+func (d *PmemCSIDeployment) NodeSetupName() string {
+	return d.GetHyphenedName() + "-node-setup"
+}
+
 // GetOwnerReference returns self owner reference could be used by other object
 // to add this deployment to it's owner reference list.
 func (d *PmemCSIDeployment) GetOwnerReference() metav1.OwnerReference {
