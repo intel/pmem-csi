@@ -8,8 +8,8 @@ package ndctl
 //#include <ndctl/ndctl.h>
 import "C"
 import (
-	"encoding/json"
 	"fmt"
+
 	/* needed for nullify
 	"os"
 	"syscall"*/
@@ -75,82 +75,112 @@ func (loc MapLocation) toCPfnLocation() C.enum_ndctl_pfn_loc {
 	return C.NDCTL_PFN_LOC_NONE
 }
 
-// Namespace go wrapper for ndctl_namespace
-type Namespace C.struct_ndctl_namespace
+// Namespace is a go wrapper for ndctl_namespace.
+type Namespace interface {
+	// ID returns the namespace id.
+	ID() uint
+	// Name returns the name of the namespace.
+	Name() string
+	// DeviceName returns the device name of the namespace.
+	DeviceName() string
+	// BlockDeviceName returns the block device name of the namespace.
+	BlockDeviceName() string
+	// Size returns the size of the namespace.
+	Size() uint64
+	// Mode returns the namespace mode.
+	Mode() NamespaceMode
+	// Type returns the namespace type.
+	Type() NamespaceType
+	// Enabled return true if the namespace is enabled.
+	Enabled() bool
+	// Active returns true if the namespace is active.
+	Active() bool
+	// UUID returns the uuid of the namespace.
+	UUID() uuid.UUID
+	// Location returns the namespace mapping location.
+	Location() MapLocation
+	// Region returns reference to the region that contains the namespace.
+	Region() Region
 
-//ID returns namespace id
-func (ns *Namespace) ID() uint {
-	ndns := (*C.struct_ndctl_namespace)(ns)
-	return uint(C.ndctl_namespace_get_id(ndns))
+	// SetAltName changes the alternative name of the namespace.
+	SetAltName(name string) error
+	// SetSize changes the size of the namespace.
+	SetSize(size uint64) error
+	// SetUUID changes the uuid of the namespace.
+	SetUUID(uid uuid.UUID) error
+	// SetSectorSize changes the sector size of the namespace.
+	SetSectorSize(sectorSize uint64) error
+	// SetEnforceMode changes how the namespace mode.
+	SetEnforceMode(mode NamespaceMode) error
+	// Enable activates the namespace.
+	Enable() error
 }
 
-//Name returns name of the namespace
-func (ns *Namespace) Name() string {
-	ndns := (*C.struct_ndctl_namespace)(ns)
-	return C.GoString(C.ndctl_namespace_get_alt_name(ndns))
+type namespace = C.struct_ndctl_namespace
+
+var _ Namespace = &namespace{}
+
+func (ns *namespace) ID() uint {
+	return uint(C.ndctl_namespace_get_id(ns))
 }
 
-//DeviceName returns namespace device name
-func (ns *Namespace) DeviceName() string {
-	ndns := (*C.struct_ndctl_namespace)(ns)
-	return C.GoString(C.ndctl_namespace_get_devname(ndns))
+func (ns *namespace) Name() string {
+	return C.GoString(C.ndctl_namespace_get_alt_name(ns))
 }
 
-//BlockDeviceName return namespace block device name
-func (ns *Namespace) BlockDeviceName() string {
-	ndns := (*C.struct_ndctl_namespace)(ns)
-	if DaxMode := C.ndctl_namespace_get_dax(ndns); DaxMode != nil {
+func (ns *namespace) DeviceName() string {
+	return C.GoString(C.ndctl_namespace_get_devname(ns))
+}
+
+func (ns *namespace) BlockDeviceName() string {
+	if DaxMode := C.ndctl_namespace_get_dax(ns); DaxMode != nil {
 		/* Chardevice */
 		return ""
 	}
 	var dev *C.char
-	btt := C.ndctl_namespace_get_btt(ndns)
-	pfn := C.ndctl_namespace_get_pfn(ndns)
+	btt := C.ndctl_namespace_get_btt(ns)
+	pfn := C.ndctl_namespace_get_pfn(ns)
 
 	if btt != nil {
 		dev = C.ndctl_btt_get_block_device(btt)
 	} else if pfn != nil {
 		dev = C.ndctl_pfn_get_block_device(pfn)
 	} else {
-		dev = C.ndctl_namespace_get_block_device(ndns)
+		dev = C.ndctl_namespace_get_block_device(ns)
 	}
 
 	return C.GoString(dev)
 }
 
-//Size returns size of the namespace
-func (ns *Namespace) Size() uint64 {
+func (ns *namespace) Size() uint64 {
 	var size C.ulonglong
 
-	ndns := (*C.struct_ndctl_namespace)(ns)
 	mode := ns.Mode()
 
 	switch mode {
 	case FsdaxMode:
-		if pfn := C.ndctl_namespace_get_pfn(ndns); pfn != nil {
+		if pfn := C.ndctl_namespace_get_pfn(ns); pfn != nil {
 			size = C.ndctl_pfn_get_size(pfn)
 		} else {
-			size = C.ndctl_namespace_get_size(ndns)
+			size = C.ndctl_namespace_get_size(ns)
 		}
 	case DaxMode:
-		if DaxMode := C.ndctl_namespace_get_dax(ndns); DaxMode != nil {
+		if DaxMode := C.ndctl_namespace_get_dax(ns); DaxMode != nil {
 			size = C.ndctl_dax_get_size(DaxMode)
 		}
 	case SectorMode:
-		if btt := C.ndctl_namespace_get_btt(ndns); btt != nil {
+		if btt := C.ndctl_namespace_get_btt(ns); btt != nil {
 			size = C.ndctl_btt_get_size(btt)
 		}
 	case RawMode:
-		size = C.ndctl_namespace_get_size(ndns)
+		size = C.ndctl_namespace_get_size(ns)
 	}
 
 	return uint64(size)
 }
 
-//Mode returns namespace mode
-func (ns *Namespace) Mode() NamespaceMode {
-	ndns := (*C.struct_ndctl_namespace)(ns)
-	mode := C.ndctl_namespace_get_mode(ndns)
+func (ns *namespace) Mode() NamespaceMode {
+	mode := C.ndctl_namespace_get_mode(ns)
 
 	if mode == C.NDCTL_NS_MODE_DAX || mode == C.NDCTL_NS_MODE_DEVDAX {
 		return DaxMode
@@ -171,10 +201,8 @@ func (ns *Namespace) Mode() NamespaceMode {
 	return UnknownMode
 }
 
-//Type returns namespace type
-func (ns *Namespace) Type() NamespaceType {
-	ndns := (*C.struct_ndctl_namespace)(ns)
-	switch C.ndctl_namespace_get_type(ndns) {
+func (ns *namespace) Type() NamespaceType {
+	switch C.ndctl_namespace_get_type(ns) {
 	case C.ND_DEVICE_NAMESPACE_PMEM:
 		return PmemNamespace
 	case C.ND_DEVICE_NAMESPACE_BLK:
@@ -186,26 +214,20 @@ func (ns *Namespace) Type() NamespaceType {
 	return UnknownType
 }
 
-//Enabled return if namespace is enabled
-func (ns *Namespace) Enabled() bool {
-	ndns := (*C.struct_ndctl_namespace)(ns)
-	return C.ndctl_namespace_is_enabled(ndns) == 1
+func (ns *namespace) Enabled() bool {
+	return C.ndctl_namespace_is_enabled(ns) == 1
 }
 
-//Active return if namespace is active
-func (ns *Namespace) Active() bool {
-	ndns := (*C.struct_ndctl_namespace)(ns)
-	return bool(C.ndctl_namespace_is_active(ndns))
+func (ns *namespace) Active() bool {
+	return bool(C.ndctl_namespace_is_active(ns))
 }
 
-//UUID returns uuid of the namespace
-func (ns *Namespace) UUID() uuid.UUID {
-	ndns := (*C.struct_ndctl_namespace)(ns)
+func (ns *namespace) UUID() uuid.UUID {
 	var cuid C.uuid_t
 
-	btt := C.ndctl_namespace_get_btt(ndns)
-	DaxMode := C.ndctl_namespace_get_dax(ndns)
-	pfn := C.ndctl_namespace_get_pfn(ndns)
+	btt := C.ndctl_namespace_get_btt(ns)
+	DaxMode := C.ndctl_namespace_get_dax(ns)
+	pfn := C.ndctl_namespace_get_pfn(ns)
 
 	if btt != nil {
 		C.ndctl_btt_get_uuid(btt, &cuid[0])
@@ -213,8 +235,8 @@ func (ns *Namespace) UUID() uuid.UUID {
 		C.ndctl_pfn_get_uuid(pfn, &cuid[0])
 	} else if DaxMode != nil {
 		C.ndctl_dax_get_uuid(DaxMode, &cuid[0])
-	} else if C.ndctl_namespace_get_type(ndns) != C.ND_DEVICE_NAMESPACE_IO {
-		C.ndctl_namespace_get_uuid(ndns, &cuid[0])
+	} else if C.ndctl_namespace_get_type(ns) != C.ND_DEVICE_NAMESPACE_IO {
+		C.ndctl_namespace_get_uuid(ns, &cuid[0])
 	}
 
 	uidbytes := C.GoBytes(unsafe.Pointer(&cuid[0]), C.sizeof_uuid_t)
@@ -227,9 +249,7 @@ func (ns *Namespace) UUID() uuid.UUID {
 	return _uuid
 }
 
-//Location returns namespace mapping location
-func (ns *Namespace) Location() MapLocation {
-	ndns := (*C.struct_ndctl_namespace)(ns)
+func (ns *namespace) Location() MapLocation {
 	locations := map[uint32]MapLocation{
 		C.NDCTL_PFN_LOC_NONE: NoneMap,
 		C.NDCTL_PFN_LOC_RAM:  MemoryMap,
@@ -239,12 +259,12 @@ func (ns *Namespace) Location() MapLocation {
 
 	switch mode {
 	case FsdaxMode:
-		if pfn := C.ndctl_namespace_get_pfn(ndns); pfn != nil {
+		if pfn := C.ndctl_namespace_get_pfn(ns); pfn != nil {
 			return locations[C.ndctl_pfn_get_location(pfn)]
 		}
 		return locations[C.NDCTL_PFN_LOC_RAM]
 	case DaxMode:
-		if dax := C.ndctl_namespace_get_dax(ndns); dax != nil {
+		if dax := C.ndctl_namespace_get_dax(ns); dax != nil {
 			return locations[C.ndctl_dax_get_location(dax)]
 		}
 	}
@@ -252,43 +272,37 @@ func (ns *Namespace) Location() MapLocation {
 	return locations[C.NDCTL_PFN_LOC_NONE]
 }
 
-//Region returns reference to Region that this namespace is part of
-func (ns *Namespace) Region() *Region {
-	ndns := (*C.struct_ndctl_namespace)(ns)
-	return (*Region)(C.ndctl_namespace_get_region(ndns))
+func (ns *namespace) Region() Region {
+	return C.ndctl_namespace_get_region(ns)
 
 }
 
-func (ns *Namespace) SetAltName(name string) error {
-	ndns := (*C.struct_ndctl_namespace)(ns)
-	if rc := C.ndctl_namespace_set_alt_name(ndns, C.CString(name)); rc != 0 {
+func (ns *namespace) SetAltName(name string) error {
+	if rc := C.ndctl_namespace_set_alt_name(ns, C.CString(name)); rc != 0 {
 		return fmt.Errorf("Failed to set namespace name: %s", cErrorString(rc))
 	}
 
 	return nil
 }
 
-func (ns *Namespace) SetSize(size uint64) error {
-	ndns := (*C.struct_ndctl_namespace)(ns)
+func (ns *namespace) SetSize(size uint64) error {
 
-	if rc := C.ndctl_namespace_set_size(ndns, C.ulonglong(size)); rc != 0 {
+	if rc := C.ndctl_namespace_set_size(ns, C.ulonglong(size)); rc != 0 {
 		return fmt.Errorf("Failed to set namespace size: %s", cErrorString(rc))
 	}
 
 	return nil
 }
 
-func (ns *Namespace) SetUUID(uid uuid.UUID) error {
-	ndns := (*C.struct_ndctl_namespace)(ns)
+func (ns *namespace) SetUUID(uid uuid.UUID) error {
 
-	if rc := C.ndctl_namespace_set_uuid(ndns, (*C.uchar)(&uid[0])); rc != 0 {
+	if rc := C.ndctl_namespace_set_uuid(ns, (*C.uchar)(&uid[0])); rc != 0 {
 		return fmt.Errorf("Failed to set namespace uid: %s", cErrorString(rc))
 	}
 	return nil
 }
 
-func (ns *Namespace) SetSectorSize(sectorSize uint64) error {
-	ndns := (*C.struct_ndctl_namespace)(ns)
+func (ns *namespace) SetSectorSize(sectorSize uint64) error {
 
 	if sectorSize == 0 {
 		sectorSize = 512
@@ -296,9 +310,9 @@ func (ns *Namespace) SetSectorSize(sectorSize uint64) error {
 
 	sSize := C.uint(sectorSize)
 
-	for num := C.ndctl_namespace_get_num_sector_sizes(ndns) - 1; num >= 0; num-- {
-		if C.uint(C.ndctl_namespace_get_supported_sector_size(ndns, num)) == sSize {
-			if rc := C.ndctl_namespace_set_sector_size(ndns, sSize); rc < 0 {
+	for num := C.ndctl_namespace_get_num_sector_sizes(ns) - 1; num >= 0; num-- {
+		if C.uint(C.ndctl_namespace_get_supported_sector_size(ns, num)) == sSize {
+			if rc := C.ndctl_namespace_set_sector_size(ns, sSize); rc < 0 {
 				return fmt.Errorf("Failed to set namespace sector size: %s", cErrorString(rc))
 			}
 			return nil
@@ -308,28 +322,25 @@ func (ns *Namespace) SetSectorSize(sectorSize uint64) error {
 	return fmt.Errorf("Sector size %v not supported", sectorSize)
 }
 
-func (ns *Namespace) SetEnforceMode(mode NamespaceMode) error {
-	ndns := (*C.struct_ndctl_namespace)(ns)
+func (ns *namespace) SetEnforceMode(mode NamespaceMode) error {
 
-	if rc := C.ndctl_namespace_set_enforce_mode(ndns, mode.toCMode()); rc != 0 {
+	if rc := C.ndctl_namespace_set_enforce_mode(ns, mode.toCMode()); rc != 0 {
 		return fmt.Errorf("Failed to set enforce mode: %s", cErrorString(rc))
 	}
 
 	return nil
 }
 
-func (ns *Namespace) Enable() error {
-	ndns := (*C.struct_ndctl_namespace)(ns)
-	if rc := C.ndctl_namespace_enable(ndns); rc < 0 {
+func (ns *namespace) Enable() error {
+	if rc := C.ndctl_namespace_enable(ns); rc < 0 {
 		return fmt.Errorf("failed to enable namespace:%s", cErrorString(rc))
 	}
 
 	return nil
 }
 
-//MarshalJSON returns json encoding of namespace
-func (ns *Namespace) MarshalJSON() ([]byte, error) {
-
+// String formats all relevant attributes as JSON.
+func (ns *namespace) String() string {
 	props := map[string]interface{}{
 		"id":      ns.ID(),
 		"dev":     ns.DeviceName(),
@@ -348,14 +359,13 @@ func (ns *Namespace) MarshalJSON() ([]byte, error) {
 		props["map"] = location
 	}
 
-	return json.Marshal(props)
+	return marshal(props)
 }
 
-func (ns *Namespace) setPfnSeed(loc MapLocation, align uint64) error {
+func (ns *namespace) setPfnSeed(loc MapLocation, align uint64) error {
 	var rc C.int
-	ndns := (*C.struct_ndctl_namespace)(ns)
-	ndr := (*C.struct_ndctl_region)(ns.Region())
-	pfn := C.ndctl_region_get_pfn_seed(ndr)
+	r := (ns.Region()).(*region)
+	pfn := C.ndctl_region_get_pfn_seed(r)
 	if pfn == nil {
 		return fmt.Errorf("pfn: no seed")
 	}
@@ -372,7 +382,7 @@ func (ns *Namespace) setPfnSeed(loc MapLocation, align uint64) error {
 		}
 	}
 
-	if rc = C.ndctl_pfn_set_namespace(pfn, ndns); rc < 0 {
+	if rc = C.ndctl_pfn_set_namespace(pfn, ns); rc < 0 {
 		return fmt.Errorf("pfn: failed to set namespace")
 	}
 
@@ -385,11 +395,10 @@ func (ns *Namespace) setPfnSeed(loc MapLocation, align uint64) error {
 	return nil
 }
 
-func (ns *Namespace) setDaxSeed(loc MapLocation, align uint64) error {
+func (ns *namespace) setDaxSeed(loc MapLocation, align uint64) error {
 	var rc C.int
-	ndns := (*C.struct_ndctl_namespace)(ns)
-	ndr := (*C.struct_ndctl_region)(ns.Region())
-	dax := C.ndctl_region_get_dax_seed(ndr)
+	r := (ns.Region()).(*region)
+	dax := C.ndctl_region_get_dax_seed(r)
 	if dax == nil {
 		return fmt.Errorf("dax: no seed")
 	}
@@ -408,7 +417,7 @@ func (ns *Namespace) setDaxSeed(loc MapLocation, align uint64) error {
 		}
 	}
 
-	if rc = C.ndctl_dax_set_namespace(dax, ndns); rc < 0 {
+	if rc = C.ndctl_dax_set_namespace(dax, ns); rc < 0 {
 		return fmt.Errorf("dax: failed to set namespace")
 	}
 
@@ -420,10 +429,9 @@ func (ns *Namespace) setDaxSeed(loc MapLocation, align uint64) error {
 	return nil
 }
 
-func (ns *Namespace) setBttSeed(sectorSize uint64) error {
-	ndns := (*C.struct_ndctl_namespace)(ns)
-	ndr := (*C.struct_ndctl_region)(ns.Region())
-	btt := C.ndctl_region_get_btt_seed(ndr)
+func (ns *namespace) setBttSeed(sectorSize uint64) error {
+	r := (ns.Region()).(*region)
+	btt := C.ndctl_region_get_btt_seed(r)
 	var rc C.int
 	if btt == nil {
 		return fmt.Errorf("btt: no seed")
@@ -435,7 +443,7 @@ func (ns *Namespace) setBttSeed(sectorSize uint64) error {
 	if rc = C.ndctl_btt_set_sector_size(btt, C.uint(sectorSize)); rc < 0 {
 		return fmt.Errorf("btt: failed to set sector size")
 	}
-	if rc = C.ndctl_btt_set_namespace(btt, ndns); rc < 0 {
+	if rc = C.ndctl_btt_set_namespace(btt, ns); rc < 0 {
 		return fmt.Errorf("btt: failed to set namespace")
 	}
 	if rc = C.ndctl_btt_enable(btt); rc < 0 {
@@ -445,37 +453,3 @@ func (ns *Namespace) setBttSeed(sectorSize uint64) error {
 
 	return nil
 }
-
-/* nullify commented out as unused, was not reliable
-func (ns *Namespace) nullify() error {
-	ndns := (*C.struct_ndctl_namespace)(ns)
-	var rc C.int
-	var buf unsafe.Pointer
-	var err error
-	var file *os.File
-
-	C.ndctl_namespace_set_raw_mode(ndns, 1)
-	defer C.ndctl_namespace_set_raw_mode(ndns, 0)
-	if err = ns.Enable(); err != nil {
-		return err
-	}
-
-	if rc = C.posix_memalign(&buf, C.size_t(kib4), C.size_t(kib4)); rc < 0 {
-		return fmt.Errorf("memory error: %s", cErrorString(rc))
-	}
-	defer C.free(buf)
-	C.memset(buf, 0, C.size_t(kib4))
-
-	file, err = os.OpenFile("/dev/"+ns.BlockDeviceName(), os.O_RDWR|syscall.O_DIRECT|os.O_EXCL, os.ModeDevice)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	bytes := *(*[]byte)(buf)
-	if _, err = file.Write(bytes); err != nil {
-		err = fmt.Errorf("failed to zero info block %s", err.Error())
-	}
-
-	return err
-}*/

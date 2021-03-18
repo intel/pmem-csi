@@ -5,50 +5,54 @@ package ndctl
 //#include <ndctl/libndctl.h>
 //#include <ndctl/ndctl.h>
 import "C"
-import "encoding/json"
 
-// Dimm go wrapper for ndctl_dimm
-type Dimm C.struct_ndctl_dimm
-
-//Enabled returns if the dimm is enabled
-func (d *Dimm) Enabled() bool {
-	ndd := (*C.struct_ndctl_dimm)(d)
-	return C.ndctl_dimm_is_enabled(ndd) == 1
+// Dimm is a go wrapper for ndctl_dimm.
+type Dimm interface {
+	// Enabled returns if the dimm is enabled.
+	Enabled() bool
+	// Active returns if the the device is active.
+	Active() bool
+	// ID returns the dimm's unique identifier string.
+	ID() string
+	// PhysicalID returns the dimm's physical id number.
+	PhysicalID() int
+	// DeviceName returns the dimm's device name.
+	DeviceName() string
+	// Handle returns the dimm's handle.
+	Handle() int16
 }
 
-//Active returns if the the device is active
-func (d *Dimm) Active() bool {
-	ndd := (*C.struct_ndctl_dimm)(d)
-	return C.ndctl_dimm_is_active(ndd) == 1
+type dimm = C.struct_ndctl_dimm
+
+var _ Dimm = &dimm{}
+
+func (d *dimm) Enabled() bool {
+	return C.ndctl_dimm_is_enabled(d) == 1
 }
 
-//ID returns unique dimm id
-func (d *Dimm) ID() string {
-	ndd := (*C.struct_ndctl_dimm)(d)
-	return C.GoString(C.ndctl_dimm_get_unique_id(ndd))
+func (d *dimm) Active() bool {
+	return C.ndctl_dimm_is_active(d) == 1
 }
 
-//PhysicalID returns dimm physical id
-func (d *Dimm) PhysicalID() int {
-	ndd := (*C.struct_ndctl_dimm)(d)
-	return int(C.ndctl_dimm_get_phys_id(ndd))
+func (d *dimm) ID() string {
+	return C.GoString(C.ndctl_dimm_get_unique_id(d))
 }
 
-//DeviceName returns dimm device name
-func (d *Dimm) DeviceName() string {
-	ndd := (*C.struct_ndctl_dimm)(d)
-	return C.GoString(C.ndctl_dimm_get_devname(ndd))
+func (d *dimm) PhysicalID() int {
+	return int(C.ndctl_dimm_get_phys_id(d))
 }
 
-//Handle returns dimm handle
-func (d *Dimm) Handle() int16 {
-	ndd := (*C.struct_ndctl_dimm)(d)
-	return int16(C.ndctl_dimm_get_handle(ndd))
+func (d *dimm) DeviceName() string {
+	return C.GoString(C.ndctl_dimm_get_devname(d))
 }
 
-//MarshalJSON returns the encoding of dimm
-func (d *Dimm) MarshalJSON() ([]byte, error) {
-	return json.Marshal(map[string]interface{}{
+func (d *dimm) Handle() int16 {
+	return int16(C.ndctl_dimm_get_handle(d))
+}
+
+// Strings formats all relevant attributes as JSON.
+func (d *dimm) String() string {
+	return marshal(map[string]interface{}{
 		"id":      d.ID(),
 		"dev":     d.DeviceName(),
 		"handle":  d.Handle(),

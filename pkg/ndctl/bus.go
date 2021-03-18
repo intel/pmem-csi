@@ -5,53 +5,59 @@ package ndctl
 //#include <ndctl/libndctl.h>
 //#include <ndctl/ndctl.h>
 import "C"
-import "encoding/json"
 
-//Bus go wrapper for ndctl_bus
-type Bus C.struct_ndctl_bus
-
-//Provider returns bus provider
-func (b *Bus) Provider() string {
-	ndbus := (*C.struct_ndctl_bus)(b)
-	return C.GoString(C.ndctl_bus_get_provider(ndbus))
+// Bus is a go wrapper for ndctl_bus.
+type Bus interface {
+	// Provider returns the bus provider.
+	Provider() string
+	// DeviceName returns the bus device name.
+	DeviceName() string
+	// Dimms returns the dimms provided by the bus.
+	Dimms() []Dimm
+	// ActiveRegions returns all active regions in the bus.
+	ActiveRegions() []Region
+	// AllRegions returns all regions in the bus including disabled regions.
+	AllRegions() []Region
+	// GetRegionByPhysicalAddress finds a region by physical address.
+	GetRegionByPhysicalAddress(address uint64) Region
 }
 
-//DeviceName returns bus device name
-func (b *Bus) DeviceName() string {
-	ndbus := (*C.struct_ndctl_bus)(b)
-	return C.GoString(C.ndctl_bus_get_devname(ndbus))
+type bus = C.struct_ndctl_bus
+
+var _ Bus = &bus{}
+
+func (b *bus) Provider() string {
+	return C.GoString(C.ndctl_bus_get_provider(b))
 }
 
-//Dimms returns dimms provided by the bus
-func (b *Bus) Dimms() []*Dimm {
-	var dimms []*Dimm
-	ndbus := (*C.struct_ndctl_bus)(b)
-	for nddimm := C.ndctl_dimm_get_first(ndbus); nddimm != nil; nddimm = C.ndctl_dimm_get_next(nddimm) {
-		dimms = append(dimms, (*Dimm)(nddimm))
+func (b *bus) DeviceName() string {
+	return C.GoString(C.ndctl_bus_get_devname(b))
+}
+
+func (b *bus) Dimms() []Dimm {
+	var dimms []Dimm
+	for nddimm := C.ndctl_dimm_get_first(b); nddimm != nil; nddimm = C.ndctl_dimm_get_next(nddimm) {
+		dimms = append(dimms, nddimm)
 	}
 	return dimms
 }
 
-//ActiveRegions returns all active regions in the bus
-func (b *Bus) ActiveRegions() []*Region {
+func (b *bus) ActiveRegions() []Region {
 	return b.regions(true)
 }
 
-//AllRegions returns all regions in the bus including disabled regions
-func (b *Bus) AllRegions() []*Region {
+func (b *bus) AllRegions() []Region {
 	return b.regions(false)
 }
 
-//GetRegionByPhysicalAddress Find region by physical address
-func (b *Bus) GetRegionByPhysicalAddress(address uint64) *Region {
-	ndbus := (*C.struct_ndctl_bus)(b)
-	ndr := C.ndctl_bus_get_region_by_physical_address(ndbus, C.ulonglong(address))
-	return (*Region)(ndr)
+func (b *bus) GetRegionByPhysicalAddress(address uint64) Region {
+	ndr := C.ndctl_bus_get_region_by_physical_address(b, C.ulonglong(address))
+	return ndr
 }
 
-//MarshalJSON returns the encoded value of bus
-func (b *Bus) MarshalJSON() ([]byte, error) {
-	return json.Marshal(map[string]interface{}{
+// Strings formats all relevant attributes as JSON.
+func (b *bus) String() string {
+	return marshal(map[string]interface{}{
 		"provider": b.Provider(),
 		"dev":      b.DeviceName(),
 		"regions":  b.ActiveRegions(),
@@ -59,12 +65,11 @@ func (b *Bus) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func (b *Bus) regions(onlyActive bool) []*Region {
-	var regions []*Region
-	ndbus := (*C.struct_ndctl_bus)(b)
-	for ndr := C.ndctl_region_get_first(ndbus); ndr != nil; ndr = C.ndctl_region_get_next(ndr) {
+func (b *bus) regions(onlyActive bool) []Region {
+	var regions []Region
+	for ndr := C.ndctl_region_get_first(b); ndr != nil; ndr = C.ndctl_region_get_next(ndr) {
 		if !onlyActive || int(C.ndctl_region_is_enabled(ndr)) == 1 {
-			regions = append(regions, (*Region)(ndr))
+			regions = append(regions, ndr)
 		}
 	}
 

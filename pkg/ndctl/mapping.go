@@ -3,44 +3,48 @@ package ndctl
 //#cgo pkg-config: libndctl
 //#include <ndctl/libndctl.h>
 import "C"
-import "encoding/json"
 
-// Mapping go wrapper for ndctl_mapping
-type Mapping C.struct_ndctl_mapping
-
-//Offset returns offset within the region
-func (m *Mapping) Offset() uint64 {
-	ndm := (*C.struct_ndctl_mapping)(m)
-	return uint64(C.ndctl_mapping_get_offset(ndm))
+// Mapping is a go wrapper for ndctl_mapping.
+type Mapping interface {
+	// Offset returns the offset within the region.
+	Offset() uint64
+	// Length returns the mapping's length.
+	Length() uint64
+	// Position returns the mapping's position.
+	Position() int
+	// Region gets the associated region.
+	Region() Region
+	// Dimm gets the associated dimm.
+	Dimm() Dimm
 }
 
-//Length returns mapping length
-func (m *Mapping) Length() uint64 {
-	ndm := (*C.struct_ndctl_mapping)(m)
-	return uint64(C.ndctl_mapping_get_length(ndm))
+type mapping = C.struct_ndctl_mapping
+
+var _ Mapping = &mapping{}
+
+func (m *mapping) Offset() uint64 {
+	return uint64(C.ndctl_mapping_get_offset(m))
 }
 
-//Position returns mapping position
-func (m *Mapping) Position() int {
-	ndm := (*C.struct_ndctl_mapping)(m)
-	return int(C.ndctl_mapping_get_position(ndm))
+func (m *mapping) Length() uint64 {
+	return uint64(C.ndctl_mapping_get_length(m))
 }
 
-//Region get associated Region
-func (m *Mapping) Region() *Region {
-	ndm := (*C.struct_ndctl_mapping)(m)
-	return (*Region)(C.ndctl_mapping_get_region(ndm))
+func (m *mapping) Position() int {
+	return int(C.ndctl_mapping_get_position(m))
 }
 
-//Dimm get associated Dimm
-func (m *Mapping) Dimm() *Dimm {
-	ndm := (*C.struct_ndctl_mapping)(m)
-	return (*Dimm)(C.ndctl_mapping_get_dimm(ndm))
+func (m *mapping) Region() Region {
+	return C.ndctl_mapping_get_region(m)
 }
 
-//MarshalJSON returns json encoding of the mapping
-func (m *Mapping) MarshalJSON() ([]byte, error) {
-	return json.Marshal(map[string]interface{}{
+func (m *mapping) Dimm() Dimm {
+	return C.ndctl_mapping_get_dimm(m)
+}
+
+// Strings formats all relevant attributes as JSON.
+func (m *mapping) String() string {
+	return marshal(map[string]interface{}{
 		"dimm":     m.Dimm().DeviceName(),
 		"offset":   m.Offset(),
 		"length":   m.Length(),

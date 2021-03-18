@@ -311,7 +311,7 @@ const (
 )
 
 // setupNS checks if a namespace needs to be created in the region and if so, does that.
-func setupNS(r *ndctl.Region, percentage uint) error {
+func setupNS(r ndctl.Region, percentage uint) error {
 	align := GB
 	// In doc for "ndctl create-namespace" https://pmem.io/ndctl/ndctl-create-namespace.html
 	// it is stated that:
@@ -369,7 +369,7 @@ func setupNS(r *ndctl.Region, percentage uint) error {
 
 // setupVG ensures that all namespaces with name "pmem-csi" in the region
 // are part of the volume group.
-func setupVG(r *ndctl.Region, vgName string) error {
+func setupVG(r ndctl.Region, vgName string) error {
 	nsArray := r.ActiveNamespaces()
 	if len(nsArray) == 0 {
 		klog.V(3).Infof("No active namespaces in region %s", r.DeviceName())
