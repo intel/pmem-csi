@@ -141,6 +141,20 @@ EOF
 EOF
                 fi
 
+                ${SSH} "cat >>'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
+  - target:
+      group: apps
+      version: v1
+      kind: DaemonSet
+      name: pmem-csi-intel-com-node-setup
+    path: node-selector-patch.yaml
+EOF
+                    ${SSH} "cat >'$tmpdir/my-deployment/node-selector-patch.yaml'" <<EOF
+- op: add
+  path: /spec/template/spec/containers/0/command/-
+  value: -nodeSelector={$(echo ${TEST_PMEM_NODE_LABEL} | sed -e 's/\([^=]*\)=\(.*\)/"\1":"\2"/')}
+EOF
+
                 # Always use the configured label for selecting nodes.
                 ${SSH} "cat >>'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
   - target:
