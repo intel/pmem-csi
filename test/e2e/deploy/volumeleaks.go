@@ -78,13 +78,34 @@ func CheckForLeftoverVolumes(d *Deployment, volBefore map[string][]string) {
 	Expect(volNow).To(Equal(volBefore), "same volumes before and after the test")
 }
 
-type ndctlOutput struct {
-	Regions []region `json:"regions"`
+type NdctlOutput struct {
+	Regions []Region `json:"regions"`
 }
 
-type region struct {
-	Size          int64 `json:"size"`
-	AvailableSize int64 `json:"available_size"`
+type Region struct {
+	Size          int64       `json:"size"`
+	AvailableSize int64       `json:"available_size"`
+	Namespaces    []Namespace `json:"namespaces"`
+}
+
+type Namespace struct {
+	Mode string `json:"mode"`
+}
+
+func ParseNdctlOutput(out []byte) (NdctlOutput, error) {
+	var parsed NdctlOutput
+
+	// `ndctl list` output is inconsistent:
+	// [ { "dev":"region0", ...
+	// vs.
+	// { regions: [ {"dev": "region0" ...
+	var err error
+	if strings.HasPrefix(string(out), "[") {
+		err = json.Unmarshal(out, &parsed.Regions)
+	} else {
+		err = json.Unmarshal(out, &parsed)
+	}
+	return parsed, err
 }
 
 // CheckPMEM ensures that a test does not permanently use more than
@@ -102,19 +123,9 @@ func CheckPMEM() {
 			break
 		}
 		Expect(err).ShouldNot(HaveOccurred(), "unexpected output for `ndctl list` on on host #%d:\n%s", worker, string(out))
-
-		var regions []region
-		// `ndctl list` output is inconsistent:
-		// [ { "dev":"region0", ...
-		// vs.
-		// { regions: [ {"dev": "region0" ...
-		if strings.HasPrefix(string(out), "[") {
-			err = json.Unmarshal(out, &regions)
-		} else {
-			var pmem ndctlOutput
-			err = json.Unmarshal(out, &pmem)
-			regions = pmem.Regions
-		}
+		parsed, err := ParseNdctlOutput(out)
+		Expect(err).ShouldNot(HaveOccurred(), "unexpected error parsing the ndctl output %q: %v", string(out), err)
+		regions := parsed.Regions
 		Expect(regions).ShouldNot(BeEmpty(), "unexpected `ndctl list` output on host #%d, no regions: %s", worker, string(out))
 		Expect(err).ShouldNot(HaveOccurred(), "unexpected JSON parsing error for `ndctl list` output on on host #%d:\n%s", worker, string(out))
 		for i, region := range regions {
