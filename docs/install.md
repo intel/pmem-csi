@@ -8,6 +8,7 @@
     - [Install PMEM-CSI driver](#install-pmem-csi-driver)
       - [Install using the operator](#install-using-the-operator)
       - [Install from source](#install-from-source)
+    - [Automatic node setup](#automatic-node-setup)
     - [Volume parameters](#volume-parameters)
     - [Kata Containers support](#kata-containers-support)
     - [Ephemeral inline volumes](#ephemeral-inline-volumes)
@@ -210,12 +211,46 @@ $ ls -l /dev/pmem*
 ls: cannot access '/dev/pmem*': No such file or directory
 ```
 
+On some virtual machines, for example VMware® vSphere, the persistent
+memory does not support setting labels and the `ndctl init-labels
+nmem0` command above would fail. What can be done in that case is to
+convert the existing namespace from "raw" to "fsdax" mode and
+then run PMEM-CSI in LVM mode. Direct mode is not possible because
+it depends on creating additional namespaces which in turn depends
+on support for labels. The command for conversion is:
+```console
+$ ndctl create-namespace --force --reconfig=namespace0.0 --mode=fsdax --name=pmem-csi
+{
+  "dev":"namespace0.0",
+  "mode":"fsdax",
+  "map":"dev",
+  "size":67643637760,
+  "uuid":"9fa6976c-ab57-491b-a00c-e52d092a4fa8",
+  "sector_size":512,
+  "align":2097152,
+  "blockdev":"pmem0",
+  "name":"pmem-csi"
+}
+```
+
+Note the `pmem-csi` name for the namespace: this is how PMEM-CSI in
+LVM mode knows that it is allowed to use this namespace. When the VM
+provides only "legacy PMEM", ndctl silently drops that name. In that
+case, the volume group as to be created manually:
+```console
+$ vgcreate --force bus0region0fsdax /dev/pmem0
+```
+
+See [automatic node setup](#automatic-node-setup) below for
+instructions on how to automate this conversion.
+
 ## Installation and setup
 
 This section assumes that a Kubernetes cluster is already available
-with at least one node that has persistent memory device(s). For development or
-testing, it is also possible to use a cluster that runs on QEMU virtual
-machines, see the ["QEMU and Kubernetes"](autotest.md#qemu-and-kubernetes).
+with at least one node that has persistent memory device(s). For
+development or testing, it is also possible to use a cluster that runs
+on QEMU virtual machines, see the ["QEMU and
+Kubernetes"](autotest.md#qemu-and-kubernetes).
 
 - **Make sure that the alpha feature gates CSINodeInfo and CSIDriverRegistry are enabled**
 
@@ -622,6 +657,114 @@ $ kubectl exec my-csi-app-1 -- mount |grep /data
 $ kubectl exec my-csi-app-2 -- mount |grep /data
 /dev/ndbus0region0fsdax/5cc9b19e-551d-11e9-a584-928299ac4b17 on /data type xfs (rw,relatime,attr2,dax,inode64,noquota)
 ```
+
+### Automatic node setup
+
+The expectation is that the scripts which bring up nodes can be
+adapted to prepare the PMEM for usage by PMEM-CSI as explained
+earlier. But this might not always be easy.
+
+For the case of converting an existing "raw" namespace to "fsdax" mode
+there is a possibility to do the conversion through a deployed
+PMEM-CSI driver:
+
+1. Install PMEM-CSI in LVM mode without preparing nodes. At this point
+   only the central controller pod will run.
+1. For each node that has one or more raw namespaces that all need
+   to be converted, set the `<driver name>/convert-raw-namespaces` label (usually
+   `pmem-csi.intel.com/convert-raw-namespaces`) to `force`.
+1. This will cause the pods of the `pmem-csi-intel-com-node-setup`
+   DaemonSet to run on those nodes. Those pods then will
+   convert the namespaces, create the LVM volume group,
+   remove the `convert-raw-namespaces` label
+   (i.e. the pods will only run once) and add the normal label
+   that enables the PMEM-CSI node driver pods to run.
+1. The normal node driver pods start up and then are
+   ready to provision volumes.
+
+**WARNING**: the raw namespaces will be converted even when they are
+active. If data was stored on them, it will be lost after the
+conversion.
+
+The output of a successful conversion will look like this:
+```
+I0407 16:24:43.453802       1 main.go:69] Version: v0.9.0-29-g043b4e9c0-dirty
+I0407 16:24:43.456707       1 convert.go:78] "raw-namespace-conversion: checking for namespaces"
+I0407 16:24:43.457705       1 convert.go:80] "raw-namespace-conversion: checking" bus="{\"dev\":\"ndbus0\",\"dimms\":[{}],\"provider\":\"ACPI.NFIT\",\"regions\":[{}]}"
+I0407 16:24:43.458144       1 convert.go:82] "raw-namespace-conversion: checking" region="{\"available_size\":0,\"dev\":\"region0\",\"mappings\":[{}],\"max_available_extent\":0,\"namespaces\":[{}],\"size\":68719476736,\"type\":\"pmem\"}"
+I0407 16:24:43.458264       1 convert.go:89] "raw-namespace-conversion: checking" namespace="{\"blockdev\":\"pmem0\",\"dev\":\"namespace0.0\",\"enabled\":true,\"id\":0,\"mode\":\"raw\",\"name\":\"\",\"size\":68719476736,\"uuid\":\"40b5697c-9453-457d-b4b3-789718ac54ab\"}"
+I0407 16:24:43.458337       1 convert.go:98] "raw-namespace-conversion: converting raw namespace" namespace="{\"blockdev\":\"pmem0\",\"dev\":\"namespace0.0\",\"enabled\":true,\"id\":0,\"mode\":\"raw\",\"name\":\"\",\"size\":68719476736,\"uuid\":\"40b5697c-9453-457d-b4b3-789718ac54ab\"}"
+I0407 16:24:44.077114       1 convert.go:126] "raw-namespace-conversion: setting up volume group" namespace="{\"blockdev\":\"pmem0\",\"dev\":\"namespace0.0\",\"enabled\":false,\"id\":0,\"mode\":\"fsdax\",\"name\":\"\",\"size\":18446744073709551615,\"uuid\":\"00000000-0000-0000-0000-000000000000\"}" VG="ndbus0region0fsdax"
+I0407 16:24:44.111153       1 pmd-lvm.go:408] /dev/pmem0: already part of volume group ndbus0region0fsdax
+I0407 16:24:44.111352       1 pmd-lvm.go:412] no unused namespace found to add to this group: ndbus0region0fsdax
+I0407 16:24:44.111541       1 convert.go:132] "raw-namespace-conversion: converted to fsdax namespace" namespace="{\"blockdev\":\"pmem0\",\"dev\":\"namespace0.0\",\"enabled\":false,\"id\":0,\"mode\":\"fsdax\",\"name\":\"\",\"size\":18446744073709551615,\"uuid\":\"00000000-0000-0000-0000-000000000000\"}" VG="ndbus0region0fsdax"
+I0407 16:24:44.111573       1 convert.go:74] "raw-namespace-conversion: successful" converted=1
+I0407 16:24:44.127330       1 convert.go:171] "check-pmem: volume group will be used by PMEM-CSI in LVM mode" VG="ndbus0region0fsdax"
+I0407 16:24:44.150347       1 convert.go:200] "relabel: change node labels" node="pmem-csi-pmem-govm-master" patch="{\"metadata\":{\"labels\":{\"pmem-csi.intel.com/convert-raw-namespaces\": null, \"feature.node.kubernetes.io/memory-nv.dax\": \"true\"}}}"
+I0407 16:24:44.150370       1 pmem-csi-driver.go:325] raw namespace conversion is done, waiting for termination signal
+I0407 16:24:45.614284       1 pmem-csi-driver.go:343] Caught signal terminated, terminating.
+```
+
+It terminates once Kubernetes notices that the pod is no longer
+needed. This usually happens quickly, so a log monitoring solution
+may be needed to see this output because `kubectl logs` does not work
+for pods that were already deleted.
+
+The DaemonSet contains some information which is available longer:
+```console
+$ kubectl describe daemonsets/pmem-csi-intel-com-node-setup
+Name:           pmem-csi-intel-com-node-setup
+Selector:       app.kubernetes.io/instance=pmem-csi.intel.com,app.kubernetes.io/name=pmem-csi-node-setup,pmem-csi.intel.com/deployment=lvm-production
+Node-Selector:  pmem-csi.intel.com/convert-raw-namespaces=force
+Labels:         app.kubernetes.io/component=node-setup
+                app.kubernetes.io/instance=pmem-csi.intel.com
+                app.kubernetes.io/name=pmem-csi-node-setup
+                app.kubernetes.io/part-of=pmem-csi
+                pmem-csi.intel.com/deployment=lvm-production
+Annotations:    deprecated.daemonset.template.generation: 1
+Desired Number of Nodes Scheduled: 0
+Current Number of Nodes Scheduled: 0
+Number of Nodes Scheduled with Up-to-date Pods: 0
+Number of Nodes Scheduled with Available Pods: 0
+Number of Nodes Misscheduled: 0
+Pods Status:  0 Running / 0 Waiting / 0 Succeeded / 0 Failed
+Pod Template:
+  Labels:           app.kubernetes.io/component=node-setup
+                    app.kubernetes.io/instance=pmem-csi.intel.com
+                    app.kubernetes.io/name=pmem-csi-node-setup
+                    app.kubernetes.io/part-of=pmem-csi
+                    pmem-csi.intel.com/deployment=lvm-production
+                    pmem-csi.intel.com/webhook=ignore
+  Service Account:  pmem-csi-intel-com-node-setup
+  Containers:
+   pmem-driver:
+    Image:      172.17.42.1:5001/pmem-csi-driver:canary
+    Port:       <none>
+    Host Port:  <none>
+    Command:
+      /usr/local/bin/pmem-csi-driver
+      -v=3
+      -logging-format=text
+      -mode=force-convert-raw-namespaces
+      -nodeSelector={"storage":"pmem"}
+      -nodeid=$(KUBE_NODE_NAME)
+...
+Events:
+  Type    Reason            Age    From                  Message
+  ----    ------            ----   ----                  -------
+  Normal  SuccessfulCreate  5m47s  daemonset-controller  Created pod: pmem-csi-intel-com-node-setup-fr9b8
+  Normal  SuccessfulDelete  5m45s  daemonset-controller  Deleted pod: pmem-csi-intel-com-node-setup-fr9b8
+```
+
+If conversion fails, the pod will exit with an error and then get
+restarted automatically by Kubernetes to retry the conversion until it
+succeeds.
+
+It is considered a user error if conversion is requested for a node
+which has nothing to convert. To make that obvious, the pod will print
+an error and then exist with an error. That way, the pod continues to
+exist and the log can be inspected to identify the problem.
+
 
 #### Volume parameters
 
