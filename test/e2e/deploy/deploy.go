@@ -36,7 +36,7 @@ import (
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
-	"github.com/intel/pmem-csi/test/test-config"
+	testconfig "github.com/intel/pmem-csi/test/test-config"
 
 	"github.com/onsi/ginkgo"
 	"github.com/onsi/gomega"
@@ -1107,13 +1107,6 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 				// root.
 				err = os.Symlink("../../_work", workRoot+"/_work")
 				framework.ExpectNoError(err, "symlink the _work directory")
-
-				// We can deploy older PMEM-CSI on Kubernetes 1.20, but we have to add the symlinks
-				// for it because they are expected by the setup-deploy.sh script.
-				if os.Getenv("TEST_KUBERNETES_VERSION") == "1.20" {
-					err = os.Symlink("kubernetes-1.19", workRoot+"/deploy/kubernetes-1.20")
-					framework.ExpectNoError(err, "symlink for Kubernetes 1.20")
-				}
 			}
 			cmd := exec.Command("test/setup-deployment.sh")
 			cmd.Dir = root
