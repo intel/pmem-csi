@@ -64,7 +64,7 @@ operator-generate-crd: controller-gen
 # Generate packagemanifests using operator-sdk.
 operator-generate-catalog: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) _work/kustomize operator-generate-crd
 	@echo "Generating base catalog in $(OPERATOR_OUTPUT_DIR) ..."
-	@_work/kustomize build --load_restrictor=none $(MANIFESTS_DIR) | $< generate packagemanifests --version $(MAJOR_MINOR_PATCH_VERSION) \
+	@_work/kustomize build --load-restrictor LoadRestrictionsNone $(MANIFESTS_DIR) | $< generate packagemanifests --version $(MAJOR_MINOR_PATCH_VERSION) \
 		--kustomize-dir $(MANIFESTS_DIR) --output-dir $(CATALOG_DIR)
 	@$(PATCH_VERSIONS) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
 	@$(PATCH_DATE) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
@@ -87,7 +87,7 @@ operator-validate-catalog: operator-courier-image
 # TODO: this seems unused and/or broken. Remove it?
 operator-generate-bundle: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) _work/kustomize operator-generate-crd
 	@echo "Generating operator bundle in $(OPERATOR_OUTPUT_DIR) ..."
-	@_work/kustomize build --load_restrictor=none $(MANIFESTS_DIR) | $< generate bundle  --version=$(MAJOR_MINOR_PATCH_VERSION) \
+	@_work/kustomize build --load-restrictor LoadRestrictionsNone $(MANIFESTS_DIR) | $< generate bundle  --version=$(MAJOR_MINOR_PATCH_VERSION) \
         --kustomize-dir=$(MANIFESTS_DIR) --output-dir=$(BUNDLE_DIR)
 	@$(PATCH_VERSIONS) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
 	@$(PATCH_DATE) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml

@@ -138,7 +138,7 @@ include test/start-stop.make
 include test/test.make
 
 #Kustomize latest release version
-KUSTOMIZE_VERSION=v3.8.7
+KUSTOMIZE_VERSION=v4.0.5
 _work/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz:
 	curl -L https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/${KUSTOMIZE_VERSION}/kustomize_${KUSTOMIZE_VERSION}_linux_amd64.tar.gz -o $(abspath $@)
 
@@ -167,7 +167,6 @@ KUSTOMIZE_KUBERNETES_OUTPUT = \
     deploy/kubernetes-X.XX/pmem-csi-lvm-testing.yaml=deploy/kustomize/kubernetes-base-lvm-coverage \
 
 KUSTOMIZE_KUBERNETES_VERSIONS = \
-    1.17 \
     1.18 \
     1.19 \
     1.20 \
@@ -196,7 +195,7 @@ KUSTOMIZE_LOOKUP_KUSTOMIZATION = $(strip $(foreach item,$(KUSTOMIZE),$(if $(filt
 # This function takes the kustomize binary and the name of an output
 # file as arguments and returns the command which produces that file
 # as stdout.
-KUSTOMIZE_INVOCATION = (echo '\# Generated with "make kustomize", do not edit!'; echo; $(1) build --load_restrictor none $(call KUSTOMIZE_LOOKUP_KUSTOMIZATION,$(2)))
+KUSTOMIZE_INVOCATION = (echo '\# Generated with "make kustomize", do not edit!'; echo; $(1) build --load-restrictor LoadRestrictionsNone $(call KUSTOMIZE_LOOKUP_KUSTOMIZATION,$(2)))
 
 $(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
 	mkdir -p ${@D}

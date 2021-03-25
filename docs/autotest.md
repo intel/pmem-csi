@@ -108,7 +108,7 @@ For example, this invocation sets up a cluster using an older release
 of Kubernetes:
 
 ``` 
-TEST_KUBERNETES_VERSION=1.17 CLUSTER=kubernetes-1.17 make start
+TEST_KUBERNETES_VERSION=1.18 CLUSTER=kubernetes-1.18 make start
 ```
 
 See additional details in [test/test-config.d](/test/test-config.d).
