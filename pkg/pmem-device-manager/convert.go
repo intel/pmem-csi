@@ -242,19 +242,24 @@ func convert(ctx context.Context, ndctx ndctl.Context) (numConverted int, finalE
 					finalErr = err
 					return
 				}
-				uid, _ := uuid.NewUUID()
-				if err := namespace.SetUUID(uid); err != nil {
-					finalErr = err
-					return
-				}
-				if err := namespace.SetSize(size); err != nil {
-					finalErr = err
-					return
-				}
-				// Set the name that is expected by LVM device manager.
-				if err := namespace.SetAltName("pmem-csi"); err != nil {
-					finalErr = err
-					return
+				// Setting UUID, size and alt name
+				// does not work for legacy persistent
+				// memory and has to be skipped.
+				if namespace.Type() != ndctl.IoNamespace {
+					uid, _ := uuid.NewUUID()
+					if err := namespace.SetUUID(uid); err != nil {
+						finalErr = err
+						return
+					}
+					if err := namespace.SetSize(size); err != nil {
+						finalErr = err
+						return
+					}
+					// Set the name that is expected by LVM device manager.
+					if err := namespace.SetAltName("pmem-csi"); err != nil {
+						finalErr = err
+						return
+					}
 				}
 				if err := namespace.SetEnforceMode(ndctl.FsdaxMode); err != nil {
 					finalErr = fmt.Errorf("set fsdax mode: %v", err)
