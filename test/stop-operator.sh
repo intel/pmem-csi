@@ -14,6 +14,9 @@ CLUSTER_DIRECTORY="${CLUSTER_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
 SSH="${CLUSTER_DIRECTORY}/ssh.0"
 KUBECTL="${SSH} kubectl" # Always use the kubectl installed in the cluster.
 
+keep_crd=false
+keep_namespace=false
+
 function delete_olm_operator() {
   set -x
   BINDIR=${REPO_DIRECTORY}/_work/bin
@@ -45,24 +48,67 @@ function delete_olm_operator() {
 
 function delete_operator() {
   DEPLOY_DIRECTORY="${REPO_DIRECTORY}/deploy/operator"
-  deploy="${DEPLOYMENT_DIRECTORY}/pmem-csi-operator.yaml"
+  deploy="${DEPLOY_DIRECTORY}/pmem-csi-operator.yaml"
 
-  echo "Deleting operator components in namespace '${TEST_OPERATOR_NAMESPACE}'"
+  tmpdir=$(mktemp -d)
+  trap "rm -rf $tmpdir" SIGTERM SIGINT EXIT
+
+  cat > ${tmpdir}/pmem-csi-operator.yaml <<EOF
+$(cat "${deploy}")
+EOF
+
+  cat > ${tmpdir}/kustomization.yaml <<EOF
+resources:
+- pmem-csi-operator.yaml
+$($keep_namespace && echo -n \
+'patchesStrategicMerge:
+- patch.yaml'
+)
+EOF
+
+  if $keep_namespace ; then
+  cat > ${tmpdir}/patch.yaml <<EOF
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${TEST_OPERATOR_NAMESPACE}
+\$patch: delete
+EOF
+  fi
+
   # Failures are expected like, as deleting namespace could also delete
   # resources created in that namespace. And when try to delete a resoruce
   # after deleting it's namespace will return NotFound error
-  sed -e "s;\(namespace: \)pmem-csi$;\1${TEST_OPERATOR_NAMESPACE};g"  -e "s;\(name: \)pmem-csi$;\1${TEST_OPERATOR_NAMESPACE};g" \
-    ${DEPLOY_DIRECTORY}/pmem-csi-operator.yaml | \
-    ${KUBECTL} delete -f - 2>&1 | grep -v NotFound || true
+  sed -i -e "s;\(namespace: \)pmem-csi$;\1${TEST_OPERATOR_NAMESPACE};g" \
+         -e "s;\(name: \)pmem-csi$;\1${TEST_OPERATOR_NAMESPACE};g" ${tmpdir}/pmem-csi-operator.yaml
 
-  echo "Deleting CRD..."
-  ${KUBECTL} delete crd/pmemcsideployments.pmem-csi.intel.com
+  echo "Deleting operator components in namespace '${TEST_OPERATOR_NAMESPACE}'"
+  ${REPO_DIRECTORY}/_work/kustomize build $tmpdir | ${KUBECTL} delete -f - 2>&1 | grep -v NotFound || true
+
+  if ! $keep_crd ; then
+    echo "Deleting CRD..."
+    ${KUBECTL} delete crd/pmemcsideployments.pmem-csi.intel.com 2>&1 | grep -v NotFound || true
+  fi
+}
+
+function Usage() {
+  echo "Usage:
+  $0 [-olm] [-keep-namespace] [-keep-crd]"
+  exit
 }
 
 deploy_method=yaml
-if [ $# -ge 1 -a "$1" == "-olm" ]; then
-  deploy_method=olm
-fi
+
+for arg in $@; do
+  case $arg in
+  "-olm") deploy_method=olm ;;
+  "-keep-crd") keep_crd=true ;;
+  "-keep-namespace") keep_namespace=true ;;
+  "-h") Usage ;;
+  *) echo "Ignoring unknown argument: $arg"
+     Usage ;;
+  esac
+done
 
 case $deploy_method in
   yaml)
@@ -73,4 +119,3 @@ case $deploy_method in
     echo >&2 "Unknown deploy method!!!"
     exit 1 ;;
 esac
-
