@@ -18,6 +18,7 @@ import (
 	"github.com/intel/pmem-csi/pkg/exec"
 	"github.com/intel/pmem-csi/pkg/logger"
 	"github.com/intel/pmem-csi/pkg/ndctl"
+	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 	"github.com/intel/pmem-csi/pkg/types"
 )
 
@@ -76,42 +77,62 @@ func convert(ctx context.Context, ndctx ndctl.Context) (numConverted int, finalE
 	l.V(3).Info("checking for namespaces")
 	for _, bus := range ndctx.GetBuses() {
 		l.V(3).Info("checking", "bus", bus)
-		for _, region := range bus.AllRegions() {
+		for _, region := range bus.ActiveRegions() {
 			l.V(3).Info("checking", "region", region)
 			if region.Readonly() {
 				l.V(3).Info("skipped because read-only")
 				continue
 			}
+			vgName := pmemcommon.VgName(bus, region)
 			for _, namespace := range region.AllNamespaces() {
-				l.V(5).Info("checking", "namespace", namespace)
+				l.V(3).Info("checking", "namespace", namespace)
 				size := namespace.Size()
 				if size <= 0 {
 					l.V(3).Info("skipped because size is zero")
 					continue
 				}
-				if namespace.Mode() != ndctl.RawMode {
-					l.V(3).Info("skipped because mode is not " + string(ndctl.RawMode))
-					continue
+
+				switch namespace.Mode() {
+				case ndctl.RawMode:
+					l.V(2).Info("converting raw namespace", "namespace", namespace)
+					// We don't even try to set the special namespace alt name here.
+					// This code is supposed to be used for legacy PMEM where the
+					// name would be silently ignored by ndctl. By not even trying
+					// set it, we avoid a special case and can test this also
+					// with PMEM were the name would be set.
+					_, err := exec.RunCommand("ndctl", "create-namespace",
+						"--force", "--mode", "fsdax",
+						"--bus", bus.DeviceName(),
+						"--region", region.DeviceName(),
+						"--reconfig", namespace.DeviceName(),
+					)
+					if err != nil {
+						finalErr = err
+						return
+					}
+					fallthrough
+				case ndctl.FsdaxMode:
+					// If it has the right name, then PMEM-CSI in LVM mode will
+					// manage it and we are done with it. Because of this special check,
+					// preparing a node as required by PMEM-CSI and then forcing
+					// conversion skips the unnecessary conversion and handles such
+					// a node normally.
+					if namespace.Name() == pmemCSINamespaceName {
+						continue
+					}
+					// Otherwise we must have the right volume group for it.
+					// If we don't, try to create it.
+					l.V(2).Info("setting up volume group", "namespace", namespace, "VG", vgName)
+					devName := "/dev/" + namespace.BlockDeviceName()
+					if err := setupVGForNamespaces(vgName, devName); err != nil {
+						finalErr = err
+						return
+					}
+					l.V(2).Info("converted to fsdax namespace", "namespace", namespace, "VG", vgName)
+					numConverted++
+				default:
+					l.V(3).Info("ignoring namespace because of mode", "mode", namespace.Mode())
 				}
-
-				l.V(2).Info("converting raw namespace", "namespace", namespace)
-
-				// TODO (?): verify that the name was set
-				// and if not, create the volume group because the LVM
-				// device manager will ignore the converted namespace
-				_, err := exec.RunCommand("ndctl", "create-namespace",
-					"--force", "--mode", "fsdax", "--name", "pmem-csi",
-					"--bus", bus.DeviceName(),
-					"--region", region.DeviceName(),
-					"--reconfig", namespace.DeviceName(),
-				)
-				if err != nil {
-					finalErr = err
-					return
-				}
-
-				l.V(2).Info("converted to fsdax namespace", "namespace", namespace)
-				numConverted++
 			}
 		}
 	}

@@ -12,6 +12,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,7 +43,7 @@ cat <<EOF
 EOF
 `
 	failure := `#!/bin/sh
-echo "fake error"
+echo "$@: fake error"
 exit 1
 `
 
@@ -58,9 +59,67 @@ case "$@" in
 esac
 `
 
+	pvsNone := `#!/bin/sh
+case "$*" in
+    --noheadings\ -o\ vg_name\ /dev/pmem0)
+       exit 0
+       ;;
+    *)
+       echo >&2 "unexpected invocation: $*"
+       exit 1
+       ;;
+esac
+`
+	pvsOne := `#!/bin/sh
+case "$*" in
+    --noheadings\ -o\ vg_name\ /dev/pmem0)
+       echo "bus0region0fsdax"
+       ;;
+    *)
+       echo >&2 "unexpected invocation: $*"
+       exit 1
+       ;;
+esac
+`
+
+	vgCreateOkay := `#!/bin/sh
+case "$*" in
+    --force\ bus0region*fsdax\ /dev/pmem*)
+       exit 0
+       ;;
+    *)
+       echo >&2 "unexpected invocation: $*"
+       exit 1
+       ;;
+esac
+`
+
+	vgExtendOkay := `#!/bin/sh
+case "$*" in
+    --force\ bus0region*fsdax\ /dev/pmem*)
+       exit 0
+       ;;
+    *)
+       echo >&2 "unexpected invocation: $*"
+       exit 1
+       ;;
+esac
+`
+
+	vgDisplayOne := `#!/bin/sh
+case "$*" in
+    bus0region0fsdax)
+       echo "bus0degion0fsdax: okay" # output does not matter
+       ;;
+    *)
+       echo >&2 "unexpected invocation: $*"
+       exit 1
+       ;;
+esac
+`
 	testcases := map[string]struct {
 		hardware    ndctl.Context
-		script      *string
+		scripts     map[string]string
 		expectError bool
 		expectNum   int
 	}{
@@ -92,10 +151,14 @@ esac
 				return hardware
 			}(),
 		},
-		"fsdax-namespace": {
+		"fsdax-namespace-with-name": {
 			hardware: func() ndctl.Context {
 				hardware := makeRawNamespace()
-				hardware.Buses[0].(*ndctlfake.Bus).Regions_[0].(*ndctlfake.Region).Namespaces_[0].(*ndctlfake.Namespace).Mode_ = ndctl.FsdaxMode
+				region := hardware.Buses[0].(*ndctlfake.Bus).Regions_[0].(*ndctlfake.Region)
+				ns := region.Namespaces_[0].(*ndctlfake.Namespace)
+				// already converted with special name
+				ns.Mode_ = ndctl.FsdaxMode
+				ns.Name_ = "pmem-csi"
 				return hardware
 			}(),
 		},
@@ -107,8 +170,50 @@ esac
 			}(),
 		},
 		"convert-one": {
-			hardware:  makeRawNamespace(),
+			hardware: makeRawNamespace(),
+			scripts: map[string]string{
+				"ndctl":    withName,
+				"pvs":      pvsNone,
+				"vgcreate": vgCreateOkay,
+			},
 			expectNum: 1,
+		},
+		"only-vgcreate": {
+			hardware: func() ndctl.Context {
+				hardware := makeRawNamespace()
+				region := hardware.Buses[0].(*ndctlfake.Bus).Regions_[0].(*ndctlfake.Region)
+				ns := region.Namespaces_[0].(*ndctlfake.Namespace)
+				ns.Mode_ = ndctl.FsdaxMode // already converted
+				return hardware
+			}(),
+			scripts: map[string]string{
+				"pvs":      pvsNone,
+				"vgcreate": vgCreateOkay,
+			},
+			expectNum: 1,
+		},
+		"vgextend": {
+			hardware: makeRawNamespace(),
+			scripts: map[string]string{
+				"ndctl":     withName,
+				"pvs":       pvsNone,
+				"vgextend":  vgExtendOkay,
+				"vgdisplay": vgDisplayOne,
+			},
+			expectNum: 1,
+		},
+		"namespace-in-vg": {
+			hardware: func() ndctl.Context {
+				hardware := makeRawNamespace()
+				region := hardware.Buses[0].(*ndctlfake.Bus).Regions_[0].(*ndctlfake.Region)
+				ns := region.Namespaces_[0].(*ndctlfake.Namespace)
+				ns.Mode_ = ndctl.FsdaxMode // already converted
+				return hardware
+			}(),
+			scripts: map[string]string{
+				"pvs": pvsOne,
+			},
+			expectNum: 1, // counted as conversion despite the nop in setupVGForNamespaces
 		},
 		"convert-two-namespaces": {
 			hardware: func() ndctl.Context {
@@ -118,6 +223,11 @@ esac
 				region.Namespaces_ = append(region.Namespaces_, &ns)
 				return hardware
 			}(),
+			scripts: map[string]string{
+				"ndctl":    withName,
+				"pvs":      pvsNone,
+				"vgcreate": vgCreateOkay,
+			},
 			expectNum: 2,
 		},
 		"convert-two-regions": {
@@ -126,18 +236,30 @@ esac
 				bus := hardware.Buses[0].(*ndctlfake.Bus)
 				region := bus.Regions_[0].(*ndctlfake.Region)
 				ns := *region.Namespaces_[0].(*ndctlfake.Namespace)
+				ns.BlockDeviceName_ = "pmem1"
+				ns.DeviceName_ = "namespace1.0"
 				bus.Regions_ = append(bus.Regions_,
 					&ndctlfake.Region{
 						Type_:       ndctl.PmemRegion,
+						DeviceName_: "region1",
+						Enabled_:    true,
 						Namespaces_: []ndctl.Namespace{&ns},
 					})
 				return hardware
 			}(),
+			scripts: map[string]string{
+				"ndctl":    withName,
+				"pvs":      pvsNone,
+				"vgcreate": vgCreateOkay,
+			},
 			expectNum: 2,
 		},
 		"convert-failure": {
-			hardware:    makeRawNamespace(),
-			script:      &failure,
+			hardware: makeRawNamespace(),
+			scripts: map[string]string{
+				"pvs":      pvsNone,
+				"vgcreate": vgCreateOkay,
+			},
 			expectError: true,
 		},
 		"convert-failure-second-namespaces": {
@@ -145,11 +267,16 @@ esac
 				hardware := makeRawNamespace()
 				region := hardware.Buses[0].(*ndctlfake.Bus).Regions_[0].(*ndctlfake.Region)
 				ns := *region.Namespaces_[0].(*ndctlfake.Namespace)
-				ns.Name_ = "namespace0.2"
+				ns.DeviceName_ = "namespace0.2"
+				ns.BlockDeviceName_ = "pmem1"
 				region.Namespaces_ = append(region.Namespaces_, &ns)
 				return hardware
 			}(),
-			script:      &failureForNamespace02,
+			scripts: map[string]string{
+				"ndctl":    failureForNamespace02,
+				"pvs":      pvsNone,
+				"vgcreate": vgCreateOkay,
+			},
 			expectError: true,
 			expectNum:   1,
 		},
@@ -161,23 +288,27 @@ esac
 			defer os.Setenv("PATH", path)
 			tmp := t.TempDir()
 
-			script := tc.script
-			if script == nil {
-				script = &withName
+			// Create fake commands, backfilling with a
+			// version which fails if called.
+			for _, script := range []string{"ndctl", "pvs", "vgcreate", "vgdisplay", "vgextend"} {
+				content, ok := tc.scripts[script]
+				if !ok {
+					content = failure
+				}
+				err := ioutil.WriteFile(tmp+"/"+script, []byte(content), 0700)
+				require.NoError(t, err)
 			}
-			err := ioutil.WriteFile(tmp+"/ndctl", []byte(*script), 0700)
-			require.NoError(t, err)
 			os.Setenv("PATH", tmp+":"+path)
 
 			ctx := logger.Set(context.Background(), testinglogger.New(t))
 
 			numConverted, err := convert(ctx, tc.hardware)
 			if tc.expectError {
-				require.Error(t, err)
+				assert.Error(t, err)
 			} else {
-				require.NoError(t, err)
+				assert.NoError(t, err)
 			}
-			require.Equal(t, tc.expectNum, numConverted)
+			assert.Equal(t, tc.expectNum, numConverted)
 		})
 	}
 }
@@ -188,15 +319,20 @@ func makeRawNamespace() *ndctlfake.Context {
 	return ndctlfake.NewContext(&ndctlfake.Context{
 		Buses: []ndctl.Bus{
 			&ndctlfake.Bus{
+				DeviceName_: "bus0",
 				Regions_: []ndctl.Region{
 					&ndctlfake.Region{
-						Type_: ndctl.PmemRegion,
+						DeviceName_: "region0",
+						Type_:       ndctl.PmemRegion,
+						Enabled_:    true,
 						Namespaces_: []ndctl.Namespace{
 							&ndctlfake.Namespace{
-								Mode_:    ndctl.RawMode,
-								Size_:    1024 * 1024 * 1024,
-								Enabled_: true,
-								Active_:  true,
+								Mode_:            ndctl.RawMode,
+								Size_:            1024 * 1024 * 1024,
+								Enabled_:         true,
+								Active_:          true,
+								DeviceName_:      "namespace0.0",
+								BlockDeviceName_: "pmem0",
 							},
 						},
 					},

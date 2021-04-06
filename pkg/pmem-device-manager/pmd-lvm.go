@@ -18,6 +18,9 @@ import (
 const (
 	// 4 MB alignment is used by LVM
 	lvmAlign uint64 = 4 * 1024 * 1024
+
+	// special alt name that a namespace must have to be managed by PMEM-CSI.
+	pmemCSINamespaceName = "pmem-csi"
 )
 
 type pmemLvm struct {
@@ -325,7 +328,7 @@ func setupNS(r ndctl.Region, percentage uint) error {
 	// Subtract sizes of existing active namespaces with currently handled mode and owned by pmem-csi
 	for _, ns := range r.ActiveNamespaces() {
 		klog.V(5).Infof("setupNS: Exists: Size %16d Mode:%v Device:%v Name:%v", ns.Size(), ns.Mode(), ns.DeviceName(), ns.Name())
-		if ns.Name() != "pmem-csi" {
+		if ns.Name() != pmemCSINamespaceName {
 			continue
 		}
 		diff := int64(canUse - ns.Size())
@@ -378,18 +381,35 @@ func setupVG(r ndctl.Region, vgName string) error {
 	var devNames []string
 	for _, ns := range nsArray {
 		// consider only namespaces having name given by this driver, to exclude foreign ones
-		if ns.Name() == "pmem-csi" {
+		if ns.Name() == pmemCSINamespaceName {
 			devName := "/dev/" + ns.BlockDeviceName()
-			/* check if this pv is already part of a group, if yes ignore this pv
-			if not add to arg list */
-			output, err := pmemexec.RunCommand("pvs", "--noheadings", "-o", "vg_name", devName)
-			if err != nil || len(strings.TrimSpace(output)) == 0 {
-				devNames = append(devNames, devName)
-			}
+			devNames = append(devNames, devName)
 		}
 	}
 	if len(devNames) == 0 {
 		klog.V(3).Infof("no new namespace found to add to this group: %s", vgName)
+		return nil
+	}
+	return setupVGForNamespaces(vgName, devNames...)
+}
+
+// setupVGForNamespaces ensures that the given namespace are in the volume group,
+// creating it if necessary. Namespaces that are already in a group are ignored.
+func setupVGForNamespaces(vgName string, devNames ...string) error {
+	var unusedDevNames []string
+	for _, devName := range devNames {
+		// check if this pv is already part of a group, if yes ignore
+		// this pv if not add to arg list
+		output, err := pmemexec.RunCommand("pvs", "--noheadings", "-o", "vg_name", devName)
+		output = strings.TrimSpace(output)
+		if err != nil || len(output) == 0 {
+			unusedDevNames = append(unusedDevNames, devName)
+		} else {
+			klog.V(3).Infof("%s: already part of volume group %s", devName, output)
+		}
+	}
+	if len(unusedDevNames) == 0 {
+		klog.V(3).Infof("no unused namespace found to add to this group: %s", vgName)
 		return nil
 	}
 
@@ -403,7 +423,7 @@ func setupVG(r ndctl.Region, vgName string) error {
 	}
 
 	cmdArgs := []string{"--force", vgName}
-	cmdArgs = append(cmdArgs, devNames...)
+	cmdArgs = append(cmdArgs, unusedDevNames...)
 	_, err := pmemexec.RunCommand(cmd, cmdArgs...) //nolint gosec
 	if err != nil {
 		return fmt.Errorf("failed to create/extend volume group '%s': %v", vgName, err)
