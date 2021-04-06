@@ -8,6 +8,7 @@ package pmdmanager
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -50,14 +51,14 @@ func ForceConvertRawNamespaces(ctx context.Context, client kubernetes.Interface,
 		return fmt.Errorf("ndctl: %v", err)
 	}
 
-	numConverted, err := convert(ctx, ndctx)
-	if err != nil {
+	if _, err := convert(ctx, ndctx); err != nil {
 		return err
 	}
-	if numConverted == 0 {
-		// Don't add the label if we didn't actually create any suitable namespace.
-		nodeSelector = nil
+
+	if err := havePMEM(ctx, ndctx); err != nil {
+		return err
 	}
+
 	if err := relabel(ctx, client, driverName, nodeSelector, nodeName); err != nil {
 		return fmt.Errorf("relabel node %s: %v:", nodeName, err)
 	}
@@ -138,6 +139,44 @@ func convert(ctx context.Context, ndctx ndctl.Context) (numConverted int, finalE
 	}
 
 	return
+}
+
+func havePMEM(ctx context.Context, ndctx ndctl.Context) error {
+	l := logger.Get(ctx).WithName("check-pmem")
+
+	haveFsdaxWithName := 0
+	haveVG := 0
+	for _, bus := range ndctx.GetBuses() {
+		l.V(5).Info("checking", "bus", bus)
+		for _, region := range bus.ActiveRegions() {
+			l.V(5).Info("checking", "region", region)
+			if region.Readonly() {
+				l.V(3).Info("skipped because read-only")
+				continue
+			}
+			vgName := pmemcommon.VgName(bus, region)
+			for _, namespace := range region.AllNamespaces() {
+				l.V(5).Info("checking", "namespace", namespace)
+				size := namespace.Size()
+				if size > 0 &&
+					namespace.Mode() == ndctl.FsdaxMode &&
+					namespace.Name() == pmemCSINamespaceName {
+					l.V(3).Info("namespace will be used by PMEM-CSI in LVM mode because of name", "namespace", namespace)
+					haveFsdaxWithName++
+				}
+			}
+			if _, err := exec.RunCommand("vgdisplay", vgName); err != nil {
+				l.V(5).Info("volume group does not exist", "VG", vgName)
+			} else {
+				l.V(3).Info("volume group will be used by PMEM-CSI in LVM mode", "VG", vgName)
+				haveVG++
+			}
+		}
+	}
+	if haveFsdaxWithName == 0 && haveVG == 0 {
+		return errors.New("no volume group and no suitable namespace found")
+	}
+	return nil
 }
 
 func relabel(ctx context.Context, client kubernetes.Interface, driverName string, nodeSelector types.NodeSelector, nodeName string) error {
