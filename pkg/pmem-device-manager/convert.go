@@ -30,7 +30,20 @@ const (
 // force-converts them to fsdax + LVM volume group, then modifies the
 // node labels such that the normal driver runs instead of this
 // special one-time operation.
-func ForceConvertRawNamespaces(ctx context.Context, client kubernetes.Interface, driverName string, nodeSelector types.NodeSelector, nodeName string) error {
+func ForceConvertRawNamespaces(ctx context.Context, client kubernetes.Interface, driverName string, nodeSelector types.NodeSelector, nodeName string) (finalErr error) {
+	defer func() {
+		if finalErr == nil {
+			return
+		}
+
+		// Gather some information and append it.
+		finalErr = fmt.Errorf("%w\n%s\n%s",
+			finalErr,
+			exec.CmdResult("ndctl", "list", "-NRi"),
+			exec.CmdResult("vgdisplay"),
+		)
+	}()
+
 	ndctx, err := ndctl.NewContext()
 	if err != nil {
 		return fmt.Errorf("ndctl: %v", err)
