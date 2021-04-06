@@ -65,7 +65,7 @@ function deploy_using_olm() {
     sed -i -r "/labels:$/{N; s|(\n\s+)(.*)|\1pmem-csi.intel.com/deployment: ${TEST_OPERATOR_DEPLOYMENT_LABEL}\1\2| }" ${CSV_FILE}
   fi
   if [ "{TEST_OPERATOR_LOGLEVEL}" != "" ]; then
-      sed -i -e "s;-v=.*;-v=${TEST_OPERATOR_LOGLEVEL};g" -e "s;-vmodule=.*;-vmodule=*=${TEST_OPERATOR_LOGLEVEL};g" ${CSV_FILE}
+      sed -i -e "s;-v=.*;-v=${TEST_OPERATOR_LOGLEVEL};g" ${CSV_FILE}
   fi
 
   NAMESPACE=""
@@ -113,7 +113,7 @@ EOF
   fi
 
   if [ "${TEST_OPERATOR_LOGLEVEL}" != "" ]; then
-    ${SSH} "sed -i -e 's;-ve=.*;-v=*=${TEST_OPERATOR_LOGLEVEL};g' -e 's;-vmodule=.*;-vmodule=*=${TEST_OPERATOR_LOGLEVEL};g' $tmpdir/operator.yaml"
+    ${SSH} "sed -i -e 's;-v=.*;-v=${TEST_OPERATOR_LOGLEVEL};g' $tmpdir/operator.yaml"
   fi
 
   ${SSH} "cat > $tmpdir/kustomization.yaml" <<EOF
