@@ -8,6 +8,8 @@ package pmdmanager
 
 import (
 	"context"
+	"io/ioutil"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -24,8 +26,41 @@ import (
 )
 
 func TestConvert(t *testing.T) {
+	withName := `#!/bin/sh
+cat <<EOF
+{
+  "dev":"namespace0.0",
+  "mode":"fsdax",
+  "map":"dev",
+  "size":67643637760,
+  "uuid":"f4afa860-b590-451f-8d64-3e2eb228d366",
+  "sector_size":512,
+  "align":2097152,
+  "blockdev":"pmem0",
+  "name":"pmem-csi"
+}
+EOF
+`
+	failure := `#!/bin/sh
+echo "fake error"
+exit 1
+`
+
+	failureForNamespace02 := `#!/bin/sh
+case "$@" in
+    *namespace0.2*)
+        echo "fake error"
+        exit 1
+        ;;
+    *)
+        exit 0
+        ;;
+esac
+`
+
 	testcases := map[string]struct {
 		hardware    ndctl.Context
+		script      *string
 		expectError bool
 		expectNum   int
 	}{
@@ -100,11 +135,42 @@ func TestConvert(t *testing.T) {
 			}(),
 			expectNum: 2,
 		},
+		"convert-failure": {
+			hardware:    makeRawNamespace(),
+			script:      &failure,
+			expectError: true,
+		},
+		"convert-failure-second-namespaces": {
+			hardware: func() ndctl.Context {
+				hardware := makeRawNamespace()
+				region := hardware.Buses[0].(*ndctlfake.Bus).Regions_[0].(*ndctlfake.Region)
+				ns := *region.Namespaces_[0].(*ndctlfake.Namespace)
+				ns.Name_ = "namespace0.2"
+				region.Namespaces_ = append(region.Namespaces_, &ns)
+				return hardware
+			}(),
+			script:      &failureForNamespace02,
+			expectError: true,
+			expectNum:   1,
+		},
 	}
 
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
+			path := os.Getenv("PATH")
+			defer os.Setenv("PATH", path)
+			tmp := t.TempDir()
+
+			script := tc.script
+			if script == nil {
+				script = &withName
+			}
+			err := ioutil.WriteFile(tmp+"/ndctl", []byte(*script), 0700)
+			require.NoError(t, err)
+			os.Setenv("PATH", tmp+":"+path)
+
 			ctx := logger.Set(context.Background(), testinglogger.New(t))
+
 			numConverted, err := convert(ctx, tc.hardware)
 			if tc.expectError {
 				require.Error(t, err)
