@@ -296,6 +296,12 @@ func (csid *csiDriver) Run() error {
 
 		// Also collect metrics data via the device manager.
 		pmdmanager.CapacityCollector{PmemDeviceCapacity: dm}.MustRegister(prometheus.DefaultRegisterer, csid.cfg.NodeID, csid.cfg.DriverName)
+
+		capacity, err := dm.GetCapacity()
+		if err != nil {
+			return fmt.Errorf("get initial capacity: %v", err)
+		}
+		klog.Infof("PMEM-CSI ready. Capacity: %s", capacity)
 	case ForceConvertRawNamespaces:
 		client, err := k8sutil.NewClient(config.KubeAPIQPS, config.KubeAPIBurst)
 		if err != nil {

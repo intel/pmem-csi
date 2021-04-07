@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 const (
@@ -43,6 +44,20 @@ type Capacity struct {
 
 func (c Capacity) GetCapacity() (Capacity, error) {
 	return c, nil
+}
+
+func (c Capacity) String() string {
+	return fmt.Sprintf("%s maximum volume size, %s available, %s managed, %s total",
+		prettyPrintSize(c.MaxVolumeSize),
+		prettyPrintSize(c.Available),
+		prettyPrintSize(c.Managed),
+		prettyPrintSize(c.Total),
+	)
+}
+
+func prettyPrintSize(size uint64) string {
+	quantity := resource.NewQuantity(int64(size), resource.BinarySI)
+	return quantity.String()
 }
 
 var _ PmemDeviceCapacity = Capacity{}
