@@ -277,7 +277,7 @@ func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment
 			if err != nil {
 				return nil, fmt.Errorf("internal error: %v", err)
 			}
-			l.V(3).Info("update")
+			l.V(3).Info("update", "patch", string(data))
 			if err := r.client.Patch(ctx, copy, patch); err != nil {
 				return nil, fmt.Errorf("patch object: %v", err)
 			}
