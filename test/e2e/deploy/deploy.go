@@ -1051,8 +1051,16 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 			running.Name(), running.Namespace,
 			deployment.Name(), deployment.Namespace)
 
-		if running.HasOLM {
-			cmd := exec.Command("test/stop-operator.sh", "-olm")
+		if running.HasOperator {
+			cmd := exec.Command("test/stop-operator.sh")
+			if running.HasOLM {
+				cmd.Args = append(cmd.Args, "-olm")
+			}
+			// Keep both the CRD and namespace in case the required deployment is also the operator
+			// required for version skew tests, otherwise it brings down the existing driver deployment(s)
+			if deployment.HasOperator {
+				cmd.Args = append(cmd.Args, "-keep-crd", "-keep-namespace")
+			}
 			cmd.Dir = os.Getenv("REPO_ROOT")
 			cmd.Env = append(os.Environ(),
 				"TEST_OPERATOR_NAMESPACE="+running.Namespace,
@@ -1063,9 +1071,57 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 		err := RemoveObjects(c, running)
 		framework.ExpectNoError(err, "remove PMEM-CSI deployment")
 	}
+
+	root := os.Getenv("REPO_ROOT")
+	env := os.Environ()
+
+	if deployment.Version != "" {
+		// Find the latest dot release on the branch for which images are public.
+		// Most recent tag is listed first. We better avoid pulling over and over again
+		// to avoid throttling.
+		tags, err := pmemexec.RunCommand("git", "tag", "--sort=-version:refname")
+		framework.ExpectNoError(err, "fetch git tags")
+		scanner := bufio.NewScanner(strings.NewReader(tags))
+		var tag string
+		for scanner.Scan() {
+			tag = scanner.Text()
+			if strings.HasPrefix(tag, "v"+deployment.Version) {
+				if _, err := pmemexec.RunCommand("docker", "image", "inspect", "--format='exists'", "intel/pmem-csi-driver:"+tag); err == nil {
+					break
+				}
+				if _, err := pmemexec.RunCommand("docker", "image", "pull", "intel/pmem-csi-driver:"+tag); err == nil {
+					break
+				}
+			}
+		}
+		framework.Logf("using %s images for release-%s", tag, deployment.Version)
+
+		// Clean check out in _work/pmem-csi-release-<version>.
+		// Pulling from remote must be done before running the test.
+		workRoot := root + "/_work/pmem-csi-release-" + deployment.Version
+		err = os.RemoveAll(workRoot)
+		framework.ExpectNoError(err, "remove PMEM-CSI source code")
+		_, err = pmemexec.RunCommand("git", "clone", "--shared", root, workRoot)
+		framework.ExpectNoError(err, "clone repo", deployment.Version)
+		_, err = pmemexec.RunCommand("git", "-C", workRoot, "checkout", tag)
+		framework.ExpectNoError(err, "check out release-%s = %s of PMEM-CSI", deployment.Version, tag)
+
+		root = workRoot
+
+		// The release branch does not pull from Docker Hub by default,
+		// we have to select that explicitly.
+		env = append(env, "REPO_ROOT="+root, "TEST_PMEM_REGISTRY=intel", "TEST_PMEM_IMAGE_TAG="+tag)
+
+		// The setup script expects to have
+		// the same _work as in the normal root.
+		err = os.Symlink("../../_work", workRoot+"/_work")
+		framework.ExpectNoError(err, "symlink the _work directory")
+	}
+
 	if deployment.HasOLM {
 		cmd := exec.Command("test/start-stop-olm.sh", "start")
-		cmd.Dir = os.Getenv("REPO_ROOT")
+		cmd.Dir = root
+		cmd.Env = env
 		_, err := pmemexec.Run(cmd)
 		framework.ExpectNoError(err, "create operator deployment: %q", deployment.Name())
 		WaitForOLM(c, "olm")
@@ -1078,8 +1134,8 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 			cmdArgs = append(cmdArgs, "-olm")
 		}
 		cmd := exec.Command("test/start-operator.sh", cmdArgs...)
-		cmd.Dir = os.Getenv("REPO_ROOT")
-		cmd.Env = append(os.Environ(),
+		cmd.Dir = root
+		cmd.Env = append(env,
 			"TEST_OPERATOR_NAMESPACE="+deployment.Namespace,
 			"TEST_OPERATOR_DEPLOYMENT_LABEL="+deployment.Label())
 		_, err := pmemexec.Run(cmd)
@@ -1093,60 +1149,13 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 			EnsureDeploymentCR(f, dep)
 		} else {
 			// Deploy with script.
-			root := os.Getenv("REPO_ROOT")
-			env := os.Environ()
-			if deployment.Version != "" {
-				// Find the latest dot release on the branch for which images are public.
-				// Most recent tag is listed first. We better avoid pulling over and over again
-				// to avoid throttling.
-				tags, err := pmemexec.RunCommand("git", "tag", "--sort=-version:refname")
-				scanner := bufio.NewScanner(strings.NewReader(tags))
-				var tag string
-				for scanner.Scan() {
-					tag = scanner.Text()
-					if strings.HasPrefix(tag, "v"+deployment.Version) {
-						if _, err := pmemexec.RunCommand("docker", "image", "inspect", "--format='exists'", "intel/pmem-csi-driver:"+tag); err == nil {
-							break
-						}
-						if _, err := pmemexec.RunCommand("docker", "image", "pull", "intel/pmem-csi-driver:"+tag); err == nil {
-							break
-						}
-					}
-				}
-				framework.Logf("using %s images for release-%s", tag, deployment.Version)
-
-				// Clean check out in _work/pmem-csi-release-<version>.
-				// Pulling from remote must be done before running the test.
-				workRoot := root + "/_work/pmem-csi-release-" + deployment.Version
-				err = os.RemoveAll(workRoot)
-				framework.ExpectNoError(err, "remove PMEM-CSI source code")
-				_, err = pmemexec.RunCommand("git", "clone", "--shared", root, workRoot)
-				framework.ExpectNoError(err, "clone repo", deployment.Version)
-				_, err = pmemexec.RunCommand("git", "-C", workRoot, "checkout", tag)
-				framework.ExpectNoError(err, "check out release-%s = %s of PMEM-CSI", deployment.Version, tag)
-				root = workRoot
-
-				// The release branch does not pull from Docker Hub by default,
-				// we have to select that explicitly.
-				env = append(env, "TEST_PMEM_REGISTRY=intel")
-
-				// The setup script expects to have
-				// the same _work as in the normal
-				// root.
-				err = os.Symlink("../../_work", workRoot+"/_work")
-				framework.ExpectNoError(err, "symlink the _work directory")
-			}
 			cmd := exec.Command("test/setup-deployment.sh")
 			cmd.Dir = root
-			flavor := ""
-			env = append(env,
-				"REPO_ROOT="+root,
-				"TEST_KUBERNETES_FLAVOR="+flavor,
+			cmd.Env = append(env, "TEST_KUBERNETES_FLAVOR=",
 				"TEST_DEPLOYMENT_QUIET=quiet",
 				"TEST_DEPLOYMENTMODE="+deployment.DeploymentMode(),
 				"TEST_DRIVER_NAMESPACE="+deployment.Namespace,
 				"TEST_DEVICEMODE="+string(deployment.Mode))
-			cmd.Env = env
 			_, err = pmemexec.Run(cmd)
 			framework.ExpectNoError(err, "create %s PMEM-CSI deployment", deployment.Name())
 		}
