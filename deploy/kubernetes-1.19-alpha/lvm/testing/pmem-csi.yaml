@@ -549,7 +549,7 @@ spec:
         env:
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
-        image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v1.2.0
+        image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.1.0
         imagePullPolicy: IfNotPresent
         name: driver-registrar
         securityContext:

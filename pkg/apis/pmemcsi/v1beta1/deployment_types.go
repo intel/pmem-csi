@@ -268,7 +268,7 @@ const (
 	DefaultProvisionerImage = defaultProvisionerImageName + ":" + defaultProvisionerImageTag
 
 	defaultRegistrarImageName = "k8s.gcr.io/sig-storage/csi-node-driver-registrar"
-	defaultRegistrarImageTag  = "v1.2.0"
+	defaultRegistrarImageTag  = "v2.1.0"
 	// DefaultRegistrarImage default node driver registrar image to use
 	DefaultRegistrarImage = defaultRegistrarImageName + ":" + defaultRegistrarImageTag
 

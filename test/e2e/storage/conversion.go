@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 
@@ -57,22 +58,8 @@ func testRawNamespaceConversion(f *framework.Framework, driverName, namespace st
 	var err error
 	var out []byte
 
-	// Find the master node.
-	nodes, err := f.ClientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	framework.ExpectNoError(err, "list nodes")
-	var masterNode string
-	var nodeNames []string
-	for _, node := range nodes.Items {
-		nodeNames = append(nodeNames, node.Name)
-		if strings.Contains(node.Name, "master") {
-			masterNode = node.Name
-			break
-		}
-	}
-	if masterNode == "" {
-		framework.Failf("none of the node names seems to be for the master node: %v", nodeNames)
-	}
-
+	masterNode, err := findMasterNode(ctx, f.ClientSet)
+	framework.ExpectNoError(err)
 	sshcmd := fmt.Sprintf("%s/_work/%s/ssh.0", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"))
 	_, err = os.Stat(sshcmd)
 	framework.ExpectNoError(err, "SSH command for master node")
@@ -182,4 +169,19 @@ func testRawNamespaceConversion(f *framework.Framework, driverName, namespace st
 		}
 		return nil
 	}, "5m", "10s").ShouldNot(HaveOccurred(), "driver running on master node")
+}
+
+func findMasterNode(ctx context.Context, cs kubernetes.Interface) (string, error) {
+	nodes, err := cs.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return "", fmt.Errorf("list nodes: %v", err)
+	}
+	var nodeNames []string
+	for _, node := range nodes.Items {
+		nodeNames = append(nodeNames, node.Name)
+		if strings.Contains(node.Name, "master") {
+			return node.Name, nil
+		}
+	}
+	return "", fmt.Errorf("none of the node names seems to be for the master node: %v", nodeNames)
 }
