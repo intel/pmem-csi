@@ -791,6 +791,23 @@ func FindDeployment(c *Cluster) (*Deployment, error) {
 
 var imageVersion = regexp.MustCompile(`pmem-csi-driver(?:-test)?:v(\d+\.\d+)`)
 
+// versionFromContainerImage Retrieves version from driver container image tag
+func versionFromContainerImage(image string) (string, bool) {
+	m := imageVersion.FindStringSubmatch(image)
+	if m == nil {
+		// not pmem-csi-driver image
+		return "", false
+	}
+
+	// If the version matches what we are currently testing, then we skip
+	// the version (i.e. "current version" == "no explicit version").
+	if m2 := imageVersion.FindStringSubmatch(os.Getenv("PMEM_CSI_IMAGE")); m2 == nil || m2[1] != m[1] {
+		return m[1], true
+	}
+
+	return "", true
+}
+
 func findDriver(c *Cluster) (*Deployment, error) {
 	list, err := c.cs.AppsV1().DaemonSets("").List(context.Background(), metav1.ListOptions{LabelSelector: deploymentLabel})
 	if err != nil {
@@ -823,15 +840,9 @@ func findDriver(c *Cluster) (*Deployment, error) {
 	deployment.HasController = len(controllers.Items) > 0
 
 	// Derive the version from the image tag. The annotation doesn't include it.
-	// If the version matches what we are currently testing, then we skip
-	// the version (i.e. "current version" == "no explicit version").
 	for _, container := range list.Items[0].Spec.Template.Spec.Containers {
-		m := imageVersion.FindStringSubmatch(container.Image)
-		if m != nil {
-			m2 := imageVersion.FindStringSubmatch(os.Getenv("PMEM_CSI_IMAGE"))
-			if m2 == nil || m2[1] != m[1] {
-				deployment.Version = m[1]
-			}
+		if v, found := versionFromContainerImage(container.Image); found {
+			deployment.Version = v
 			break
 		}
 	}
@@ -867,6 +878,16 @@ func findOperator(c *Cluster) (*Deployment, error) {
 	}
 	deployment.Namespace = list.Items[0].Namespace
 
+	// Derive the version from the image tag. The annotation doesn't include it.
+	// If the version matches what we are currently testing, then we skip
+	// the version (i.e. "current version" == "no explicit version").
+	for _, container := range list.Items[0].Spec.Template.Spec.Containers {
+		if v, found := versionFromContainerImage(container.Image); found {
+			deployment.Version = v
+			break
+		}
+	}
+
 	// Currently we don't support parallel installations, so all
 	// objects must belong to each other.
 	for _, item := range list.Items {
@@ -895,28 +916,18 @@ var deploymentRE = regexp.MustCompile(`^(operator|olm)?-?(\w*)?-?(testing|produc
 
 // Parse the deployment name and sets fields accordingly.
 func Parse(deploymentName string) (*Deployment, error) {
-	deployment := &Deployment{
-		Namespace:     "default",
-		DriverName:    "pmem-csi.intel.com",
-		HasController: true,
-	}
-	switch deploymentName {
-	case "operator":
-		// Run the operator tests in a dedicated namespace
-		// to cover the non-default namespace usecase
-		deployment.Namespace = "operator-test"
-	case "operator-direct-production":
-		deployment.Namespace = "kube-system"
-		// No secret available in that namespace.
-		deployment.HasController = false
-	case "operator-lvm-production":
-		deployment.DriverName = "second.pmem-csi.intel.com"
-	}
 
 	matches := deploymentRE.FindStringSubmatch(deploymentName)
 	if matches == nil {
 		return nil, fmt.Errorf("unsupported deployment %s", deploymentName)
 	}
+
+	deployment := &Deployment{
+		Namespace:     "default",
+		DriverName:    "pmem-csi.intel.com",
+		HasController: true,
+	}
+
 	switch matches[1] {
 	case "olm":
 		deployment.HasOLM = true
@@ -932,6 +943,23 @@ func Parse(deploymentName string) (*Deployment, error) {
 		}
 	}
 	deployment.Version = matches[4]
+
+	if deployment.HasOperator {
+		if !deployment.HasDriver && !deployment.HasOLM { // "operator"
+			// Run the operator tests in a dedicated namespace
+			// to cover the non-default namespace usecase
+			deployment.Namespace = "operator-test"
+		}
+		if deployment.HasDriver && !deployment.Testing {
+			if deployment.Mode == api.DeviceModeDirect { // operator-direct-production
+				deployment.Namespace = "kube-system"
+				// No secret available in that namespace.
+				deployment.HasController = false
+			} else { // operator-lvm-production
+				deployment.DriverName = "second.pmem-csi.intel.com"
+			}
+		}
+	}
 
 	return deployment, nil
 }
