@@ -56,6 +56,9 @@ function deploy_using_olm() {
   if [ "${TEST_PMEM_REGISTRY}" != "" ]; then
     sed -i -e "s^intel/pmem-csi-driver:v${VERSION}^${TEST_PMEM_REGISTRY}/pmem-csi-driver:canary^g" ${CSV_FILE}
   fi
+  if [ "${TEST_PMEM_IMAGE_TAG}" != "" ]; then
+    sed -i -e "s^\(/pmem-csi-driver:\).*^\1${TEST_PMEM_IMAGE_TAG}^g" ${CSV_FILE}
+  fi
   if [ "${TEST_IMAGE_PULL_POLICY}" != "" ]; then
     sed -i -e "s^imagePullPolicy:.IfNotPresent^imagePullPolicy: ${TEST_IMAGE_PULL_POLICY}^g" ${CSV_FILE}
   fi
@@ -99,6 +102,9 @@ EOF
 
   if [ "${TEST_PMEM_REGISTRY}" != "" ]; then
      ${SSH} sed -ie "s^intel/pmem^${TEST_PMEM_REGISTRY}/pmem^g" "$tmpdir/operator.yaml"
+  fi
+  if [ "${TEST_PMEM_IMAGE_TAG}" != "" ]; then
+    ${SSH} sed -ie "'s^\(/pmem-csi-driver:\).*^\1${TEST_PMEM_IMAGE_TAG}^g' $tmpdir/operator.yaml"
   fi
   if [ "${TEST_IMAGE_PULL_POLICY}" != "" ]; then
     ${SSH} "sed -ie 's;\(imagePullPolicy: \).*;\1${TEST_IMAGE_PULL_POLICY};g' $tmpdir/operator.yaml"
