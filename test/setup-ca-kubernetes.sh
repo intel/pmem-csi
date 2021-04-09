@@ -27,17 +27,12 @@ read_key () {
 
 # Read certificate files and turn them into Kubernetes secrets.
 #
-# The "registry" part in the file and variable names is historic.
-# PMEM-CSI < 0.9.0 used that certificate for the node registry
-# and webhooks. PMEM-CSI >= 0.9.0 only uses it for the webhooks
-# and no longer has such a registry.
-#
 # -caFile (controller and all nodes)
 CA=$(read_key "${TEST_CA}.pem")
 # -certFile (controller)
-REGISTRY_CERT=$(read_key "$tmpdir/pmem-registry.pem")
+CONTROLLER_CERT=$(read_key "$tmpdir/pmem-controller.pem")
 # -keyFile (controller)
-REGISTRY_KEY=$(read_key "$tmpdir/pmem-registry-key.pem")
+CONTROLLER_KEY=$(read_key "$tmpdir/pmem-controller-key.pem")
 
 ${KUBECTL} get ns ${TEST_DRIVER_NAMESPACE} 2>/dev/null >/dev/null || ${KUBECTL} create ns ${TEST_DRIVER_NAMESPACE}
 
@@ -50,6 +45,6 @@ metadata:
 type: kubernetes.io/tls
 data:
     ca.crt: ${CA}
-    tls.crt: ${REGISTRY_CERT}
-    tls.key: ${REGISTRY_KEY}
+    tls.crt: ${CONTROLLER_CERT}
+    tls.key: ${CONTROLLER_KEY}
 EOF
