@@ -36,8 +36,8 @@ func init() {
 	flag.StringVar(&config.Endpoint, "endpoint", "unix:///tmp/pmem-csi.sock", "PMEM CSI endpoint")
 	flag.Var(&config.Mode, "mode", "driver run mode")
 	flag.StringVar(&config.CAFile, "caFile", "ca.pem", "Root CA certificate file to use for verifying connections")
-	flag.StringVar(&config.CertFile, "certFile", "pmem-registry.pem", "SSL certificate file to use for authenticating client connections")
-	flag.StringVar(&config.KeyFile, "keyFile", "pmem-registry-key.pem", "Private key file associated to certificate")
+	flag.StringVar(&config.CertFile, "certFile", "pmem-controller.pem", "SSL certificate file to used by the PMEM-CSI controller for authenticating client connections")
+	flag.StringVar(&config.KeyFile, "keyFile", "pmem-controller-key.pem", "Private key file associated to certificate")
 
 	flag.Float64Var(&config.KubeAPIQPS, "kube-api-qps", 5, "QPS to use while communicating with the Kubernetes apiserver. Defaults to 5.0.")
 	flag.IntVar(&config.KubeAPIBurst, "kube-api-burst", 10, "Burst to use while communicating with the Kubernetes apiserver. Defaults to 10.")
