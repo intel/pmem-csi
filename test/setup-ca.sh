@@ -37,7 +37,7 @@ EOF
 fi
 
 # Generate server and client certificates.
-DEFAULT_CNS="pmem-registry"
+DEFAULT_CNS="pmem-controller"
 CNS="${DEFAULT_CNS} ${EXTRA_CNS:=""}"
 for name in ${CNS}; do
   echo "Generating Certificate for '$name'(NS=$NS) ..."
@@ -45,7 +45,7 @@ for name in ${CNS}; do
 {
     "CN": "$name",
     "hosts": [
-        $(if [ "$name" = "pmem-registry" ]; then
+        $(if [ "$name" = "pmem-controller" ]; then
              # Some extra names needed for scheduler extender and webhook.
              # The version without intel-com was used by PMEM-CSI < 0.9.0,
              # the version starting with 0.9.0 for the sake of consistency with

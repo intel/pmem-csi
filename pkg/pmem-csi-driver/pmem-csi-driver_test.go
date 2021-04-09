@@ -21,8 +21,8 @@ import (
 
 var (
 	caFile   = os.ExpandEnv("${TEST_WORK}/pmem-ca/ca.pem")
-	certFile = os.ExpandEnv("${TEST_WORK}/pmem-ca/pmem-registry.pem")
-	keyFile  = os.ExpandEnv("${TEST_WORK}/pmem-ca/pmem-registry-key.pem")
+	certFile = os.ExpandEnv("${TEST_WORK}/pmem-ca/pmem-controller.pem")
+	keyFile  = os.ExpandEnv("${TEST_WORK}/pmem-ca/pmem-controller-key.pem")
 )
 
 func TestMetrics(t *testing.T) {
