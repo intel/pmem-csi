@@ -7,8 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 package exec
 
 import (
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"k8s.io/klog/v2"
 )
@@ -17,58 +18,110 @@ func init() {
 	klog.InitFlags(nil)
 }
 
-func Test_Failure(t *testing.T) {
-	output, err := RunCommand("no-such-binary", "foo")
-	if err == nil {
-		t.Errorf("did not get expected error")
-	}
-	if output != "" {
-		t.Errorf("unexpected output: %q", output)
+var testcases = map[string]struct {
+	cmd []string
+
+	expectedError  string
+	expectedOutput string
+	expectedResult string
+}{
+	"no-such-binary": {
+		cmd:            []string{"no-such-binary", "foo"},
+		expectedError:  `"no-such-binary foo": command failed with no output: exec: "no-such-binary": executable file not found in $PATH`,
+		expectedResult: `"no-such-binary foo": command failed with no output: exec: "no-such-binary": executable file not found in $PATH`,
+	},
+	"bad-args": {
+		cmd: []string{"ls", "/no/such/file"},
+		expectedError: `"/bin/ls /no/such/file": command failed: exit status 2
+Combined stderr/stdout output: ls: cannot access '/no/such/file': No such file or directory
+`,
+		expectedResult: `"/bin/ls /no/such/file": command failed: exit status 2
+Output:
+ls: cannot access '/no/such/file': No such file or directory
+`,
+	},
+	"stdout": {
+		cmd: []string{"echo", "hello", "world"},
+		expectedOutput: `hello world
+`,
+		expectedResult: `"/bin/echo hello world":
+hello world
+`,
+	},
+	"stderr": {
+		cmd: []string{"sh", "-c", "echo >&2 hello world"},
+		expectedResult: `"/bin/sh -c echo >&2 hello world":
+hello world
+`,
+	},
+	"both": {
+		cmd: []string{"sh", "-c", "echo >&2 hello; echo world"},
+		expectedOutput: `world
+`,
+		expectedResult: `"/bin/sh -c echo >&2 hello; echo world":
+hello
+world
+`,
+	},
+	"stdout-with-error": {
+		cmd: []string{"sh", "-c", "echo hello world; exit 1"},
+		expectedOutput: `hello world
+`,
+		expectedError: `"/bin/sh -c echo hello world; exit 1": command failed: exit status 1
+Combined stderr/stdout output: hello world
+`,
+		expectedResult: `"/bin/sh -c echo hello world; exit 1": command failed: exit status 1
+Output:
+hello world
+`,
+	},
+	"stderr-with-error": {
+		cmd: []string{"sh", "-c", "echo >&2 hello world; exit 1"},
+		expectedError: `"/bin/sh -c echo >&2 hello world; exit 1": command failed: exit status 1
+Combined stderr/stdout output: hello world
+`,
+		expectedResult: `"/bin/sh -c echo >&2 hello world; exit 1": command failed: exit status 1
+Output:
+hello world
+`,
+	},
+	// This test case cannot be run reliably because ordering of stdout/stderr lines is random.
+	//
+	// 	"both-with-error": {
+	// 		cmd: []string{"sh", "-c", "echo >&2 hello; echo world; exit 1"},
+	// 		expectedOutput: `world
+	// `,
+	// 		expectedError: `"/bin/sh -c echo >&2 hello; echo world; exit 1": command failed: exit status 1
+	// Combined stderr/stdout output: world
+	// hello
+	// `,
+	// 		expectedResult: `"/bin/sh -c echo >&2 hello; echo world; exit 1": command failed: exit status 1
+	// Output:
+	// hello
+	// world
+	// `,
+	// },
+}
+
+func TestRun(t *testing.T) {
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			output, err := RunCommand(tc.cmd[0], tc.cmd[1:]...)
+			assert.Equal(t, tc.expectedOutput, output, "output")
+			errStr := ""
+			if err != nil {
+				errStr = err.Error()
+			}
+			assert.Equal(t, tc.expectedError, errStr, "error")
+		})
 	}
 }
 
-func Test_BadArgs(t *testing.T) {
-	badFile := "/no/such/file"
-	output, err := RunCommand("ls", badFile)
-	if err == nil {
-		t.Errorf("did not get expected error")
-	}
-	if strings.Index(output, badFile) == -1 {
-		t.Errorf("file name not in output: %q", output)
-	}
-}
-
-func Test_Echo(t *testing.T) {
-	output, err := RunCommand("echo", "hello", "world")
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if strings.Index(output, "hello world") == -1 {
-		t.Errorf("'hello world' not in output: %q", output)
-	}
-}
-
-func Test_Lines(t *testing.T) {
-	output, err := RunCommand("echo", "hello\nworld\n")
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if strings.Index(output, "hello\nworld") == -1 {
-		t.Errorf("'hello\nworld' not in output: %q", output)
-	}
-}
-
-func Test_Error(t *testing.T) {
-	output, err := RunCommand("sh", "-c", "echo hello world && false")
-	if err == nil {
-		t.Fatal("unexpected success")
-	}
-	t.Logf("got expected error: %v", err)
-	if strings.Index(output, "hello world") == -1 {
-		t.Errorf("'hello world' not in output: %q", output)
-	}
-	msg := err.Error()
-	if strings.Index(msg, "Output: hello world") == -1 {
-		t.Errorf("'Output: hello world' not in error: %v", err)
+func TestResult(t *testing.T) {
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			result := CmdResult(tc.cmd[0], tc.cmd[1:]...)
+			assert.Equal(t, tc.expectedResult, result)
+		})
 	}
 }
