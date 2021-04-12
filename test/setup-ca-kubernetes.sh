@@ -27,37 +27,16 @@ read_key () {
 
 # Read certificate files and turn them into Kubernetes secrets.
 #
-# The "registry" part in the file and variable names is historic.
-# PMEM-CSI < 0.9.0 used that certificate for the node registry
-# and webhooks. PMEM-CSI >= 0.9.0 only uses it for the webhooks
-# and no longer has such a registry.
-#
 # -caFile (controller and all nodes)
 CA=$(read_key "${TEST_CA}.pem")
 # -certFile (controller)
-REGISTRY_CERT=$(read_key "$tmpdir/pmem-registry.pem")
+CONTROLLER_CERT=$(read_key "$tmpdir/pmem-controller.pem")
 # -keyFile (controller)
-REGISTRY_KEY=$(read_key "$tmpdir/pmem-registry-key.pem")
-# -certFile (same for all nodes)
-NODE_CERT=$(read_key "$tmpdir/pmem-node-controller.pem")
-# -keyFile (same for all nodes)
-NODE_KEY=$(read_key "$tmpdir/pmem-node-controller-key.pem")
+CONTROLLER_KEY=$(read_key "$tmpdir/pmem-controller-key.pem")
 
 ${KUBECTL} get ns ${TEST_DRIVER_NAMESPACE} 2>/dev/null >/dev/null || ${KUBECTL} create ns ${TEST_DRIVER_NAMESPACE}
 
 ${KUBECTL} apply -f - <<EOF
-apiVersion: v1
-kind: Secret
-metadata:
-    # Historic name for PMEM-CSI deployments < 0.9.0.
-    name: pmem-csi-registry-secrets
-    namespace: ${TEST_DRIVER_NAMESPACE}
-type: kubernetes.io/tls
-data:
-    ca.crt: ${CA}
-    tls.crt: ${REGISTRY_CERT}
-    tls.key: ${REGISTRY_KEY}
----
 apiVersion: v1
 kind: Secret
 metadata:
@@ -66,19 +45,6 @@ metadata:
 type: kubernetes.io/tls
 data:
     ca.crt: ${CA}
-    tls.crt: ${REGISTRY_CERT}
-    tls.key: ${REGISTRY_KEY}
----
-# This secret is not used anymore since PMEM-CSI >= 0.9.0.
-# It still gets created to support downgrades.
-apiVersion: v1
-kind: Secret
-metadata:
-    name: pmem-csi-node-secrets
-    namespace: ${TEST_DRIVER_NAMESPACE}
-type: Opaque
-data:
-    ca.crt: ${CA}
-    tls.crt: ${NODE_CERT}
-    tls.key: ${NODE_KEY}
+    tls.crt: ${CONTROLLER_CERT}
+    tls.key: ${CONTROLLER_KEY}
 EOF
