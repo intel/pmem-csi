@@ -32,27 +32,59 @@ func Run(cmd *exec.Cmd) (string, error) {
 	klog.V(4).Infof("Executing: %s", cmd)
 
 	r, w := io.Pipe()
+	r2, w2 := io.Pipe()
 	cmd.Stdout = w
-	cmd.Stderr = w
-	buffer := new(bytes.Buffer)
-	r2 := io.TeeReader(r, buffer)
+	cmd.Stderr = w2
+	var stdout, both bytes.Buffer
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		scanner := bufio.NewScanner(r2)
-		for scanner.Scan() {
-			klog.V(5).Infof("%s: %s", cmd.Path, scanner.Text())
-		}
-	}()
+	wg.Add(2)
+	// Collect stdout and stderr separately. Storing in the
+	// combined buffer is a bit racy, but we need to know which
+	// output is stdout.
+	go dumpOutput(&wg, r, []io.Writer{&stdout, &both}, cmd.Path+": stdout: ")
+	go dumpOutput(&wg, r2, []io.Writer{&both}, cmd.Path+": stderr: ")
 	err := cmd.Run()
 	w.Close()
+	w2.Close()
 	wg.Wait()
-	klog.V(4).Infof("%s terminated, with %d bytes of output and error %v", cmd.Path, buffer.Len(), err)
+	klog.V(4).Infof("%s terminated, with %d bytes of stdout, %d of combined output and error %v", cmd.Path, stdout.Len(), both.Len(), err)
 
-	output := string(buffer.Bytes())
-	if err != nil {
-		err = fmt.Errorf("command %q failed: %v\nOutput: %s", cmd, err, output)
+	switch {
+	case err != nil && both.Len() > 0:
+		err = fmt.Errorf("%q: command failed: %v\nCombined stderr/stdout output: %s", cmd, err, string(both.Bytes()))
+	case err != nil:
+		err = fmt.Errorf("%q: command failed with no output: %v", cmd, err)
 	}
-	return output, err
+	return string(stdout.Bytes()), err
+}
+
+func dumpOutput(wg *sync.WaitGroup, in io.Reader, out []io.Writer, prefix string) {
+	defer wg.Done()
+	scanner := bufio.NewScanner(in)
+	for scanner.Scan() {
+		for _, o := range out {
+			o.Write(scanner.Bytes())
+			o.Write([]byte("\n"))
+		}
+		klog.V(5).Infof("%s%s", prefix, scanner.Text())
+	}
+}
+
+// CmdResult always returns an informative description of what command ran and what the
+// outcome (stdout+stderr, exit code if any) was. Logging is left entirely to the caller.
+func CmdResult(cmd string, args ...string) string {
+	c := exec.Command(cmd, args...)
+	output, err := c.CombinedOutput()
+	result := fmt.Sprintf("%q:", c)
+	switch {
+	case err != nil && len(output) == 0:
+		result += fmt.Sprintf(" command failed with no output: %v", err)
+	case err != nil:
+		result += fmt.Sprintf(" command failed: %v\nOutput:\n%s", err, string(output))
+	case len(output) > 0:
+		result += fmt.Sprintf("\n%s", output)
+	default:
+		result += " no output"
+	}
+	return result
 }
