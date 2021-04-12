@@ -957,7 +957,7 @@ func EnsureDeployment(deploymentName string) *Deployment {
 
 	f := framework.NewDefaultFramework("cluster")
 	f.SkipNamespaceCreation = true
-	var prevVol map[string][]string
+	var prevVol Volumes
 
 	ginkgo.BeforeEach(func() {
 		ginkgo.By(fmt.Sprintf("preparing for test %q in namespace %s",
@@ -987,7 +987,7 @@ func EnsureDeployment(deploymentName string) *Deployment {
 		))
 
 		// Check list of volumes after test to detect left-overs
-		CheckForLeftoverVolumes(deployment, prevVol)
+		prevVol.CheckForLeaks()
 
 		// And check that PMEM is in a sane state.
 		CheckPMEM()
