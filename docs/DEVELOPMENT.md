@@ -106,7 +106,7 @@ is okay to merge two PRs quickly after one another without
 retesting. If two merged PRs don't have code conflicts
 (which would be detected by GitHub\*) but nonetheless don't work
 together, the combined testing in the `devel` branch will find
-that. This block updating `master` and thus needs to be dealt with
+that. This blocks updating `master` and thus needs to be dealt with
 quickly.
 
 Releases are created by branching `release-x.y` from `master` or some
@@ -117,9 +117,11 @@ Releases and the corresponding images are never changed. If something
 goes wrong after setting a tag (such as detecting a bug while testing the
 release images), a new release is created.
 
-Container images reference a fixed base image. To ensure that the base
-image remains secure, it is scanned for known vulnerabilities regularly
-and a new release is prepared manually, if needed. The new release then
+Container images reference a floating base image. Whatever version of
+that was current at the time of building the PMEM-CSI image then
+serves as base for the release. To ensure that the release image
+remains secure, it is scanned for known vulnerabilities regularly and
+a new release is prepared manually, if needed. The new release then
 uses a newer base image.
 
 ### Tagging
