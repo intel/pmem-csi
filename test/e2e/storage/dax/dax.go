@@ -27,8 +27,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"k8s.io/kubernetes/test/e2e/framework/volume"
-	"k8s.io/kubernetes/test/e2e/storage/testpatterns"
-	"k8s.io/kubernetes/test/e2e/storage/testsuites"
+	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
 
 	"github.com/intel/pmem-csi/test/e2e/ephemeral"
 	pmempod "github.com/intel/pmem-csi/test/e2e/pod"
@@ -37,47 +36,47 @@ import (
 )
 
 type daxTestSuite struct {
-	tsInfo testsuites.TestSuiteInfo
+	tsInfo storageframework.TestSuiteInfo
 }
 
-var _ testsuites.TestSuite = &daxTestSuite{}
+var _ storageframework.TestSuite = &daxTestSuite{}
 
 // InitDaxTestSuite returns daxTestSuite that implements TestSuite interface
-func InitDaxTestSuite() testsuites.TestSuite {
+func InitDaxTestSuite() storageframework.TestSuite {
 	suite := &daxTestSuite{
-		tsInfo: testsuites.TestSuiteInfo{
+		tsInfo: storageframework.TestSuiteInfo{
 			Name: "dax",
-			TestPatterns: []testpatterns.TestPattern{
-				testpatterns.DefaultFsDynamicPV,
-				testpatterns.Ext4DynamicPV,
-				testpatterns.XfsDynamicPV,
+			TestPatterns: []storageframework.TestPattern{
+				storageframework.DefaultFsDynamicPV,
+				storageframework.Ext4DynamicPV,
+				storageframework.XfsDynamicPV,
 
-				testpatterns.BlockVolModeDynamicPV,
+				storageframework.BlockVolModeDynamicPV,
 			},
 		},
 	}
 	if ephemeral.Supported {
 		suite.tsInfo.TestPatterns = append(suite.tsInfo.TestPatterns,
-			testpatterns.DefaultFsCSIEphemeralVolume,
-			testpatterns.Ext4CSIEphemeralVolume,
-			testpatterns.XfsCSIEphemeralVolume,
+			storageframework.DefaultFsCSIEphemeralVolume,
+			storageframework.Ext4CSIEphemeralVolume,
+			storageframework.XfsCSIEphemeralVolume,
 		)
 	}
 	return suite
 }
 
-func (p *daxTestSuite) GetTestSuiteInfo() testsuites.TestSuiteInfo {
+func (p *daxTestSuite) GetTestSuiteInfo() storageframework.TestSuiteInfo {
 	return p.tsInfo
 }
 
-func (p *daxTestSuite) SkipRedundantSuite(driver testsuites.TestDriver, pattern testpatterns.TestPattern) {
+func (p *daxTestSuite) SkipUnsupportedTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) {
 }
 
 type local struct {
-	config      *testsuites.PerTestConfig
+	config      *storageframework.PerTestConfig
 	testCleanup func()
 
-	resource *testsuites.VolumeResource
+	resource *storageframework.VolumeResource
 	root     string
 }
 
@@ -85,7 +84,7 @@ const (
 	daxCheckBinary = "_work/pmem-dax-check"
 )
 
-func (p *daxTestSuite) DefineTests(driver testsuites.TestDriver, pattern testpatterns.TestPattern) {
+func (p *daxTestSuite) DefineTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) {
 	var l local
 
 	f := framework.NewDefaultFramework("dax")
@@ -105,7 +104,7 @@ func (p *daxTestSuite) DefineTests(driver testsuites.TestDriver, pattern testpat
 
 		// Now do the more expensive test initialization.
 		l.config, l.testCleanup = driver.PrepareTest(f)
-		l.resource = testsuites.CreateVolumeResource(driver, l.config, pattern, volume.SizeRange{})
+		l.resource = storageframework.CreateVolumeResource(driver, l.config, pattern, volume.SizeRange{})
 	}
 
 	cleanup := func() {
@@ -135,7 +134,7 @@ func testDaxInPod(
 	root string,
 	volumeMode v1.PersistentVolumeMode,
 	source *v1.VolumeSource,
-	config *testsuites.PerTestConfig,
+	config *storageframework.PerTestConfig,
 	withKataContainers bool,
 ) {
 	pod := CreatePod(f, "dax-volume-test", volumeMode, source, config, withKataContainers)
@@ -154,7 +153,7 @@ func CreatePod(
 	name string,
 	volumeMode v1.PersistentVolumeMode,
 	source *v1.VolumeSource,
-	config *testsuites.PerTestConfig,
+	config *storageframework.PerTestConfig,
 	withKataContainers bool,
 ) *v1.Pod {
 	const (

@@ -20,7 +20,7 @@ import (
 	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"k8s.io/kubernetes/test/e2e/framework"
-	"k8s.io/kubernetes/test/e2e/storage/testsuites"
+	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -70,7 +70,7 @@ var _ = deploy.DescribeForSome("driver", func(d *deploy.Deployment) bool {
 
 	// Just very minimal testing at the moment.
 	csiTestDriver := driver.New(d.Name(), d.GetDriverDeployment().Name, []string{""} /* only the default fs type */, nil)
-	var csiTestSuites = []func() testsuites.TestSuite{
+	var csiTestSuites = []func() storageframework.TestSuite{
 		dax.InitDaxTestSuite,
 	}
 	if d.HasController {
@@ -78,7 +78,7 @@ var _ = deploy.DescribeForSome("driver", func(d *deploy.Deployment) bool {
 		csiTestSuites = append(csiTestSuites, scheduler.InitSchedulerTestSuite)
 	}
 
-	testsuites.DefineTestSuite(csiTestDriver, csiTestSuites)
+	storageframework.DefineTestSuites(csiTestDriver, csiTestSuites)
 
 	// Late binding must work, regardless of the driver name and whether we have
 	// a scheduler extender.

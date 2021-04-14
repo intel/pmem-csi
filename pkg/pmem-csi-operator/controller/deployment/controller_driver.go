@@ -241,8 +241,17 @@ func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment
 		return nil, err
 	}
 
+	// The underlying object should implement client.Object, but
+	// DeepCopyObject doesn't return a typed pointer, so we have
+	// to cast explicitly.
+	clone := o.DeepCopyObject()
+	clientObject, ok := clone.(client.Object)
+	if !ok {
+		return nil, fmt.Errorf("internal error: %T does not implement client.Object", clone)
+	}
+
 	// Prepare for patching by remembering the base object.
-	patch := client.MergeFrom(o.DeepCopyObject())
+	patch := client.MergeFrom(clientObject)
 
 	// Now set all values that we care about...
 	if err := ro.modify(d, o); err != nil {

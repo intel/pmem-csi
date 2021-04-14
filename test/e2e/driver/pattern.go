@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/kubernetes/test/e2e/storage/testpatterns"
+	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
 )
 
 // StorageClassParameters can be used in combination with DynamicDriver to implement test patterns
@@ -50,18 +50,18 @@ func (scp *StorageClassParameters) Decode(parameters string) error {
 	return json.Unmarshal([]byte(parameters), scp)
 }
 
-func EncodeTestPatternName(volType testpatterns.TestVolType, volMode v1.PersistentVolumeMode, scp StorageClassParameters) string {
+func EncodeTestPatternName(volType storageframework.TestVolType, volMode v1.PersistentVolumeMode, scp StorageClassParameters) string {
 	return fmt.Sprintf("%s %s %s", volType, volMode, scp.MustEncode())
 }
 
-func DecodeTestPatternName(name string) (volType testpatterns.TestVolType, volMode v1.PersistentVolumeMode, scp *StorageClassParameters, err error) {
+func DecodeTestPatternName(name string) (volType storageframework.TestVolType, volMode v1.PersistentVolumeMode, scp *StorageClassParameters, err error) {
 	parts := strings.SplitN(name, " ", 3)
 	if len(parts) != 3 {
 		err = fmt.Errorf("not of format '<vol type> <vol mode> {<parameters>}': %s", name)
 		return
 	}
 	scp = &StorageClassParameters{}
-	volType = testpatterns.TestVolType(parts[0])
+	volType = storageframework.TestVolType(parts[0])
 	volMode = v1.PersistentVolumeMode(parts[1])
 	err = scp.Decode(parts[2])
 	return
