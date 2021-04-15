@@ -7,10 +7,10 @@ SPDX-License-Identifier: Apache-2.0
 package gotests
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
@@ -19,9 +19,11 @@ import (
 	. "github.com/onsi/gomega"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog/v2/klogr"
 	"k8s.io/kubernetes/test/e2e/framework"
 
 	"github.com/intel/pmem-csi/test/e2e/deploy"
+	"github.com/intel/pmem-csi/test/e2e/pod"
 )
 
 // We only need to test this in one deployment because the tests
@@ -61,17 +63,10 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 		pods, err := f.ClientSet.CoreV1().Pods(d.Namespace).List(context.Background(), metav1.ListOptions{})
 		framework.ExpectNoError(err, "list pods")
 
-		// We cannot connect to the node port directly from
-		// outside of the cluster. Instead of setting up
-		// port-forwarding, we rely on having socat in the
-		// "testing" deployment. We just need to find one of
-		// those pods...
-		socatPods, err := f.ClientSet.CoreV1().Pods(d.Namespace).List(context.Background(), metav1.ListOptions{
-			LabelSelector: "app.kubernetes.io/name in ( pmem-csi-node-testing )",
-		})
-		framework.ExpectNoError(err, "list socat pods")
-		Expect(pods.Items).NotTo(BeEmpty(), "at least one socat pod should be running")
-		socatPod := socatPods.Items[0]
+		transport := pod.NewTransport(klogr.New().WithName("port forwarding"), f.ClientSet, f.ClientConfig())
+		client := http.Client{
+			Transport: transport,
+		}
 
 		test := func() {
 			numPods := 0
@@ -92,43 +87,26 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 							Expect(ip).ToNot(BeEmpty(), "have pod IP")
 							Expect(portNum).ToNot(Equal(0), "have container port")
 
-							// We use HTTP 1.0 to prevent the server from sending the response in chunks.
-							// That way we don't need to decode the response...
-							request := fmt.Sprintf(`GET /metrics HTTP/1.0
-Host: %s:%d
-User-Agent: e2e/1.0
-Accept: */*
-
-`, ip, portNum)
-							options := framework.ExecOptions{
-								Command: []string{
-									"socat",
-									"STDIO",
-									fmt.Sprintf("TCP:%s:%d", ip, portNum),
-								},
-								Namespace:     socatPod.Namespace,
-								PodName:       socatPod.Name,
-								Stdin:         bytes.NewBufferString(request),
-								CaptureStdout: true,
-								CaptureStderr: true,
-							}
-							stdout, stderr, err := f.ExecWithOptions(options)
-							framework.ExpectNoError(err, "command failed in namespace %s, pod %s:\nstderr:\n%s\nstdout:%s\n",
-								socatPod.Namespace, socatPod.Name, stderr, stdout)
+							url := fmt.Sprintf("http://%s.%s:%d/metrics",
+								pod.Namespace, pod.Name, port.ContainerPort)
+							resp, err := client.Get(url)
+							framework.ExpectNoError(err, "GET failed")
+							data, err := ioutil.ReadAll(resp.Body)
+							framework.ExpectNoError(err, "read GET response")
 							name := pod.Name + "/" + container.Name
 							if strings.HasPrefix(container.Name, "pmem") {
-								Expect(stdout).To(ContainSubstring("go_threads "), name)
-								Expect(stdout).To(ContainSubstring("process_open_fds "), name)
+								Expect(data).To(ContainSubstring("go_threads "), name)
+								Expect(data).To(ContainSubstring("process_open_fds "), name)
 								if !strings.Contains(pod.Name, "controller") {
 									// Only the node driver implements CSI and manages volumes.
-									Expect(stdout).To(ContainSubstring("csi_plugin_operations_seconds "), name)
-									Expect(stdout).To(ContainSubstring("pmem_amount_available "), name)
-									Expect(stdout).To(ContainSubstring("pmem_amount_managed "), name)
-									Expect(stdout).To(ContainSubstring("pmem_amount_max_volume_size "), name)
-									Expect(stdout).To(ContainSubstring("pmem_amount_total "), name)
+									Expect(data).To(ContainSubstring("csi_plugin_operations_seconds "), name)
+									Expect(data).To(ContainSubstring("pmem_amount_available "), name)
+									Expect(data).To(ContainSubstring("pmem_amount_managed "), name)
+									Expect(data).To(ContainSubstring("pmem_amount_max_volume_size "), name)
+									Expect(data).To(ContainSubstring("pmem_amount_total "), name)
 								}
 							} else {
-								Expect(stdout).To(ContainSubstring("csi_sidecar_operations_seconds "), name)
+								Expect(data).To(ContainSubstring("csi_sidecar_operations_seconds "), name)
 							}
 						}
 					}
