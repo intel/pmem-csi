@@ -12,6 +12,12 @@ spec:
       labels:
         app: my-csi-app
     spec:
+      # The 'pmem-csi-driver-test' container runs apps as user/group 1000/1000.
+      # This security context causes permissions of volume mounts
+      # to be adapted accordingly, see
+      # https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod
+      securityContext:
+        fsGroup: 1000
       # make sure that no two Pods run on same node
       affinity:
         podAntiAffinity:
