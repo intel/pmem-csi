@@ -1,7 +1,7 @@
 # Project configuration file used by controller-gen and operator-sdk tools
 {
     # Kubebuilder configuration version
-    version: "2",
+    version: "3",
     domain: "pmem-csi.intel.com",
     repo: "github.com/intel/pmem-csi/pkg/pmem-csi-operator",
     projectName: "pmem-csi-operator"
