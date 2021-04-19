@@ -20,22 +20,6 @@ keep_namespace=false
 function delete_olm_operator() {
   set -x
   BINDIR=${REPO_DIRECTORY}/_work/bin
-  CATALOG_DIR="${REPO_DIRECTORY}/deploy/olm-catalog"
-
-  if [ ! -d "${CATALOG_DIR}" ]; then
-    echo >&2 "'${CATALOG_DIR}' not a directory"
-    return 1
-  fi
-
-  VERSION=$(grep 'currentCSV:' ${CATALOG_DIR}/pmem-csi-operator.package.yaml | sed -r 's|.*currentCSV: (.*)|\1|')
-
-  set -e
-  output=$(${KUBECTL} get clusterserviceversion ${VERSION} 2>&1)
-  if echo $oupput | grep -q '(NotFound)' ; then
-    echo "Operator deployment not found!"
-    exit 0
-  fi
-  set +e
  
   namespace=""
   if [ "${TEST_OPERATOR_NAMESPACE}" != "" ]; then
@@ -43,7 +27,11 @@ function delete_olm_operator() {
   fi
 
   echo "Cleaning up the operator deployment using OLM"
-  ${BINDIR}/operator-sdk cleanup pmem-csi-operator $namespace
+  output=$(${BINDIR}/operator-sdk cleanup pmem-csi-operator $namespace 2>&1)
+  if [ $? -ne 0 ] ; then
+    echo "Failed to delete the operator: $output"
+    exit 1
+  fi
 }
 
 function delete_operator() {

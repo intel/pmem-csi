@@ -169,9 +169,9 @@ Follow the steps below to publish new operator release to
 
 * Generate OLM catalog for new release
 ``` console
-$ make operator-generate-catalog VERSION=<X.Y.Z> #semantic version number
+$ make operator-generate-bundle VERSION=<X.Y.Z> #semantic version number
 ```
-Running the above command generates the OLM catalog files under `deploy/olm-catalog/<X.Y.Z>`
+Running the above command generates the OLM catalog files under `deploy/olm-bundle/<X.Y.Z>`
 
 * Clone `operator-framework/community-operators` repository
 ``` console
@@ -182,7 +182,7 @@ $ git clone https://github.com/operator-framework/community-operators.git
   request to
  [community-operators](https://github.com/operator-framework/community-operators) repository.
 ```console
-$ cp -r <PMEM-CSI_ROOT>/deploy/olm-catalog/* <COMMUNITY-OPERATORS_ROOT>/upstream-community-operators/pmem-csi-operator/
+$ cp -r <PMEM-CSI_ROOT>/deploy/olm-bundle/* <COMMUNITY-OPERATORS_ROOT>/upstream-community-operators/pmem-csi-operator/
 $ cd <COMMUNITY-OPERATORS_ROOT>
 $ git add upstream-community-operators/pmem-csi-operator/
 $ git commit -s -m "Updating PMEM-CSI Operator to version <X.Y.Z>"
