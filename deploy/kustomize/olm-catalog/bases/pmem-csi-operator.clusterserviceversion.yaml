@@ -13,6 +13,7 @@ metadata:
     certified: "false"
     capabilities: Seamless Upgrades
 spec:
+  minKubeVersion: 1.18.0
   displayName: Operator for PMEM-CSI driver
   provider:
     name: Intel® Corporation
