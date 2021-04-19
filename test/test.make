@@ -199,7 +199,7 @@ RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 		-ginkgo.randomizeAllSpecs=false \
 	        $(TEST_E2E_ARGS) \
                 -report-dir=$(TEST_E2E_REPORT_DIR)
-test_e2e: start $(RUN_TEST_DEPS) operator-generate-catalog
+test_e2e: start $(RUN_TEST_DEPS) operator-generate-bundle
 	$(RUN_E2E)
 
 run_dm_tests: TEST_BINARY_NAME=pmem-dm-tests
