@@ -268,7 +268,7 @@ const (
 	DefaultProvisionerImage = defaultProvisionerImageName + ":" + defaultProvisionerImageTag
 
 	defaultRegistrarImageName = "k8s.gcr.io/sig-storage/csi-node-driver-registrar"
-	defaultRegistrarImageTag  = "v1.2.0"
+	defaultRegistrarImageTag  = "v2.1.0"
 	// DefaultRegistrarImage default node driver registrar image to use
 	DefaultRegistrarImage = defaultRegistrarImageName + ":" + defaultRegistrarImageTag
 
@@ -608,6 +608,30 @@ func (d *PmemCSIDeployment) NodeDriverName() string {
 // StatefulSet object name used by the deployment
 func (d *PmemCSIDeployment) ControllerDriverName() string {
 	return d.GetHyphenedName() + "-controller"
+}
+
+// NodeSetupServiceAccountName returns the name of the service account
+// used by the StatefulSet with the webhooks.
+func (d *PmemCSIDeployment) NodeSetupServiceAccountName() string {
+	return d.GetHyphenedName() + "-node-setup"
+}
+
+// NodeSetupClusterRoleName returns the name of the
+// webhooks' ClusterRole object name used by the deployment
+func (d *PmemCSIDeployment) NodeSetupClusterRoleName() string {
+	return d.GetHyphenedName() + "-node-setup-runner"
+}
+
+// NodeSetupClusterRoleBindingName returns the name of the
+// webhooks' ClusterRoleBinding object name used by the deployment
+func (d *PmemCSIDeployment) NodeSetupClusterRoleBindingName() string {
+	return d.GetHyphenedName() + "-node-setup-role"
+}
+
+// NodeSetupName returns the name of the node setup
+// DaemonSet object name used by the deployment
+func (d *PmemCSIDeployment) NodeSetupName() string {
+	return d.GetHyphenedName() + "-node-setup"
 }
 
 // GetOwnerReference returns self owner reference could be used by other object

@@ -29,7 +29,7 @@ KVM_CPU_OPTS="${KVM_CPU_OPTS:-\
  -machine pc,accel=kvm,nvdimm=on}"
 EXTRA_QEMU_OPTS="${EXTRA_QWEMU_OPTS:-\
  -object memory-backend-file,id=mem1,share=${TEST_PMEM_SHARE},\
-mem-path=/data/nvdimm0,size=${TEST_PMEM_MEM_SIZE}M \
+mem-path=/data/nvdimm0,size=$((${TEST_PMEM_MEM_SIZE} * 1024 * 1024 + ${TEST_PMEM_LABEL_SIZE})) \
  -device nvdimm,id=nvdimm1,memdev=mem1,label-size=${TEST_PMEM_LABEL_SIZE} \
 }"
 INIT_CLUSTER=${INIT_CLUSTER:-true}

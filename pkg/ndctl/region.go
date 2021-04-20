@@ -7,7 +7,6 @@ package ndctl
 //#include <ndctl/ndctl.h>
 import "C"
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -25,41 +24,75 @@ const (
 )
 
 // Region go wrapper for ndctl_region
-type Region C.struct_ndctl_region
-
-//ID returns region id
-func (r *Region) ID() uint {
-	ndr := (*C.struct_ndctl_region)(r)
-	return uint(C.ndctl_region_get_id(ndr))
+type Region interface {
+	// ID returns region id.
+	ID() uint
+	// DeviceName returns region name.
+	DeviceName() string
+	// Size returns the total size of the region.
+	Size() uint64
+	// AvailableSize returns the size of remaining available space in the region.
+	AvailableSize() uint64
+	// MaxAvailableExtent returns max available extent size in the region.
+	MaxAvailableExtent() uint64
+	// Type identifies the kind of region.
+	Type() RegionType
+	// TypeName returns the name for the region type.
+	TypeName() string
+	// Enabled returns true if the region is enabled.
+	Enabled() bool
+	// Readonly returns true if the region is read/only.
+	Readonly() bool
+	// InterleaveWays returns the interleaving of the region.
+	InterleaveWays() uint64
+	// ActiveNamespaces returns all active namespaces in the region.
+	ActiveNamespaces() []Namespace
+	// AllNamespaces returns all non-zero sized namespaces in the region
+	// as sometime a deleted namespace also lies around with size zero, we can ignore
+	// such namespace.
+	AllNamespaces() []Namespace
+	// Bus returns the bus associated with the region.
+	Bus() Bus
+	// Mappings returns all available mappings in the region.
+	Mappings() []Mapping
+	// SeedNamespace returns the initial namespace in the region.
+	SeedNamespace() Namespace
+	// CreateNamespace creates a new namespace in the region.
+	CreateNamespace(opts CreateNamespaceOpts) (Namespace, error)
+	// DestroyNamespace destroys the given namespace in the region.
+	DestroyNamespace(ns Namespace, force bool) error
+	// AdaptAlign modifies the alignment for the region.
+	AdaptAlign(align uint64) (uint64, error)
+	// FsdaxAlignment returns the default alignment for an fsdax namespace.
+	FsdaxAlignment() (uint64, error)
 }
 
-//DeviceName returns region name
-func (r *Region) DeviceName() string {
-	ndr := (*C.struct_ndctl_region)(r)
-	return C.GoString(C.ndctl_region_get_devname(ndr))
+type region = C.struct_ndctl_region
+
+var _ Region = &region{}
+
+func (r *region) ID() uint {
+	return uint(C.ndctl_region_get_id(r))
 }
 
-//Size returns total size of the region
-func (r *Region) Size() uint64 {
-	ndr := (*C.struct_ndctl_region)(r)
-	return uint64(C.ndctl_region_get_size(ndr))
+func (r *region) DeviceName() string {
+	return C.GoString(C.ndctl_region_get_devname(r))
 }
 
-//AvailableSize returns size available in the region
-func (r *Region) AvailableSize() uint64 {
-	ndr := (*C.struct_ndctl_region)(r)
-	return uint64(C.ndctl_region_get_available_size(ndr))
+func (r *region) Size() uint64 {
+	return uint64(C.ndctl_region_get_size(r))
 }
 
-//MaxAvailableExtent returns max available extent size in the region
-func (r *Region) MaxAvailableExtent() uint64 {
-	ndr := (*C.struct_ndctl_region)(r)
-	return uint64(C.ndctl_region_get_max_available_extent(ndr))
+func (r *region) AvailableSize() uint64 {
+	return uint64(C.ndctl_region_get_available_size(r))
 }
 
-func (r *Region) Type() RegionType {
-	ndr := (*C.struct_ndctl_region)(r)
-	switch C.ndctl_region_get_type(ndr) {
+func (r *region) MaxAvailableExtent() uint64 {
+	return uint64(C.ndctl_region_get_max_available_extent(r))
+}
+
+func (r *region) Type() RegionType {
+	switch C.ndctl_region_get_type(r) {
 	case C.ND_DEVICE_REGION_PMEM:
 		return PmemRegion
 	case C.ND_DEVICE_REGION_BLK:
@@ -69,63 +102,48 @@ func (r *Region) Type() RegionType {
 	return UnknownRegion
 }
 
-//TypeName returns region type
-func (r *Region) TypeName() string {
-	ndr := (*C.struct_ndctl_region)(r)
-	return C.GoString(C.ndctl_region_get_type_name(ndr))
+func (r *region) TypeName() string {
+	return C.GoString(C.ndctl_region_get_type_name(r))
 }
 
-func (r *Region) Enabled() bool {
-	ndr := (*C.struct_ndctl_region)(r)
-	return C.ndctl_region_is_enabled(ndr) != 0
+func (r *region) Enabled() bool {
+	return C.ndctl_region_is_enabled(r) != 0
 }
 
-func (r *Region) Readonly() bool {
-	ndr := (*C.struct_ndctl_region)(r)
-	return C.ndctl_region_get_ro(ndr) != 0
+func (r *region) Readonly() bool {
+	return C.ndctl_region_get_ro(r) != 0
 }
 
-func (r *Region) InterleaveWays() uint64 {
-	ndr := (*C.struct_ndctl_region)(r)
-	return uint64(C.ndctl_region_get_interleave_ways(ndr))
+func (r *region) InterleaveWays() uint64 {
+	return uint64(C.ndctl_region_get_interleave_ways(r))
 }
 
-//ActiveNamespaces returns all active namespaces in the region
-func (r *Region) ActiveNamespaces() []*Namespace {
+func (r *region) ActiveNamespaces() []Namespace {
 	return r.namespaces(true)
 }
 
-//AllNamespaces returns all non-zero sized namespaces in the region
-//as sometime a deleted namespace also lies around with size zero, we can ignore
-//such namespace
-func (r *Region) AllNamespaces() []*Namespace {
+func (r *region) AllNamespaces() []Namespace {
 	return r.namespaces(false)
 }
 
-//Bus get associated bus
-func (r *Region) Bus() *Bus {
-	ndr := (*C.struct_ndctl_region)(r)
-	return (*Bus)(C.ndctl_region_get_bus(ndr))
+func (r *region) Bus() Bus {
+	return C.ndctl_region_get_bus(r)
 }
 
-//Mappings return available mappings in the region
-func (r *Region) Mappings() []*Mapping {
-	ndr := (*C.struct_ndctl_region)(r)
-	var mappings []*Mapping
-	for ndmap := C.ndctl_mapping_get_first(ndr); ndmap != nil; ndmap = C.ndctl_mapping_get_next(ndmap) {
-		mappings = append(mappings, (*Mapping)(ndmap))
+func (r *region) Mappings() []Mapping {
+	var mappings []Mapping
+	for ndmap := C.ndctl_mapping_get_first(r); ndmap != nil; ndmap = C.ndctl_mapping_get_next(ndmap) {
+		mappings = append(mappings, ndmap)
 	}
 
 	return mappings
 }
 
-func (r *Region) SeedNamespace() *Namespace {
-	ndr := (*C.struct_ndctl_region)(r)
-	return (*Namespace)(C.ndctl_region_get_namespace_seed(ndr))
+func (r *region) SeedNamespace() Namespace {
+	return C.ndctl_region_get_namespace_seed(r)
 }
 
-func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
-	ndr := (*C.struct_ndctl_region)(r)
+func (r *region) CreateNamespace(opts CreateNamespaceOpts) (Namespace, error) {
 	defaultAlign := mib2
 	var err error
 	/* Set defaults */
@@ -176,31 +194,27 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 		}
 	}
 
+	align := defaultAlign
 	if opts.Align != 0 {
 		if opts.Mode == SectorMode || opts.Mode == RawMode {
 			klog.V(4).Infof("%s mode does not support setting an alignment, hence ignoring alignment", opts.Mode)
 		} else {
-			resource := uint64(C.ndctl_region_get_resource(ndr))
-			if resource < uint64(C.ULLONG_MAX) && resource&(mib2-1) != 0 {
-				klog.V(4).Infof("%s: falling back to a 4K alignment", regionName)
-				opts.Align = kib4
-			}
-			if opts.Align != kib4 && opts.Align != mib2 && opts.Align != gib {
-				return nil, fmt.Errorf("unsupported alignment: %v", opts.Align)
+			var err error
+			align, err = r.AdaptAlign(opts.Align)
+			if err != nil {
+				return nil, err
 			}
 		}
-	} else {
-		opts.Align = defaultAlign
 	}
 
 	if opts.Size != 0 {
-		ways := uint64(C.ndctl_region_get_interleave_ways(ndr))
-		align := opts.Align * ways
+		ways := uint64(C.ndctl_region_get_interleave_ways(r))
+		align = align * ways
 		if opts.Size%align != 0 {
 			// Round up size to align with next block boundary.
 			opts.Size = (opts.Size/align + 1) * align
 			klog.V(4).Infof("%s: namespace size must align to interleave-width:%d * alignment:%d, force-align to %d",
-				regionName, ways, opts.Align, opts.Size)
+				regionName, ways, align, opts.Size)
 		}
 	}
 
@@ -213,7 +227,7 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 	if ns.Active() {
 		return nil, fmt.Errorf("Seed namespace is active in region %s", r.DeviceName())
 	}
-	ndns := (*C.struct_ndctl_namespace)(ns)
+	ndns := (ns).(*namespace)
 
 	if ns.Type() != IoNamespace {
 		uid, _ := uuid.NewUUID()
@@ -238,13 +252,13 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 		switch opts.Mode {
 		case FsdaxMode:
 			klog.V(5).Info("setting pfn")
-			err = ns.setPfnSeed(opts.Location, opts.Align)
+			err = ndns.SetPfnSeed(opts.Location, align)
 		case DaxMode:
 			klog.V(5).Info("setting dax")
-			err = ns.setDaxSeed(opts.Location, opts.Align)
+			err = ndns.setDaxSeed(opts.Location, align)
 		case SectorMode:
 			klog.V(5).Info("setting btt")
-			err = ns.setBttSeed(opts.SectorSize)
+			err = ndns.setBttSeed(opts.SectorSize)
 		}
 	}
 	if err == nil {
@@ -262,17 +276,47 @@ func (r *Region) CreateNamespace(opts CreateNamespaceOpts) (*Namespace, error) {
 	return ns, nil
 }
 
-//DestroyNamespace destroys the given namespace ns in the region
-func (r *Region) DestroyNamespace(ns *Namespace, force bool) error {
+func (r *region) AdaptAlign(align uint64) (uint64, error) {
+	resource := uint64(C.ndctl_region_get_resource(r))
+	if resource < uint64(C.ULLONG_MAX) && resource&(mib2-1) != 0 {
+		klog.V(4).Infof("%s: falling back to a 4K alignment", r.DeviceName())
+		align = kib4
+	}
+	if align != kib4 && align != mib2 && align != gib {
+		return 0, fmt.Errorf("unsupported alignment: %v", align)
+	}
+	return align, nil
+}
+
+func (r *region) FsdaxAlignment() (uint64, error) {
+	var align uint64
+	// https://github.com/pmem/ndctl/blob/ea014c0c9ec8d0ef945d072dcc52b306c7a686f9/ndctl/namespace.c#L724-L732
+	pfn := C.ndctl_region_get_pfn_seed(r)
+
+	// https://github.com/pmem/ndctl/blob/ea014c0c9ec8d0ef945d072dcc52b306c7a686f9/ndctl/namespace.c#L799-L814
+	//
+	// The initial pfn device support in the kernel didn't
+	// have the 'align' sysfs attribute and assumed a 2MB
+	// alignment. Fall back to that if we don't have the
+	// attribute.
+	//
+	if pfn != nil && C.ndctl_pfn_has_align(pfn) != 0 {
+		align = (uint64)(C.ndctl_pfn_get_align(pfn))
+	} else {
+		align = mib2
+	}
+	return align, nil
+}
+
+func (r *region) DestroyNamespace(ns Namespace, force bool) error {
 	var rc C.int
 	devname := ns.DeviceName()
-	ndr := (*C.struct_ndctl_region)(r)
-	ndns := (*C.struct_ndctl_namespace)(ns)
-	if ndns == nil {
+	if ns == nil {
 		return fmt.Errorf("null namespace")
 	}
+	ndns := (ns).(*namespace)
 
-	if rc = C.ndctl_region_get_ro(ndr); rc < 0 {
+	if rc = C.ndctl_region_get_ro(r); rc < 0 {
 		return fmt.Errorf("namespace %s is in readonly region", devname)
 	}
 
@@ -304,9 +348,9 @@ func (r *Region) DestroyNamespace(ns *Namespace, force bool) error {
 	return nil
 }
 
-//MarshalJSON returns json encoding of the region
-func (r *Region) MarshalJSON() ([]byte, error) {
-	return json.Marshal(map[string]interface{}{
+// Strings formats all relevant attributes as JSON.
+func (r *region) String() string {
+	return marshal(map[string]interface{}{
 		"type":                 r.Type(),
 		"dev":                  r.DeviceName(),
 		"size":                 r.Size(),
@@ -317,12 +361,11 @@ func (r *Region) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func (r *Region) namespaces(onlyActive bool) []*Namespace {
-	var namespaces []*Namespace
-	ndr := (*C.struct_ndctl_region)(r)
+func (r *region) namespaces(onlyActive bool) []Namespace {
+	var namespaces []Namespace
 
-	for ndns := C.ndctl_namespace_get_first(ndr); ndns != nil; ndns = C.ndctl_namespace_get_next(ndns) {
-		ns := (*Namespace)(ndns)
+	for ndns := C.ndctl_namespace_get_first(r); ndns != nil; ndns = C.ndctl_namespace_get_next(ndns) {
+		ns := (Namespace)(ndns)
 		// If asked for only active namespaces return it regardless of it size
 		// if not, return only valid namespaces, i.e, non-zero sized.
 		if onlyActive {

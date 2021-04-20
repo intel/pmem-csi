@@ -50,7 +50,7 @@ type DriverMode string
 
 func (mode *DriverMode) Set(value string) error {
 	switch value {
-	case string(Node), string(Webhooks):
+	case string(Node), string(Webhooks), string(ForceConvertRawNamespaces):
 		*mode = DriverMode(value)
 	default:
 		// The flag package will add the value to the final output, no need to do it here.
@@ -70,6 +70,8 @@ const (
 	Node DriverMode = "node"
 	// Just the webhooks, using metrics instead of gRPC over TCP.
 	Webhooks DriverMode = "webhooks"
+	// Convert each raw namespace into fsdax.
+	ForceConvertRawNamespaces = "force-convert-raw-namespaces"
 )
 
 var (
@@ -127,7 +129,7 @@ type Config struct {
 	// parameters for Kubernetes scheduler extender
 	schedulerListen string
 
-	// parameters for rescheduler
+	// parameters for rescheduler and raw namespace conversion
 	nodeSelector types.NodeSelector
 
 	// parameters for Prometheus metrics
@@ -294,6 +296,33 @@ func (csid *csiDriver) Run() error {
 
 		// Also collect metrics data via the device manager.
 		pmdmanager.CapacityCollector{PmemDeviceCapacity: dm}.MustRegister(prometheus.DefaultRegisterer, csid.cfg.NodeID, csid.cfg.DriverName)
+
+		capacity, err := dm.GetCapacity()
+		if err != nil {
+			return fmt.Errorf("get initial capacity: %v", err)
+		}
+		klog.Infof("PMEM-CSI ready. Capacity: %s", capacity)
+	case ForceConvertRawNamespaces:
+		client, err := k8sutil.NewClient(config.KubeAPIQPS, config.KubeAPIBurst)
+		if err != nil {
+			return fmt.Errorf("connect to apiserver: %v", err)
+		}
+
+		if err := pmdmanager.ForceConvertRawNamespaces(ctx, client, csid.cfg.DriverName, csid.cfg.nodeSelector, csid.cfg.NodeID); err != nil {
+			return err
+		}
+
+		// By proceeding to waiting for the termination signal below
+		// we keep the pod around after it has its work done until
+		// Kubernetes notices that the pod is no longer needed.
+		// Terminating the pod (even with a zero exit code) would
+		// cause a race between detecting the label change and
+		// restarting the container.
+		//
+		// "RestartPolicy: OnFailure" would solve that, but
+		// isn't supported for DaemonSets
+		// (https://github.com/kubernetes/kubernetes/issues/24725).
+		klog.V(2).Info("raw namespace conversion is done, waiting for termination signal")
 	default:
 		return fmt.Errorf("Unsupported device mode '%v", csid.cfg.Mode)
 	}

@@ -230,6 +230,10 @@ spec:
         pmem-csi.intel.com/webhook: ignore
     spec:
       serviceAccountName: pmem-csi-intel-com-controller
+      # Allow this pod to run on a master node.
+      tolerations:
+      - key: "node-role.kubernetes.io/master"
+        effect: "NoSchedule"
       nodeSelector:
         storage: pmem
       containers:
@@ -374,6 +378,108 @@ spec:
             # because we want to pick up old volumes even when the driver name gets changed.
             path: /var/lib/pmem-csi.intel.com
             type: DirectoryOrCreate
+        - name: dev-dir
+          hostPath:
+            path: /dev
+            type: DirectoryOrCreate
+        - name: sys-dir
+          hostPath:
+            path: /sys
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pmem-csi-intel-com-node-setup
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pmem-csi-intel-com-node-setup-runner
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pmem-csi-intel-com-node-setup-role
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pmem-csi-intel-com-node-setup-runner
+subjects:
+- kind: ServiceAccount
+  name: pmem-csi-intel-com-node-setup
+---
+kind: DaemonSet
+apiVersion: apps/v1
+metadata:
+  name: pmem-csi-intel-com-node-setup
+  namespace: default
+  labels:
+    app.kubernetes.io/name: pmem-csi-node-setup
+    app.kubernetes.io/part-of: pmem-csi
+    app.kubernetes.io/component: node-setup
+    app.kubernetes.io/instance: pmem-csi.intel.com
+spec:
+  selector:
+    matchLabels:
+        app.kubernetes.io/name: pmem-csi-node-setup
+        app.kubernetes.io/instance: pmem-csi.intel.com
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pmem-csi-node-setup
+        app.kubernetes.io/part-of: pmem-csi
+        app.kubernetes.io/component: node-setup
+        app.kubernetes.io/instance: pmem-csi.intel.com
+        pmem-csi.intel.com/webhook: ignore
+    spec:
+      serviceAccountName: pmem-csi-intel-com-node-setup
+      # Allow this pod to run on a master node.
+      tolerations:
+      - key: "node-role.kubernetes.io/master"
+        effect: "NoSchedule"
+      nodeSelector:
+        pmem-csi.intel.com/convert-raw-namespaces: force
+      containers:
+      - name: pmem-driver
+        image: intel/pmem-csi-driver:canary
+        imagePullPolicy: IfNotPresent
+        command:
+        - /usr/local/bin/pmem-csi-driver
+        - -v=3
+        - -logging-format=text
+        - -mode=force-convert-raw-namespaces
+        - '-nodeSelector={"storage":"pmem"}'
+        - -nodeid=$(KUBE_NODE_NAME)
+        # Passing /dev to container may cause container creation error because
+        # termination-log is located on /dev/ by default, re-locate to /tmp
+        terminationMessagePath: /tmp/termination-log
+        securityContext:
+          privileged: true
+          runAsUser: 0
+        env:
+        - name: KUBE_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: TERMINATION_LOG_PATH
+          value: /tmp/termination-log
+        volumeMounts:
+        - name : dev-dir
+          mountPath: /dev
+        - name: sys-dir
+          mountPath: /sys
+        - name: sys-dir
+          mountPath: /host-sys
+      volumes:
         - name: dev-dir
           hostPath:
             path: /dev

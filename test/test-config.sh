@@ -63,9 +63,9 @@ fi
 # for details about QEMU simulated PMEM.
 : ${TEST_MEM_SLOTS:=2}
 : ${TEST_NORMAL_MEM_SIZE:=2048} # 2GB
-: ${TEST_PMEM_MEM_SIZE:=65536} # 64GB
+: ${TEST_PMEM_MEM_SIZE:=65536} # 64GB of PMEM usable inside the VM.
 : ${TEST_PMEM_SHARE:=on}
-: ${TEST_PMEM_LABEL_SIZE:=2097152}
+: ${TEST_PMEM_LABEL_SIZE:=2097152} # bytes
 
 # Number of CPUS in QEMU VM. Must be at least 2 for Kubernetes.
 : ${TEST_NUM_CPUS:=2}

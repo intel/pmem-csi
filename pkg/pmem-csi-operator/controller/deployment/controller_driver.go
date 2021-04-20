@@ -277,7 +277,7 @@ func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment
 			if err != nil {
 				return nil, fmt.Errorf("internal error: %v", err)
 			}
-			l.V(3).Info("update")
+			l.V(3).Info("update", "patch", string(data))
 			if err := r.client.Patch(ctx, copy, patch); err != nil {
 				return nil, fmt.Errorf("patch object: %v", err)
 			}
@@ -559,6 +559,59 @@ var subObjectHandlers = map[string]redeployObject{
 		},
 		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			// nothing to customize for service account
+			return nil
+		},
+	},
+
+	"node setup cluster role": {
+		objType: reflect.TypeOf(&rbacv1.ClusterRole{}),
+		object: func(d *pmemCSIDeployment) client.Object {
+			return &rbacv1.ClusterRole{
+				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: d.getObjectMeta(d.NodeSetupClusterRoleName(), true),
+			}
+		},
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
+			d.getNodeSetupClusterRole(o.(*rbacv1.ClusterRole))
+			return nil
+		},
+	},
+	"node setup cluster role binding": {
+		objType: reflect.TypeOf(&rbacv1.ClusterRoleBinding{}),
+		object: func(d *pmemCSIDeployment) client.Object {
+			return &rbacv1.ClusterRoleBinding{
+				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: d.getObjectMeta(d.NodeSetupClusterRoleBindingName(), true),
+			}
+		},
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
+			d.getNodeSetupClusterRoleBinding(o.(*rbacv1.ClusterRoleBinding))
+			return nil
+		},
+	},
+	"node setup service account": {
+		objType: reflect.TypeOf(&corev1.ServiceAccount{}),
+		object: func(d *pmemCSIDeployment) client.Object {
+			return &corev1.ServiceAccount{
+				TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+				ObjectMeta: d.getObjectMeta(d.NodeSetupServiceAccountName(), false),
+			}
+		},
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
+			// nothing to customize for service account
+			return nil
+		},
+	},
+	"node setup driver": {
+		objType: reflect.TypeOf(&appsv1.DaemonSet{}),
+		object: func(d *pmemCSIDeployment) client.Object {
+			return &appsv1.DaemonSet{
+				TypeMeta:   metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+				ObjectMeta: d.getObjectMeta(d.NodeSetupName(), false),
+			}
+		},
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
+			d.getNodeSetupDaemonSet(o.(*appsv1.DaemonSet))
 			return nil
 		},
 	},
@@ -1078,7 +1131,14 @@ func (d *pmemCSIDeployment) getNodeDaemonSet(ds *appsv1.DaemonSet) {
 			},
 			Spec: corev1.PodSpec{
 				ServiceAccountName: d.ProvisionerServiceAccountName(),
-				NodeSelector:       d.Spec.NodeSelector,
+				Tolerations: []corev1.Toleration{
+					{
+						// Allow this pod to run on a master node.
+						Key:    "node-role.kubernetes.io/master",
+						Effect: "NoSchedule",
+					},
+				},
+				NodeSelector: d.Spec.NodeSelector,
 				Containers: []corev1.Container{
 					d.getNodeDriverContainer(),
 					d.getNodeRegistrarContainer(),
@@ -1389,6 +1449,158 @@ func (d *pmemCSIDeployment) getNodeRegistrarContainer() corev1.Container {
 			},
 		},
 		Resources: *d.Spec.NodeRegistrarResources,
+	}
+}
+
+func (d *pmemCSIDeployment) getNodeSetupClusterRole(cr *rbacv1.ClusterRole) {
+	cr.Rules = []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"nodes"},
+			Verbs: []string{
+				"patch",
+			},
+		},
+	}
+}
+
+func (d *pmemCSIDeployment) getNodeSetupClusterRoleBinding(crb *rbacv1.ClusterRoleBinding) {
+	crb.Subjects = []rbacv1.Subject{
+		{
+			Kind:      "ServiceAccount",
+			Name:      d.NodeSetupServiceAccountName(),
+			Namespace: d.namespace,
+		},
+	}
+	crb.RoleRef = rbacv1.RoleRef{
+		APIGroup: "rbac.authorization.k8s.io",
+		Kind:     "ClusterRole",
+		Name:     d.NodeSetupClusterRoleName(),
+	}
+}
+
+func (d *pmemCSIDeployment) getNodeSetupDaemonSet(ds *appsv1.DaemonSet) {
+	directoryOrCreate := corev1.HostPathDirectoryOrCreate
+
+	if ds.Labels == nil {
+		ds.Labels = map[string]string{}
+	}
+	ds.Labels["app.kubernetes.io/name"] = "pmem-csi-node-setup"
+	ds.Labels["app.kubernetes.io/part-of"] = "pmem-csi"
+	ds.Labels["app.kubernetes.io/component"] = "node-setup"
+	ds.Labels["app.kubernetes.io/instance"] = d.Name
+
+	spec := &ds.Spec
+	spec.Selector = &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"app.kubernetes.io/name":     "pmem-csi-node-setup",
+			"app.kubernetes.io/instance": d.Name,
+		},
+	}
+	spec.Template.ObjectMeta.Labels = joinMaps(
+		d.Spec.Labels,
+		map[string]string{
+			"app.kubernetes.io/name":      "pmem-csi-node-setup",
+			"app.kubernetes.io/part-of":   "pmem-csi",
+			"app.kubernetes.io/component": "node-setup",
+			"app.kubernetes.io/instance":  d.Name,
+			"pmem-csi.intel.com/webhook":  "ignore",
+		})
+	podSpec := &ds.Spec.Template.Spec
+	podSpec.ServiceAccountName = d.NodeSetupServiceAccountName()
+	podSpec.Tolerations = []corev1.Toleration{
+		{
+			// Allow this pod to run on a master node.
+			Key:    "node-role.kubernetes.io/master",
+			Effect: "NoSchedule",
+		},
+	}
+	podSpec.NodeSelector = map[string]string{
+		d.Name + "/convert-raw-namespaces": "force",
+	}
+	podSpec.Containers = []corev1.Container{
+		d.getNodeSetupContainer(),
+	}
+	podSpec.Volumes = []corev1.Volume{
+		{
+			Name: "dev-dir",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/dev",
+					Type: &directoryOrCreate,
+				},
+			},
+		},
+		{
+			Name: "sys-dir",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/sys",
+					Type: &directoryOrCreate,
+				},
+			},
+		},
+	}
+}
+
+func (d *pmemCSIDeployment) getNodeSetupContainer() corev1.Container {
+	true := true
+	root := int64(0)
+	c := corev1.Container{
+		Name:            "pmem-driver",
+		Image:           d.Spec.Image,
+		ImagePullPolicy: d.Spec.PullPolicy,
+		Command:         d.getNodeSetupCommand(),
+		Env: []corev1.EnvVar{
+			{
+				Name: "KUBE_NODE_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						APIVersion: "v1",
+						FieldPath:  "spec.nodeName",
+					},
+				},
+			},
+			{
+				Name:  "TERMINATION_LOG_PATH",
+				Value: "/tmp/termination-log",
+			},
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "dev-dir",
+				MountPath: "/dev",
+			},
+			{
+				Name:      "sys-dir",
+				MountPath: "/sys",
+			},
+			{
+				Name:      "sys-dir",
+				MountPath: "/host-sys",
+			},
+		},
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: &true,
+			// Node setup must run as root user
+			RunAsUser: &root,
+		},
+		TerminationMessagePath:   "/tmp/termination-log",
+		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+	}
+
+	return c
+}
+
+func (d *pmemCSIDeployment) getNodeSetupCommand() []string {
+	nodeSelector := types.NodeSelector(d.Spec.NodeSelector)
+	return []string{
+		"/usr/local/bin/pmem-csi-driver",
+		fmt.Sprintf("-v=%d", d.Spec.LogLevel),
+		"-logging-format=" + string(d.Spec.LogFormat),
+		"-mode=force-convert-raw-namespaces",
+		"-nodeSelector=" + nodeSelector.String(),
+		"-nodeid=$(KUBE_NODE_NAME)",
 	}
 }
 

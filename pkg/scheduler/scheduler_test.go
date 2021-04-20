@@ -33,7 +33,6 @@ import (
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
-	"k8s.io/klog/v2"
 	schedulerapi "k8s.io/kube-scheduler/extender/v1"
 	"k8s.io/kubernetes/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -74,9 +73,10 @@ const (
 	nodeC = "node-C"
 )
 
-func init() {
-	klog.InitFlags(nil)
-}
+// Done indirectly by k8s.io/component-base/logs
+// func init() {
+// 	klog.InitFlags(nil)
+// }
 
 type inlineVolume struct {
 	driverName string

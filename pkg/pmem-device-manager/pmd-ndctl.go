@@ -105,7 +105,7 @@ func (pmem *pmemNdctl) GetCapacity() (capacity Capacity, err error) {
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
 
-	var ndctx *ndctl.Context
+	var ndctx ndctl.Context
 	ndctx, err = ndctl.NewContext()
 	if err != nil {
 		return
@@ -166,7 +166,7 @@ func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64) error {
 	// to request `align` additional bytes.
 	size += ndctlAlign
 	klog.V(4).Infof("Compensate for libndctl creating one alignment step smaller: increase size to %d", size)
-	ns, err := ndctx.CreateNamespace(ndctl.CreateNamespaceOpts{
+	ns, err := ndctl.CreateNamespace(ndctx, ndctl.CreateNamespaceOpts{
 		Name:  volumeId,
 		Size:  size,
 		Align: ndctlAlign,
@@ -175,8 +175,7 @@ func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64) error {
 	if err != nil {
 		return err
 	}
-	data, _ := ns.MarshalJSON() //nolint: gosec
-	klog.V(3).Infof("Namespace created: %s", data)
+	klog.V(3).Infof("Namespace created: %+v", ns)
 	// clear start of device to avoid old data being recognized as file system
 	device, err := getDevice(ndctx, volumeId)
 	if err != nil {
@@ -212,7 +211,7 @@ func (pmem *pmemNdctl) DeleteDevice(volumeId string, flush bool) error {
 		}
 		return err
 	}
-	return ndctx.DestroyNamespaceByName(volumeId)
+	return ndctl.DestroyNamespaceByName(ndctx, volumeId)
 }
 
 func (pmem *pmemNdctl) GetDevice(volumeId string) (*PmemDeviceInfo, error) {
@@ -239,14 +238,14 @@ func (pmem *pmemNdctl) ListDevices() ([]*PmemDeviceInfo, error) {
 	defer ndctx.Free()
 
 	devices := []*PmemDeviceInfo{}
-	for _, ns := range ndctx.GetAllNamespaces() {
+	for _, ns := range ndctl.GetAllNamespaces(ndctx) {
 		devices = append(devices, namespaceToPmemInfo(ns))
 	}
 	return devices, nil
 }
 
-func getDevice(ndctx *ndctl.Context, volumeId string) (*PmemDeviceInfo, error) {
-	ns, err := ndctx.GetNamespaceByName(volumeId)
+func getDevice(ndctx ndctl.Context, volumeId string) (*PmemDeviceInfo, error) {
+	ns, err := ndctl.GetNamespaceByName(ndctx, volumeId)
 	if err != nil {
 		return nil, fmt.Errorf("error getting device %q: %w", volumeId, err)
 	}
@@ -254,7 +253,7 @@ func getDevice(ndctx *ndctl.Context, volumeId string) (*PmemDeviceInfo, error) {
 	return namespaceToPmemInfo(ns), nil
 }
 
-func namespaceToPmemInfo(ns *ndctl.Namespace) *PmemDeviceInfo {
+func namespaceToPmemInfo(ns ndctl.Namespace) *PmemDeviceInfo {
 	return &PmemDeviceInfo{
 		VolumeId: ns.Name(),
 		Path:     "/dev/" + ns.BlockDeviceName(),
@@ -265,7 +264,7 @@ func namespaceToPmemInfo(ns *ndctl.Namespace) *PmemDeviceInfo {
 // totalSize sums up all PMEM regions, regardless whether they are
 // enabled and regardless of their mode.
 func totalSize() (size uint64, err error) {
-	var ndctx *ndctl.Context
+	var ndctx ndctl.Context
 	ndctx, err = ndctl.NewContext()
 	if err != nil {
 		return

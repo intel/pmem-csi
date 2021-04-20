@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 
@@ -18,73 +19,125 @@ import (
 
 	"github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
 )
 
-// Register list of volumes before test, using out-of-band host commands (i.e. not CSI API).
-func GetHostVolumes(d *Deployment) map[string][]string {
-	var cmd string
-	var hdr string
-	switch d.Mode {
-	case api.DeviceModeLVM:
-		// lvs adds many space (0x20) chars at end, we could squeeze
-		// repetitions using tr here, but TrimSpace() below strips those away
-		cmd = "sudo lvs --foreign --noheadings"
-		hdr = "LVM Volumes"
-	case api.DeviceModeDirect:
-		// ndctl produces multiline block. We want one line per namespace.
-		// Pick uuid, mode, size for comparison. Note that sorting changes the order so lines
-		// are not grouped by volume, but keeping volume order would need more complex parsing
-		// and this is not meant to be pretty-printed for human, just to detect the change.
-		cmd = "sudo ndctl list |tr -d '\"' |egrep 'uuid|mode|^ *size' |sort |tr -d ' \n'"
-		hdr = "Namespaces"
-	}
-	result := make(map[string][]string)
+type Volumes struct {
+	d      *Deployment
+	output []string
+}
+
+// GetHostVolumes list all volumes (LVM and namespaces) on all nodes.
+func GetHostVolumes(d *Deployment) Volumes {
+	var output []string
+
 	// Instead of trying to find out number of hosts, we trust the set of
 	// ssh.N helper scripts matches running hosts, which should be the case in
 	// correctly running tester system. We run ssh.N commands until a ssh.N
 	// script appears to be "no such file".
-	for worker := 1; ; worker++ {
-		sshcmd := fmt.Sprintf("%s/_work/%s/ssh.%d", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"), worker)
+	for host := 0; ; host++ {
+		sshcmd := fmt.Sprintf("%s/_work/%s/ssh.%d", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"), host)
 		if _, err := os.Stat(sshcmd); err == nil {
-			i := 0
-			for {
-				ssh := exec.Command(sshcmd, cmd)
-				// Intentional Output instead of CombinedOutput to dismiss warnings from stderr.
-				// lvs may emit lvmetad-related WARNING msg which can't be silenced using -q option.
-				out, err := ssh.Output()
-				if err != nil {
-					if i >= 3 {
-						ginkgo.Fail(fmt.Sprintf("repeated ssh attempts to node %d failed: %v", worker, err.Error()))
-					}
-					ginkgo.By(fmt.Sprintf("ssh attempt No.%d to node %d failed: %v", i, worker, err.Error()))
-					time.Sleep(10 * time.Second)
-				} else {
-					buf := fmt.Sprintf("%s on Node %d", hdr, worker)
-					result[buf] = strings.Split(strings.TrimSpace(string(out)), "\n")
-					break
-				}
+			output = append(output,
+				listVolumes(sshcmd, fmt.Sprintf("host #%d, LVM: ", host), "sudo lvs --foreign --noheadings")...)
+			// On the master node we never expect to leak
+			// namespaces. On workers it is a bit more
+			// tricky: when starting in LVM mode, the
+			// namespace created for that by the driver is
+			// left behind, which is okay.
+			//
+			// Detecting that particular namespace is
+			// tricky, so for the sake of simplicity we
+			// skip leak detection of namespaces unless we
+			// know for sure that the test doesn't use LVM
+			// mode. Unfortunately, that is currently only
+			// the case when the device mode is explicitly
+			// set to direct mode. For operator tests that
+			// mode is unset and thus namespace leaks are
+			// not detected.
+			if host == 0 || d.Mode == api.DeviceModeDirect {
+				output = append(output,
+					listVolumes(sshcmd, fmt.Sprintf("host #%d, direct: ", host), "sudo ndctl list")...)
 			}
 		} else {
 			// ssh wrapper does not exist: all nodes handled.
 			break
 		}
 	}
-	return result
+	return Volumes{
+		d:      d,
+		output: output,
+	}
+}
+
+// Some lines are allowed to change, for example the enumeration of
+// namespaces and devices because those change when rebooting a
+// node. We filter out those lines.
+var ignored = regexp.MustCompile(`direct: "dev":"namespace|direct: "blockdev":"pmem`)
+
+func listVolumes(sshcmd, prefix, cmd string) []string {
+	i := 0
+	for {
+		ssh := exec.Command(sshcmd, cmd)
+		// Intentional Output instead of CombinedOutput to dismiss warnings from stderr.
+		// lvs may emit lvmetad-related WARNING msg which can't be silenced using -q option.
+		out, err := ssh.Output()
+		if err != nil {
+			if i >= 3 {
+				ginkgo.Fail(fmt.Sprintf("%s: repeated ssh attempts failed: %v", sshcmd, err))
+			}
+			ginkgo.By(fmt.Sprintf("%s: attempt #%d failed, retry: %v", sshcmd, i, err))
+			time.Sleep(10 * time.Second)
+		} else {
+			var lines []string
+			for _, line := range strings.Split(string(out), "\n") {
+				volumeLine := prefix + strings.TrimSpace(line)
+				if !ignored.MatchString(volumeLine) {
+					lines = append(lines, volumeLine)
+				}
+			}
+			return lines
+		}
+	}
+	return nil
 }
 
 // CheckForLeftovers lists volumes again after test, diff means leftovers.
-func CheckForLeftoverVolumes(d *Deployment, volBefore map[string][]string) {
-	volNow := GetHostVolumes(d)
-	Expect(volNow).To(Equal(volBefore), "same volumes before and after the test")
+func (v Volumes) CheckForLeaks() {
+	volNow := GetHostVolumes(v.d)
+	if !assert.Equal(ginkgo.GinkgoT(), v, volNow) {
+		ginkgo.Fail("volume leak")
+	}
 }
 
-type ndctlOutput struct {
-	Regions []region `json:"regions"`
+type NdctlOutput struct {
+	Regions []Region `json:"regions"`
 }
 
-type region struct {
-	Size          int64 `json:"size"`
-	AvailableSize int64 `json:"available_size"`
+type Region struct {
+	Size          int64       `json:"size"`
+	AvailableSize int64       `json:"available_size"`
+	Namespaces    []Namespace `json:"namespaces"`
+}
+
+type Namespace struct {
+	Mode string `json:"mode"`
+}
+
+func ParseNdctlOutput(out []byte) (NdctlOutput, error) {
+	var parsed NdctlOutput
+
+	// `ndctl list` output is inconsistent:
+	// [ { "dev":"region0", ...
+	// vs.
+	// { regions: [ {"dev": "region0" ...
+	var err error
+	if strings.HasPrefix(string(out), "[") {
+		err = json.Unmarshal(out, &parsed.Regions)
+	} else {
+		err = json.Unmarshal(out, &parsed)
+	}
+	return parsed, err
 }
 
 // CheckPMEM ensures that a test does not permanently use more than
@@ -102,19 +155,9 @@ func CheckPMEM() {
 			break
 		}
 		Expect(err).ShouldNot(HaveOccurred(), "unexpected output for `ndctl list` on on host #%d:\n%s", worker, string(out))
-
-		var regions []region
-		// `ndctl list` output is inconsistent:
-		// [ { "dev":"region0", ...
-		// vs.
-		// { regions: [ {"dev": "region0" ...
-		if strings.HasPrefix(string(out), "[") {
-			err = json.Unmarshal(out, &regions)
-		} else {
-			var pmem ndctlOutput
-			err = json.Unmarshal(out, &pmem)
-			regions = pmem.Regions
-		}
+		parsed, err := ParseNdctlOutput(out)
+		Expect(err).ShouldNot(HaveOccurred(), "unexpected error parsing the ndctl output %q: %v", string(out), err)
+		regions := parsed.Regions
 		Expect(regions).ShouldNot(BeEmpty(), "unexpected `ndctl list` output on host #%d, no regions: %s", worker, string(out))
 		Expect(err).ShouldNot(HaveOccurred(), "unexpected JSON parsing error for `ndctl list` output on on host #%d:\n%s", worker, string(out))
 		for i, region := range regions {
