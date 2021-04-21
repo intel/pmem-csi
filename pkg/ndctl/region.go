@@ -65,6 +65,8 @@ type Region interface {
 	AdaptAlign(align uint64) (uint64, error)
 	// FsdaxAlignment returns the default alignment for an fsdax namespace.
 	FsdaxAlignment() (uint64, error)
+	// GetAlign returns region alignment.
+	GetAlign() uint64
 }
 
 type region = C.struct_ndctl_region
@@ -143,8 +145,11 @@ func (r *region) SeedNamespace() Namespace {
 	return C.ndctl_region_get_namespace_seed(r)
 }
 
+func (r *region) GetAlign() uint64 {
+	return uint64(C.ndctl_region_get_align(r))
+}
+
 func (r *region) CreateNamespace(opts CreateNamespaceOpts) (Namespace, error) {
-	defaultAlign := mib2
 	var err error
 	/* Set defaults */
 	if opts.Type == "" {
@@ -184,38 +189,26 @@ func (r *region) CreateNamespace(opts CreateNamespaceOpts) (Namespace, error) {
 		}
 	}
 
-	if opts.Size != 0 {
-		available := r.MaxAvailableExtent()
-		if available == uint64(C.ULLONG_MAX) {
-			available = r.AvailableSize()
-		}
-		if opts.Size > available {
-			return nil, fmt.Errorf("create namespace with size %v: %w", opts.Size, pmemerr.NotEnoughSpace)
-		}
+	align := mib2
+	namespacealign := align * r.InterleaveWays()
+	regionalign := r.GetAlign()
+	// Size has to be aligned both by namespace alignment times interleave_ways, and also by region alignment
+	lcmalign := LCM(namespacealign, regionalign)
+	klog.V(3).Infof("%s: Least Common Multiple of namespacealign:%d and regionalign:%d is %d",
+		regionName, namespacealign, regionalign, lcmalign)
+	if opts.Size == 0 || opts.Size%lcmalign != 0 {
+		// Align up to least-common-multiple alignment boundary.
+		alignedsize := (opts.Size/lcmalign + 1) * lcmalign
+		klog.V(3).Infof("%s: namespace size must align to LCM alignment:%d, adjust up from %d to %d",
+			regionName, lcmalign, opts.Size, alignedsize)
+		opts.Size = alignedsize
 	}
-
-	align := defaultAlign
-	if opts.Align != 0 {
-		if opts.Mode == SectorMode || opts.Mode == RawMode {
-			klog.V(4).Infof("%s mode does not support setting an alignment, hence ignoring alignment", opts.Mode)
-		} else {
-			var err error
-			align, err = r.AdaptAlign(opts.Align)
-			if err != nil {
-				return nil, err
-			}
-		}
+	available := r.MaxAvailableExtent()
+	if available == uint64(C.ULLONG_MAX) {
+		available = r.AvailableSize()
 	}
-
-	if opts.Size != 0 {
-		ways := uint64(C.ndctl_region_get_interleave_ways(r))
-		align = align * ways
-		if opts.Size%align != 0 {
-			// Round up size to align with next block boundary.
-			opts.Size = (opts.Size/align + 1) * align
-			klog.V(4).Infof("%s: namespace size must align to interleave-width:%d * alignment:%d, force-align to %d",
-				regionName, ways, align, opts.Size)
-		}
+	if opts.Size > available {
+		return nil, fmt.Errorf("create namespace with size %v: %w", opts.Size, pmemerr.NotEnoughSpace)
 	}
 
 	/* setup_namespace */
@@ -273,6 +266,7 @@ func (r *region) CreateNamespace(opts CreateNamespaceOpts) (Namespace, error) {
 		return nil, err
 	}
 
+	klog.V(3).Infof("%s: Namespace created: size:%d uuid:%v", regionName, ns.Size(), ns.UUID())
 	return ns, nil
 }
 
@@ -378,4 +372,20 @@ func (r *region) namespaces(onlyActive bool) []Namespace {
 	}
 
 	return namespaces
+}
+
+// Functions GCD and LCM borrowed from Go playground, simplified for 2 arguments.
+// greatest common divisor (GCD) via Euclidean algorithm
+func GCD(a, b uint64) uint64 {
+	for b != 0 {
+		t := b
+		b = a % b
+		a = t
+	}
+	return a
+}
+
+// find Least Common Multiple (LCM) via GCD
+func LCM(a, b uint64) uint64 {
+	return a * b / GCD(a, b)
 }

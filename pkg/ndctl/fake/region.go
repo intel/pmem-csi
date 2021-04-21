@@ -25,6 +25,7 @@ type Region struct {
 	Enabled_            bool
 	Readonly_           bool
 	InterleaveWays_     uint64
+	RegionAlign_        uint64
 
 	Mappings_   []ndctl.Mapping
 	Namespaces_ []ndctl.Namespace
@@ -105,8 +106,11 @@ func (r *Region) SeedNamespace() ndctl.Namespace {
 	return nil
 }
 
+func (r *Region) GetAlign() uint64 {
+	return r.RegionAlign_
+}
+
 func (r *Region) CreateNamespace(opts ndctl.CreateNamespaceOpts) (ndctl.Namespace, error) {
-	defaultAlign := mib2
 	var err error
 	/* Set defaults */
 	if opts.Type == "" {
@@ -150,11 +154,7 @@ func (r *Region) CreateNamespace(opts ndctl.CreateNamespaceOpts) (ndctl.Namespac
 		if opts.Size > available {
 			return nil, fmt.Errorf("create namespace with size %v: %w", opts.Size, pmemerr.NotEnoughSpace)
 		}
-	}
-	opts.Align = defaultAlign
-
-	if opts.Size != 0 {
-		align := opts.Align
+		align := mib2
 		if opts.Size%align != 0 {
 			// Round up size to align with next block boundary.
 			opts.Size = (opts.Size/align + 1) * align

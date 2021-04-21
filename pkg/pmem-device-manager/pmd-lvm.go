@@ -309,34 +309,19 @@ func getVolumeGroups(groups []string) ([]vgInfo, error) {
 	return vgs, nil
 }
 
-const (
-	GB uint64 = 1024 * 1024 * 1024
-)
-
 // setupNS checks if a namespace needs to be created in the region and if so, does that.
 func setupNS(r ndctl.Region, percentage uint) error {
-	align := GB
-	// In doc for "ndctl create-namespace" https://pmem.io/ndctl/ndctl-create-namespace.html
-	// it is stated that:
-	// For pmem namepsaces the size must be a multiple of the interleave-width and the namespace alignment.
-	// Because "align" is already used for argument we pass into r.CreateNamespace,
-	// we use "realalign" for multiplied alignment value required by above requirement.
-	realalign := align * r.InterleaveWays()
 	canUse := uint64(percentage) * r.Size() / 100
-	klog.V(3).Infof("Create fsdax-namespaces in %v, allowed %d %%, real align %d:\ntotal       : %16d\navail       : %16d\ncan use     : %16d",
-		r.DeviceName(), percentage, realalign, r.Size(), r.AvailableSize(), canUse)
+	klog.V(3).Infof("Create fsdax-namespaces in %v, allowed %d %%\ntotal       : %16d\navail       : %16d\ncan use     : %16d",
+		r.DeviceName(), percentage, r.Size(), r.AvailableSize(), canUse)
 	// Subtract sizes of existing active namespaces with currently handled mode and owned by pmem-csi
 	for _, ns := range r.ActiveNamespaces() {
 		klog.V(5).Infof("setupNS: Exists: Size %16d Mode:%v Device:%v Name:%v", ns.Size(), ns.Mode(), ns.DeviceName(), ns.Name())
 		if ns.Name() != pmemCSINamespaceName {
 			continue
 		}
-		diff := int64(canUse - ns.Size())
-		if diff <= 0 {
-			canUse = 0
-		} else {
-			canUse = uint64(diff)
-		}
+		klog.V(5).Infof("setupNS: Found owned-by-self namespace of size:%d, stop processing this region", ns.Size())
+		return nil
 	}
 	klog.V(4).Infof("Calculated canUse:%v, available by Region info:%v", canUse, r.AvailableSize())
 	// Because of overhead by alignment and extra space for page mapping, calculated available may show more than actual
@@ -349,18 +334,12 @@ func setupNS(r ndctl.Region, percentage uint) error {
 		klog.V(4).Infof("MaxAvailableExtent in Region:%v is less than desired size, limit to that", r.MaxAvailableExtent())
 		canUse = r.MaxAvailableExtent()
 	}
-	// Align down to next real alignment boundary, as trying creation above it may fail.
-	canUse /= realalign
-	canUse *= realalign
-	// If less than 2GB usable, don't attempt as creation would fail
-	minsize := 2 * GB
-	if canUse >= minsize {
-		klog.V(3).Infof("Create %v-bytes fsdax-namespace", canUse)
+	if canUse > 0 {
+		klog.V(3).Infof("Create fsdax-namespace with size:%d", canUse)
 		_, err := r.CreateNamespace(ndctl.CreateNamespaceOpts{
-			Name:  "pmem-csi",
-			Mode:  "fsdax",
-			Size:  canUse,
-			Align: align,
+			Name: "pmem-csi",
+			Mode: "fsdax",
+			Size: canUse,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create PMEM namespace with size '%d' in region '%s': %v", canUse, r.DeviceName(), err)

@@ -13,12 +13,6 @@ import (
 	"k8s.io/utils/mount"
 )
 
-const (
-	// 1 GB align in ndctl creation request has proven to be reliable.
-	// Newer kernels may allow smaller alignment but we do not want to introduce kernel dependency.
-	ndctlAlign uint64 = 1024 * 1024 * 1024
-)
-
 type pmemNdctl struct {
 	pmemPercentage uint
 }
@@ -120,13 +114,13 @@ func (pmem *pmemNdctl) GetCapacity() (capacity Capacity, err error) {
 				continue
 			}
 
-			realalign := ndctlAlign * r.InterleaveWays()
+			regionalign := r.GetAlign()
 			available := r.MaxAvailableExtent()
-			// align down, avoid claiming more than what we really can serve
-			klog.V(4).Infof("GetCapacity: available before realalign: %d", available)
-			available /= realalign
-			available *= realalign
-			klog.V(4).Infof("GetCapacity: available after realalign: %d", available)
+			klog.V(4).Infof("GetCapacity: initial available value by Region state: %d", available)
+			// align down by regionalign, avoid claiming having more than what we really can serve
+			available /= regionalign
+			available *= regionalign
+			klog.V(4).Infof("GetCapacity: available after regionalign down: %d", available)
 			if available > capacity.MaxVolumeSize {
 				capacity.MaxVolumeSize = available
 			}
@@ -158,19 +152,10 @@ func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64) error {
 		return pmemerr.DeviceExists
 	}
 
-	// libndctl needs to store meta data and will use some of the allocated
-	// space for that (https://github.com/pmem/ndctl/issues/79).
-	// We don't know exactly how much space that is, just
-	// that it should be a small amount. But because libndctl
-	// rounds up to the alignment, in practice that means we need
-	// to request `align` additional bytes.
-	size += ndctlAlign
-	klog.V(4).Infof("Compensate for libndctl creating one alignment step smaller: increase size to %d", size)
 	ns, err := ndctl.CreateNamespace(ndctx, ndctl.CreateNamespaceOpts{
-		Name:  volumeId,
-		Size:  size,
-		Align: ndctlAlign,
-		Mode:  "fsdax",
+		Name: volumeId,
+		Size: size,
+		Mode: "fsdax",
 	})
 	if err != nil {
 		return err

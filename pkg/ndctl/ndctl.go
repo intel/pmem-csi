@@ -29,7 +29,6 @@ type CreateNamespaceOpts struct {
 	Name       string
 	Size       uint64
 	SectorSize uint64
-	Align      uint64
 	Type       NamespaceType
 	Mode       NamespaceMode
 	Location   MapLocation
