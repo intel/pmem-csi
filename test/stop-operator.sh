@@ -18,7 +18,6 @@ keep_crd=false
 keep_namespace=false
 
 function delete_olm_operator() {
-  set -x
   BINDIR=${REPO_DIRECTORY}/_work/bin
  
   namespace=""
@@ -32,6 +31,22 @@ function delete_olm_operator() {
     echo "Failed to delete the operator: $output"
     exit 1
   fi
+
+  timeout=180 # 3 minutes
+  SECONDS=0
+  echo "Waiting for all the operator bundle objects gets deleted..."
+  while true ; do
+    output=$(${KUBECTL} get subscriptions,catalogsource,installplans,csvs,po $namespace 2>&1 | grep -v "No rsources found" || true)
+    if ! echo $output | grep -q -E 'pmem-csi-(operator|bundle)' ; then
+      echo "Done"
+      return
+    fi
+    if [ $SECONDS -gt $timeout ]; then
+      echo "Remove objects timedout: $output"
+      exit 1
+    fi
+    sleep 1
+  done
 }
 
 function delete_operator() {
