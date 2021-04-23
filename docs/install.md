@@ -270,13 +270,13 @@ Alternatively, the you can install the operator manually from YAML files.
 First install the PmemCSIDeployment CRD:
 
 ``` console
-$ kubectl create -f https://github.com/intel/pmem-csi/raw/v0.9.0/deploy/crd/pmem-csi.intel.com_pmemcsideployments.yaml
+$ kubectl create -f https://github.com/intel/pmem-csi/raw/v0.9.1/deploy/crd/pmem-csi.intel.com_pmemcsideployments.yaml
 ```
 
 Then install the PMEM-CSI operator itself:
 
 ``` console
-$ kubectl create -f https://github.com/intel/pmem-csi/raw/v0.9.0/deploy/operator/pmem-csi-operator.yaml
+$ kubectl create -f https://github.com/intel/pmem-csi/raw/v0.9.1/deploy/operator/pmem-csi-operator.yaml
 ```
 The operator gets deployed in a namespace called 'pmem-csi' which gets created by that YAML file.
 
