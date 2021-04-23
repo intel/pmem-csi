@@ -1051,29 +1051,47 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 			running.Name(), running.Namespace,
 			deployment.Name(), deployment.Namespace)
 
-		if running.HasOperator {
-			cmd := exec.Command("test/stop-operator.sh")
-			if running.HasOLM {
-				cmd.Args = append(cmd.Args, "-olm")
+		// If both running and wanted operator deployments are managed by
+		// OLM, then we do nothing. The ./test/start-operato-sh -olm script
+		// supposed to handle the case, in other words the OLM should treat
+		// this as operator upgrade.
+		if !(running.HasOLM && deployment.HasOLM) {
+			if running.HasOperator {
+				cmd := exec.Command("test/stop-operator.sh")
+				if running.HasOLM {
+					cmd.Args = append(cmd.Args, "-olm")
+				}
+				// Keep both the CRD and namespace in case the required deployment is also the operator
+				// required for version skew tests, otherwise it brings down the existing driver deployment(s)
+				if deployment.HasOperator {
+					cmd.Args = append(cmd.Args, "-keep-crd", "-keep-namespace")
+				}
+				cmd.Dir = os.Getenv("REPO_ROOT")
+				cmd.Env = append(os.Environ(),
+					"TEST_OPERATOR_NAMESPACE="+running.Namespace,
+					"TEST_OPERATOR_DEPLOYMENT_LABEL="+running.Label())
+				_, err := pmemexec.Run(cmd)
+				framework.ExpectNoError(err, "delete operator deployment: %q", deployment.Name())
 			}
-			// Keep both the CRD and namespace in case the required deployment is also the operator
-			// required for version skew tests, otherwise it brings down the existing driver deployment(s)
-			if deployment.HasOperator {
-				cmd.Args = append(cmd.Args, "-keep-crd", "-keep-namespace")
-			}
-			cmd.Dir = os.Getenv("REPO_ROOT")
-			cmd.Env = append(os.Environ(),
-				"TEST_OPERATOR_NAMESPACE="+running.Namespace,
-				"TEST_OPERATOR_DEPLOYMENT_LABEL="+running.Label())
-			_, err := pmemexec.Run(cmd)
-			framework.ExpectNoError(err, "delete operator deployment: %q", deployment.Name())
 		}
-		err := RemoveObjects(c, running)
-		framework.ExpectNoError(err, "remove PMEM-CSI deployment")
+
+		if !running.HasOLM {
+			err := RemoveObjects(c, running)
+			framework.ExpectNoError(err, "remove PMEM-CSI deployment")
+		}
 	}
 
 	root := os.Getenv("REPO_ROOT")
 	env := os.Environ()
+
+	if deployment.HasOLM {
+		cmd := exec.Command("test/start-stop-olm.sh", "start")
+		cmd.Dir = root
+		cmd.Env = env
+		_, err := pmemexec.Run(cmd)
+		framework.ExpectNoError(err, "create operator deployment: %q", deployment.Name())
+		WaitForOLM(c, "olm")
+	}
 
 	if deployment.Version != "" {
 		// Find the latest dot release on the branch for which images are public.
@@ -1106,25 +1124,28 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 		_, err = pmemexec.RunCommand("git", "-C", workRoot, "checkout", tag)
 		framework.ExpectNoError(err, "check out release-%s = %s of PMEM-CSI", deployment.Version, tag)
 
-		root = workRoot
-
-		// The release branch does not pull from Docker Hub by default,
-		// we have to select that explicitly.
-		env = append(env, "REPO_ROOT="+root, "TEST_PMEM_REGISTRY=intel", "TEST_PMEM_IMAGE_TAG="+tag)
-
 		// The setup script expects to have
 		// the same _work as in the normal root.
 		err = os.Symlink("../../_work", workRoot+"/_work")
 		framework.ExpectNoError(err, "symlink the _work directory")
-	}
 
-	if deployment.HasOLM {
-		cmd := exec.Command("test/start-stop-olm.sh", "start")
-		cmd.Dir = root
-		cmd.Env = env
-		_, err := pmemexec.Run(cmd)
-		framework.ExpectNoError(err, "create operator deployment: %q", deployment.Name())
-		WaitForOLM(c, "olm")
+		// NOTE: Release branch does not have the OLM bundle
+		// So we have to generate them. We use `make operator-generate-bundle`
+		// from devel on released manifests(CRD, CSV etc.,) for generating
+		// released OLM bundles. This step could be avoided if we keep the
+		// generated oln-bundles under /deploy in the source tree.
+		if deployment.HasOLM {
+			make := exec.Command("make", "operator-generate-bundle", "VERSION="+tag, "REPO_ROOT="+workRoot)
+			make.Dir = root
+			make.Env = env
+			_, err := pmemexec.Run(make)
+			framework.ExpectNoError(err, "%s: generate bundle for operator version %s", deployment.Name(), deployment.Version)
+		}
+
+		root = workRoot
+		// The release branch does not pull from Docker Hub by default,
+		// we have to select that explicitly.
+		env = append(env, "REPO_ROOT="+root, "TEST_PMEM_REGISTRY=intel", "TEST_PMEM_IMAGE_TAG="+tag)
 	}
 
 	if deployment.HasOperator {
@@ -1134,7 +1155,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 			cmdArgs = append(cmdArgs, "-olm")
 		}
 		cmd := exec.Command("test/start-operator.sh", cmdArgs...)
-		cmd.Dir = root
+		cmd.Dir = os.Getenv("REPO_ROOT")
 		cmd.Env = append(env,
 			"TEST_OPERATOR_NAMESPACE="+deployment.Namespace,
 			"TEST_OPERATOR_DEPLOYMENT_LABEL="+deployment.Label())
