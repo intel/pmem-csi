@@ -12,8 +12,8 @@ TEST_DIRECTORY=${TEST_DIRECTORY:-$(dirname "$(readlink -f "$0")")}
 source "${TEST_CONFIG:-${TEST_DIRECTORY}/test-config.sh}"
 
 CLUSTER=${CLUSTER:-pmem-govm}
-REPO_DIRECTORY="${REPO_DIRECTORY:-$(dirname "${TEST_DIRECTORY}")}"
-CLUSTER_DIRECTORY="${CLUSTER_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
+REPO_ROOT="${REPO_ROOT:-$(dirname "${TEST_DIRECTORY}")}"
+CLUSTER_DIRECTORY="${CLUSTER_DIRECTORY:-${REPO_ROOT}/_work/${CLUSTER}}"
 SSH="${CLUSTER_DIRECTORY}/ssh.0"
 KUBECTL="${SSH} kubectl" # Always use the kubectl installed in the cluster.
 upgrade=""
@@ -21,11 +21,11 @@ upgrade=""
 function deploy_using_olm() {
   set -x
   # Choose the latest(by creation time) bundle version if not provided one
-  BUNDLE_VERSION=${BUNDLE_VERSION:-$(ls -1t ${REPO_DIRECTORY}/deploy/olm-bundle | head -1)}
+  BUNDLE_VERSION=${BUNDLE_VERSION:-$(ls -1t ${REPO_ROOT}/deploy/olm-bundle | head -1)}
 
   echo "Starting the operator using OLM...."
-  BUNDLE_DIR="${REPO_DIRECTORY}/deploy/olm-bundle/${BUNDLE_VERSION}"
-  BINDIR=${REPO_DIRECTORY}/_work/bin
+  BUNDLE_DIR="${REPO_ROOT}/deploy/olm-bundle/${BUNDLE_VERSION}"
+  BINDIR=${REPO_ROOT}/_work/bin
 
   if [ ! -d "${BUNDLE_DIR}" ]; then
     echo >&2 "'${BUNDLE_DIR}' not a directory"
@@ -95,11 +95,11 @@ function deploy_using_olm() {
 }
 
 function deploy_using_yaml() {
-  crd=${REPO_DIRECTORY}/deploy/crd/pmem-csi.intel.com_pmemcsideployments.yaml
+  crd=${REPO_ROOT}/deploy/crd/pmem-csi.intel.com_pmemcsideployments.yaml
   echo "Deploying '${crd}'..."
   sed -e "s;\(namespace: \)pmem-csi$;\1${TEST_OPERATOR_NAMESPACE};g" ${crd} | ${SSH} kubectl apply -f -
 
-  DEPLOY_DIRECTORY="${REPO_DIRECTORY}/deploy"
+  DEPLOY_DIRECTORY="${REPO_ROOT}/deploy"
   deploy="${DEPLOY_DIRECTORY}/operator/pmem-csi-operator.yaml"
   echo "Deploying '${deploy}'..."
 
@@ -168,10 +168,10 @@ case $deploy_method in
     exit 1 ;;
 esac
 
-if [ "$upgrade" == "" ]; then
+if [ "$upgrade" == "" ] ; then
   # Set up TLS secrets in the TEST_OPERATOR_NAMESPACE, with the two different prefixes.
-  PATH="${REPO_DIRECTORY}/_work/bin:$PATH" TEST_DRIVER_NAMESPACE="${TEST_OPERATOR_NAMESPACE}" TEST_DRIVER_PREFIX=second-pmem-csi-intel-com ${TEST_DIRECTORY}/setup-ca-kubernetes.sh
-  PATH="${REPO_DIRECTORY}/_work/bin:$PATH" TEST_DRIVER_NAMESPACE="${TEST_OPERATOR_NAMESPACE}" ${TEST_DIRECTORY}/setup-ca-kubernetes.sh
+  PATH="${REPO_ROOT}/_work/bin:$PATH" TEST_DRIVER_NAMESPACE="${TEST_OPERATOR_NAMESPACE}" TEST_DRIVER_PREFIX=second-pmem-csi-intel-com ${TEST_DIRECTORY}/setup-ca-kubernetes.sh
+  PATH="${REPO_ROOT}/_work/bin:$PATH" TEST_DRIVER_NAMESPACE="${TEST_OPERATOR_NAMESPACE}" ${TEST_DIRECTORY}/setup-ca-kubernetes.sh
 fi
 
   cat <<EOF
