@@ -269,6 +269,7 @@ func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment
 		}
 		// Check whether we really need to patch.
 		if string(data) != "{}" && len(data) >= 0 {
+			l.V(5).Info("patch", "diff", string(data))
 			// Patch() will modify the object, which is an object that was
 			// generated from our PmemCSIDeployment object and shares some
 			// data structure with it. We don't want those to be modified,
@@ -1031,6 +1032,17 @@ func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 	true := true
 	pmemcsiUser := int64(1000)
 
+	// To make sure that the default values set by the API server
+	// are not unset by the operator we choose to update only specific
+	// we are interested.
+	//
+	// NOTE: Do not ferget to unset the fields that are set conditionally, as below:
+	// if expr{
+	//   ss.Spec.FieldX = some_value
+	// } else {
+	//	ss.Spec.FieldX = unset
+	// }
+
 	if ss.Labels == nil {
 		ss.Labels = map[string]string{}
 	}
@@ -1039,65 +1051,63 @@ func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 	ss.Labels["app.kubernetes.io/component"] = "controller"
 	ss.Labels["app.kubernetes.io/instance"] = d.Name
 
-	ss.Spec = appsv1.StatefulSetSpec{
-		Replicas: &replicas,
-		Selector: &metav1.LabelSelector{
-			MatchLabels: map[string]string{
-				"app.kubernetes.io/name":     "pmem-csi-controller",
-				"app.kubernetes.io/instance": d.Name,
-			},
-		},
-		ServiceName: d.ControllerServiceName(),
-		Template: corev1.PodTemplateSpec{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels: joinMaps(
-					d.Spec.Labels,
-					map[string]string{
-						"app.kubernetes.io/name":      "pmem-csi-controller",
-						"app.kubernetes.io/part-of":   "pmem-csi",
-						"app.kubernetes.io/component": "controller",
-						"app.kubernetes.io/instance":  d.Name,
-						"pmem-csi.intel.com/webhook":  "ignore",
-					}),
-				Annotations: map[string]string{
-					"pmem-csi.intel.com/scrape": "containers",
-				},
-			},
-			Spec: corev1.PodSpec{
-				SecurityContext: &corev1.PodSecurityContext{
-					// Controller pod must run as non-root user
-					RunAsNonRoot: &true,
-					RunAsUser:    &pmemcsiUser,
-				},
-				ServiceAccountName: d.GetHyphenedName() + "-webhooks",
-				Containers: []corev1.Container{
-					d.getControllerContainer(),
-				},
-				Tolerations: []corev1.Toleration{
-					{
-						// Allow this pod to run on a master node.
-						Key:    "node-role.kubernetes.io/master",
-						Effect: "NoSchedule",
-					},
-				},
-			},
+	ss.Spec.Replicas = &replicas
+	ss.Spec.Selector = &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"app.kubernetes.io/name":     "pmem-csi-controller",
+			"app.kubernetes.io/instance": d.Name,
 		},
 	}
+	ss.Spec.ServiceName = d.ControllerServiceName()
+	ss.Spec.Template.ObjectMeta.Labels = joinMaps(
+		d.Spec.Labels,
+		map[string]string{
+			"app.kubernetes.io/name":      "pmem-csi-controller",
+			"app.kubernetes.io/part-of":   "pmem-csi",
+			"app.kubernetes.io/component": "controller",
+			"app.kubernetes.io/instance":  d.Name,
+			"pmem-csi.intel.com/webhook":  "ignore",
+		})
+	ss.Spec.Template.ObjectMeta.Annotations = map[string]string{
+		"pmem-csi.intel.com/scrape": "containers",
+	}
+	ss.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{
+		// Controller pod must run as non-root user
+		RunAsNonRoot: &true,
+		RunAsUser:    &pmemcsiUser,
+	}
+	ss.Spec.Template.Spec.ServiceAccountName = d.GetHyphenedName() + "-webhooks"
+	ss.Spec.Template.Spec.Containers = []corev1.Container{
+		d.getControllerContainer(),
+	}
+	// Allow this pod to run on a master node.
+	setNoScheduleToMasterToleration(&ss.Spec.Template.Spec)
+	ss.Spec.Template.Spec.Volumes = []corev1.Volume{}
 	if d.Spec.ControllerTLSSecret != "" {
-		ss.Spec.Template.Spec.Volumes = append(ss.Spec.Template.Spec.Volumes,
-			corev1.Volume{
-				Name: "webhook-cert",
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: d.Spec.ControllerTLSSecret,
-					},
+		ss.Spec.Template.Spec.Volumes = append(ss.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: "webhook-cert",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: d.Spec.ControllerTLSSecret,
 				},
-			})
+			},
+		})
 	}
 }
 
 func (d *pmemCSIDeployment) getNodeDaemonSet(ds *appsv1.DaemonSet) {
 	directoryOrCreate := corev1.HostPathDirectoryOrCreate
+
+	// To make sure that the default values set by the API server
+	// are not unset by the operator we choose to update only specific
+	// we are interested.
+	//
+	// NOTE: Do not ferget to unset the fields that are set conditionally, as below:
+	// if expr{
+	//   ds.Spec.FieldX = some_value
+	// } else {
+	//	 ds.Spec.FieldX = unset
+	// }
 
 	if ds.Labels == nil {
 		ds.Labels = map[string]string{}
@@ -1107,107 +1117,94 @@ func (d *pmemCSIDeployment) getNodeDaemonSet(ds *appsv1.DaemonSet) {
 	ds.Labels["app.kubernetes.io/component"] = "node"
 	ds.Labels["app.kubernetes.io/instance"] = d.Name
 
-	ds.Spec = appsv1.DaemonSetSpec{
-		Selector: &metav1.LabelSelector{
-			MatchLabels: map[string]string{
-				"app.kubernetes.io/name":     "pmem-csi-node",
-				"app.kubernetes.io/instance": d.Name,
+	ds.Spec.Selector = &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"app.kubernetes.io/name":     "pmem-csi-node",
+			"app.kubernetes.io/instance": d.Name,
+		},
+	}
+	ds.Spec.Template.ObjectMeta.Labels = joinMaps(
+		d.Spec.Labels,
+		map[string]string{
+			"app.kubernetes.io/name":      "pmem-csi-node",
+			"app.kubernetes.io/part-of":   "pmem-csi",
+			"app.kubernetes.io/component": "node",
+			"app.kubernetes.io/instance":  d.Name,
+			"pmem-csi.intel.com/webhook":  "ignore",
+		})
+	ds.Spec.Template.ObjectMeta.Annotations = map[string]string{
+		"pmem-csi.intel.com/scrape": "containers",
+	}
+	ds.Spec.Template.Spec.ServiceAccountName = d.ProvisionerServiceAccountName()
+	ds.Spec.Template.Spec.NodeSelector = d.Spec.NodeSelector
+	ds.Spec.Template.Spec.Containers = []corev1.Container{
+		d.getNodeDriverContainer(),
+		d.getNodeRegistrarContainer(),
+		d.getProvisionerContainer(),
+	}
+	// Allow this pod to run on a master node.
+	setNoScheduleToMasterToleration(&ds.Spec.Template.Spec)
+	ds.Spec.Template.Spec.Volumes = []corev1.Volume{
+		{
+			Name: "socket-dir",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: d.Spec.KubeletDir + "/plugins/" + d.GetName(),
+					Type: &directoryOrCreate,
+				},
 			},
 		},
-		Template: corev1.PodTemplateSpec{
-			ObjectMeta: metav1.ObjectMeta{
-				Labels: joinMaps(
-					d.Spec.Labels,
-					map[string]string{
-						"app.kubernetes.io/name":      "pmem-csi-node",
-						"app.kubernetes.io/part-of":   "pmem-csi",
-						"app.kubernetes.io/component": "node",
-						"app.kubernetes.io/instance":  d.Name,
-						"pmem-csi.intel.com/webhook":  "ignore",
-					}),
-				Annotations: map[string]string{
-					"pmem-csi.intel.com/scrape": "containers",
+		{
+			Name: "registration-dir",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: d.Spec.KubeletDir + "/plugins_registry/",
+					Type: &directoryOrCreate,
 				},
 			},
-			Spec: corev1.PodSpec{
-				ServiceAccountName: d.ProvisionerServiceAccountName(),
-				Tolerations: []corev1.Toleration{
-					{
-						// Allow this pod to run on a master node.
-						Key:    "node-role.kubernetes.io/master",
-						Effect: "NoSchedule",
-					},
+		},
+		{
+			Name: "mountpoint-dir",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: d.Spec.KubeletDir + "/plugins/kubernetes.io/csi",
+					Type: &directoryOrCreate,
 				},
-				NodeSelector: d.Spec.NodeSelector,
-				Containers: []corev1.Container{
-					d.getNodeDriverContainer(),
-					d.getNodeRegistrarContainer(),
-					d.getProvisionerContainer(),
+			},
+		},
+		{
+			Name: "pods-dir",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: d.Spec.KubeletDir + "/pods",
+					Type: &directoryOrCreate,
 				},
-				Volumes: []corev1.Volume{
-					{
-						Name: "socket-dir",
-						VolumeSource: corev1.VolumeSource{
-							HostPath: &corev1.HostPathVolumeSource{
-								Path: d.Spec.KubeletDir + "/plugins/" + d.GetName(),
-								Type: &directoryOrCreate,
-							},
-						},
-					},
-					{
-						Name: "registration-dir",
-						VolumeSource: corev1.VolumeSource{
-							HostPath: &corev1.HostPathVolumeSource{
-								Path: d.Spec.KubeletDir + "/plugins_registry/",
-								Type: &directoryOrCreate,
-							},
-						},
-					},
-					{
-						Name: "mountpoint-dir",
-						VolumeSource: corev1.VolumeSource{
-							HostPath: &corev1.HostPathVolumeSource{
-								Path: d.Spec.KubeletDir + "/plugins/kubernetes.io/csi",
-								Type: &directoryOrCreate,
-							},
-						},
-					},
-					{
-						Name: "pods-dir",
-						VolumeSource: corev1.VolumeSource{
-							HostPath: &corev1.HostPathVolumeSource{
-								Path: d.Spec.KubeletDir + "/pods",
-								Type: &directoryOrCreate,
-							},
-						},
-					},
-					{
-						Name: "pmem-state-dir",
-						VolumeSource: corev1.VolumeSource{
-							HostPath: &corev1.HostPathVolumeSource{
-								Path: "/var/lib/" + d.GetName(),
-								Type: &directoryOrCreate,
-							},
-						},
-					},
-					{
-						Name: "dev-dir",
-						VolumeSource: corev1.VolumeSource{
-							HostPath: &corev1.HostPathVolumeSource{
-								Path: "/dev",
-								Type: &directoryOrCreate,
-							},
-						},
-					},
-					{
-						Name: "sys-dir",
-						VolumeSource: corev1.VolumeSource{
-							HostPath: &corev1.HostPathVolumeSource{
-								Path: "/sys",
-								Type: &directoryOrCreate,
-							},
-						},
-					},
+			},
+		},
+		{
+			Name: "pmem-state-dir",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/var/lib/" + d.GetName(),
+					Type: &directoryOrCreate,
+				},
+			},
+		},
+		{
+			Name: "dev-dir",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/dev",
+					Type: &directoryOrCreate,
+				},
+			},
+		},
+		{
+			Name: "sys-dir",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/sys",
+					Type: &directoryOrCreate,
 				},
 			},
 		},
@@ -1281,9 +1278,10 @@ func (d *pmemCSIDeployment) getControllerContainer() corev1.Container {
 				},
 			},
 		},
-		Ports:                  d.getMetricsPorts(controllerMetricsPort),
-		Resources:              *d.Spec.ControllerDriverResources,
-		TerminationMessagePath: "/dev/termination-log",
+		Ports:                    d.getMetricsPorts(controllerMetricsPort),
+		Resources:                *d.Spec.ControllerDriverResources,
+		TerminationMessagePath:   "/dev/termination-log",
+		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 		SecurityContext: &corev1.SecurityContext{
 			ReadOnlyRootFilesystem: &true,
 		},
@@ -1368,7 +1366,8 @@ func (d *pmemCSIDeployment) getNodeDriverContainer() corev1.Container {
 			// Node driver must run as root user
 			RunAsUser: &root,
 		},
-		TerminationMessagePath: "/tmp/termination-log",
+		TerminationMessagePath:   "/tmp/termination-log",
+		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 	}
 
 	return c
@@ -1415,6 +1414,8 @@ func (d *pmemCSIDeployment) getProvisionerContainer() corev1.Container {
 		SecurityContext: &corev1.SecurityContext{
 			ReadOnlyRootFilesystem: &true,
 		},
+		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
+		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 	}
 }
 
@@ -1448,7 +1449,9 @@ func (d *pmemCSIDeployment) getNodeRegistrarContainer() corev1.Container {
 				Value: d.GetName(),
 			},
 		},
-		Resources: *d.Spec.NodeRegistrarResources,
+		Resources:                *d.Spec.NodeRegistrarResources,
+		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
+		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 	}
 }
 
@@ -1508,13 +1511,8 @@ func (d *pmemCSIDeployment) getNodeSetupDaemonSet(ds *appsv1.DaemonSet) {
 		})
 	podSpec := &ds.Spec.Template.Spec
 	podSpec.ServiceAccountName = d.NodeSetupServiceAccountName()
-	podSpec.Tolerations = []corev1.Toleration{
-		{
-			// Allow this pod to run on a master node.
-			Key:    "node-role.kubernetes.io/master",
-			Effect: "NoSchedule",
-		},
-	}
+	// Allow this pod to run on a master node.
+	setNoScheduleToMasterToleration(podSpec)
 	podSpec.NodeSelector = map[string]string{
 		d.Name + "/convert-raw-namespaces": "force",
 	}
@@ -1636,4 +1634,24 @@ func joinMaps(left, right map[string]string) map[string]string {
 		result[key] = value
 	}
 	return result
+}
+
+func setNoScheduleToMasterToleration(podSpec *corev1.PodSpec) {
+	key := "node-role.kubernetes.io/master"
+
+	if podSpec.Tolerations == nil {
+		podSpec.Tolerations = []corev1.Toleration{}
+	}
+
+	for _, t := range podSpec.Tolerations {
+		if t.Key == key {
+			t.Effect = "NoSchedule"
+			return
+		}
+	}
+
+	podSpec.Tolerations = append(podSpec.Tolerations, corev1.Toleration{
+		Key:    key,
+		Effect: "NoSchedule",
+	})
 }
