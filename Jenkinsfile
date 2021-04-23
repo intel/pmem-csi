@@ -181,7 +181,7 @@ pipeline {
                 // This runs most tests and thus gets to use the initial worker immediately.
                 stage('1.20') {
                     options {
-                        timeout(time: 14, unit: "HOURS")
+                        timeout(time: 12, unit: "HOURS")
                     }
                     steps {
                         TestInVM("", "fedora", "", "1.20", "Top.Level..[[:alpha:]]*-production[[:space:]]")
@@ -191,7 +191,7 @@ pipeline {
                 // All others set up their own worker.
                 stage('1.19') {
                     options {
-                        timeout(time: 540, unit: "MINUTES")
+                        timeout(time: 12, unit: "HOURS")
                     }
                     agent {
                         label "pmem-csi"
@@ -203,7 +203,7 @@ pipeline {
                 stage('1.18') {
                     when { not { changeRequest() } }
                     options {
-                        timeout(time: 540, unit: "MINUTES")
+                        timeout(time: 12, unit: "HOURS")
                     }
                     agent {
                         label "pmem-csi"
