@@ -545,6 +545,7 @@ spec:
         - -v=3
         - --kubelet-registration-path=/var/lib/kubelet/plugins/$(PMEM_CSI_DRIVER_NAME)/csi.sock
         - --csi-address=/csi/csi.sock
+        - --timeout=10s
         - -v=5
         env:
         - name: PMEM_CSI_DRIVER_NAME
