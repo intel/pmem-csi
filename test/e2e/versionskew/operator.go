@@ -9,10 +9,12 @@ package versionskew
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"sync"
 	"time"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
+	pmemexec "github.com/intel/pmem-csi/pkg/exec"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 	"golang.org/x/net/context"
 	corev1 "k8s.io/api/core/v1"
@@ -26,10 +28,7 @@ import (
 )
 
 var _ = deploy.DescribeForSome("versionskew", func(d *deploy.Deployment) bool {
-	// Run these tests only for bare operator deployments, not for the operator
-	// deployed by OLM. Because there is no way how to ask olm to stop the operator
-	// but keep the CRD.
-	return d.HasOperator && !d.HasDriver && !d.HasOLM
+	return d.HasOperator && !d.HasDriver
 }, func(d *deploy.Deployment) {
 	var (
 		evWatcher  watch.Interface
@@ -74,10 +73,25 @@ var _ = deploy.DescribeForSome("versionskew", func(d *deploy.Deployment) bool {
 			// deploy.Parse() expects the deployment is seperated with '-'
 			// and the version should be the 4th field.
 			newDeploymentName = d.Name() + "---" + version
+		} else if d.HasOLM {
+			root := os.Getenv("REPO_ROOT")
+			semver := current + ".0"
+			defer func() {
+				// Remove generated bundle
+				_, err := pmemexec.RunCommand("rm", "-rf", root+"/deploy/olm-bundle/"+semver)
+				framework.ExpectNoError(err, "remove generated bundle: %v", err)
+			}()
+			// (Re)Generate olm-bundle with future release version number
+			// So that OLM sees it as upgrade.
+			make := exec.Command("make", "operator-generate-bundle", "VERSION=v"+semver)
+			make.Dir = root
+			make.Env = os.Environ()
+			_, err := pmemexec.Run(make)
+			framework.ExpectNoError(err, "%s: generate bundle for operator version %s", d.Name(), d.Version)
 		}
 
 		// Change operator release.
-		By(fmt.Sprintf("Switching the operator to %s", newDeploymentName))
+		By(fmt.Sprintf("Switching the operator to '%s'", newDeploymentName))
 		deployment, err := deploy.Parse(newDeploymentName)
 		framework.ExpectNoError(err, "internal error while parsing %s: %v", newDeploymentName, err)
 		deploy.EnsureDeploymentNow(f, deployment)
@@ -202,10 +216,18 @@ var _ = deploy.DescribeForSome("versionskew", func(d *deploy.Deployment) bool {
 	}
 
 	It("downgrade [Slow]", func() {
+		if d.HasOLM {
+			Skip("OLM yet not support operator downgrade!")
+		}
 		testVersion(base, "downgrade")
 	})
 
 	It("upgrade [Slow]", func() {
+		// First remove existing operator deployment
+		// This is mandatory in case of OLM. Otherwise later downgrade
+		// step might results in operator upgrade by the OLM.
+		deploy.EnsureDeploymentNow(f, &deploy.Deployment{Namespace: d.Namespace})
+
 		// downgrade the operator to base version
 		changeVersion(base)
 

@@ -39,6 +39,8 @@ import (
 const (
 	// base is the release branch used for version skew testing. Empty if none.
 	base = "0.9"
+	// Expected release version(used by the operator)
+	current = "1.0"
 )
 
 func baseSupportsKubernetes(ver version.Version) bool {
