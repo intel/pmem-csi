@@ -91,7 +91,7 @@ function deploy_using_olm() {
   fi
 
   # Deploy the operator
-  ${BINDIR}/operator-sdk run bundle${upgrade} ${NAMESPACE} --timeout 3m ${BUNDLE_IMAGE} --skip-tls
+  ${BINDIR}/operator-sdk run bundle${upgrade} ${NAMESPACE} --timeout 5m ${BUNDLE_IMAGE} --skip-tls
 }
 
 function deploy_using_yaml() {
