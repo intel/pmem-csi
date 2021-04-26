@@ -47,36 +47,22 @@ var _ = Describe("Operator", func() {
 			Expect(d.Spec.NodeRegistrarImage).Should(BeEquivalentTo(api.DefaultRegistrarImage), "default node driver registrar image mismatch")
 
 			Expect(d.Spec.ControllerDriverResources).ShouldNot(BeNil(), "default controller resources not set")
-			rs := d.Spec.ControllerDriverResources.Limits
-			Expect(rs.Cpu().String()).Should(BeEquivalentTo(api.DefaultControllerResourceLimitCPU), "controller driver 'cpu' resource mismatch")
-			Expect(rs.Memory().String()).Should(BeEquivalentTo(api.DefaultControllerResourceLimitMemory), "controller driver 'memory' resource mismatch")
 
 			Expect(d.Spec.NodeDriverResources).ShouldNot(BeNil(), "default node driver resources not set")
-			rs = d.Spec.NodeDriverResources.Requests
+			rs := d.Spec.NodeDriverResources.Requests
 			Expect(rs.Cpu().String()).Should(BeEquivalentTo(api.DefaultNodeResourceRequestCPU), "node driver 'cpu' resource request mismatch")
 			Expect(rs.Memory().String()).Should(BeEquivalentTo(api.DefaultNodeResourceRequestMemory), "node driver 'cpu' resource request mismatch")
 
-			rs = d.Spec.NodeDriverResources.Limits
-			Expect(rs.Cpu().String()).Should(BeEquivalentTo(api.DefaultNodeResourceLimitCPU), "node driver 'cpu' resource limit mismatch")
-			Expect(rs.Memory().String()).Should(BeEquivalentTo(api.DefaultNodeResourceLimitMemory), "node driver 'cpu' resource limit mismatch")
 			Expect(d.Spec.NodeRegistrarResources).ShouldNot(BeNil(), "default node registrar resources not set")
 
 			rs = d.Spec.NodeRegistrarResources.Requests
 			Expect(rs.Cpu().String()).Should(BeEquivalentTo(api.DefaultNodeRegistrarRequestCPU), "node registrar 'cpu' resource request mismatch")
 			Expect(rs.Memory().String()).Should(BeEquivalentTo(api.DefaultNodeRegistrarRequestMemory), "node registrar 'cpu' resource request mismatch")
 
-			rs = d.Spec.NodeRegistrarResources.Limits
-			Expect(rs.Cpu().String()).Should(BeEquivalentTo(api.DefaultNodeRegistrarLimitCPU), "node registrar 'cpu' resource limit mismatch")
-			Expect(rs.Memory().String()).Should(BeEquivalentTo(api.DefaultNodeRegistrarLimitMemory), "node registrar 'cpu' resource limit mismatch")
-
 			Expect(d.Spec.ProvisionerResources).ShouldNot(BeNil(), "default provisioner resources not set")
 			rs = d.Spec.ProvisionerResources.Requests
 			Expect(rs.Cpu().String()).Should(BeEquivalentTo(api.DefaultProvisionerRequestCPU), "provisioner 'cpu' resource request mismatch")
 			Expect(rs.Memory().String()).Should(BeEquivalentTo(api.DefaultProvisionerRequestMemory), "provisioner 'cpu' resource request mismatch")
-
-			rs = d.Spec.ProvisionerResources.Limits
-			Expect(rs.Cpu().String()).Should(BeEquivalentTo(api.DefaultProvisionerLimitCPU), "provisioner 'cpu' resource limit mismatch")
-			Expect(rs.Memory().String()).Should(BeEquivalentTo(api.DefaultProvisionerLimitMemory), "provisioner 'cpu' resource limit mismatch")
 		})
 
 		It("shall be able to set values", func() {

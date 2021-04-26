@@ -401,19 +401,26 @@ spec:
         ports:
         - containerPort: 10010
           name: metrics
+        resources:
+          requests:
+            cpu: 12m
+            memory: 128Mi
         securityContext:
           readOnlyRootFilesystem: true
         terminationMessagePath: /dev/termination-log
         volumeMounts:
         - mountPath: /certs
           name: webhook-cert
+      priorityClassName: system-cluster-critical
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
       serviceAccountName: pmem-csi-intel-com-webhooks
       tolerations:
       - effect: NoSchedule
-        key: node-role.kubernetes.io/master
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
       volumes:
       - name: webhook-cert
         secret:
@@ -477,6 +484,10 @@ spec:
         ports:
         - containerPort: 10010
           name: metrics
+        resources:
+          requests:
+            cpu: 100m
+            memory: 250Mi
         securityContext:
           privileged: true
           runAsUser: 0
@@ -510,6 +521,10 @@ spec:
         image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.1.0
         imagePullPolicy: IfNotPresent
         name: driver-registrar
+        resources:
+          requests:
+            cpu: 12m
+            memory: 128Mi
         securityContext:
           readOnlyRootFilesystem: true
         volumeMounts:
@@ -540,6 +555,10 @@ spec:
         ports:
         - containerPort: 10011
           name: metrics
+        resources:
+          requests:
+            cpu: 12m
+            memory: 128Mi
         securityContext:
           readOnlyRootFilesystem: true
         volumeMounts:
@@ -547,10 +566,13 @@ spec:
           name: socket-dir
       nodeSelector:
         storage: pmem
+      priorityClassName: system-node-critical
       serviceAccountName: pmem-csi-intel-com-controller
       tolerations:
       - effect: NoSchedule
-        key: node-role.kubernetes.io/master
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
       volumes:
       - hostPath:
           path: /var/lib/kubelet/plugins/pmem-csi.intel.com
@@ -643,7 +665,9 @@ spec:
       serviceAccountName: pmem-csi-intel-com-node-setup
       tolerations:
       - effect: NoSchedule
-        key: node-role.kubernetes.io/master
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
       volumes:
       - hostPath:
           path: /dev
