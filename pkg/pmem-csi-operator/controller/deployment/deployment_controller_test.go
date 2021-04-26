@@ -540,7 +540,7 @@ func TestDeploymentController(t *testing.T) {
 			for _, testcase := range testcases.UpdateTests() {
 				testcase := testcase
 				t.Run(testcase.Name, func(t *testing.T) {
-					testIt := func(restart bool) {
+					testIt := func(t *testing.T, restart bool) {
 						tc := setup(t)
 						defer teardown(tc)
 						dep := testcase.Deployment.DeepCopyObject().(*api.PmemCSIDeployment)
@@ -588,11 +588,11 @@ func TestDeploymentController(t *testing.T) {
 					t.Parallel()
 
 					t.Run("while running", func(t *testing.T) {
-						testIt(false)
+						testIt(t, false)
 					})
 
 					t.Run("while stopped", func(t *testing.T) {
-						testIt(true)
+						testIt(t, true)
 					})
 				})
 			}
