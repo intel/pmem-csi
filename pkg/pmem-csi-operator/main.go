@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	// import deployment to ensure that the deployment reconciler get initialized.
 	_ "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment"
@@ -39,7 +40,8 @@ var (
 	driverImage    = flag.String("image", "", "docker container image used for deploying the operator.")
 	leaderElection = flag.Bool("leader-election", false, "Enable leader election for controller manager. "+
 		"Enabling this will ensure there is only one active controller manager.")
-	logFormat = logger.NewFlag()
+	metricsAddr = flag.String("metrics-addr", metrics.DefaultBindAddress, "The address the metric endpoint binds to. Use \"0\" to disable metrics.")
+	logFormat   = logger.NewFlag()
 )
 
 func init() {
@@ -72,6 +74,7 @@ func Main() int {
 		LeaderElection:          *leaderElection,
 		LeaderElectionNamespace: namespace,
 		LeaderElectionID:        "pmem-csi-operator-lock",
+		MetricsBindAddress:      *metricsAddr,
 	})
 	if err != nil {
 		pmemcommon.ExitError("Failed to create controller manager: ", err)

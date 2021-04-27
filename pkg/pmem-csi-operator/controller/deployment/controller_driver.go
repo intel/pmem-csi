@@ -13,6 +13,7 @@ import (
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	"github.com/intel/pmem-csi/pkg/logger"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/metrics"
 	"github.com/intel/pmem-csi/pkg/types"
 	"github.com/intel/pmem-csi/pkg/version"
 
@@ -282,6 +283,9 @@ func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment
 			if err := r.client.Patch(ctx, copy, patch); err != nil {
 				return nil, fmt.Errorf("patch object: %v", err)
 			}
+			if err := metrics.SetSubResourceUpdateMetric(o); err != nil {
+				l.V(3).Error(err, "failed to set sub-resource metrics", "object", o)
+			}
 		}
 	} else {
 		// For unknown reason client.Create() clearing off the
@@ -292,6 +296,9 @@ func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment
 			return nil, fmt.Errorf("create object: %v", err)
 		}
 		o.GetObjectKind().SetGroupVersionKind(gvk)
+		if err := metrics.SetSubResourceCreateMetric(o); err != nil {
+			l.V(3).Error(err, "failed to set sub-resource metrics", "object", o)
+		}
 	}
 
 	// Final per-object changes, like emitting events or setting status.
