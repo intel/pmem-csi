@@ -270,6 +270,17 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
+	if ephemeral && fsType == "xfs" {
+		// FS was created only in ephemeral case.
+		// Only if created filesytem and it was XFS:
+		// Tune XFS file system to serve huge pages:
+		// Set file system extent size to 2 MiB sized and aligned block allocations.
+		_, err := pmemexec.RunCommand("xfs_io", "-c", "extsize 2m", hostMount)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+
 	if !volumeParameters.GetKataContainers() {
 		// A normal volume, return early.
 		return &csi.NodePublishVolumeResponse{}, nil
@@ -530,6 +541,15 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 
 	if err = ns.mount(device.Path, stagingtargetPath, mountOptions, false /* raw block */); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	if existingFsType == "" && requestedFsType == "xfs" {
+		// Only if created a new filesytem and it was XFS:
+		// Align XFS file system for hugepages
+		_, err := pmemexec.RunCommand("xfs_io", "-c", "extsize 2m", stagingtargetPath)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
 	}
 
 	return &csi.NodeStageVolumeResponse{}, nil
