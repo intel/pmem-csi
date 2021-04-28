@@ -17,12 +17,13 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/storage"
 	"github.com/intel/pmem-csi/test/e2e/storage/dax"
 	"github.com/intel/pmem-csi/test/e2e/storage/scheduler"
+	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
-	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
 var _ = deploy.DescribeForSome("driver", func(d *deploy.Deployment) bool {
@@ -47,11 +48,21 @@ var _ = deploy.DescribeForSome("driver", func(d *deploy.Deployment) bool {
 		k8sver, err := k8sutil.GetKubernetesVersion(f.ClientConfig())
 		framework.ExpectNoError(err, "get Kubernetes version")
 
+		c, err := deploy.NewCluster(f.ClientSet, f.DynamicClient, f.ClientConfig())
+		framework.ExpectNoError(err, "new cluster")
+
 		// We need the actual CR from the apiserver to check ownership.
 		deployment := d.GetDriverDeployment()
 		deployment = deploy.GetDeploymentCR(f, deployment.Name)
 
-		framework.ExpectNoError(validate.DriverDeploymentEventually(ctx, client, *k8sver, d.Namespace, deployment, true), "validate driver")
+		metricsURL, err := deploy.GetOperatorMetricsURL(ctx, c, d)
+		Expect(err).ShouldNot(HaveOccurred(), "get operator metrics URL")
+
+		err = validate.DriverDeployment(ctx, client, *k8sver, d.Namespace, deployment)
+		framework.ExpectNoError(err, "validate driver")
+
+		err = validate.CheckForObjectUpdates(ctx, c, metricsURL, nil, &deployment)
+		framework.ExpectNoError(err, "check object updates")
 	})
 
 	// Just very minimal testing at the moment.

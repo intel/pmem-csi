@@ -8,7 +8,6 @@ package gotests
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -34,25 +33,18 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 
 	var (
 		metricsURL string
-		tlsConfig  = tls.Config{
-			// We could load ca.pem with pmemgrpc.LoadClientTLS, but as we are not connecting to it
-			// via the service name, that would be enough.
-			InsecureSkipVerify: true,
-		}
-		tr = http.Transport{
-			TLSClientConfig: &tlsConfig,
-		}
-		timeout = 5 * time.Second
-		client  = &http.Client{
-			Transport: &tr,
-			Timeout:   timeout,
-		}
+		client     *http.Client
+		timeout    = 5 * time.Second
 	)
 
 	BeforeEach(func() {
-		cluster, err := deploy.NewCluster(f.ClientSet, f.DynamicClient)
+		cluster, err := deploy.NewCluster(f.ClientSet, f.DynamicClient, f.ClientConfig())
 		framework.ExpectNoError(err, "get cluster information")
 		metricsURL = deploy.WaitForPMEMDriver(cluster, d)
+		client = &http.Client{
+			Transport: pod.NewTransport(klogr.New().WithName("port forwarding"), f.ClientSet, f.ClientConfig()),
+			Timeout:   timeout,
+		}
 	})
 
 	It("works", func() {
@@ -62,11 +54,6 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 		// metrics endpoint).
 		pods, err := f.ClientSet.CoreV1().Pods(d.Namespace).List(context.Background(), metav1.ListOptions{})
 		framework.ExpectNoError(err, "list pods")
-
-		transport := pod.NewTransport(klogr.New().WithName("port forwarding"), f.ClientSet, f.ClientConfig())
-		client := http.Client{
-			Transport: transport,
-		}
 
 		test := func() {
 			numPods := 0

@@ -9,7 +9,6 @@ package deploy
 import (
 	"bufio"
 	"context"
-	"crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -22,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	cm "github.com/prometheus/client_model/go"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 	v1 "k8s.io/api/core/v1"
@@ -31,11 +31,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/klog/v2/klogr"
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
+	"github.com/intel/pmem-csi/test/e2e/pod"
 	testconfig "github.com/intel/pmem-csi/test/test-config"
 
 	"github.com/onsi/ginkgo"
@@ -95,6 +97,64 @@ func WaitForOLM(c *Cluster, namespace string) *v1.Pod {
 	return olm
 }
 
+// GetMetricsURL retrieves the metrics URL provided by a pod that
+// matches with the label set passed in podLabelSet.
+func GetMetricsURL(ctx context.Context, c *Cluster, namespace string, podLabels labels.Set) (string, error) {
+	list, err := c.cs.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: podLabels.String()})
+	if err != nil {
+		return "", err
+	}
+
+	var pod *v1.Pod
+	for i, p := range list.Items {
+		if p.GetDeletionTimestamp() == nil {
+			pod = &list.Items[i]
+		}
+	}
+
+	if pod == nil {
+		return "", fmt.Errorf("no pod(s) found for given labels(%v) in '%s' namespace", podLabels, namespace)
+	}
+	for _, container := range pod.Spec.Containers {
+		for _, port := range container.Ports {
+			if port.Name == "metrics" {
+				return fmt.Sprintf("http://%s.%s:%d/metrics", pod.Namespace, pod.Name, port.ContainerPort), nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no metrics port found (pod: %s)", pod.Name)
+}
+
+// GetMetricsPortForward retrieves metrics from given metricsURL
+// by Pod's container port forwarding. The metricsURL could be retrieved
+// using deploy.GetMetricsURL() and must be in the form of
+// 'scheme://pod_namespace.pod_name:container_port/metric_endpoint>'.
+func GetMetrics(ctx context.Context, c *Cluster, url string) (map[string]*cm.MetricFamily, error) {
+	tr := pod.NewTransport(klogr.New().WithName("port forwarding"), c.cs, c.cfg)
+	defer tr.CloseIdleConnections()
+
+	httpClient := http.Client{
+		Transport: tr,
+		Timeout:   time.Minute,
+	}
+
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("get controller metrics: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		body, _ := ioutil.ReadAll(resp.Body)
+		suffix := ""
+		if len(body) > 0 {
+			suffix = "\n" + string(body)
+		}
+		return nil, fmt.Errorf("HTTP GET %s failed: %d%s", url, resp.StatusCode, suffix)
+	}
+
+	return (&expfmt.TextParser{}).TextToMetricFamilies(resp.Body)
+}
+
 // WaitForPMEMDriver ensures that the PMEM-CSI driver is ready for use, which is
 // defined as:
 // - controller service is up and running
@@ -108,33 +168,12 @@ func WaitForPMEMDriver(c *Cluster, d *Deployment) (metricsURL string) {
 	deadline, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	// "name" is the common prefix used for objects of the deployment.
-	// If we are testing against an older version of PMEM-CSI, then it is always "pmem-csi".
-	// PMEM-CSI 0.9.0 derives it from the CSI driver name.
-	var name string
-	switch d.Version {
-	case "0.7", "0.8":
-		name = "pmem-csi"
-	default:
-		name = strings.ReplaceAll(d.DriverName, ".", "-")
-	}
-
 	if waitForPMEMDriverTimedOut {
 		// Abort early.
 		skipper.Skipf("installing PMEM-CSI driver during previous test was too slow")
 	}
 
 	framework.Logf("Waiting for PMEM-CSI driver.")
-
-	tlsConfig := tls.Config{
-		// We could load ca.pem with pmemgrpc.LoadClientTLS, but as we are not connecting to it
-		// via the service name, that would be enough.
-		InsecureSkipVerify: true,
-	}
-	tr := http.Transport{
-		TLSClientConfig: &tlsConfig,
-	}
-	defer tr.CloseIdleConnections()
 
 	var lastError error
 	var version string
@@ -146,38 +185,16 @@ func WaitForPMEMDriver(c *Cluster, d *Deployment) (metricsURL string) {
 		defer cancel()
 
 		if d.HasController {
-			// The controller service must be defined.
-			port, err := c.GetServicePort(deadline, name+"-metrics", d.Namespace)
+			var err error
+			metricsURL, err = GetMetricsURL(deadline, c, d.Namespace, labels.Set{
+				"pmem-csi.intel.com/deployment": d.Label(),
+				"app.kubernetes.io/name":        "pmem-csi-controller",
+			})
 			if err != nil {
-				return fmt.Errorf("get port for service %s-metrics in namespace %s: %v", name, d.Namespace, err)
+				return err
 			}
 
-			// We can connect to it and get metrics data.
-			scheme := "http"
-			if d.Version == "0.7" {
-				scheme = "https"
-			}
-			metricsURL = fmt.Sprintf("%s://%s:%d/metrics", scheme, c.NodeIP(0), port)
-			client := &http.Client{
-				Transport: &tr,
-				Timeout:   timeout,
-			}
-			resp, err := client.Get(metricsURL)
-			if err != nil {
-				return fmt.Errorf("get controller metrics: %v", err)
-			}
-			if resp.StatusCode != 200 {
-				body, _ := ioutil.ReadAll(resp.Body)
-				suffix := ""
-				if len(body) > 0 {
-					suffix = "\n" + string(body)
-				}
-				return fmt.Errorf("HTTP GET %s failed: %d%s", metricsURL, resp.StatusCode, suffix)
-			}
-
-			// Check metrics data.
-			parser := expfmt.TextParser{}
-			metrics, err := parser.TextToMetricFamilies(resp.Body)
+			metrics, err := GetMetrics(deadline, c, metricsURL)
 			if err != nil {
 				return fmt.Errorf("parse metrics response: %v", err)
 			}
@@ -254,24 +271,15 @@ func WaitForPMEMDriver(c *Cluster, d *Deployment) (metricsURL string) {
 				}
 
 				// Now check that the webhook was called.
-				resp, err := client.Get(metricsURL)
-				if err != nil {
-					return fmt.Errorf("get controller metrics: %v", err)
-				}
-				if resp.StatusCode != 200 {
-					body, _ := ioutil.ReadAll(resp.Body)
-					suffix := ""
-					if len(body) > 0 {
-						suffix = "\n" + string(body)
-					}
-					return fmt.Errorf("HTTP GET %s failed: %d%s", metricsURL, resp.StatusCode, suffix)
-				}
-				metrics, err := parser.TextToMetricFamilies(resp.Body)
+				metrics, err := GetMetrics(deadline, c, metricsURL)
 				if err != nil {
 					return fmt.Errorf("parse metrics response: %v", err)
 				}
 
 				newCount, err := findHistogramCount(metrics, "scheduler_request_duration_seconds", map[string]string{"handler": "mutate"})
+				if err != nil {
+					return fmt.Errorf("parse metrics response: %v", err)
+				}
 				if newCount == oldCount {
 					return fmt.Errorf("mutating webhook was not called for pod %q, request count still %d", pod.Name, oldCount)
 				}
@@ -1026,7 +1034,7 @@ func EnsureDeployment(deploymentName string) *Deployment {
 
 // EnsureDeploymentNow checks the currently running driver and replaces it if necessary.
 func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
-	c, err := NewCluster(f.ClientSet, f.DynamicClient)
+	c, err := NewCluster(f.ClientSet, f.DynamicClient, f.ClientConfig())
 	framework.ExpectNoError(err, "get cluster information")
 	running, err := FindDeployment(c)
 	framework.ExpectNoError(err, "check for PMEM-CSI components")

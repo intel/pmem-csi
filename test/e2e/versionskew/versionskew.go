@@ -262,7 +262,7 @@ func (p *skewTestSuite) DefineTests(driver testsuites.TestDriver, pattern testpa
 	// of the skew won't matter.
 	It("controller [Slow]", func() {
 		withKataContainers := false
-		c, err := deploy.NewCluster(f.ClientSet, f.DynamicClient)
+		c, err := deploy.NewCluster(f.ClientSet, f.DynamicClient, f.ClientConfig())
 		framework.ExpectNoError(err, "new cluster")
 		// Get the current controller image.
 		//

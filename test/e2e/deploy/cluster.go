@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	e2essh "k8s.io/kubernetes/test/e2e/framework/ssh"
 
 	. "github.com/onsi/gomega"
@@ -27,12 +28,14 @@ type Cluster struct {
 	nodeIPs []string
 	cs      kubernetes.Interface
 	dc      dynamic.Interface
+	cfg     *rest.Config
 }
 
-func NewCluster(cs kubernetes.Interface, dc dynamic.Interface) (*Cluster, error) {
+func NewCluster(cs kubernetes.Interface, dc dynamic.Interface, cfg *rest.Config) (*Cluster, error) {
 	cluster := &Cluster{
-		cs: cs,
-		dc: dc,
+		cs:  cs,
+		dc:  dc,
+		cfg: cfg,
 	}
 
 	hosts, err := e2essh.NodeSSHHosts(cs)
