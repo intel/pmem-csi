@@ -276,39 +276,24 @@ const (
 	// recommendations reported by VirtualPodAutoscaler(LowerBound -> Requests and UpperBound -> Limits)
 
 	// DefaultControllerResourceRequestCPU default CPU resource request used for controller driver container
-	DefaultControllerResourceRequestCPU = "12m" // MilliSeconds
-
+	DefaultControllerResourceRequestCPU = "12m"
 	// DefaultControllerResourceRequestMemory default memory resource request used for controller driver container
-	DefaultControllerResourceRequestMemory = "128Mi" // MB
-	// DefaultNodeResourceRequestCPU default CPU resource request used for node driver container
-	DefaultNodeResourceRequestCPU = "100m" // MilliSeconds
-	// DefaultNodeResourceRequestMemory default memory resource request used for node driver container
-	DefaultNodeResourceRequestMemory = "250Mi" // MB
-	// DefaultNodeRegistrarRequestCPU default CPU resource request used for node registrar container
-	DefaultNodeRegistrarRequestCPU = "12m" // MilliSeconds
-	// DefaultNodeRegistrarRequestMemory default memory resource request used for node registrar container
-	DefaultNodeRegistrarRequestMemory = "128Mi" // MB
-	// DefaultProvisionerRequestCPU default CPU resource request used for provisioner container
-	DefaultProvisionerRequestCPU = "12m" // MilliSeconds
-	// DefaultProvisionerRequestMemory default memory resource request used for node registrar container
-	DefaultProvisionerRequestMemory = "128Mi" // MB
+	DefaultControllerResourceRequestMemory = "128Mi"
 
-	// DefaultControllerResourceLimitCPU default CPU resource limit used for controller driver container
-	DefaultControllerResourceLimitCPU = "500m" // MilliSeconds
-	// DefaultControllerResourceLimitMemory default memory resource limit used for controller driver container
-	DefaultControllerResourceLimitMemory = "250Mi" // MB
-	// DefaultNodeResourceLimitCPU default CPU resource limit used for node driver container
-	DefaultNodeResourceLimitCPU = "600m" // MilliSeconds
-	// DefaultNodeResourceLimitMemory default memory resource limit used for node driver container
-	DefaultNodeResourceLimitMemory = "500Mi" // MB
-	// DefaultNodeRegistrarLimitCPU default CPU resource limit used for node registrar container
-	DefaultNodeRegistrarLimitCPU = "100m" // MilliSeconds
-	// DefaultNodeRegistrarLimitMemory default memory resource limit used for node registrar container
-	DefaultNodeRegistrarLimitMemory = "128Mi" // MB
-	// DefaultProvisionerLimitCPU default CPU resource limit used for provisioner container
-	DefaultProvisionerLimitCPU = "250m" // MilliSeconds
-	// DefaultProvisionerLimitMemory default memory resource limit used for node registrar container
-	DefaultProvisionerLimitMemory = "250Mi" // MB
+	// DefaultNodeResourceRequestCPU default CPU resource request used for node driver container
+	DefaultNodeResourceRequestCPU = "100m"
+	// DefaultNodeResourceRequestMemory default memory resource request used for node driver container
+	DefaultNodeResourceRequestMemory = "250Mi"
+
+	// DefaultNodeRegistrarRequestCPU default CPU resource request used for node registrar container
+	DefaultNodeRegistrarRequestCPU = "12m"
+	// DefaultNodeRegistrarRequestMemory default memory resource request used for node registrar container
+	DefaultNodeRegistrarRequestMemory = "128Mi"
+
+	// DefaultProvisionerRequestCPU default CPU resource request used for provisioner container
+	DefaultProvisionerRequestCPU = "12m"
+	// DefaultProvisionerRequestMemory default memory resource request used for node registrar container
+	DefaultProvisionerRequestMemory = "128Mi"
 
 	// DefaultDeviceMode default device manger used for deployment
 	DefaultDeviceMode = DeviceModeLVM
@@ -439,10 +424,6 @@ func (d *PmemCSIDeployment) EnsureDefaults(operatorImage string) error {
 				corev1.ResourceCPU:    resource.MustParse(DefaultControllerResourceRequestCPU),
 				corev1.ResourceMemory: resource.MustParse(DefaultControllerResourceRequestMemory),
 			},
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse(DefaultControllerResourceLimitCPU),
-				corev1.ResourceMemory: resource.MustParse(DefaultControllerResourceLimitMemory),
-			},
 		}
 	}
 
@@ -451,10 +432,6 @@ func (d *PmemCSIDeployment) EnsureDefaults(operatorImage string) error {
 			Requests: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse(DefaultProvisionerRequestCPU),
 				corev1.ResourceMemory: resource.MustParse(DefaultProvisionerRequestMemory),
-			},
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse(DefaultProvisionerLimitCPU),
-				corev1.ResourceMemory: resource.MustParse(DefaultProvisionerLimitMemory),
 			},
 		}
 	}
@@ -465,10 +442,6 @@ func (d *PmemCSIDeployment) EnsureDefaults(operatorImage string) error {
 				corev1.ResourceCPU:    resource.MustParse(DefaultNodeResourceRequestCPU),
 				corev1.ResourceMemory: resource.MustParse(DefaultNodeResourceRequestMemory),
 			},
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse(DefaultNodeResourceLimitCPU),
-				corev1.ResourceMemory: resource.MustParse(DefaultNodeResourceLimitMemory),
-			},
 		}
 	}
 
@@ -477,10 +450,6 @@ func (d *PmemCSIDeployment) EnsureDefaults(operatorImage string) error {
 			Requests: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse(DefaultNodeRegistrarRequestCPU),
 				corev1.ResourceMemory: resource.MustParse(DefaultNodeRegistrarRequestMemory),
-			},
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse(DefaultNodeRegistrarLimitCPU),
-				corev1.ResourceMemory: resource.MustParse(DefaultNodeRegistrarLimitMemory),
 			},
 		}
 	}

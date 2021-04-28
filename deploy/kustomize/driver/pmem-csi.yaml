@@ -166,10 +166,14 @@ spec:
         # UID 1000 is defined in Dockerfile
         runAsUser: 1000
       serviceAccountName: pmem-csi-intel-com-webhooks
-      # Allow this pod to run on a master node.
+      # Allow this pod to run on all nodes and
+      # prevent eviction (https://github.com/kubernetes-csi/csi-driver-host-path/issues/47#issuecomment-538469081).
       tolerations:
-      - key: "node-role.kubernetes.io/master"
-        effect: "NoSchedule"
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
+      priorityClassName: system-cluster-critical
       containers:
       - name: pmem-driver
         image: intel/pmem-csi-driver:canary
@@ -187,6 +191,10 @@ spec:
         - -schedulerListen=:8000
         securityContext:
           readOnlyRootFilesystem: true
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 12m
         terminationMessagePath: /dev/termination-log
         volumeMounts:
         - name: webhook-cert
@@ -230,10 +238,14 @@ spec:
         pmem-csi.intel.com/webhook: ignore
     spec:
       serviceAccountName: pmem-csi-intel-com-controller
-      # Allow this pod to run on a master node.
+      # Allow this pod to run on all nodes and
+      # prevent eviction (https://github.com/kubernetes-csi/csi-driver-host-path/issues/47#issuecomment-538469081).
       tolerations:
-      - key: "node-role.kubernetes.io/master"
-        effect: "NoSchedule"
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
+      priorityClassName: system-node-critical
       nodeSelector:
         storage: pmem
       containers:
@@ -256,6 +268,10 @@ spec:
         securityContext:
           privileged: true
           runAsUser: 0
+        resources:
+          requests:
+            memory: 250Mi
+            cpu: 100m
         env:
         - name: KUBE_NODE_NAME
           valueFrom:
@@ -310,6 +326,10 @@ spec:
         - --timeout=10s # avoids unlikely test flakes, default is 1s
         securityContext:
           readOnlyRootFilesystem: true
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 12m
         volumeMounts:
         - name: socket-dir
           mountPath: /csi
@@ -336,6 +356,10 @@ spec:
         - --worker-threads=5 # We don't need much concurrency inside a node.
         securityContext:
           readOnlyRootFilesystem: true
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 12m
         volumeMounts:
         - name: socket-dir
           mountPath: /csi
@@ -442,10 +466,12 @@ spec:
         pmem-csi.intel.com/webhook: ignore
     spec:
       serviceAccountName: pmem-csi-intel-com-node-setup
-      # Allow this pod to run on a master node.
+      # Allow this pod to run on all nodes.
       tolerations:
-      - key: "node-role.kubernetes.io/master"
-        effect: "NoSchedule"
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
       nodeSelector:
         pmem-csi.intel.com/convert-raw-namespaces: force
       containers:

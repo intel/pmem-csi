@@ -1076,12 +1076,13 @@ func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 		RunAsNonRoot: &true,
 		RunAsUser:    &pmemcsiUser,
 	}
+	ss.Spec.Template.Spec.PriorityClassName = "system-cluster-critical"
 	ss.Spec.Template.Spec.ServiceAccountName = d.GetHyphenedName() + "-webhooks"
 	ss.Spec.Template.Spec.Containers = []corev1.Container{
 		d.getControllerContainer(),
 	}
-	// Allow this pod to run on a master node.
-	setNoScheduleToMasterToleration(&ss.Spec.Template.Spec)
+	// Allow this pod to run on all nodes.
+	setTolerations(&ss.Spec.Template.Spec)
 	ss.Spec.Template.Spec.Volumes = []corev1.Volume{}
 	if d.Spec.ControllerTLSSecret != "" {
 		ss.Spec.Template.Spec.Volumes = append(ss.Spec.Template.Spec.Volumes, corev1.Volume{
@@ -1135,6 +1136,7 @@ func (d *pmemCSIDeployment) getNodeDaemonSet(ds *appsv1.DaemonSet) {
 	ds.Spec.Template.ObjectMeta.Annotations = map[string]string{
 		"pmem-csi.intel.com/scrape": "containers",
 	}
+	ds.Spec.Template.Spec.PriorityClassName = "system-node-critical"
 	ds.Spec.Template.Spec.ServiceAccountName = d.ProvisionerServiceAccountName()
 	ds.Spec.Template.Spec.NodeSelector = d.Spec.NodeSelector
 	ds.Spec.Template.Spec.Containers = []corev1.Container{
@@ -1142,8 +1144,8 @@ func (d *pmemCSIDeployment) getNodeDaemonSet(ds *appsv1.DaemonSet) {
 		d.getNodeRegistrarContainer(),
 		d.getProvisionerContainer(),
 	}
-	// Allow this pod to run on a master node.
-	setNoScheduleToMasterToleration(&ds.Spec.Template.Spec)
+	// Allow this pod to run on all master nodes.
+	setTolerations(&ds.Spec.Template.Spec)
 	ds.Spec.Template.Spec.Volumes = []corev1.Volume{
 		{
 			Name: "socket-dir",
@@ -1512,8 +1514,8 @@ func (d *pmemCSIDeployment) getNodeSetupDaemonSet(ds *appsv1.DaemonSet) {
 		})
 	podSpec := &ds.Spec.Template.Spec
 	podSpec.ServiceAccountName = d.NodeSetupServiceAccountName()
-	// Allow this pod to run on a master node.
-	setNoScheduleToMasterToleration(podSpec)
+	// Allow this pod to run on all nodes.
+	setTolerations(podSpec)
 	podSpec.NodeSelector = map[string]string{
 		d.Name + "/convert-raw-namespaces": "force",
 	}
@@ -1637,22 +1639,21 @@ func joinMaps(left, right map[string]string) map[string]string {
 	return result
 }
 
-func setNoScheduleToMasterToleration(podSpec *corev1.PodSpec) {
-	key := "node-role.kubernetes.io/master"
+func setTolerations(podSpec *corev1.PodSpec) {
+	setToleration(podSpec, "NoSchedule")
+	setToleration(podSpec, "NoExecute")
+}
 
-	if podSpec.Tolerations == nil {
-		podSpec.Tolerations = []corev1.Toleration{}
+func setToleration(podSpec *corev1.PodSpec, effect corev1.TaintEffect) {
+	newToleration := corev1.Toleration{
+		Effect:   effect,
+		Operator: corev1.TolerationOpExists,
 	}
 
 	for _, t := range podSpec.Tolerations {
-		if t.Key == key {
-			t.Effect = "NoSchedule"
+		if t == newToleration {
 			return
 		}
 	}
-
-	podSpec.Tolerations = append(podSpec.Tolerations, corev1.Toleration{
-		Key:    key,
-		Effect: "NoSchedule",
-	})
+	podSpec.Tolerations = append(podSpec.Tolerations, newToleration)
 }
