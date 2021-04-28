@@ -81,9 +81,9 @@ function deploy_using_olm() {
       sed -i -e "s;-v=.*;-v=${TEST_OPERATOR_LOGLEVEL};g" ${CSV_FILE}
   fi
 
-  BUNDLE_IMAGE=${TEST_LOCAL_REGISTRY}/pmem-csi-bundle:v${BUNDLE_VERSION}
   # Build and push bundle image
-  cd $TMP_BUNDLE_DIR && docker build -f bundle.Dockerfile -t ${BUNDLE_IMAGE} . && docker push ${BUNDLE_IMAGE}
+  cd $TMP_BUNDLE_DIR && docker build -f bundle.Dockerfile -t ${TEST_BUILD_PMEM_REGISTRY}/pmem-csi-bundle:v${BUNDLE_VERSION} . && \
+     docker push ${TEST_BUILD_PMEM_REGISTRY}/pmem-csi-bundle:v${BUNDLE_VERSION}
 
   NAMESPACE=""
   if [ "${TEST_OPERATOR_NAMESPACE}" != "" ]; then
@@ -91,7 +91,7 @@ function deploy_using_olm() {
   fi
 
   # Deploy the operator
-  ${BINDIR}/operator-sdk run bundle${upgrade} ${NAMESPACE} --timeout 5m ${BUNDLE_IMAGE} --skip-tls
+  ${BINDIR}/operator-sdk run bundle${upgrade} ${NAMESPACE} --timeout 5m ${TEST_LOCAL_REGISTRY}/pmem-csi-bundle:v${BUNDLE_VERSION} --skip-tls
 }
 
 function deploy_using_yaml() {
