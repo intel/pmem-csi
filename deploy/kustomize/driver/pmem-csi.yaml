@@ -172,7 +172,7 @@ spec:
         effect: "NoSchedule"
       containers:
       - name: pmem-driver
-        image: intel/pmem-csi-driver:v0.9.0
+        image: intel/pmem-csi-driver:v0.9.1
         imagePullPolicy: IfNotPresent
         command:
         - /usr/local/bin/pmem-csi-driver
@@ -234,7 +234,7 @@ spec:
         storage: pmem
       containers:
       - name: pmem-driver
-        image: intel/pmem-csi-driver:v0.9.0
+        image: intel/pmem-csi-driver:v0.9.1
         imagePullPolicy: IfNotPresent
         command:
         - /usr/local/bin/pmem-csi-driver
@@ -303,6 +303,7 @@ spec:
         - -v=3
         - --kubelet-registration-path=/var/lib/kubelet/plugins/$(PMEM_CSI_DRIVER_NAME)/csi.sock
         - --csi-address=/csi/csi.sock
+        - --timeout=10s # avoids unlikely test flakes, default is 1s
         securityContext:
           readOnlyRootFilesystem: true
         volumeMounts:

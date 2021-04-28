@@ -376,7 +376,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: intel/pmem-csi-driver-test:v0.9.0
+        image: intel/pmem-csi-driver-test:v0.9.1
         imagePullPolicy: IfNotPresent
         name: pmem-driver
         ports:
@@ -396,7 +396,7 @@ spec:
         - -R
         - pmem-csi:pmem-csi
         - /var/lib/pmem-csi-coverage
-        image: intel/pmem-csi-driver-test:v0.9.0
+        image: intel/pmem-csi-driver-test:v0.9.1
         imagePullPolicy: Always
         name: coverage-init
         securityContext:
@@ -474,7 +474,7 @@ spec:
           value: pmem-csi.intel.com
         - name: TERMINATION_LOG_PATH
           value: /tmp/termination-log
-        image: intel/pmem-csi-driver-test:v0.9.0
+        image: intel/pmem-csi-driver-test:v0.9.1
         imagePullPolicy: IfNotPresent
         name: pmem-driver
         ports:
@@ -508,11 +508,12 @@ spec:
         - -v=3
         - --kubelet-registration-path=/var/lib/kubelet/plugins/$(PMEM_CSI_DRIVER_NAME)/csi.sock
         - --csi-address=/csi/csi.sock
+        - --timeout=10s
         - -v=5
         env:
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
-        image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v1.2.0
+        image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.1.0
         imagePullPolicy: IfNotPresent
         name: driver-registrar
         securityContext:

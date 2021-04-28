@@ -1368,6 +1368,7 @@ func (d *pmemCSIDeployment) getNodeRegistrarContainer() corev1.Container {
 			fmt.Sprintf("-v=%d", d.Spec.LogLevel),
 			"--kubelet-registration-path=" + d.Spec.KubeletDir + "/plugins/$(PMEM_CSI_DRIVER_NAME)/csi.sock",
 			"--csi-address=/csi/csi.sock",
+			"--timeout=10s",
 		},
 		SecurityContext: &corev1.SecurityContext{
 			ReadOnlyRootFilesystem: &true,

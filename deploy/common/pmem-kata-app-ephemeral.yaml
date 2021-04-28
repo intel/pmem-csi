@@ -5,13 +5,19 @@ metadata:
   labels:
     io.katacontainers.config.hypervisor.memory_offset: "2147483648" # 2Gi, must be at least as large as the PMEM volume
 spec:
+  # The 'pmem-csi-driver-test' container runs apps as user/group 1000/1000.
+  # This security context causes permissions of volume mounts
+  # to be adapted accordingly, see
+  # https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod
+  securityContext:
+    fsGroup: 1000
   # see https://github.com/kata-containers/packaging/tree/1.11.0-rc0/kata-deploy#run-a-sample-workload
   runtimeClassName: kata-qemu
   nodeSelector:
     katacontainers.io/kata-runtime: "true"
   containers:
     - name: my-frontend
-      image: intel/pmem-csi-driver-test:v0.9.0
+      image: intel/pmem-csi-driver-test:v0.9.1
       command: [ "sleep", "100000" ]
       volumeMounts:
       - mountPath: "/data"

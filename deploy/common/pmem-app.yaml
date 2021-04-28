@@ -3,9 +3,15 @@ apiVersion: v1
 metadata:
   name: my-csi-app-1
 spec:
+  # The 'pmem-csi-driver-test' container runs apps as user/group 1000/1000.
+  # This security context causes permissions of volume mounts
+  # to be adapted accordingly, see
+  # https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod
+  securityContext:
+    fsGroup: 1000
   containers:
     - name: my-frontend
-      image: intel/pmem-csi-driver-test:v0.9.0
+      image: intel/pmem-csi-driver-test:v0.9.1
       command: [ "sleep", "100000" ]
       volumeMounts:
       - mountPath: "/data"
@@ -20,9 +26,15 @@ apiVersion: v1
 metadata:
   name: my-csi-app-2
 spec:
+  # The 'pmem-csi-driver-test' container runs apps as user/group 1000/1000.
+  # This security context causes permissions of volume mounts
+  # to be adapted accordingly, see
+  # https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod
+  securityContext:
+    fsGroup: 1000
   containers:
     - name: my-frontend
-      image: intel/pmem-csi-driver-test:v0.9.0
+      image: intel/pmem-csi-driver-test:v0.9.1
       command: [ "sleep", "100000" ]
       volumeMounts:
       - mountPath: "/data"
