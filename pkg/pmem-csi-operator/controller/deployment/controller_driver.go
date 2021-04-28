@@ -727,10 +727,8 @@ func (d *pmemCSIDeployment) getCSIDriver(csiDriver *storagev1.CSIDriver) {
 	attachRequired := false
 	podInfoOnMount := true
 
-	csiDriver.Spec = storagev1.CSIDriverSpec{
-		AttachRequired: &attachRequired,
-		PodInfoOnMount: &podInfoOnMount,
-	}
+	csiDriver.Spec.AttachRequired = &attachRequired
+	csiDriver.Spec.PodInfoOnMount = &podInfoOnMount
 
 	// Volume lifecycle modes are supported only after k8s v1.16
 	if d.k8sVersion.Compare(1, 16) >= 0 {
@@ -840,6 +838,7 @@ func (d *pmemCSIDeployment) getWebhooksClusterRoleBinding(crb *rbacv1.ClusterRol
 }
 
 func (d *pmemCSIDeployment) getMutatingWebhookConfig(hook *admissionregistrationv1.MutatingWebhookConfiguration) {
+	servicePort := int32(443) // default webhook service port
 	selector := &metav1.LabelSelector{
 		MatchExpressions: []metav1.LabelSelectorRequirement{
 			{
@@ -872,6 +871,7 @@ func (d *pmemCSIDeployment) getMutatingWebhookConfig(hook *admissionregistration
 					Name:      d.SchedulerServiceName(),
 					Namespace: d.namespace,
 					Path:      &path,
+					Port:      &servicePort,
 				},
 				CABundle: d.controllerCABundle, // loaded earlier in reconcile()
 			},
@@ -1092,11 +1092,13 @@ func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 	setTolerations(&ss.Spec.Template.Spec)
 	ss.Spec.Template.Spec.Volumes = []corev1.Volume{}
 	if d.Spec.ControllerTLSSecret != "" {
+		mode := corev1.SecretVolumeSourceDefaultMode
 		ss.Spec.Template.Spec.Volumes = append(ss.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: "webhook-cert",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: d.Spec.ControllerTLSSecret,
+					SecretName:  d.Spec.ControllerTLSSecret,
+					DefaultMode: &mode,
 				},
 			},
 		})
