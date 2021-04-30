@@ -168,16 +168,13 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			expected[r] = struct{}{}
 		}
 		Eventually(func() bool {
-			reasons := map[string]struct{}{}
-			ok := false
-			if reasons, ok = evCaptured[dep.UID]; !ok {
+			reasons, ok := evCaptured[dep.UID]
+			if !ok {
 				// No event captured for this object
 				return false
 			}
 			for r := range reasons {
-				if _, ok := expected[r]; ok {
-					delete(expected, r)
-				}
+				delete(expected, r)
 			}
 			return len(expected) == 0
 		}, 2*time.Minute, time.Second, what, ": ", expected)
@@ -1034,7 +1031,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 							}
 							// Zero is actually a valid value: it is treated as "unset" because of
 							// the JSON omitempty and thus means "I want the default".
-							valid := percentage >= 0 && percentage <= 100
+							valid := percentage <= 100
 							if valid {
 								framework.ExpectNoError(err, "valid percentage should work")
 							} else {
@@ -1097,19 +1094,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		}
 	})
 })
-
-func validateDeploymentFailure(f *framework.Framework, name string) {
-	Eventually(func() bool {
-		dep, err := f.DynamicClient.Resource(deploy.DeploymentResource).Get(context.Background(), name, metav1.GetOptions{})
-		if err != nil {
-			return false
-		}
-
-		deployment := deploy.DeploymentFromUnstructured(dep)
-		framework.Logf("Deployment %q is in %q phase", deployment.Name, deployment.Status.Phase)
-		return deployment.Status.Phase == api.DeploymentPhaseFailed
-	}, "3m", "5s").Should(BeTrue(), "deployment %q not running", name)
-}
 
 // stopOperator ensures operator deployment replica counter == 0 and the
 // operator pod gets deleted
