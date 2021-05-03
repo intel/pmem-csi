@@ -31,8 +31,8 @@ import (
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
-	"github.com/kubernetes-csi/csi-test/v3/pkg/sanity"
 	sanityutils "github.com/kubernetes-csi/csi-test/v3/utils"
+	"github.com/kubernetes-csi/csi-test/v4/pkg/sanity"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
@@ -173,11 +173,30 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			execOnTestNode("rmdir", path)
 			return nil
 		}
+		checkpath := func(path string) (sanity.PathKind, error) {
+			out := execOnTestNode("/bin/sh", "-c", fmt.Sprintf(`
+if [ -f '%s' ]; then
+    echo file;
+elif [ -d '%s' ]; then
+    echo directory;
+elif [ -e '%s' ]; then
+    echo other;
+else
+    echo not_found;
+fi
+`, path, path, path))
+			kind, err := sanity.IsPathKind(out)
+			if err != nil {
+				return "", fmt.Errorf("unexpected output from node shell script: %v", err)
+			}
+			return kind, nil
+		}
 
 		config.CreateTargetDir = mkdir
 		config.CreateStagingDir = mkdir
 		config.RemoveTargetPath = rmdir
 		config.RemoveStagingPath = rmdir
+		config.CheckPath = checkpath
 	})
 
 	AfterEach(func() {
@@ -212,13 +231,13 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 
 	var _ = Describe("PMEM-CSI", func() {
 		var (
-			cl       *sanity.Cleanup
-			nc       csi.NodeClient
-			cc, ncc  csi.ControllerClient
-			nodeID   string
-			v        volume
-			cancel   func()
-			rebooted bool
+			resources *sanity.Resources
+			nc        csi.NodeClient
+			cc, ncc   csi.ControllerClient
+			nodeID    string
+			v         volume
+			cancel    func()
+			rebooted  bool
 		)
 
 		BeforeEach(func() {
@@ -226,7 +245,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			nc = csi.NewNodeClient(sc.Conn)
 			cc = csi.NewControllerClient(sc.ControllerConn)
 			ncc = csi.NewControllerClient(sc.Conn) // This works because PMEM-CSI exposes the node, controller, and ID server via its csi.sock.
-			cl = &sanity.Cleanup{
+			resources = &sanity.Resources{
 				Context:                    sc,
 				NodeClient:                 nc,
 				ControllerClient:           cc,
@@ -248,12 +267,12 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 				sc:         sc,
 				cc:         cc,
 				nc:         nc,
-				cl:         cl,
+				resources:  resources,
 			}
 		})
 
 		AfterEach(func() {
-			cl.DeleteVolumes()
+			resources.Cleanup()
 			cancel()
 			sc.Teardown()
 
@@ -421,9 +440,8 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 						RequiredBytes: volSize,
 					},
 				}
-				volResp, err := ncc.CreateVolume(context.Background(), req)
+				_, err := resources.CreateVolume(context.Background(), req)
 				Expect(err).Should(BeNil(), "Failed to create volume on node")
-				cl.MaybeRegisterVolume(volName, volResp, err)
 
 				resp, err := ncc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
 				Expect(err).Should(BeNil(), "Failed to get node capacity after volume creation")
@@ -787,7 +805,7 @@ type volume struct {
 	sc          *sanity.TestContext
 	cc          csi.ControllerClient
 	nc          csi.NodeClient
-	cl          *sanity.Cleanup
+	resources   *sanity.Resources
 	stagingPath string
 	targetPath  string
 }
@@ -851,17 +869,16 @@ func (v volume) create(sizeInBytes int64, nodeID string, expectedStatus ...codes
 	var vol *csi.CreateVolumeResponse
 	if len(expectedStatus) > 0 {
 		// Expected to fail, no retries.
-		vol, err = v.cc.CreateVolume(v.ctx, req)
+		vol, err = v.resources.CreateVolume(v.ctx, req)
 	} else {
 		// With retries.
 		err = v.retry(func() error {
-			vol, err = v.cc.CreateVolume(
+			vol, err = v.resources.CreateVolume(
 				v.ctx, req,
 			)
 			return err
 		}, "CreateVolume")
 	}
-	v.cl.MaybeRegisterVolume(name, vol, err)
 	if len(expectedStatus) > 0 {
 		framework.ExpectError(err, create)
 		status, ok := status.FromError(err)
@@ -989,7 +1006,7 @@ func (v volume) remove(vol *csi.Volume, volName string) {
 	By(delete)
 	var deletevol interface{}
 	err = v.retry(func() error {
-		deletevol, err = v.cc.DeleteVolume(
+		deletevol, err = v.resources.DeleteVolume(
 			v.ctx,
 			&csi.DeleteVolumeRequest{
 				VolumeId: vol.GetVolumeId(),
@@ -999,8 +1016,6 @@ func (v volume) remove(vol *csi.Volume, volName string) {
 	}, "DeleteVolume")
 	framework.ExpectNoError(err, delete)
 	Expect(deletevol).NotTo(BeNil())
-
-	v.cl.UnregisterVolume(volName)
 }
 
 // retry will execute the operation (rapidly initially, then with
