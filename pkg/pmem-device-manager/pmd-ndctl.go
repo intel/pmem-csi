@@ -167,10 +167,11 @@ func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64) error {
 	size += ndctlAlign
 	klog.V(4).Infof("Compensate for libndctl creating one alignment step smaller: increase size to %d", size)
 	ns, err := ndctl.CreateNamespace(ndctx, ndctl.CreateNamespaceOpts{
-		Name:  volumeId,
-		Size:  size,
-		Align: ndctlAlign,
-		Mode:  "fsdax",
+		Name:     volumeId,
+		Size:     size,
+		Align:    ndctlAlign,
+		Mode:     "fsdax",
+		Location: "mem",
 	})
 	if err != nil {
 		return err

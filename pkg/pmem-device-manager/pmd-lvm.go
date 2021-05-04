@@ -357,10 +357,11 @@ func setupNS(r ndctl.Region, percentage uint) error {
 	if canUse >= minsize {
 		klog.V(3).Infof("Create %v-bytes fsdax-namespace", canUse)
 		_, err := r.CreateNamespace(ndctl.CreateNamespaceOpts{
-			Name:  "pmem-csi",
-			Mode:  "fsdax",
-			Size:  canUse,
-			Align: align,
+			Name:     "pmem-csi",
+			Mode:     "fsdax",
+			Size:     canUse,
+			Align:    align,
+			Location: "mem",
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create PMEM namespace with size '%d' in region '%s': %v", canUse, r.DeviceName(), err)
