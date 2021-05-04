@@ -292,12 +292,12 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			cases := map[string]api.LogFormat{
 				"default": "",
 				"text":    api.LogFormatText,
-				"JSON":    api.LogFormatJSON,
+				"json":    api.LogFormatJSON,
 			}
 			for name, format := range cases {
 				format := format
 				It(name, func() {
-					deployment := getDeployment("test-deployment-driver-image")
+					deployment := getDeployment("test-logging-format-" + name)
 					deployment.Spec.Image = ""
 					deployment.Spec.PMEMPercentage = 50
 					deployment.Spec.LogFormat = format
