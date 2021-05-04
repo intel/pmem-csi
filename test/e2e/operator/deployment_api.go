@@ -446,10 +446,16 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			// Stop the operator
 			stopOperator(c, d)
 			// restore the deployment so that next test should  not effect
-			defer startOperator(c, d)
+			defer func() {
+				startOperator(c, d)
+				url, err := deploy.GetOperatorMetricsURL(ctx, c, d)
+				Expect(err).ShouldNot(HaveOccurred(), "get metrics url after operator restart")
+				metricsURL = url
+			}()
 
 			// Ensure that the driver is running consistently
-			validateDriver(deployment, nil, "after operator restart")
+			err := validate.DriverDeployment(ctx, client, k8sver, d.Namespace, deployment)
+			Expect(err).ShouldNot(HaveOccurred(), "after operator restart")
 		})
 
 		It("shall recover from conflicts", func() {
@@ -726,12 +732,18 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					Expect(modifiedDeployment.Spec).To(Equal(deployment.Spec), "spec unmodified")
 					Expect(modifiedDeployment.Status.Phase).To(Equal(api.DeploymentPhaseRunning), "deployment phase")
 
+					resetMetricsURL := func() {
+						url, err := deploy.GetOperatorMetricsURL(ctx, c, d)
+						Expect(err).ShouldNot(HaveOccurred(), "get metrics url after operator restart")
+						metricsURL = url
+					}
 					restored := false
 					if restart {
 						stopOperator(c, d)
 						defer func() {
 							if !restored {
 								startOperator(c, d)
+								resetMetricsURL()
 							}
 						}()
 					}
@@ -742,6 +754,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					reconcileCount := lastReconcileCount
 					if restart {
 						startOperator(c, d)
+						resetMetricsURL()
 						restored = true
 						reconcileCount = float64(0)
 					}
