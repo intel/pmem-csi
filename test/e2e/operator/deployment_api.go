@@ -556,8 +556,15 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				return err
 			}, "3m", "1s").ShouldNot(HaveOccurred(), "create secret %s", sec.Name)
 			defer deleteSecret()
-			validateDriver(deployment, nil, "validate driver")
+			// Now as the missing secrets are there in place, the deployment should
+			// move ahead and get succeed
+			Eventually(func() bool {
+				deployment := deploy.GetDeploymentCR(f, deployment.Name)
+				return deployment.Status.Phase == api.DeploymentPhaseRunning
+			}, "3m", "1s").Should(BeTrue(), "deployment should not fail %q", deployment.Name)
 			validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonRunning})
+			err := validate.DriverDeployment(context.Background(), client, k8sver, d.Namespace, deployment)
+			Expect(err).ShouldNot(HaveOccurred(), "validate driver after secret creation")
 		})
 	})
 
