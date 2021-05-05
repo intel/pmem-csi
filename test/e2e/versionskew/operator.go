@@ -233,5 +233,11 @@ var _ = deploy.DescribeForSome("versionskew", func(d *deploy.Deployment) bool {
 
 		// And test upgrade
 		testVersion("" /*devel*/, "upgrade")
+
+		// Delete the upgraded operator, otherwise 'start-operator.sh -olm' from later tests
+		// might assume this as 'downgrade', and currently operator downgrading
+		// is not supported by the OLM.
+		err := deploy.StopOperator(d)
+		framework.ExpectNoError(err, "delete upgraded operator")
 	})
 })

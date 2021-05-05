@@ -1057,20 +1057,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 		// this as operator upgrade.
 		if !(running.HasOLM && deployment.HasOLM) {
 			if running.HasOperator {
-				cmd := exec.Command("test/stop-operator.sh")
-				if running.HasOLM {
-					cmd.Args = append(cmd.Args, "-olm")
-				}
-				// Keep both the CRD and namespace in case the required deployment is also the operator
-				// required for version skew tests, otherwise it brings down the existing driver deployment(s)
-				if deployment.HasOperator {
-					cmd.Args = append(cmd.Args, "-keep-crd", "-keep-namespace")
-				}
-				cmd.Dir = os.Getenv("REPO_ROOT")
-				cmd.Env = append(os.Environ(),
-					"TEST_OPERATOR_NAMESPACE="+running.Namespace,
-					"TEST_OPERATOR_DEPLOYMENT_LABEL="+running.Label())
-				_, err := pmemexec.Run(cmd)
+				err := StopOperator(running)
 				framework.ExpectNoError(err, "delete operator deployment: %q", deployment.Name())
 			}
 		}
@@ -1187,6 +1174,25 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 		WaitForPMEMDriver(c, deployment)
 		CheckPMEMDriver(c, deployment)
 	}
+}
+
+func StopOperator(d *Deployment) error {
+	cmd := exec.Command("test/stop-operator.sh")
+	if d.HasOLM {
+		cmd.Args = append(cmd.Args, "-olm")
+	}
+	// Keep both the CRD and namespace in case the required deployment is also the operator
+	// required for version skew tests, otherwise it brings down the existing driver deployment(s)
+	if d.HasOperator {
+		cmd.Args = append(cmd.Args, "-keep-crd", "-keep-namespace")
+	}
+	cmd.Dir = os.Getenv("REPO_ROOT")
+	cmd.Env = append(os.Environ(),
+		"TEST_OPERATOR_NAMESPACE="+d.Namespace,
+		"TEST_OPERATOR_DEPLOYMENT_LABEL="+d.Label())
+	_, err := pmemexec.Run(cmd)
+
+	return err
 }
 
 // GetDriverDeployment returns the spec for the driver deployment that is used
