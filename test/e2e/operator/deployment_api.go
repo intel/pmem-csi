@@ -894,7 +894,8 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					obj := getter(&dep)
 					delete(obj)
 					ensureObjectRecovered(obj)
-					validateDriver(deployment, nil, "restore deleted registry secret")
+					err := validate.DriverDeployment(ctx, client, k8sver, d.Namespace, deployment)
+					Expect(err).ShouldNot(HaveOccurred(), "validate driver after object recover")
 				})
 			}
 		})
@@ -984,7 +985,9 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						return err
 					}, "2m", "1s").ShouldNot(HaveOccurred(), "update: %s", name)
 
-					validateDriver(deployment, []runtime.Object{obj}, fmt.Sprintf("recovered %s", name))
+					Eventually(func() error {
+						return validate.DriverDeployment(ctx, client, k8sver, d.Namespace, deployment)
+					}, "2m", "1s").ShouldNot(HaveOccurred(), fmt.Sprintf("recovered %s", name))
 				})
 			}
 		})
