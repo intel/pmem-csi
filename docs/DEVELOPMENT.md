@@ -167,11 +167,12 @@ Jenkinsfile ensures that.
 Follow the steps below to publish new operator release to
 [OperatorHub](https://operatorhub.io):
 
-* Generate OLM catalog for new release
+* Generate OLM package bundle for the new release
 ``` console
-$ make operator-generate-bundle VERSION=<X.Y.Z> #semantic version number
+$ make operator-clean-bundle
+$ make operator-generate-bundle VERSION=<X.Y.Z> REPLACES=<X.Y.Z> # semantic version numbers without v prefix
 ```
-Running the above command generates the OLM catalog files under `deploy/olm-bundle/<X.Y.Z>`
+Running the above command generates the OLM package bundle files under `deploy/olm-bundle/<X.Y.Z>`
 
 * Clone `operator-framework/community-operators` repository
 ``` console
