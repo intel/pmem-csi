@@ -48,6 +48,7 @@ BUNDLE_DIR=$(REPO_ROOT)/deploy/olm-bundle/$(MAJOR_MINOR_PATCH_VERSION)
 CRD_DIR=$(REPO_ROOT)/deploy/crd
 
 PATCH_VERSIONS := sed -i -e 's;X\.Y\.Z;$(MAJOR_MINOR_PATCH_VERSION);g' -e 's;X\.Y;$(MAJOR_MINOR_VERSION);g'
+PATCH_REPLACES := sed -i -e 's;\(.*\)\(version:.*\);\1replaces: pmem-csi-operator.v$(REPLACES)\n\1\2;g'
 PATCH_DATE := sed -i -e 's;\(.*createdAt: \).*;\1$(shell date +%FT%TZ);g'
 
 # Generate CRD
@@ -70,6 +71,9 @@ operator-generate-bundle: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) _work/k
 	@_work/kustomize build --load-restrictor LoadRestrictionsNone $(MANIFESTS_DIR) | $< generate bundle --version=$(MAJOR_MINOR_PATCH_VERSION) \
         --kustomize-dir=$(MANIFESTS_DIR) --output-dir=$(BUNDLE_DIR)
 	$(PATCH_VERSIONS) $(BUNDLE_DIR)/manifests/pmem-csi-operator.clusterserviceversion.yaml
+ifdef REPLACES
+	@$(PATCH_REPLACES) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
+endif
 	$(PATCH_DATE) $(BUNDLE_DIR)/manifests/pmem-csi-operator.clusterserviceversion.yaml
 	@sed -i -e "s;$(BUNDLE_DIR)/;;g"  -e "/scorecard/d" bundle.Dockerfile
 	@mv bundle.Dockerfile $(BUNDLE_DIR)
