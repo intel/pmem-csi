@@ -43,6 +43,10 @@ fi
 # This is needed for "make push-images".
 : ${TEST_BUILD_PMEM_REGISTRY:=localhost:5000}
 
+# The PMEM-CSI driver/operator container image tag to use.
+# This is used by version skew tests to set the driver/operator version.
+: ${TEST_PMEM_IMAGE_TAG:=canary}
+
 # Additional insecure registries (for example, my-registry:5000),
 # separated by spaces. The default local registry above is always
 # marked as insecure and does not need to be listed.

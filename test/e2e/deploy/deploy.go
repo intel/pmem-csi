@@ -791,6 +791,23 @@ func FindDeployment(c *Cluster) (*Deployment, error) {
 
 var imageVersion = regexp.MustCompile(`pmem-csi-driver(?:-test)?:v(\d+\.\d+)`)
 
+// versionFromContainerImage Retrieves version from driver container image tag
+func versionFromContainerImage(image string) (string, bool) {
+	m := imageVersion.FindStringSubmatch(image)
+	if m == nil {
+		// not pmem-csi-driver image
+		return "", false
+	}
+
+	// If the version matches what we are currently testing, then we skip
+	// the version (i.e. "current version" == "no explicit version").
+	if m2 := imageVersion.FindStringSubmatch(os.Getenv("PMEM_CSI_IMAGE")); m2 == nil || m2[1] != m[1] {
+		return m[1], true
+	}
+
+	return "", true
+}
+
 func findDriver(c *Cluster) (*Deployment, error) {
 	list, err := c.cs.AppsV1().DaemonSets("").List(context.Background(), metav1.ListOptions{LabelSelector: deploymentLabel})
 	if err != nil {
@@ -823,15 +840,9 @@ func findDriver(c *Cluster) (*Deployment, error) {
 	deployment.HasController = len(controllers.Items) > 0
 
 	// Derive the version from the image tag. The annotation doesn't include it.
-	// If the version matches what we are currently testing, then we skip
-	// the version (i.e. "current version" == "no explicit version").
 	for _, container := range list.Items[0].Spec.Template.Spec.Containers {
-		m := imageVersion.FindStringSubmatch(container.Image)
-		if m != nil {
-			m2 := imageVersion.FindStringSubmatch(os.Getenv("PMEM_CSI_IMAGE"))
-			if m2 == nil || m2[1] != m[1] {
-				deployment.Version = m[1]
-			}
+		if v, found := versionFromContainerImage(container.Image); found {
+			deployment.Version = v
 			break
 		}
 	}
@@ -867,6 +878,16 @@ func findOperator(c *Cluster) (*Deployment, error) {
 	}
 	deployment.Namespace = list.Items[0].Namespace
 
+	// Derive the version from the image tag. The annotation doesn't include it.
+	// If the version matches what we are currently testing, then we skip
+	// the version (i.e. "current version" == "no explicit version").
+	for _, container := range list.Items[0].Spec.Template.Spec.Containers {
+		if v, found := versionFromContainerImage(container.Image); found {
+			deployment.Version = v
+			break
+		}
+	}
+
 	// Currently we don't support parallel installations, so all
 	// objects must belong to each other.
 	for _, item := range list.Items {
@@ -895,28 +916,18 @@ var deploymentRE = regexp.MustCompile(`^(operator|olm)?-?(\w*)?-?(testing|produc
 
 // Parse the deployment name and sets fields accordingly.
 func Parse(deploymentName string) (*Deployment, error) {
-	deployment := &Deployment{
-		Namespace:     "default",
-		DriverName:    "pmem-csi.intel.com",
-		HasController: true,
-	}
-	switch deploymentName {
-	case "operator":
-		// Run the operator tests in a dedicated namespace
-		// to cover the non-default namespace usecase
-		deployment.Namespace = "operator-test"
-	case "operator-direct-production":
-		deployment.Namespace = "kube-system"
-		// No secret available in that namespace.
-		deployment.HasController = false
-	case "operator-lvm-production":
-		deployment.DriverName = "second.pmem-csi.intel.com"
-	}
 
 	matches := deploymentRE.FindStringSubmatch(deploymentName)
 	if matches == nil {
 		return nil, fmt.Errorf("unsupported deployment %s", deploymentName)
 	}
+
+	deployment := &Deployment{
+		Namespace:     "default",
+		DriverName:    "pmem-csi.intel.com",
+		HasController: true,
+	}
+
 	switch matches[1] {
 	case "olm":
 		deployment.HasOLM = true
@@ -932,6 +943,23 @@ func Parse(deploymentName string) (*Deployment, error) {
 		}
 	}
 	deployment.Version = matches[4]
+
+	if deployment.HasOperator {
+		if !deployment.HasDriver && !deployment.HasOLM { // "operator"
+			// Run the operator tests in a dedicated namespace
+			// to cover the non-default namespace usecase
+			deployment.Namespace = "operator-test"
+		}
+		if deployment.HasDriver && !deployment.Testing {
+			if deployment.Mode == api.DeviceModeDirect { // operator-direct-production
+				deployment.Namespace = "kube-system"
+				// No secret available in that namespace.
+				deployment.HasController = false
+			} else { // operator-lvm-production
+				deployment.DriverName = "second.pmem-csi.intel.com"
+			}
+		}
+	}
 
 	return deployment, nil
 }
@@ -1023,24 +1051,88 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 			running.Name(), running.Namespace,
 			deployment.Name(), deployment.Namespace)
 
-		if running.HasOLM {
-			cmd := exec.Command("test/stop-operator.sh", "-olm")
-			cmd.Dir = os.Getenv("REPO_ROOT")
-			cmd.Env = append(os.Environ(),
-				"TEST_OPERATOR_NAMESPACE="+running.Namespace,
-				"TEST_OPERATOR_DEPLOYMENT_LABEL="+running.Label())
-			_, err := pmemexec.Run(cmd)
-			framework.ExpectNoError(err, "delete operator deployment: %q", deployment.Name())
+		// If both running and wanted operator deployments are managed by
+		// OLM, then we do nothing. The ./test/start-operato-sh -olm script
+		// supposed to handle the case, in other words the OLM should treat
+		// this as operator upgrade.
+		if !(running.HasOLM && deployment.HasOLM) {
+			if running.HasOperator {
+				err := StopOperator(running)
+				framework.ExpectNoError(err, "delete operator deployment: %q", deployment.Name())
+			}
 		}
-		err := RemoveObjects(c, running)
-		framework.ExpectNoError(err, "remove PMEM-CSI deployment")
+
+		if !running.HasOLM {
+			err := RemoveObjects(c, running)
+			framework.ExpectNoError(err, "remove PMEM-CSI deployment")
+		}
 	}
+
+	root := os.Getenv("REPO_ROOT")
+	env := os.Environ()
+
 	if deployment.HasOLM {
 		cmd := exec.Command("test/start-stop-olm.sh", "start")
-		cmd.Dir = os.Getenv("REPO_ROOT")
+		cmd.Dir = root
+		cmd.Env = env
 		_, err := pmemexec.Run(cmd)
 		framework.ExpectNoError(err, "create operator deployment: %q", deployment.Name())
 		WaitForOLM(c, "olm")
+	}
+
+	if deployment.Version != "" {
+		// Find the latest dot release on the branch for which images are public.
+		// Most recent tag is listed first. We better avoid pulling over and over again
+		// to avoid throttling.
+		tags, err := pmemexec.RunCommand("git", "tag", "--sort=-version:refname")
+		framework.ExpectNoError(err, "fetch git tags")
+		scanner := bufio.NewScanner(strings.NewReader(tags))
+		var tag string
+		for scanner.Scan() {
+			tag = scanner.Text()
+			if strings.HasPrefix(tag, "v"+deployment.Version) {
+				if _, err := pmemexec.RunCommand("docker", "image", "inspect", "--format='exists'", "intel/pmem-csi-driver:"+tag); err == nil {
+					break
+				}
+				if _, err := pmemexec.RunCommand("docker", "image", "pull", "intel/pmem-csi-driver:"+tag); err == nil {
+					break
+				}
+			}
+		}
+		framework.Logf("using %s images for release-%s", tag, deployment.Version)
+
+		// Clean check out in _work/pmem-csi-release-<version>.
+		// Pulling from remote must be done before running the test.
+		workRoot := root + "/_work/pmem-csi-release-" + deployment.Version
+		err = os.RemoveAll(workRoot)
+		framework.ExpectNoError(err, "remove PMEM-CSI source code")
+		_, err = pmemexec.RunCommand("git", "clone", "--shared", root, workRoot)
+		framework.ExpectNoError(err, "clone repo", deployment.Version)
+		_, err = pmemexec.RunCommand("git", "-C", workRoot, "checkout", tag)
+		framework.ExpectNoError(err, "check out release-%s = %s of PMEM-CSI", deployment.Version, tag)
+
+		// The setup script expects to have
+		// the same _work as in the normal root.
+		err = os.Symlink("../../_work", workRoot+"/_work")
+		framework.ExpectNoError(err, "symlink the _work directory")
+
+		// NOTE: Release branch does not have the OLM bundle
+		// So we have to generate them. We use `make operator-generate-bundle`
+		// from devel on released manifests(CRD, CSV etc.,) for generating
+		// released OLM bundles. This step could be avoided if we keep the
+		// generated oln-bundles under /deploy in the source tree.
+		if deployment.HasOLM {
+			make := exec.Command("make", "operator-generate-bundle", "VERSION="+tag, "REPO_ROOT="+workRoot)
+			make.Dir = root
+			make.Env = env
+			_, err := pmemexec.Run(make)
+			framework.ExpectNoError(err, "%s: generate bundle for operator version %s", deployment.Name(), deployment.Version)
+		}
+
+		root = workRoot
+		// The release branch does not pull from Docker Hub by default,
+		// we have to select that explicitly.
+		env = append(env, "REPO_ROOT="+root, "TEST_PMEM_REGISTRY=intel", "TEST_PMEM_IMAGE_TAG="+tag)
 	}
 
 	if deployment.HasOperator {
@@ -1051,7 +1143,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 		}
 		cmd := exec.Command("test/start-operator.sh", cmdArgs...)
 		cmd.Dir = os.Getenv("REPO_ROOT")
-		cmd.Env = append(os.Environ(),
+		cmd.Env = append(env,
 			"TEST_OPERATOR_NAMESPACE="+deployment.Namespace,
 			"TEST_OPERATOR_DEPLOYMENT_LABEL="+deployment.Label())
 		_, err := pmemexec.Run(cmd)
@@ -1065,60 +1157,13 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 			EnsureDeploymentCR(f, dep)
 		} else {
 			// Deploy with script.
-			root := os.Getenv("REPO_ROOT")
-			env := os.Environ()
-			if deployment.Version != "" {
-				// Find the latest dot release on the branch for which images are public.
-				// Most recent tag is listed first. We better avoid pulling over and over again
-				// to avoid throttling.
-				tags, err := pmemexec.RunCommand("git", "tag", "--sort=-version:refname")
-				scanner := bufio.NewScanner(strings.NewReader(tags))
-				var tag string
-				for scanner.Scan() {
-					tag = scanner.Text()
-					if strings.HasPrefix(tag, "v"+deployment.Version) {
-						if _, err := pmemexec.RunCommand("docker", "image", "inspect", "--format='exists'", "intel/pmem-csi-driver:"+tag); err == nil {
-							break
-						}
-						if _, err := pmemexec.RunCommand("docker", "image", "pull", "intel/pmem-csi-driver:"+tag); err == nil {
-							break
-						}
-					}
-				}
-				framework.Logf("using %s images for release-%s", tag, deployment.Version)
-
-				// Clean check out in _work/pmem-csi-release-<version>.
-				// Pulling from remote must be done before running the test.
-				workRoot := root + "/_work/pmem-csi-release-" + deployment.Version
-				err = os.RemoveAll(workRoot)
-				framework.ExpectNoError(err, "remove PMEM-CSI source code")
-				_, err = pmemexec.RunCommand("git", "clone", "--shared", root, workRoot)
-				framework.ExpectNoError(err, "clone repo", deployment.Version)
-				_, err = pmemexec.RunCommand("git", "-C", workRoot, "checkout", tag)
-				framework.ExpectNoError(err, "check out release-%s = %s of PMEM-CSI", deployment.Version, tag)
-				root = workRoot
-
-				// The release branch does not pull from Docker Hub by default,
-				// we have to select that explicitly.
-				env = append(env, "TEST_PMEM_REGISTRY=intel")
-
-				// The setup script expects to have
-				// the same _work as in the normal
-				// root.
-				err = os.Symlink("../../_work", workRoot+"/_work")
-				framework.ExpectNoError(err, "symlink the _work directory")
-			}
 			cmd := exec.Command("test/setup-deployment.sh")
 			cmd.Dir = root
-			flavor := ""
-			env = append(env,
-				"REPO_ROOT="+root,
-				"TEST_KUBERNETES_FLAVOR="+flavor,
+			cmd.Env = append(env, "TEST_KUBERNETES_FLAVOR=",
 				"TEST_DEPLOYMENT_QUIET=quiet",
 				"TEST_DEPLOYMENTMODE="+deployment.DeploymentMode(),
 				"TEST_DRIVER_NAMESPACE="+deployment.Namespace,
 				"TEST_DEVICEMODE="+string(deployment.Mode))
-			cmd.Env = env
 			_, err = pmemexec.Run(cmd)
 			framework.ExpectNoError(err, "create %s PMEM-CSI deployment", deployment.Name())
 		}
@@ -1129,6 +1174,25 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 		WaitForPMEMDriver(c, deployment)
 		CheckPMEMDriver(c, deployment)
 	}
+}
+
+func StopOperator(d *Deployment) error {
+	cmd := exec.Command("test/stop-operator.sh")
+	if d.HasOLM {
+		cmd.Args = append(cmd.Args, "-olm")
+	}
+	// Keep both the CRD and namespace in case the required deployment is also the operator
+	// required for version skew tests, otherwise it brings down the existing driver deployment(s)
+	if d.HasOperator {
+		cmd.Args = append(cmd.Args, "-keep-crd", "-keep-namespace")
+	}
+	cmd.Dir = os.Getenv("REPO_ROOT")
+	cmd.Env = append(os.Environ(),
+		"TEST_OPERATOR_NAMESPACE="+d.Namespace,
+		"TEST_OPERATOR_DEPLOYMENT_LABEL="+d.Label())
+	_, err := pmemexec.Run(cmd)
+
+	return err
 }
 
 // GetDriverDeployment returns the spec for the driver deployment that is used

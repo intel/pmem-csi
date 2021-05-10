@@ -12,51 +12,64 @@ TEST_DIRECTORY=${TEST_DIRECTORY:-$(dirname "$(readlink -f "$0")")}
 source "${TEST_CONFIG:-${TEST_DIRECTORY}/test-config.sh}"
 
 CLUSTER=${CLUSTER:-pmem-govm}
-REPO_DIRECTORY="${REPO_DIRECTORY:-$(dirname "${TEST_DIRECTORY}")}"
-CLUSTER_DIRECTORY="${CLUSTER_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
+REPO_ROOT="${REPO_ROOT:-$(dirname "${TEST_DIRECTORY}")}"
+CLUSTER_DIRECTORY="${CLUSTER_DIRECTORY:-${REPO_ROOT}/_work/${CLUSTER}}"
 SSH="${CLUSTER_DIRECTORY}/ssh.0"
 KUBECTL="${SSH} kubectl" # Always use the kubectl installed in the cluster.
+upgrade=""
 
 function deploy_using_olm() {
   set -x
-  echo "Starting the operator using OLM...."
-  CATALOG_DIR="${REPO_DIRECTORY}/deploy/olm-catalog"
-  BINDIR=${REPO_DIRECTORY}/_work/bin
+  # Choose the latest(by creation time) bundle version if not provided one
+  BUNDLE_VERSION=${BUNDLE_VERSION:-$(ls -1t ${REPO_ROOT}/deploy/olm-bundle | head -1)}
 
-  if [ ! -d "${CATALOG_DIR}" ]; then
-    echo >&2 "'${CATALOG_DIR}' not a directory"
+  echo "Starting the operator using OLM...."
+  BUNDLE_DIR="${REPO_ROOT}/deploy/olm-bundle/${BUNDLE_VERSION}"
+  BINDIR=${REPO_ROOT}/_work/bin
+
+  if [ ! -d "${BUNDLE_DIR}" ]; then
+    echo >&2 "'${BUNDLE_DIR}' not a directory"
     return 1
   fi
 
-  # if there is a running operator deployment just reuse that
   set +e
-  oupput=$(${KUBECTL} get deployment pmem-csi-operator 2>&1)
+  output=$(${KUBECTL} get csv -o jsonpath='{.items[*].metadata.name}' 2>&1)
   if [ $? -eq 0 ]; then
-    echo "Found a running operator deployment!!!"
-    exit 0
-  elif echo $oupput | grep -q -v '(NotFound)' ; then
-    echo "Failed to find the existance of an operator deployment\n   $output"
-    exit 1
+    for csv in $output; do
+      re="^([^.v]+).v(.*)$"
+      [[ "$csv" =~ $re ]] && name=${BASH_REMATCH[1]} && ver=${BASH_REMATCH[2]}
+      # if there is a running operator deployment just reuse that
+      if [ $name == "pmem-csi-operator" ] ; then
+        if [ $ver == "${BUNDLE_VERSION}" ]; then
+          echo "Found a running operator deployment with given version!!!"
+          exit 0
+        fi
+        # else treat it as an upgrade/downgrade
+        upgrade="-upgrade"
+      fi
+    done
   fi
   set -e
 
   tmpdir="$(mktemp -d)"
-  TMP_CATALOG_DIR="${tmpdir}/olm-catalog"
+  TMP_BUNDLE_DIR="${tmpdir}/${BUNDLE_VERSION}"
   trap 'rm -rf $tmpdir' SIGTERM SIGINT EXIT
   # We need to alter generated catalog with custom driver/operator image
   # So copy them to temproary location
-  cp -r ${CATALOG_DIR} ${tmpdir}/
+  cp -rv ${BUNDLE_DIR} ${tmpdir}/
 
   # find the latest catalog version
-  VERSION=$(grep 'currentCSV:' ${TMP_CATALOG_DIR}/pmem-csi-operator.package.yaml | sed -r 's|.*v([0-9]+\.[0-9]+\.[0-9]+)$|\1|')
-  CSV_FILE="${TMP_CATALOG_DIR}/${VERSION}/pmem-csi-operator.clusterserviceversion.yaml"
+  CSV_FILE="${TMP_BUNDLE_DIR}/manifests/pmem-csi-operator.clusterserviceversion.yaml"
 
   # Update docker registry
-  # NOTE: Also updating image version to 'canary' for tests
-  if [ "${TEST_PMEM_REGISTRY}" != "" ]; then
-    sed -i -e "s^intel/pmem-csi-driver:v${VERSION}^${TEST_PMEM_REGISTRY}/pmem-csi-driver:canary^g" ${CSV_FILE}
+  # Generated CSV's containerImage is 'intel/pmem-csi-driver:v${BUNDLE_VERSION}'
+  if [ "${TEST_PMEM_REGISTRY}" != "intel" ]; then
+    sed -i -e "s^intel/pmem-csi-driver:^${TEST_PMEM_REGISTRY}/pmem-csi-driver:^g" ${CSV_FILE}
   fi
-  if [ "${TEST_IMAGE_PULL_POLICY}" != "" ]; then
+  if [ "${TEST_PMEM_IMAGE_TAG}" != "" ]; then
+    sed -i -e "s^\(/pmem-csi-driver:\).*^\1${TEST_PMEM_IMAGE_TAG}^g" ${CSV_FILE}
+  fi
+  if [ "${TEST_IMAGE_PULL_POLICY}" != "IfNotPresent" ]; then
     sed -i -e "s^imagePullPolicy:.IfNotPresent^imagePullPolicy: ${TEST_IMAGE_PULL_POLICY}^g" ${CSV_FILE}
   fi
   # Patch operator deployment with appropriate label(pmem-csi.intel.com/deployment=<<deployment-name>>)
@@ -64,9 +77,13 @@ function deploy_using_olm() {
   if [ "${TEST_OPERATOR_DEPLOYMENT_LABEL}" != "" ]; then
     sed -i -r "/labels:$/{N; s|(\n\s+)(.*)|\1pmem-csi.intel.com/deployment: ${TEST_OPERATOR_DEPLOYMENT_LABEL}\1\2| }" ${CSV_FILE}
   fi
-  if [ "{TEST_OPERATOR_LOGLEVEL}" != "" ]; then
+  if [ "${TEST_OPERATOR_LOGLEVEL}" != "" ]; then
       sed -i -e "s;-v=.*;-v=${TEST_OPERATOR_LOGLEVEL};g" ${CSV_FILE}
   fi
+
+  # Build and push bundle image
+  cd $TMP_BUNDLE_DIR && docker build -f bundle.Dockerfile -t ${TEST_BUILD_PMEM_REGISTRY}/pmem-csi-bundle:v${BUNDLE_VERSION} . && \
+     docker push ${TEST_BUILD_PMEM_REGISTRY}/pmem-csi-bundle:v${BUNDLE_VERSION}
 
   NAMESPACE=""
   if [ "${TEST_OPERATOR_NAMESPACE}" != "" ]; then
@@ -74,15 +91,15 @@ function deploy_using_olm() {
   fi
 
   # Deploy the operator
-  ${BINDIR}/operator-sdk run packagemanifests --version ${VERSION} ${NAMESPACE} --install-mode OwnNamespace --timeout 3m ${TMP_CATALOG_DIR}
+  ${BINDIR}/operator-sdk run bundle${upgrade} ${NAMESPACE} --timeout 5m ${TEST_LOCAL_REGISTRY}/pmem-csi-bundle:v${BUNDLE_VERSION} --skip-tls
 }
 
 function deploy_using_yaml() {
-  crd=${REPO_DIRECTORY}/deploy/crd/pmem-csi.intel.com_pmemcsideployments.yaml
+  crd=${REPO_ROOT}/deploy/crd/pmem-csi.intel.com_pmemcsideployments.yaml
   echo "Deploying '${crd}'..."
   sed -e "s;\(namespace: \)pmem-csi$;\1${TEST_OPERATOR_NAMESPACE};g" ${crd} | ${SSH} kubectl apply -f -
 
-  DEPLOY_DIRECTORY="${REPO_DIRECTORY}/deploy"
+  DEPLOY_DIRECTORY="${REPO_ROOT}/deploy"
   deploy="${DEPLOY_DIRECTORY}/operator/pmem-csi-operator.yaml"
   echo "Deploying '${deploy}'..."
 
@@ -99,6 +116,9 @@ EOF
 
   if [ "${TEST_PMEM_REGISTRY}" != "" ]; then
      ${SSH} sed -ie "s^intel/pmem^${TEST_PMEM_REGISTRY}/pmem^g" "$tmpdir/operator.yaml"
+  fi
+  if [ "${TEST_PMEM_IMAGE_TAG}" != "" ]; then
+    ${SSH} sed -ie "'s^\(/pmem-csi-driver:\).*^\1${TEST_PMEM_IMAGE_TAG}^g' $tmpdir/operator.yaml"
   fi
   if [ "${TEST_IMAGE_PULL_POLICY}" != "" ]; then
     ${SSH} "sed -ie 's;\(imagePullPolicy: \).*;\1${TEST_IMAGE_PULL_POLICY};g' $tmpdir/operator.yaml"
@@ -148,9 +168,11 @@ case $deploy_method in
     exit 1 ;;
 esac
 
-# Set up TLS secrets in the TEST_OPERATOR_NAMESPACE, with the two different prefixes.
-PATH="${REPO_DIRECTORY}/_work/bin:$PATH" TEST_DRIVER_NAMESPACE="${TEST_OPERATOR_NAMESPACE}" TEST_DRIVER_PREFIX=second-pmem-csi-intel-com ${TEST_DIRECTORY}/setup-ca-kubernetes.sh
-PATH="${REPO_DIRECTORY}/_work/bin:$PATH" TEST_DRIVER_NAMESPACE="${TEST_OPERATOR_NAMESPACE}" ${TEST_DIRECTORY}/setup-ca-kubernetes.sh
+if [ "$upgrade" == "" ] ; then
+  # Set up TLS secrets in the TEST_OPERATOR_NAMESPACE, with the two different prefixes.
+  PATH="${REPO_ROOT}/_work/bin:$PATH" TEST_DRIVER_NAMESPACE="${TEST_OPERATOR_NAMESPACE}" TEST_DRIVER_PREFIX=second-pmem-csi-intel-com ${TEST_DIRECTORY}/setup-ca-kubernetes.sh
+  PATH="${REPO_ROOT}/_work/bin:$PATH" TEST_DRIVER_NAMESPACE="${TEST_OPERATOR_NAMESPACE}" ${TEST_DIRECTORY}/setup-ca-kubernetes.sh
+fi
 
   cat <<EOF
 PMEM-CSI operator is running in '${TEST_OPERATOR_NAMESPACE}' namespace. To try out deploying the pmem-csi driver:
