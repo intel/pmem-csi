@@ -111,6 +111,19 @@ roleRef:
   kind: ClusterRole
   name: pmem-csi-operator
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pmem-csi-operator-metrics
+  namespace: default
+spec:
+  selector:
+    name: pmem-csi-operator
+    app: pmem-csi-operator
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -121,6 +134,7 @@ spec:
   selector:
     matchLabels:
       name: pmem-csi-operator
+      app: pmem-csi-operator
   template:
     metadata:
       labels:
@@ -135,9 +149,13 @@ spec:
           imagePullPolicy: IfNotPresent
           command:
           - /usr/local/bin/pmem-csi-operator
+          - -metrics-addr=:8080
           - -v=3
           securityContext:
             readOnlyRootFilesystem: true
+          ports:
+          - containerPort: 8080
+            name: metrics
           env:
             - name: WATCH_NAMESPACE
               valueFrom:

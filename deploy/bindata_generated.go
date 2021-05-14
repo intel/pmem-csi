@@ -101,7 +101,7 @@ func deployKubernetes118DirectPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.18/direct/pmem-csi.yaml", size: 16675, mode: os.FileMode(420), modTime: time.Unix(1619451292, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.18/direct/pmem-csi.yaml", size: 16675, mode: os.FileMode(436), modTime: time.Unix(1620586606, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -121,7 +121,7 @@ func deployKubernetes118LvmPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.18/lvm/pmem-csi.yaml", size: 16591, mode: os.FileMode(420), modTime: time.Unix(1619451294, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.18/lvm/pmem-csi.yaml", size: 16591, mode: os.FileMode(436), modTime: time.Unix(1620586609, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -141,7 +141,7 @@ func deployKubernetes119AlphaDirectPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.19-alpha/direct/pmem-csi.yaml", size: 16989, mode: os.FileMode(420), modTime: time.Unix(1619451307, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.19-alpha/direct/pmem-csi.yaml", size: 16989, mode: os.FileMode(436), modTime: time.Unix(1620586634, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -161,7 +161,7 @@ func deployKubernetes119AlphaLvmPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.19-alpha/lvm/pmem-csi.yaml", size: 16905, mode: os.FileMode(420), modTime: time.Unix(1619451308, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.19-alpha/lvm/pmem-csi.yaml", size: 16905, mode: os.FileMode(436), modTime: time.Unix(1620586637, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -181,7 +181,7 @@ func deployKubernetes119DirectPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.19/direct/pmem-csi.yaml", size: 16675, mode: os.FileMode(420), modTime: time.Unix(1619451297, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.19/direct/pmem-csi.yaml", size: 16675, mode: os.FileMode(436), modTime: time.Unix(1620586616, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -201,7 +201,7 @@ func deployKubernetes119LvmPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.19/lvm/pmem-csi.yaml", size: 16591, mode: os.FileMode(420), modTime: time.Unix(1619451298, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.19/lvm/pmem-csi.yaml", size: 16591, mode: os.FileMode(436), modTime: time.Unix(1620586618, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -221,7 +221,7 @@ func deployKubernetes120DirectPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.20/direct/pmem-csi.yaml", size: 16675, mode: os.FileMode(420), modTime: time.Unix(1619451302, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.20/direct/pmem-csi.yaml", size: 16675, mode: os.FileMode(436), modTime: time.Unix(1620586625, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -241,7 +241,7 @@ func deployKubernetes120LvmPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.20/lvm/pmem-csi.yaml", size: 16591, mode: os.FileMode(420), modTime: time.Unix(1619451303, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.20/lvm/pmem-csi.yaml", size: 16591, mode: os.FileMode(436), modTime: time.Unix(1620586627, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -261,7 +261,7 @@ func deployKustomizeWebhookWebhookYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kustomize/webhook/webhook.yaml", size: 1196, mode: os.FileMode(420), modTime: time.Unix(1615969377, 0)}
+	info := bindataFileInfo{name: "deploy/kustomize/webhook/webhook.yaml", size: 1196, mode: os.FileMode(436), modTime: time.Unix(1620026661, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -281,7 +281,7 @@ func deployKustomizeSchedulerSchedulerServiceYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kustomize/scheduler/scheduler-service.yaml", size: 277, mode: os.FileMode(420), modTime: time.Unix(1615969377, 0)}
+	info := bindataFileInfo{name: "deploy/kustomize/scheduler/scheduler-service.yaml", size: 277, mode: os.FileMode(436), modTime: time.Unix(1620026661, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
