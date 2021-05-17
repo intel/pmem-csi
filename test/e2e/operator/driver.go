@@ -36,6 +36,16 @@ var _ = deploy.DescribeForSome("driver", func(d *deploy.Deployment) bool {
 	f.SkipNamespaceCreation = true
 
 	It("runs", func() {
+		// Delete existing driver and start a new driver
+		// so that this test results does not effected by the other
+		// tests run using the same driver deployment.
+		deployment := d.GetDriverDeployment()
+		deploy.DeleteDeploymentCR(f, deployment.Name)
+		deploy.CreateDeploymentCR(f, deployment)
+
+		// We need the actual CR from the apiserver to check ownership.
+		deployment = deploy.GetDeploymentCR(f, deployment.Name)
+
 		// Once we get here, the deploy package has already checked for us that the driver is operational.
 		// We can verify that it meets the spec.
 
@@ -51,18 +61,11 @@ var _ = deploy.DescribeForSome("driver", func(d *deploy.Deployment) bool {
 		c, err := deploy.NewCluster(f.ClientSet, f.DynamicClient, f.ClientConfig())
 		framework.ExpectNoError(err, "new cluster")
 
-		// We need the actual CR from the apiserver to check ownership.
-		deployment := d.GetDriverDeployment()
-		deployment = deploy.GetDeploymentCR(f, deployment.Name)
-
 		metricsURL, err := deploy.GetOperatorMetricsURL(ctx, c, d)
 		Expect(err).ShouldNot(HaveOccurred(), "get operator metrics URL")
 
-		err = validate.DriverDeployment(ctx, client, *k8sver, d.Namespace, deployment)
+		_, err = validate.DriverDeploymentEventually(ctx, c, client, *k8sver, metricsURL, d.Namespace, deployment, nil, 0)
 		framework.ExpectNoError(err, "validate driver")
-
-		err = validate.CheckForObjectUpdates(ctx, c, metricsURL, nil, &deployment)
-		framework.ExpectNoError(err, "check object updates")
 	})
 
 	// Just very minimal testing at the moment.
