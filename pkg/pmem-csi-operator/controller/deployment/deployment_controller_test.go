@@ -351,12 +351,7 @@ func TestDeploymentController(t *testing.T) {
 				dep.Spec.Image = testDriverImage
 			}
 
-			// If the CR was not updated, then objects should still be the same as they were initially.
-			rv := tc.resourceVersions
-			if wasUpdated {
-				rv = nil
-			}
-			_, err := validate.DriverDeployment(tc.ctx, tc.c, testK8sVersion, testNamespace, *dep, rv)
+			err := validate.DriverDeployment(tc.ctx, tc.c, testK8sVersion, testNamespace, *dep)
 			require.NoError(tc.t, err, "validate deployment")
 			validateEvents(tc, dep, expectedEvents)
 		}

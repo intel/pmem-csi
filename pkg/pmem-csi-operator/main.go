@@ -19,12 +19,12 @@ import (
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
 
-	"github.com/operator-framework/operator-lib/leader"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	// import deployment to ensure that the deployment reconciler get initialized.
 	_ "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment"
@@ -37,9 +37,11 @@ func printVersion() {
 }
 
 var (
-	driverImage  = flag.String("image", "", "docker container image used for deploying the operator.")
-	startWebhook = flag.Bool("webhook", false, "run conversion webhook server")
-	logFormat    = logger.NewFlag()
+	driverImage    = flag.String("image", "", "docker container image used for deploying the operator.")
+	leaderElection = flag.Bool("leader-election", false, "Enable leader election for controller manager. "+
+		"Enabling this will ensure there is only one active controller manager.")
+	metricsAddr = flag.String("metrics-addr", metrics.DefaultBindAddress, "The address the metric endpoint binds to. Use \"0\" to disable metrics.")
+	logFormat   = logger.NewFlag()
 )
 
 func init() {
@@ -62,19 +64,17 @@ func Main() int {
 	}
 
 	ctx := context.Background()
-	// Become the leader before proceeding
-	err = leader.Become(ctx, "pmem-csi-operator-lock")
-	if err != nil {
-		pmemcommon.ExitError("Failed to become leader: ", err)
-		return 1
-	}
 
 	// Retrieve namespace to watch for new deployments and to create sub-resources
 	namespace := k8sutil.GetNamespace()
 
 	// Create a new Cmd to provide shared dependencies and start components
 	mgr, err := manager.New(cfg, manager.Options{
-		Namespace: namespace,
+		Namespace:               namespace,
+		LeaderElection:          *leaderElection,
+		LeaderElectionNamespace: namespace,
+		LeaderElectionID:        "pmem-csi-operator-lock",
+		MetricsBindAddress:      *metricsAddr,
 	})
 	if err != nil {
 		pmemcommon.ExitError("Failed to create controller manager: ", err)

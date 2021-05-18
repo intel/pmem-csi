@@ -13,6 +13,7 @@ import (
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	"github.com/intel/pmem-csi/pkg/logger"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/metrics"
 	"github.com/intel/pmem-csi/pkg/types"
 	"github.com/intel/pmem-csi/pkg/version"
 
@@ -282,6 +283,9 @@ func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment
 			if err := r.client.Patch(ctx, copy, patch); err != nil {
 				return nil, fmt.Errorf("patch object: %v", err)
 			}
+			if err := metrics.SetSubResourceUpdateMetric(o); err != nil {
+				l.V(3).Error(err, "failed to set sub-resource metrics", "object", o)
+			}
 		}
 	} else {
 		// For unknown reason client.Create() clearing off the
@@ -292,6 +296,9 @@ func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment
 			return nil, fmt.Errorf("create object: %v", err)
 		}
 		o.GetObjectKind().SetGroupVersionKind(gvk)
+		if err := metrics.SetSubResourceCreateMetric(o); err != nil {
+			l.V(3).Error(err, "failed to set sub-resource metrics", "object", o)
+		}
 	}
 
 	// Final per-object changes, like emitting events or setting status.
@@ -720,10 +727,8 @@ func (d *pmemCSIDeployment) getCSIDriver(csiDriver *storagev1.CSIDriver) {
 	attachRequired := false
 	podInfoOnMount := true
 
-	csiDriver.Spec = storagev1.CSIDriverSpec{
-		AttachRequired: &attachRequired,
-		PodInfoOnMount: &podInfoOnMount,
-	}
+	csiDriver.Spec.AttachRequired = &attachRequired
+	csiDriver.Spec.PodInfoOnMount = &podInfoOnMount
 
 	// Volume lifecycle modes are supported only after k8s v1.16
 	if d.k8sVersion.Compare(1, 16) >= 0 {
@@ -833,6 +838,7 @@ func (d *pmemCSIDeployment) getWebhooksClusterRoleBinding(crb *rbacv1.ClusterRol
 }
 
 func (d *pmemCSIDeployment) getMutatingWebhookConfig(hook *admissionregistrationv1.MutatingWebhookConfiguration) {
+	servicePort := int32(443) // default webhook service port
 	selector := &metav1.LabelSelector{
 		MatchExpressions: []metav1.LabelSelectorRequirement{
 			{
@@ -865,6 +871,7 @@ func (d *pmemCSIDeployment) getMutatingWebhookConfig(hook *admissionregistration
 					Name:      d.SchedulerServiceName(),
 					Namespace: d.namespace,
 					Path:      &path,
+					Port:      &servicePort,
 				},
 				CABundle: d.controllerCABundle, // loaded earlier in reconcile()
 			},
@@ -1085,11 +1092,13 @@ func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 	setTolerations(&ss.Spec.Template.Spec)
 	ss.Spec.Template.Spec.Volumes = []corev1.Volume{}
 	if d.Spec.ControllerTLSSecret != "" {
+		mode := corev1.SecretVolumeSourceDefaultMode
 		ss.Spec.Template.Spec.Volumes = append(ss.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: "webhook-cert",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: d.Spec.ControllerTLSSecret,
+					SecretName:  d.Spec.ControllerTLSSecret,
+					DefaultMode: &mode,
 				},
 			},
 		})

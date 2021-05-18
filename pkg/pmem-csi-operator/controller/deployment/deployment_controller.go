@@ -18,7 +18,9 @@ import (
 	"github.com/intel/pmem-csi/pkg/k8sutil"
 	"github.com/intel/pmem-csi/pkg/logger"
 	pmemcontroller "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/metrics"
 	"github.com/intel/pmem-csi/pkg/version"
+	"github.com/operator-framework/operator-lib/handler"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,7 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
+	crhandler "sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -39,6 +41,8 @@ import (
 func init() {
 	// AddToManagerFuncs is a list of functions to create controllers and add them to a manager.
 	pmemcontroller.AddToManagerFuncs = append(pmemcontroller.AddToManagerFuncs, Add)
+
+	metrics.RegisterMetrics()
 }
 
 // Add creates a new Deployment Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -107,7 +111,7 @@ func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error
 	}
 
 	// Watch for changes to primary resource Deployment
-	if err := c.Watch(&source.Kind{Type: &api.PmemCSIDeployment{}}, &handler.EnqueueRequestForObject{}, p); err != nil {
+	if err := c.Watch(&source.Kind{Type: &api.PmemCSIDeployment{}}, &handler.InstrumentedEnqueueRequestForObject{}, p); err != nil {
 		return fmt.Errorf("watch: %v", err)
 	}
 
@@ -164,7 +168,7 @@ func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error
 	}
 
 	for _, resource := range currentObjects {
-		if err := c.Watch(&source.Kind{Type: resource}, &handler.EnqueueRequestForOwner{
+		if err := c.Watch(&source.Kind{Type: resource}, &crhandler.EnqueueRequestForOwner{
 			IsController: true,
 			OwnerType:    &api.PmemCSIDeployment{},
 		}, sop); err != nil {
@@ -316,6 +320,9 @@ func (r *ReconcileDeployment) Reconcile(ctx context.Context, request reconcile.R
 		}
 
 		l.V(3).Info("reconcile done", "duration", time.Since(startTime))
+		if err := metrics.SetReconcileMetrics(deployment.Name, string(deployment.UID)); err != nil {
+			l.V(3).Error(err, "failed to set reconcile metrics", "object", deployment)
+		}
 	}()
 
 	d, err := r.newDeployment(ctx, dep)

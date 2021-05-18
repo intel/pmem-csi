@@ -1485,6 +1485,18 @@ deployment is in the `Failed` state, then one can look into the event(s) using
 > driver could run can be configured by using `nodeSelector` property of
 > [`DeploymentSpec`](#deployment-crd-api).
 
+#### Operator metrics data
+
+PMEM-CSI operator exposes below metrics data about active PmemCSIDeployment
+custom resources and it's sub-object in addition to the
+[metrics data provided by the controller-runtime](https://book-v1.book.kubebuilder.io/beyond_basics/controller_metrics.html):
+
+Name | Type | Explanation
+-----|------|------------
+`pmem_csi_deployment_reconcile` | counter | Counter that gets incremented on each time a PmemCSIDeployment CR gone through a reconcile loop, labeled with the deployment name and uid.
+`pmem_csi_deployment_sub_resource_created_at` | gauge | Timestamp at which a sub resource of the PmemCSIDeployment CR was created  by the operator. Labeled by resource details ("name, "namespace", "group", "version", "kind", "uid", "ownedBy").
+`pmem_csi_deployment_sub_resource_updated_at` | gauge | Timestamp at which a sub resource of the PmemCSIDeployment CR was updated by the operator. Labeled by resource details ("name, "namespace", "group", "version", "kind", "uid", "ownedBy").
+
 
 ## Filing issues and contributing
 

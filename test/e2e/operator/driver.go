@@ -17,12 +17,13 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/storage"
 	"github.com/intel/pmem-csi/test/e2e/storage/dax"
 	"github.com/intel/pmem-csi/test/e2e/storage/scheduler"
+	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
-	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
 
 var _ = deploy.DescribeForSome("driver", func(d *deploy.Deployment) bool {
@@ -35,6 +36,16 @@ var _ = deploy.DescribeForSome("driver", func(d *deploy.Deployment) bool {
 	f.SkipNamespaceCreation = true
 
 	It("runs", func() {
+		// Delete existing driver and start a new driver
+		// so that this test results does not effected by the other
+		// tests run using the same driver deployment.
+		deployment := d.GetDriverDeployment()
+		deploy.DeleteDeploymentCR(f, deployment.Name)
+		deploy.CreateDeploymentCR(f, deployment)
+
+		// We need the actual CR from the apiserver to check ownership.
+		deployment = deploy.GetDeploymentCR(f, deployment.Name)
+
 		// Once we get here, the deploy package has already checked for us that the driver is operational.
 		// We can verify that it meets the spec.
 
@@ -47,11 +58,14 @@ var _ = deploy.DescribeForSome("driver", func(d *deploy.Deployment) bool {
 		k8sver, err := k8sutil.GetKubernetesVersion(f.ClientConfig())
 		framework.ExpectNoError(err, "get Kubernetes version")
 
-		// We need the actual CR from the apiserver to check ownership.
-		deployment := d.GetDriverDeployment()
-		deployment = deploy.GetDeploymentCR(f, deployment.Name)
+		c, err := deploy.NewCluster(f.ClientSet, f.DynamicClient, f.ClientConfig())
+		framework.ExpectNoError(err, "new cluster")
 
-		framework.ExpectNoError(validate.DriverDeploymentEventually(ctx, client, *k8sver, d.Namespace, deployment, true), "validate driver")
+		metricsURL, err := deploy.GetOperatorMetricsURL(ctx, c, d)
+		Expect(err).ShouldNot(HaveOccurred(), "get operator metrics URL")
+
+		_, err = validate.DriverDeploymentEventually(ctx, c, client, *k8sver, metricsURL, d.Namespace, deployment, nil, 0)
+		framework.ExpectNoError(err, "validate driver")
 	})
 
 	// Just very minimal testing at the moment.

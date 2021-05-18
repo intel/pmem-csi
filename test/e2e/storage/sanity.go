@@ -99,7 +99,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 		cs := f.ClientSet
 
 		var err error
-		cluster, err = deploy.NewCluster(cs, f.DynamicClient)
+		cluster, err = deploy.NewCluster(cs, f.DynamicClient, f.ClientConfig())
 		framework.ExpectNoError(err, "query cluster")
 
 		config.Address, config.ControllerAddress, err = deploy.LookupCSIAddresses(cluster, d.Namespace)
