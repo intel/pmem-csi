@@ -16,6 +16,7 @@ require (
 	github.com/imdario/mergo v0.3.11 // indirect
 	github.com/kubernetes-csi/csi-lib-utils v0.9.1
 	github.com/kubernetes-csi/csi-test/v3 v3.1.1
+	github.com/kubernetes-csi/csi-test/v4 v4.2.0
 	github.com/miekg/dns v1.1.38 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/onsi/ginkgo v1.14.2
@@ -35,7 +36,7 @@ require (
 	google.golang.org/genproto v0.0.0-20210207032614-bba0dbe2a9ea // indirect
 	google.golang.org/grpc v1.35.0
 	gopkg.in/freddierice/go-losetup.v1 v1.0.0-20170407175016-fc9adea44124
-	gopkg.in/yaml.v2 v2.3.0
+	gopkg.in/yaml.v2 v2.4.0
 	honnef.co/go/tools v0.0.1-2020.1.4 // indirect
 	k8s.io/api v0.20.2
 	k8s.io/apiextensions-apiserver v0.20.1
