@@ -101,7 +101,7 @@ func deployKubernetes118DirectPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.18/direct/pmem-csi.yaml", size: 16278, mode: os.FileMode(420), modTime: time.Unix(1621418344, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.18/direct/pmem-csi.yaml", size: 16278, mode: os.FileMode(420), modTime: time.Unix(1621427059, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -121,7 +121,7 @@ func deployKubernetes118LvmPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.18/lvm/pmem-csi.yaml", size: 16200, mode: os.FileMode(420), modTime: time.Unix(1621418346, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.18/lvm/pmem-csi.yaml", size: 16200, mode: os.FileMode(420), modTime: time.Unix(1621427060, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -141,7 +141,7 @@ func deployKubernetes119AlphaDirectPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.19-alpha/direct/pmem-csi.yaml", size: 16592, mode: os.FileMode(420), modTime: time.Unix(1621418359, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.19-alpha/direct/pmem-csi.yaml", size: 16592, mode: os.FileMode(420), modTime: time.Unix(1621427074, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -161,7 +161,7 @@ func deployKubernetes119AlphaLvmPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.19-alpha/lvm/pmem-csi.yaml", size: 16514, mode: os.FileMode(420), modTime: time.Unix(1621418360, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.19-alpha/lvm/pmem-csi.yaml", size: 16514, mode: os.FileMode(420), modTime: time.Unix(1621427075, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -181,7 +181,7 @@ func deployKubernetes119DirectPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.19/direct/pmem-csi.yaml", size: 16278, mode: os.FileMode(420), modTime: time.Unix(1621418349, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.19/direct/pmem-csi.yaml", size: 16278, mode: os.FileMode(420), modTime: time.Unix(1621427064, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -201,7 +201,7 @@ func deployKubernetes119LvmPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.19/lvm/pmem-csi.yaml", size: 16200, mode: os.FileMode(420), modTime: time.Unix(1621418351, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.19/lvm/pmem-csi.yaml", size: 16200, mode: os.FileMode(420), modTime: time.Unix(1621427065, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -221,7 +221,7 @@ func deployKubernetes120DirectPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.20/direct/pmem-csi.yaml", size: 16278, mode: os.FileMode(420), modTime: time.Unix(1621418354, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.20/direct/pmem-csi.yaml", size: 16278, mode: os.FileMode(420), modTime: time.Unix(1621427069, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -241,7 +241,7 @@ func deployKubernetes120LvmPmemCsiYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "deploy/kubernetes-1.20/lvm/pmem-csi.yaml", size: 16200, mode: os.FileMode(420), modTime: time.Unix(1621418355, 0)}
+	info := bindataFileInfo{name: "deploy/kubernetes-1.20/lvm/pmem-csi.yaml", size: 16200, mode: os.FileMode(420), modTime: time.Unix(1621427070, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
