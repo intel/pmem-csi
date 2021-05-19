@@ -710,11 +710,11 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 				v.remove(vol, volName)
 			})
 
-			Context("ephemeral volumes", func() {
-				doit := func(withFlag bool, repeatCalls int) {
+			Context("CSI ephemeral volumes", func() {
+				doit := func(withFlag bool, repeatCalls int, fsType string) {
 					targetPath := sc.TargetPath + "/ephemeral"
 					params := map[string]string{
-						"size": "1Mi",
+						"size": "100Mi",
 					}
 					if withFlag {
 						params["csi.storage.k8s.io/ephemeral"] = "true"
@@ -724,7 +724,9 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 						VolumeContext: params,
 						VolumeCapability: &csi.VolumeCapability{
 							AccessType: &csi.VolumeCapability_Mount{
-								Mount: &csi.VolumeCapability_MountVolume{},
+								Mount: &csi.VolumeCapability_MountVolume{
+									FsType: fsType,
+								},
 							},
 							AccessMode: &csi.VolumeCapability_AccessMode{
 								Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
@@ -738,7 +740,6 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 						_, err := nc.NodePublishVolume(context.Background(), &req)
 						if err == nil {
 							published = true
-							break
 						} else if failedPublish == nil {
 							failedPublish = fmt.Errorf("NodePublishVolume for ephemeral volume, attempt #%d: %v", i, err)
 						}
@@ -760,13 +761,21 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 				}
 
 				doall := func(withFlag bool) {
-					It("work", func() {
-						doit(withFlag, 1)
-					})
+					for _, fs := range []string{"default", "ext4", "xfs"} {
+						fsType := fs
+						if fsType == "default" {
+							fsType = ""
+						}
+						Context(fs+" FS", func() {
+							It("work", func() {
+								doit(withFlag, 1, fsType)
+							})
 
-					It("are idempotent", func() {
-						doit(withFlag, 10)
-					})
+							It("are idempotent", func() {
+								doit(withFlag, 10, fsType)
+							})
+						})
+					}
 				}
 
 				Context("with csi.storage.k8s.io/ephemeral", func() {
