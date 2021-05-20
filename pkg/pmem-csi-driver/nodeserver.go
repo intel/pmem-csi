@@ -174,7 +174,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 			return nil, err
 		}
 		srcPath = device.Path
-		mountFlags = append(mountFlags, "dax")
+		mountFlags = append(mountFlags, "dax=always")
 	} else {
 		// Validate parameters.
 		v, err := parameters.Parse(parameters.PersistentVolumeOrigin, req.GetVolumeContext())
@@ -526,7 +526,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		}
 	}
 
-	mountOptions = append(mountOptions, "dax")
+	mountOptions = append(mountOptions, "dax=always")
 
 	if err = ns.mount(device.Path, stagingtargetPath, mountOptions, false /* raw block */); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -630,6 +630,19 @@ func (ns *nodeServer) provisionDevice(device *pmdmanager.PmemDeviceInfo, fsType 
 		fsType = defaultFilesystem
 	}
 
+	// Check does devicepath already contain a filesystem?
+	existingFsType, err := determineFilesystemType(device.Path)
+	if err != nil {
+		return status.Error(codes.Internal, err.Error())
+	}
+	if existingFsType != "" {
+		// Is existing filesystem type same as requested?
+		if existingFsType == fsType {
+			klog.V(4).Infof("Skip mkfs as %v file system already exists on %v", existingFsType, device.Path)
+			return nil
+		}
+		return status.Error(codes.AlreadyExists, "File system with different type exists")
+	}
 	cmd := ""
 	var args []string
 	// hard-code block size to 4k to avoid smaller values and trouble to dax mount option
@@ -646,15 +659,7 @@ func (ns *nodeServer) provisionDevice(device *pmdmanager.PmemDeviceInfo, fsType 
 	}
 	output, err := pmemexec.RunCommand(cmd, args...)
 	if err != nil {
-		// If the filesystem is already mounted, then
-		// formatting it fails.  In that case we don't need to
-		// format and can ignore that error.  We could check
-		// for that ourselves in advance, but that would be
-		// extra code.
-		if strings.Contains(output, "contains a mounted filesystem") {
-			return nil
-		}
-		return fmt.Errorf("mkfs failed: %s", output)
+		return fmt.Errorf("mkfs failed: output:[%s] err:[%v]", output, err)
 	}
 
 	return nil
@@ -664,7 +669,7 @@ func (ns *nodeServer) provisionDevice(device *pmdmanager.PmemDeviceInfo, fsType 
 func (ns *nodeServer) mount(sourcePath, targetPath string, mountOptions []string, rawBlock bool) error {
 	notMnt, err := ns.mounter.IsLikelyNotMountPoint(targetPath)
 	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to determain if '%s' is a valid mount point: %s", targetPath, err.Error())
+		return fmt.Errorf("failed to determine if '%s' is a valid mount point: %s", targetPath, err.Error())
 	}
 	if !notMnt {
 		return nil
@@ -798,7 +803,9 @@ func findMountFlags(flags []string, findIn []string) bool {
 		}
 		found := false
 		for _, fIn := range findIn {
-			if f == fIn {
+			if f == "dax=always" && fIn == "dax" ||
+				f == "dax" && fIn == "dax=always" ||
+				f == fIn {
 				found = true
 				break
 			}
