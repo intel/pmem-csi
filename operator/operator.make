@@ -72,10 +72,11 @@ operator-generate-bundle: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) _work/k
         --kustomize-dir=$(MANIFESTS_DIR) --output-dir=$(BUNDLE_DIR)
 	$(PATCH_VERSIONS) $(BUNDLE_DIR)/manifests/pmem-csi-operator.clusterserviceversion.yaml
 ifdef REPLACES
-	@$(PATCH_REPLACES) $(OPERATOR_OUTPUT_DIR)/pmem-csi-operator.clusterserviceversion.yaml
+	@$(PATCH_REPLACES) $(BUNDLE_DIR)/manifests/pmem-csi-operator.clusterserviceversion.yaml
 endif
 	$(PATCH_DATE) $(BUNDLE_DIR)/manifests/pmem-csi-operator.clusterserviceversion.yaml
 	@sed -i -e "s;$(BUNDLE_DIR)/;;g"  -e "/scorecard/d" bundle.Dockerfile
+	@sed -i -e "/scorecard/d" $(BUNDLE_DIR)/metadata/annotations.yaml
 	@mv bundle.Dockerfile $(BUNDLE_DIR)
 	@make operator-validate-bundle
 
