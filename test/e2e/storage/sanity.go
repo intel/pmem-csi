@@ -21,6 +21,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"regexp"
@@ -31,7 +32,8 @@ import (
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
-	sanityutils "github.com/kubernetes-csi/csi-test/v3/utils"
+	"github.com/intel/pmem-csi/pkg/logger"
+	"github.com/intel/pmem-csi/pkg/logger/testinglogger"
 	"github.com/kubernetes-csi/csi-test/v4/pkg/sanity"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -49,6 +51,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
 
 	"github.com/intel/pmem-csi/test/e2e/deploy"
+	pmeme2epod "github.com/intel/pmem-csi/test/e2e/pod"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -616,29 +619,59 @@ fi
 				volumes []*csi.ListVolumesResponse_Entry
 			}
 			var (
-				nodes map[string]nodeClient
+				nodes  map[string]nodeClient
+				ctx    context.Context
+				cancel func()
 			)
 
 			BeforeEach(func() {
+				ctx, cancel = context.WithCancel(context.Background())
+				l := testinglogger.New(GinkgoT(0))
+				ctx = logger.Set(ctx, l)
+
 				// Worker nodes with PMEM.
 				nodes = make(map[string]nodeClient)
-				for i := 1; i < cluster.NumNodes(); i++ {
-					addr := cluster.NodeServiceAddress(i, deploy.SocatPort)
-					conn, err := sanityutils.Connect(addr, grpc.WithInsecure())
-					framework.ExpectNoError(err, "connect to socat instance on node #%d via %s", i, addr)
+
+				// Find socat pods.
+				pods, err := f.ClientSet.CoreV1().Pods("").List(ctx,
+					metav1.ListOptions{
+						LabelSelector: labels.FormatLabels(map[string]string{
+							"app.kubernetes.io/component": "node-testing",
+							"app.kubernetes.io/instance":  "pmem-csi.intel.com",
+						}),
+					})
+				framework.ExpectNoError(err, "list socat pods")
+				expectedPodNum := cluster.NumNodes() - 1
+				if len(pods.Items) != expectedPodNum {
+					framework.Failf("expected %d socat pods, only found %d:\n%v", expectedPodNum, len(pods.Items), pods.Items)
+				}
+
+				for _, pod := range pods.Items {
+					dialer := grpc.WithDialer(
+						// Dial timeout has to be ignored because the pod dialer does not support that
+						// because the underlying code doesn't support it.
+						// The address is already known.
+						func(_ string, _ time.Duration) (net.Conn, error) {
+							return pmeme2epod.NewDialer(f.ClientSet, f.ClientConfig()).DialContainerPort(ctx, l, pmeme2epod.Addr{
+								Namespace: pod.Namespace,
+								PodName:   pod.Name,
+								Port:      deploy.SocatPort,
+							})
+						})
+					conn, err := grpc.Dial(pod.Spec.NodeName, dialer, grpc.WithInsecure())
+					framework.ExpectNoError(err, "gRPC connection to socat instance on node %s", pod.Spec.NodeName)
 					node := nodeClient{
-						host: addr,
+						host: pod.Spec.NodeName,
 						conn: conn,
 						nc:   csi.NewNodeClient(conn),
 						cc:   csi.NewControllerClient(conn),
 					}
-					info, err := node.nc.NodeGetInfo(context.Background(), &csi.NodeGetInfoRequest{})
-					framework.ExpectNoError(err, "node name #%d", i+1)
-					initialVolumes, err := node.cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
-					framework.ExpectNoError(err, "list volumes on node #%d", i)
+					info, err := node.nc.NodeGetInfo(ctx, &csi.NodeGetInfoRequest{})
+					framework.ExpectNoError(err, "CSI node name for node %s", pod.Spec.NodeName)
+					initialVolumes, err := node.cc.ListVolumes(ctx, &csi.ListVolumesRequest{})
+					framework.ExpectNoError(err, "list volumes on node %s", pod.Spec.NodeName)
 					node.volumes = initialVolumes.Entries
 
-					//nodes = append(nodes, node)
 					nodes[info.NodeId] = node
 				}
 			})
@@ -647,6 +680,7 @@ fi
 				for _, node := range nodes {
 					node.conn.Close()
 				}
+				cancel()
 			})
 
 			It("supports persistent volumes", func() {
@@ -660,13 +694,13 @@ fi
 				// Node now should have one additional volume only one node,
 				// and its size should match the requested one.
 				for nodeName, node := range nodes {
-					currentVolumes, err := node.cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+					currentVolumes, err := node.cc.ListVolumes(ctx, &csi.ListVolumesRequest{})
 					framework.ExpectNoError(err, "list volumes on node %s", nodeName)
 					if nodeName == volNodeName {
 						Expect(len(currentVolumes.Entries)).To(Equal(len(node.volumes)+1), "one additional volume on node %s", nodeName)
 						for _, e := range currentVolumes.Entries {
 							if e.Volume.VolumeId == vol.VolumeId {
-								Expect(e.Volume.CapacityBytes).To(Equal(sizeInBytes), "additional volume size on node #%s(%s)", nodeName, node.host)
+								Expect(e.Volume.CapacityBytes).To(Equal(sizeInBytes), "additional volume size on node %s", nodeName)
 								break
 							}
 						}
@@ -689,12 +723,12 @@ fi
 				// Node now should have one additional volume only one node,
 				// and its size should match the requested one.
 				node := nodes[nodeID]
-				currentVolumes, err := node.cc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+				currentVolumes, err := node.cc.ListVolumes(ctx, &csi.ListVolumesRequest{})
 				framework.ExpectNoError(err, "list volumes on node %s", nodeID)
 				Expect(len(currentVolumes.Entries)).To(Equal(len(node.volumes)+1), "one additional volume on node %s", nodeID)
 				for _, e := range currentVolumes.Entries {
 					if e.Volume.VolumeId == vol.VolumeId {
-						Expect(e.Volume.CapacityBytes).To(Equal(sizeInBytes), "additional volume size on node #%s(%s)", nodeID, node.host)
+						Expect(e.Volume.CapacityBytes).To(Equal(sizeInBytes), "additional volume size on node %s", nodeID)
 						break
 					}
 				}
@@ -753,7 +787,7 @@ fi
 					published := false
 					var failedPublish, failedUnpublish error
 					for i := 0; i < repeatCalls; i++ {
-						_, err := nc.NodePublishVolume(context.Background(), &req)
+						_, err := nc.NodePublishVolume(ctx, &req)
 						if err == nil {
 							published = true
 							break
@@ -767,7 +801,7 @@ fi
 							TargetPath: targetPath,
 						}
 						for i := 0; i < repeatCalls; i++ {
-							_, err := nc.NodeUnpublishVolume(context.Background(), &req)
+							_, err := nc.NodeUnpublishVolume(ctx, &req)
 							if err != nil && failedUnpublish == nil {
 								failedUnpublish = fmt.Errorf("NodeUnpublishVolume for ephemeral volume, attempt #%d: %v", i, err)
 							}

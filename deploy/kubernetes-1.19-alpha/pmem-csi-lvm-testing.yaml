@@ -325,39 +325,6 @@ spec:
     app.kubernetes.io/name: pmem-csi-controller
     pmem-csi.intel.com/deployment: lvm-testing
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    pmem-csi.intel.com/deployment: lvm-testing
-  name: pmem-csi-intel-com-controller-testing
-  namespace: pmem-csi
-spec:
-  ports:
-  - port: 10002
-  selector:
-    app.kubernetes.io/instance: pmem-csi.intel.com
-    app.kubernetes.io/name: pmem-csi-controller
-    pmem-csi.intel.com/deployment: lvm-testing
-  type: NodePort
----
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    pmem-csi.intel.com/deployment: lvm-testing
-  name: pmem-csi-intel-com-metrics
-  namespace: pmem-csi
-spec:
-  ports:
-  - port: 10010
-    targetPort: 10010
-  selector:
-    app.kubernetes.io/instance: pmem-csi.intel.com
-    app.kubernetes.io/name: pmem-csi-controller
-    pmem-csi.intel.com/deployment: lvm-testing
-  type: NodePort
----
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:

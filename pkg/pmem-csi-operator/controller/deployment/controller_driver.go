@@ -387,19 +387,6 @@ var subObjectHandlers = map[string]redeployObject{
 			return nil
 		},
 	},
-	"metrics service": {
-		objType: reflect.TypeOf(&corev1.Service{}),
-		object: func(d *pmemCSIDeployment) client.Object {
-			return &corev1.Service{
-				TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-				ObjectMeta: d.getObjectMeta(d.MetricsServiceName(), false),
-			}
-		},
-		modify: func(d *pmemCSIDeployment, o client.Object) error {
-			d.getMetricsService(o.(*corev1.Service))
-			return nil
-		},
-	},
 	"CSIDriver": {
 		objType: reflect.TypeOf(&storagev1.CSIDriver{}),
 		object: func(d *pmemCSIDeployment) client.Object {
@@ -756,10 +743,6 @@ func (d *pmemCSIDeployment) getService(service *corev1.Service, t corev1.Service
 
 func (d *pmemCSIDeployment) getControllerService(service *corev1.Service) {
 	d.getService(service, corev1.ServiceTypeClusterIP, controllerServicePort)
-}
-
-func (d *pmemCSIDeployment) getMetricsService(service *corev1.Service) {
-	d.getService(service, corev1.ServiceTypeNodePort, controllerMetricsPort)
 }
 
 func (d *pmemCSIDeployment) getWebhooksRole(role *rbacv1.Role) {

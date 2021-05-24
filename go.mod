@@ -15,7 +15,6 @@ require (
 	github.com/googleapis/gnostic v0.5.4 // indirect
 	github.com/imdario/mergo v0.3.11 // indirect
 	github.com/kubernetes-csi/csi-lib-utils v0.9.1
-	github.com/kubernetes-csi/csi-test/v3 v3.1.1
 	github.com/kubernetes-csi/csi-test/v4 v4.2.0
 	github.com/miekg/dns v1.1.38 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect

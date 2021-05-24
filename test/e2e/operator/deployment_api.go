@@ -803,11 +803,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ControllerServiceName(), Namespace: d.Namespace},
 					}
 				},
-				"metrics service": func(dep *api.PmemCSIDeployment) runtime.Object {
-					return &corev1.Service{
-						ObjectMeta: metav1.ObjectMeta{Name: dep.MetricsServiceName(), Namespace: d.Namespace},
-					}
-				},
 				"webhooks role": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &rbacv1.Role{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksRoleName(), Namespace: d.Namespace},
@@ -929,22 +924,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 							obj.Spec.Template.Spec.Containers[i].Command = []string{"malformed", "options"}
 							break
 						}
-					}
-					return obj
-				},
-				"metrics service": func(dep *api.PmemCSIDeployment) runtime.Object {
-					obj := &corev1.Service{}
-					key := runtime.ObjectKey{Name: dep.MetricsServiceName(), Namespace: d.Namespace}
-					EventuallyWithOffset(1, func() error {
-						return client.Get(context.TODO(), key, obj)
-					}, "2m", "1s").ShouldNot(HaveOccurred(), "get metrics service set")
-					obj.Spec.Ports = []corev1.ServicePort{
-						{
-							Port: 1111,
-							TargetPort: intstr.IntOrString{
-								IntVal: 1111,
-							},
-						},
 					}
 					return obj
 				},
