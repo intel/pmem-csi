@@ -516,15 +516,13 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
                            testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}' | sed -e s/--*/-/g | tr . _ ) && \
                            make test_e2e TEST_E2E_REPORT_DIR=${WORKSPACE}/build/reports.tmp/\$testrun \
                                          TEST_E2E_SKIP=\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]@${skipIfPR}; fi) \
-                           ' |tee joblog-${BUILD_TAG}-test-${kubernetesVersion}.log |egrep 'Passed|FAIL:|^ERROR' 2>&1 \
+                           ' |tee joblog-${BUILD_TAG}-test-${kubernetesVersion}.log |egrep 'Passed|FAIL:|^ERROR' 2>&1\
            "
-    } catch (exc) {
-        echo "Handling exception, writing pod state and kubelet logs into joblog-${BUILD_TAG}-kubeletlogs-${kubernetesVersion}.log"
-        sh "_work/${env.CLUSTER}/ssh.0 kubectl get pods --all-namespaces -o wide > joblog-${BUILD_TAG}-kubeletlogs-${kubernetesVersion}.log"
-        sh "for cmd in `ls _work/${env.CLUSTER}/ssh.*`; do \$cmd sudo journalctl -u kubelet > joblog-${BUILD_TAG}-kubeletlogs-${kubernetesVersion}.log; done"
-        // regular error handling
-        throw exc
     } finally {
+        echo "Writing cluster state and kubelet logs into files."
+        sh "_work/${env.CLUSTER}/ssh.0 kubectl get nodes -o wide > joblog-${BUILD_TAG}-nodestate-${kubernetesVersion}.log"
+        sh "_work/${env.CLUSTER}/ssh.0 kubectl get pods --all-namespaces -o wide > joblog-${BUILD_TAG}-podstate-${kubernetesVersion}.log"
+        sh "for cmd in `ls _work/${env.CLUSTER}/ssh.*`; do \$cmd sudo journalctl -u kubelet >> joblog-${BUILD_TAG}-kubeletlogs-${kubernetesVersion}.log; done"
         // Each test run produces junit_*.xml files with testsuite name="PMEM E2E suite".
         // To make test names unique in the Jenkins UI, we rename that test suite per run,
         // mangle the <testcase name="..." classname="..."> such that
