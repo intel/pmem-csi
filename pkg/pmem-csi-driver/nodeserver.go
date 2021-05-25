@@ -666,18 +666,20 @@ func (ns *nodeServer) provisionDevice(device *pmdmanager.PmemDeviceInfo, fsType 
 	cmd := ""
 	var args []string
 	// hard-code block size to 4k to avoid smaller values and trouble to dax mount option
-	if fsType == "ext4" {
+	switch fsType {
+	case "ext4":
 		cmd = "mkfs.ext4"
 		args = []string{"-b", "4096", "-E", "stride=512,stripe_width=512", "-F", device.Path}
-	} else if fsType == "xfs" {
+	case "xfs":
 		cmd = "mkfs.xfs"
 		// reflink=0: reflink and DAX are mutually exclusive
 		// (http://man7.org/linux/man-pages/man8/mkfs.xfs.8.html).
 		// su=2m,sw=1: use 2MB-aligned and -sized block allocations
 		args = []string{"-b", "size=4096", "-m", "reflink=0", "-d", "su=2m,sw=1", "-f", device.Path}
-	} else {
+	default:
 		return fmt.Errorf("Unsupported filesystem '%s'. Supported filesystems types: 'xfs', 'ext4'", fsType)
 	}
+
 	output, err := pmemexec.RunCommand(cmd, args...)
 	if err != nil {
 		return fmt.Errorf("mkfs failed: output:[%s] err:[%v]", output, err)
