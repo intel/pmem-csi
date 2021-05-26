@@ -120,6 +120,7 @@ spec:
   replicas: 1
   selector:
     matchLabels:
+      app: pmem-csi-operator
       name: pmem-csi-operator
   template:
     metadata:
