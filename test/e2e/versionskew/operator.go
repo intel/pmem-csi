@@ -222,7 +222,7 @@ var _ = deploy.DescribeForSome("versionskew", func(d *deploy.Deployment) bool {
 		testVersion(base, "downgrade")
 	})
 
-	It("upgrade [Slow]", func() {
+	XIt("upgrade [Slow]", func() {
 		// First remove existing operator deployment
 		// This is mandatory in case of OLM. Otherwise later downgrade
 		// step might results in operator upgrade by the OLM.
