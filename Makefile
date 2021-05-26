@@ -181,7 +181,6 @@ KUSTOMIZE += $(subst kubernetes-base,kubernetes-1.19-alpha,$(subst X.XX,1.19-alp
 KUSTOMIZE += deploy/common/pmem-storageclass-default.yaml=deploy/kustomize/storageclass
 KUSTOMIZE += deploy/common/pmem-storageclass-ext4.yaml=deploy/kustomize/storageclass-ext4
 KUSTOMIZE += deploy/common/pmem-storageclass-xfs.yaml=deploy/kustomize/storageclass-xfs
-KUSTOMIZE += deploy/common/pmem-storageclass-cache.yaml=deploy/kustomize/storageclass-cache
 KUSTOMIZE += deploy/common/pmem-storageclass-late-binding.yaml=deploy/kustomize/storageclass-late-binding
 KUSTOMIZE += deploy/operator/pmem-csi-operator.yaml=deploy/kustomize/operator
 
