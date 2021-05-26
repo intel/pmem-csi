@@ -5,6 +5,8 @@ on:
     branches:
         - devel
         - release-0.7
+        - release-0.8
+        - release-0.9
 
 jobs:
   build:
@@ -23,16 +25,18 @@ jobs:
       run: |
         mkdir $HOME/output
         touch $HOME/output/.nojekyll
-        # This is the static index page for https://intel.github.io/pmem-csi,
-        # copied from the "devel" branch.
-        cp docs/html/index2.html $HOME/output/index.html
+        # https://intel.github.io/pmem-csi/ redirects to the latest stable release.
+        echo "<meta http-equiv=\"refresh\" content=\"0; URL='0.9/index.html'\" />" >"$HOME/output/index.html"
+        # "latest" used to be what "devel" is now, i.e. the documentation for the "devel"
+        # branch. Now it points to the latest stable release.
+        ln -s 0.9 "$HOME/output/latest"
     - name: Build latest
       run: |
         GITHUB_SHA=$(git rev-parse HEAD)
         export GITHUB_SHA
         rm -rf _work/venv
         make vhtml
-        mv _output/html $HOME/output/latest
+        mv _output/html $HOME/output/devel
     - uses: actions/checkout@v2
       with:
         ref: release-0.7
