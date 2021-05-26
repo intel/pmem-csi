@@ -16,10 +16,10 @@ and bug fixes. Older releases are no longer supported.
 
 Documentation is part of the source code for each release and also
 available in rendered form for easier reading:
-- [latest documentation, in development](https://intel.github.io/pmem-csi/latest/)
-- [latest 0.7.x release](https://intel.github.io/pmem-csi/0.7/)
-- [latest 0.8.x release](https://intel.github.io/pmem-csi/0.8/)
 - [latest 0.9.x release](https://intel.github.io/pmem-csi/0.9/)
+- [latest 0.8.x release](https://intel.github.io/pmem-csi/0.8/)
+- [latest 0.7.x release](https://intel.github.io/pmem-csi/0.7/)
+- [latest documentation, in development](https://intel.github.io/pmem-csi/devel/)
 
 ## Supported Kubernetes versions
 
