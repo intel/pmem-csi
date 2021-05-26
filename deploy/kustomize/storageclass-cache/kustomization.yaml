@@ -1,7 +1,0 @@
-nameSuffix: -cache
-
-bases:
-- ../storageclass
-
-patchesStrategicMerge:
-- cache.yaml

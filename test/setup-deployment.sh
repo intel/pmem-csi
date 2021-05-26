@@ -33,7 +33,6 @@ DEPLOY=(
     pmem-storageclass-ext4-kata.yaml
     pmem-storageclass-xfs.yaml
     pmem-storageclass-xfs-kata.yaml
-    pmem-storageclass-cache.yaml
     pmem-storageclass-late-binding.yaml
     scheduler
     webhook
