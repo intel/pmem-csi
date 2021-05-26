@@ -2,6 +2,7 @@
 import json
 import os
 import sys
+import subprocess
 from os import getenv
 #support for modified code block
 from pygments.lexers.shell import BashSessionLexer
@@ -28,6 +29,15 @@ with open('conf.json') as jsonFile:
 
 for item in conf:
     globals()[item] = (conf[item])
+
+# Dynamically determine the major version based on the branch name:
+# vx.y for release-x.y, "devel" for everything else
+branch = subprocess.check_output("git rev-parse --abbrev-ref HEAD".split(), encoding="utf-8")
+if branch.startswith("release-"):
+    version = "v" + branch[len("release-"):].strip()
+else:
+    version = "devel"
+release = version
 
 sphinx_md_useGitHubURL = True
 baseBranch = "devel"
