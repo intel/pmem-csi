@@ -119,7 +119,6 @@ metadata:
 spec:
   selector:
     name: pmem-csi-operator
-    app: pmem-csi-operator
   ports:
   - port: 8080
     targetPort: 8080
@@ -134,7 +133,6 @@ spec:
   selector:
     matchLabels:
       name: pmem-csi-operator
-      app: pmem-csi-operator
   template:
     metadata:
       labels:
