@@ -78,6 +78,7 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 								pod.Namespace, pod.Name, port.ContainerPort)
 							resp, err := client.Get(url)
 							framework.ExpectNoError(err, "GET failed")
+							Expect(resp.Body).NotTo(BeNil(), "have response body")
 							data, err := ioutil.ReadAll(resp.Body)
 							framework.ExpectNoError(err, "read GET response")
 							name := pod.Name + "/" + container.Name
