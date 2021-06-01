@@ -206,7 +206,7 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 	asked := capacity.GetRequiredBytes()
 	if vol := cs.getVolumeByName(volumeName); vol != nil {
 		// Check if the size of existing volume can cover the new request
-		klog.V(4).Infof("Node CreateVolume: volume exists, name:%q id:%s size:%v", volumeName, vol.ID, vol.Size)
+		klog.V(4).Infof("CreateVolume: volume exists, name:%q id:%s size:%v", volumeName, vol.ID, vol.Size)
 		if vol.Size < asked {
 			statusErr = status.Error(codes.AlreadyExists, fmt.Sprintf("smaller volume with the same name %q already exists", volumeName))
 			return
@@ -218,8 +218,8 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 		return
 	}
 
-	klog.V(4).Infof("Node CreateVolume: Name:%q req.Required:%v req.Limit:%v", volumeName, asked, capacity.GetLimitBytes())
-	volumeID = generateVolumeID("Node CreateVolume", volumeName)
+	klog.V(4).Infof("CreateVolume: Name:%q req.Required:%v req.Limit:%v", volumeName, asked, capacity.GetLimitBytes())
+	volumeID = generateVolumeID("CreateVolume", volumeName)
 	// Check do we have entry with newly generated VolumeID already
 	if vol := cs.getVolumeByID(volumeID); vol != nil {
 		// if we have, that has to be VolumeID collision, because above we checked
@@ -245,7 +245,7 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 		// Writing this state after creating the volume has the risk that
 		// we leak the volume if we don't get around to storing the state.
 		if err := cs.sm.Create(volumeID, vol); err != nil {
-			statusErr = status.Error(codes.Internal, "Node CreateVolume: "+err.Error())
+			statusErr = status.Error(codes.Internal, "store state: "+err.Error())
 			return
 		}
 		defer func() {
@@ -269,7 +269,7 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 		if errors.Is(err, pmemerr.NotEnoughSpace) {
 			code = codes.ResourceExhausted
 		}
-		statusErr = status.Errorf(code, "Node CreateVolume: device creation failed: %v", err)
+		statusErr = status.Errorf(code, "device creation failed: %v", err)
 		return
 	}
 	// TODO(?): determine and return actual size here?
@@ -278,7 +278,7 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 	cs.mutex.Lock()
 	defer cs.mutex.Unlock()
 	cs.pmemVolumes[volumeID] = vol
-	klog.V(3).Infof("Node CreateVolume: Record new volume as %v", *vol)
+	klog.V(3).Infof("CreateVolume: Record new volume as %v", *vol)
 
 	return
 }
