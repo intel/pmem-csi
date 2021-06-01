@@ -201,7 +201,10 @@ pipeline {
                     }
                 }
                 stage('1.18') {
-                    when { not { changeRequest() } }
+                    when {
+		        beforeAgent true
+		        not { changeRequest() }
+                    }
                     options {
                         timeout(time: 540, unit: "MINUTES")
                     }
