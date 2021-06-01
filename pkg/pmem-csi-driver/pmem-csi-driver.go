@@ -288,7 +288,7 @@ func (csid *csiDriver) Run() error {
 		ns := NewNodeServer(cs, filepath.Clean(csid.cfg.StateBasePath)+"/mount")
 
 		services := []grpcserver.Service{ids, ns, cs}
-		if err := s.Start(csid.cfg.Endpoint, nil, cmm, services...); err != nil {
+		if err := s.Start(csid.cfg.Endpoint, csid.cfg.NodeID, nil, cmm, services...); err != nil {
 			return err
 		}
 

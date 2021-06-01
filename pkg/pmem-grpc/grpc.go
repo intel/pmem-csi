@@ -1,6 +1,7 @@
 package pmemgrpc
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -17,6 +18,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/resolver"
+	"google.golang.org/grpc/status"
 	"k8s.io/klog/v2"
 
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
@@ -54,8 +56,9 @@ func Connect(endpoint string, tlsConfig *tls.Config, dialOptions ...grpc.DialOpt
 	return grpc.Dial(address, dialOptions...)
 }
 
-//NewServer is a helper function to start a grpc server at given endpoint and uses provided tlsConfig
-func NewServer(endpoint string, tlsConfig *tls.Config, csiMetricsManager metrics.CSIMetricsManager, opts ...grpc.ServerOption) (*grpc.Server, net.Listener, error) {
+// NewServer is a helper function to start a grpc server at the given endpoint.
+// The error prefix is added to all error messages if not empty.
+func NewServer(endpoint, errorPrefix string, tlsConfig *tls.Config, csiMetricsManager metrics.CSIMetricsManager, opts ...grpc.ServerOption) (*grpc.Server, net.Listener, error) {
 	proto, addr, err := parseEndpoint(endpoint)
 	if err != nil {
 		return nil, nil, err
@@ -74,6 +77,22 @@ func NewServer(endpoint string, tlsConfig *tls.Config, csiMetricsManager metrics
 
 	interceptors := []grpc.UnaryServerInterceptor{
 		pmemcommon.LogGRPCServer,
+	}
+	if errorPrefix != "" {
+		interceptors = append(interceptors,
+			func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+				resp, err := handler(ctx, req)
+				if err != nil {
+					// We loose any additional details here that might be attached
+					// to the status, but that's okay because we shouldn't have any.
+					originalStatus := status.Convert(err)
+					extendedStatus := status.New(originalStatus.Code(),
+						errorPrefix+": "+originalStatus.Message())
+					// Return the extended error.
+					return resp, extendedStatus.Err()
+				}
+				return resp, err
+			})
 	}
 	if csiMetricsManager != nil {
 		interceptors = append(interceptors,

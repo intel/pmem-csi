@@ -786,6 +786,17 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 					doall(false)
 				})
 			})
+
+			It("reports errors properly", func() {
+				for nodeName, node := range nodes {
+					_, err := node.cc.DeleteVolume(context.Background(), &csi.DeleteVolumeRequest{})
+					Expect(err).ToNot(BeNil(), "DeleteVolume with empty volume ID did not fail on node %s", nodeName)
+					Expect(err.Error()).To(ContainSubstring(nodeName+": "), "errors should contain node name")
+					status, ok := status.FromError(err)
+					Expect(ok).To(BeTrue(), "error type %T should have contained a gRPC status: %v", err, err)
+					Expect(status.Code().String()).To(Equal(codes.InvalidArgument.String()), "status code should be InvalidArgument")
+				}
+			})
 		})
 	})
 })
