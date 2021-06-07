@@ -544,7 +544,7 @@ pmem-csi-intel-com-controller-0   2/2     Running   0          3m15s
 pmem-csi-intel-com-node-fbmpg     2/2     Running   0          3m15s
 ```
 
-#### Volume parameters
+### Volume parameters
 
 A Kubernetes cluster administrators must define some volume parameters
 like the filesystem type in [storage
