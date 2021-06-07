@@ -261,16 +261,14 @@ const (
 	DefaultMutatePods = MutatePodsTry
 
 	// The sidecar versions must be kept in sync with the
-	// deploy/kustomize YAML files!
-	defaultProvisionerImageName = "k8s.gcr.io/sig-storage/csi-provisioner"
-	defaultProvisionerImageTag  = "v2.1.1"
-	// DefaultProvisionerImage default external provisioner image to use
-	DefaultProvisionerImage = defaultProvisionerImageName + ":" + defaultProvisionerImageTag
+	// deploy/kustomize YAML files! hack/bump-image-versions.sh
+	// can be used to update both.
 
-	defaultRegistrarImageName = "k8s.gcr.io/sig-storage/csi-node-driver-registrar"
-	defaultRegistrarImageTag  = "v2.1.0"
+	// DefaultProvisionerImage default external provisioner image to use
+	DefaultProvisionerImage = "k8s.gcr.io/sig-storage/csi-provisioner:v2.2.1"
+
 	// DefaultRegistrarImage default node driver registrar image to use
-	DefaultRegistrarImage = defaultRegistrarImageName + ":" + defaultRegistrarImageTag
+	DefaultRegistrarImage = "k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.2.0"
 
 	// Below resource requests and limits are derived(with minor adjustments) from
 	// recommendations reported by VirtualPodAutoscaler(LowerBound -> Requests and UpperBound -> Limits)

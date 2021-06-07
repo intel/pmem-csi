@@ -501,7 +501,7 @@ spec:
         env:
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
-        image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.1.0
+        image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.2.0
         imagePullPolicy: IfNotPresent
         name: driver-registrar
         resources:
@@ -532,7 +532,7 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: spec.nodeName
-        image: k8s.gcr.io/sig-storage/csi-provisioner:v2.1.1
+        image: k8s.gcr.io/sig-storage/csi-provisioner:v2.2.1
         imagePullPolicy: IfNotPresent
         name: external-provisioner
         ports:
