@@ -25,9 +25,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
+	e2eskipper "k8s.io/kubernetes/test/e2e/framework/skipper"
 	"k8s.io/kubernetes/test/e2e/framework/volume"
 	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
 
+	"github.com/intel/pmem-csi/test/e2e/deploy"
 	e2edriver "github.com/intel/pmem-csi/test/e2e/driver"
 	"github.com/intel/pmem-csi/test/e2e/ephemeral"
 
@@ -87,6 +89,14 @@ func (p *schedulerTestSuite) DefineTests(driver storageframework.TestDriver, pat
 
 	init := func() {
 		l = local{}
+
+		c, err := deploy.NewCluster(f.ClientSet, f.DynamicClient, f.ClientConfig())
+		framework.ExpectNoError(err, "create cluster object")
+		d, err := deploy.FindDeployment(c)
+		framework.ExpectNoError(err, "find PMEM-CSI deployment")
+		if d.StorageCapacitySupported(f.ClientConfig()) {
+			e2eskipper.Skipf("storage capacity tracking is enabled, not using scheduler extensions")
+		}
 
 		// Now do the more expensive test initialization.
 		l.config, l.testCleanup = driver.PrepareTest(f)

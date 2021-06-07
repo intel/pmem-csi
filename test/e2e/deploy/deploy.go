@@ -31,12 +31,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2/klogr"
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
+	"github.com/intel/pmem-csi/pkg/k8sutil"
 	"github.com/intel/pmem-csi/test/e2e/pod"
 	testconfig "github.com/intel/pmem-csi/test/test-config"
 
@@ -215,8 +217,8 @@ func WaitForPMEMDriver(c *Cluster, d *Deployment) (metricsURL string) {
 			}
 			version = *label.Value
 
-			switch d.Version {
-			case "0.7", "0.8":
+			switch {
+			case d.Version == "0.7" || d.Version == "0.8":
 				// With the older, centralized provisioning we
 				// can also check that the controller knows
 				// about all nodes.
@@ -233,7 +235,7 @@ func WaitForPMEMDriver(c *Cluster, d *Deployment) (metricsURL string) {
 				if actualNodes != c.NumNodes()-1 {
 					return fmt.Errorf("only %d of %d nodes have registered", actualNodes, c.NumNodes()-1)
 				}
-			default:
+			case d.Version == "0.9" || !d.StorageCapacitySupported(c.cfg):
 				// It is possible that we just
 				// (re)configured the mutating pod
 				// webhook. We must be sure that
@@ -283,6 +285,10 @@ func WaitForPMEMDriver(c *Cluster, d *Deployment) (metricsURL string) {
 				if newCount == oldCount {
 					return fmt.Errorf("mutating webhook was not called for pod %q, request count still %d", pod.Name, oldCount)
 				}
+			default:
+				// Nothing to wait for. We could check for CSIStorageCapacity objects, but those
+				// are not needed yet when starting a test. The scheduler will wait for them by
+				// itself.
 			}
 		}
 
@@ -768,6 +774,14 @@ func (d Deployment) Name() string {
 func (d Deployment) Label() string {
 	d.Version = ""
 	return d.Name()
+}
+
+// StorageCapacitySupported checks that the v1beta1 CSIStorageCapacity API is supported.
+// It only checks the Kubernetes version.
+func (d *Deployment) StorageCapacitySupported(cfg *rest.Config) bool {
+	ver, err := k8sutil.GetKubernetesVersion(cfg)
+	framework.ExpectNoError(err, "check Kubernetes version")
+	return ver.Compare(1, 21) >= 0
 }
 
 // FindDeployment checks whether there is a PMEM-CSI driver and/or

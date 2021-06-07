@@ -173,7 +173,7 @@ fi
 : ${TEST_FEATURE_GATES:=\
 $(case ${TEST_KUBERNETES_VERSION} in 1.1[6-9]) echo 'EndpointSlice=false,';; esac)\
 $(case ${TEST_KUBERNETES_VERSION} in 1.1[8-9]) echo 'EndpointSliceProxying=false,';; esac)\
-$(case ${TEST_KUBERNETES_VERSION} in 1.19 | 1.20) echo 'CSIStorageCapacity=true,GenericEphemeralVolume=true,';; esac)\
+$(case ${TEST_KUBERNETES_VERSION} in 1.19 | 1.20) echo 'GenericEphemeralVolume=true,';; esac)\
 }
 
 # If non-empty, the version of Kata Containers which is to be installed

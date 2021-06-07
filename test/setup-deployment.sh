@@ -34,8 +34,6 @@ DEPLOY=(
     pmem-storageclass-xfs.yaml
     pmem-storageclass-xfs-kata.yaml
     pmem-storageclass-late-binding.yaml
-    scheduler
-    webhook
 )
 echo "INFO: deploying from ${DEPLOYMENT_DIRECTORY}/${TEST_DEVICEMODE}${deployment_suffix}"
 
@@ -43,12 +41,9 @@ echo "INFO: deploying from ${DEPLOYMENT_DIRECTORY}/${TEST_DEVICEMODE}${deploymen
 PATH="${REPO_DIRECTORY}/_work/bin:$PATH" KUBECTL="${KUBECTL}" ${TEST_DIRECTORY}/setup-ca-kubernetes.sh
 
 case "$KUBERNETES_VERSION" in
-    1.1[01234])
-        # We cannot exclude the PMEM-CSI pods from the webhook because objectSelector
-        # was only added in 1.15. Instead, we exclude the entire "TEST_DRIVER_NAMESPACE" namespace.
-        # This means our normal test applications also don't use it, but our normal
-        # instructions for checking that PMEM-CSI works still apply.
-        ${KUBECTL} label --overwrite ns ${TEST_DRIVER_NAMESPACE} pmem-csi.intel.com/webhook=ignore
+    1.19|1.20)
+        # Enable scheduler extensions. Not needed on >= 1.21.
+        DEPLOY+=(scheduler webhook)
         ;;
 esac
 
