@@ -154,7 +154,7 @@ fi
 # is installed instead of the latest one. Ignored when
 # using Clear Linux as OS because with Clear Linux we have
 # to use the Kubernetes version that ships with it.
-: ${TEST_KUBERNETES_VERSION:=1.20}
+: ${TEST_KUBERNETES_VERSION:=1.21}
 
 # Can be used to pick one of potentially severally of the
 # pre-generated deploy/kubernetes-<version><flavor> deployment

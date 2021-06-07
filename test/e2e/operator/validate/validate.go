@@ -365,6 +365,9 @@ Service:
     clusterIP: ignore
     clusterIPs: ignore # since k8s v1.20
     externalTrafficPolicy: Cluster
+    ipFamilies:
+    - IPv4
+    ipFamilyPolicy: SingleStack
     ports:
       protocol: TCP
       nodePort: ignore
@@ -382,6 +385,7 @@ CSIDriver:
   spec:
     storageCapacity: false
     fsGroupPolicy: ignore # currently PMEM-CSI driver does not support fsGroupPolicy
+    requiresRepublish: false
 MutatingWebhookConfiguration:
   webhooks:
     clientConfig:

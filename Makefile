@@ -167,9 +167,9 @@ KUSTOMIZE_KUBERNETES_OUTPUT = \
     deploy/kubernetes-X.XX/pmem-csi-lvm-testing.yaml=deploy/kustomize/kubernetes-base-lvm-coverage \
 
 KUSTOMIZE_KUBERNETES_VERSIONS = \
-    1.18 \
     1.19 \
     1.20 \
+    1.21
 
 KUSTOMIZE += $(foreach version,$(KUSTOMIZE_KUBERNETES_VERSIONS),$(subst X.XX,$(version),$(KUSTOMIZE_KUBERNETES_OUTPUT)))
 
