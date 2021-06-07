@@ -65,20 +65,20 @@ func (fs *fileState) Create(id string, data interface{}) error {
 	// Create new file for synchronous writes
 	fp, err := os.OpenFile(file, os.O_WRONLY|os.O_SYNC|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
-		return fmt.Errorf("file-state: failed to create metadata storage file %q: %w", file, err)
+		return fmt.Errorf("failed to create state file: %w", err)
 	}
 
 	if err := json.NewEncoder(fp).Encode(data); err != nil {
 		// cleanup file entry before returning error
 		fp.Close() //nolint: errcheck, gosec
 		if e := os.Remove(file); e != nil {
-			klog.Warningf("file-state: fail to remove file %s: %s", file, e.Error())
+			klog.Warningf("file-state: failed to remove state file: %v", e)
 		}
-		return fmt.Errorf("file-state: failed to encode metadata: %w", err)
+		return fmt.Errorf("failed to encode metadata: %w", err)
 	}
 
 	if err := fp.Close(); err != nil {
-		return fmt.Errorf("file-state: failed to close metadata storage file %q: %w", file, err)
+		return fmt.Errorf("failed to close state file: %w", err)
 	}
 
 	return fs.syncStateDir()
@@ -91,7 +91,7 @@ func (fs *fileState) Delete(id string) error {
 
 	file := path.Join(fs.location, id+".json")
 	if err := os.Remove(file); err != nil && err != os.ErrNotExist {
-		return fmt.Errorf("file-state: failed to delete file %q: %w", file, err)
+		return fmt.Errorf("failed to delete state file: %w", err)
 	}
 
 	return fs.syncStateDir()
@@ -108,7 +108,7 @@ func (fs *fileState) GetAll() ([]string, error) {
 	files, err := ioutil.ReadDir(fs.location)
 	fs.stateDirLock.Unlock()
 	if err != nil {
-		return nil, fmt.Errorf("file-state: failed to read metadata from %q: %w", fs.location, err)
+		return nil, fmt.Errorf("failed to read metadata from %q: %w", fs.location, err)
 	}
 
 	ids := []string{}
@@ -131,7 +131,7 @@ func ensureLocation(directory string) error {
 			err = os.Mkdir(directory, 0750)
 		}
 	} else if !info.IsDir() {
-		err = fmt.Errorf("State location(%s) must be a directory", directory)
+		err = fmt.Errorf("state location %q must be a directory", directory)
 	}
 
 	return err
@@ -143,12 +143,12 @@ func (fs *fileState) readFileData(file string, dataPtr interface{}) error {
 
 	fp, err := os.OpenFile(file, os.O_RDONLY|os.O_SYNC, 0) //nolint: gosec
 	if err != nil {
-		return fmt.Errorf("file-state: failed to open file %q: %w", file, err)
+		return fmt.Errorf("failed to open state file: %w", err)
 	}
 	defer fp.Close() //nolint: errcheck
 
 	if err := json.NewDecoder(fp).Decode(dataPtr); err != nil {
-		return fmt.Errorf("file-state: failed to decode metadata from file %q: %w", file, err)
+		return fmt.Errorf("failed to decode metadata from file %q: %w", file, err)
 	}
 
 	return nil
@@ -160,12 +160,12 @@ func (fs *fileState) syncStateDir() error {
 	defer fs.stateDirLock.Unlock()
 
 	if fp, err := os.Open(fs.location); err != nil {
-		rErr = fmt.Errorf("file-state: failed to open state directory for syncing: %w", err)
+		rErr = fmt.Errorf("failed to open state directory for syncing: %w", err)
 	} else if err := fp.Sync(); err != nil {
 		fp.Close() //nolint: errcheck
-		rErr = fmt.Errorf("file-state: fsync failure on state directory: %w", err)
+		rErr = fmt.Errorf("fsync failure on state directory: %w", err)
 	} else if err := fp.Close(); err != nil {
-		rErr = fmt.Errorf("file-state: failed to close state directory after sync: %w", err)
+		rErr = fmt.Errorf("failed to close state directory after sync: %w", err)
 	}
 
 	return rErr
