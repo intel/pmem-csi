@@ -571,10 +571,10 @@ func RemoveObjects(c *Cluster, deployment *Deployment) error {
 			}
 		}
 
-		if list, err := c.cs.AdmissionregistrationV1beta1().MutatingWebhookConfigurations().List(context.Background(), filter); !failure(err) {
+		if list, err := c.cs.AdmissionregistrationV1().MutatingWebhookConfigurations().List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, object, func() error {
-					return c.cs.AdmissionregistrationV1beta1().MutatingWebhookConfigurations().Delete(context.Background(), object.Name, metav1.DeleteOptions{})
+					return c.cs.AdmissionregistrationV1().MutatingWebhookConfigurations().Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
