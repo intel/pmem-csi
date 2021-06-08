@@ -1432,8 +1432,6 @@ pmem_csi_node_operations_seconds_count{method_name="/csi.v1.Controller/CreateVol
 
 ## PMEM-CSI Deployment CRD
 
-TODO update operator
-
 `PmemCSIDeployment` is a cluster-scoped Kubernetes resource in the
 `pmem-csi.intel.com` API group. It describes how a PMEM-CSI driver
 instance is to be created.
