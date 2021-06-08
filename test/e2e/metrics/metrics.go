@@ -78,7 +78,13 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 								pod.Namespace, pod.Name, port.ContainerPort)
 							resp, err := client.Get(url)
 							framework.ExpectNoError(err, "GET failed")
-							Expect(resp.Body).NotTo(BeNil(), "have response body")
+							// When wrapped with InterceptGomegaFailures, err == nil doesn't
+							// cause the function to abort. We have to do that ourselves before
+							// using resp to avoid a panic.
+							// https://github.com/onsi/gomega/issues/198#issuecomment-856630787
+							if err != nil {
+								return
+							}
 							data, err := ioutil.ReadAll(resp.Body)
 							framework.ExpectNoError(err, "read GET response")
 							name := pod.Name + "/" + container.Name
