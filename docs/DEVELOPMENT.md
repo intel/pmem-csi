@@ -350,7 +350,6 @@ Two diagrams are generated using the
 [plantuml program](http://plantuml.com/).
 Source files:
 - [source file for regular sequence](/docs/diagrams/sequence.wsd)
-- [source file for cache sequence](/docs/diagrams/sequence-cache.wsd)
 
 The PNG files are committed as repository elements in docs/images/sequence/.
 
