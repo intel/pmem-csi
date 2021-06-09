@@ -287,6 +287,15 @@ func CreatePod(
 	ns := f.Namespace.Name
 	podClient := f.PodClientNS(ns)
 	createdPod := podClient.Create(pod)
+	defer func() {
+		if r := recover(); r != nil {
+			// Delete pod before raising the panic again,
+			// because the caller will not do it when this
+			// function doesn't return normally.
+			DeletePod(f, createdPod)
+			panic(r)
+		}
+	}()
 	podErr := e2epod.WaitForPodRunningInNamespace(f.ClientSet, createdPod)
 	framework.ExpectNoError(podErr, "running pod")
 
