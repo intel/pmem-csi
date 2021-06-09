@@ -45,13 +45,13 @@ COPY --from=build python3_100.0_all.deb /var/cache/python3_100.0_all.deb
 # xfsprogs, e2fsprogs - formating filesystems
 # lvm2 - volume management
 # ndctl - pulls in the necessary library, useful by itself
-# fio - only included in testing images
+# parted - for Kata Containers support
 RUN echo 'deb http://ftp.debian.org/debian buster-backports main' > /etc/apt/sources.list.d/buster-backports.list
 RUN echo 'deb-src http://ftp.debian.org/debian buster-backports main' >> /etc/apt/sources.list.d/buster-backports.list
 RUN ${APT_GET} update && \
     mkdir -p /usr/local/share && \
     dpkg -i /var/cache/python3_100.0_all.deb && \
-    bash -c 'set -o pipefail; ${APT_GET} install -y --no-install-recommends file xfsprogs e2fsprogs lvm2 libndctl-dev/buster-backports ndctl/buster-backports \
+    bash -c 'set -o pipefail; ${APT_GET} install -y --no-install-recommends file xfsprogs e2fsprogs lvm2 libndctl-dev/buster-backports ndctl/buster-backports parted \
        | tee --append /usr/local/share/package-install.log' && \
     rm -rf /var/cache/*
 
