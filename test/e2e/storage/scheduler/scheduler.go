@@ -26,8 +26,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"k8s.io/kubernetes/test/e2e/framework/volume"
-	"k8s.io/kubernetes/test/e2e/storage/testpatterns"
-	"k8s.io/kubernetes/test/e2e/storage/testsuites"
+	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
 
 	e2edriver "github.com/intel/pmem-csi/test/e2e/driver"
 	"github.com/intel/pmem-csi/test/e2e/ephemeral"
@@ -37,51 +36,51 @@ import (
 )
 
 type schedulerTestSuite struct {
-	tsInfo testsuites.TestSuiteInfo
+	tsInfo storageframework.TestSuiteInfo
 }
 
-var _ testsuites.TestSuite = &schedulerTestSuite{}
+var _ storageframework.TestSuite = &schedulerTestSuite{}
 
 // InitSchedulerTestSuite returns a test suite which verifies that the scheduler extender and
 // webhook work.
-func InitSchedulerTestSuite() testsuites.TestSuite {
+func InitSchedulerTestSuite() storageframework.TestSuite {
 	// We test with an ephemeral inline volume and a PVC with late
 	// binding.
-	lateBinding := testpatterns.DefaultFsDynamicPV
+	lateBinding := storageframework.DefaultFsDynamicPV
 	lateBinding.Name = "Dynamic PV with late binding"
 	lateBinding.BindingMode = storagev1.VolumeBindingWaitForFirstConsumer
 
 	suite := &schedulerTestSuite{
-		tsInfo: testsuites.TestSuiteInfo{
+		tsInfo: storageframework.TestSuiteInfo{
 			Name: "scheduler",
-			TestPatterns: []testpatterns.TestPattern{
+			TestPatterns: []storageframework.TestPattern{
 				lateBinding,
 			},
 		},
 	}
 	if ephemeral.Supported {
 		suite.tsInfo.TestPatterns = append(suite.tsInfo.TestPatterns,
-			testpatterns.DefaultFsCSIEphemeralVolume,
+			storageframework.DefaultFsCSIEphemeralVolume,
 		)
 	}
 	return suite
 }
 
-func (p *schedulerTestSuite) GetTestSuiteInfo() testsuites.TestSuiteInfo {
+func (p *schedulerTestSuite) GetTestSuiteInfo() storageframework.TestSuiteInfo {
 	return p.tsInfo
 }
 
-func (p *schedulerTestSuite) SkipRedundantSuite(driver testsuites.TestDriver, pattern testpatterns.TestPattern) {
+func (p *schedulerTestSuite) SkipUnsupportedTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) {
 }
 
 type local struct {
-	config      *testsuites.PerTestConfig
+	config      *storageframework.PerTestConfig
 	testCleanup func()
 
-	resource *testsuites.VolumeResource
+	resource *storageframework.VolumeResource
 }
 
-func (p *schedulerTestSuite) DefineTests(driver testsuites.TestDriver, pattern testpatterns.TestPattern) {
+func (p *schedulerTestSuite) DefineTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) {
 	var l local
 
 	f := framework.NewDefaultFramework("scheduler")
@@ -91,7 +90,7 @@ func (p *schedulerTestSuite) DefineTests(driver testsuites.TestDriver, pattern t
 
 		// Now do the more expensive test initialization.
 		l.config, l.testCleanup = driver.PrepareTest(f)
-		l.resource = testsuites.CreateVolumeResource(driver, l.config, pattern, volume.SizeRange{})
+		l.resource = storageframework.CreateVolumeResource(driver, l.config, pattern, volume.SizeRange{})
 	}
 
 	cleanup := func() {
@@ -119,9 +118,9 @@ func (p *schedulerTestSuite) DefineTests(driver testsuites.TestDriver, pattern t
 func (l local) testSchedulerInPod(
 	f *framework.Framework,
 	driverName string,
-	volumeType testpatterns.TestVolType,
+	volumeType storageframework.TestVolType,
 	source *v1.VolumeSource,
-	config *testsuites.PerTestConfig) {
+	config *storageframework.PerTestConfig) {
 
 	const (
 		volPath       = "/vol1"

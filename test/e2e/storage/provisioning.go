@@ -38,7 +38,7 @@ import (
 
 // TestDynamicLateBindingProvisioning is a variant of k8s.io/kubernetes/test/e2e/storage/testsuites/provisioning.go
 // which works with late and immediate binding and can be invoked in parallel with different IDs.
-func TestDynamicProvisioning(client clientset.Interface, claim *v1.PersistentVolumeClaim, mode storagev1.VolumeBindingMode, id string) {
+func TestDynamicProvisioning(client clientset.Interface, timeouts *framework.TimeoutContext, claim *v1.PersistentVolumeClaim, mode storagev1.VolumeBindingMode, id string) {
 	var err error
 
 	By(fmt.Sprintf("%s: creating a claim", id))
@@ -55,7 +55,7 @@ func TestDynamicProvisioning(client clientset.Interface, claim *v1.PersistentVol
 
 	if mode == storagev1.VolumeBindingWaitForFirstConsumer {
 		// Schedule a pod, otherwise there's not going to be a PV.
-		PVWriteReadSingleNodeCheck(client, claim, id)
+		PVWriteReadSingleNodeCheck(client, timeouts, claim, id)
 	}
 
 	err = e2epv.WaitForPersistentVolumeClaimPhase(v1.ClaimBound, client, claim.Namespace, claim.Name, framework.Poll, framework.ClaimProvisionTimeout)
@@ -107,7 +107,7 @@ func TestDynamicProvisioning(client clientset.Interface, claim *v1.PersistentVol
 // persistent across pods.
 //
 // This is a common test that can be called from a StorageClassTest.PvCheck.
-func PVWriteReadSingleNodeCheck(client clientset.Interface, claim *v1.PersistentVolumeClaim, id string) {
+func PVWriteReadSingleNodeCheck(client clientset.Interface, timeouts *framework.TimeoutContext, claim *v1.PersistentVolumeClaim, id string) {
 	By(fmt.Sprintf("%s: checking the created volume is writable", id))
 	command := "echo 'hello world' > /mnt/test/data || (mount | grep 'on /mnt/test'; false)"
 	pod := testsuites.StartInPodWithVolume(client, claim.Namespace, claim.Name, "pvc-volume-tester-writer-"+id, command, e2epod.NodeSelection{})
@@ -124,5 +124,5 @@ func PVWriteReadSingleNodeCheck(client clientset.Interface, claim *v1.Persistent
 
 	By(fmt.Sprintf("%s: checking the created volume is readable and retains data on the same node %q", id, actualNodeName))
 	command = "grep 'hello world' /mnt/test/data"
-	testsuites.RunInPodWithVolume(client, claim.Namespace, claim.Name, "pvc-volume-tester-reader-"+id, command, e2epod.NodeSelection{Name: actualNodeName})
+	testsuites.RunInPodWithVolume(client, timeouts, claim.Namespace, claim.Name, "pvc-volume-tester-reader-"+id, command, e2epod.NodeSelection{Name: actualNodeName})
 }

@@ -31,7 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/test/e2e/framework"
-	"k8s.io/kubernetes/test/e2e/storage/testsuites"
+	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
 
 	. "github.com/onsi/ginkgo"
 )
@@ -50,7 +50,7 @@ func DefineImmediateBindingTests(d *deploy.Deployment) {
 			csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil)
 			config, cl := csiTestDriver.PrepareTest(f)
 			cleanup = cl
-			sc = csiTestDriver.(testsuites.DynamicPVTestDriver).GetDynamicProvisionStorageClass(config, "ext4")
+			sc = csiTestDriver.(storageframework.DynamicPVTestDriver).GetDynamicProvisionStorageClass(config, "ext4")
 			immediateBindingMode := storagev1.VolumeBindingImmediate
 			sc.VolumeBindingMode = &immediateBindingMode
 
@@ -90,7 +90,7 @@ func DefineImmediateBindingTests(d *deploy.Deployment) {
 		})
 
 		It("works", func() {
-			TestDynamicProvisioning(f.ClientSet, &claim, *sc.VolumeBindingMode, "immediatebinding")
+			TestDynamicProvisioning(f.ClientSet, f.Timeouts, &claim, *sc.VolumeBindingMode, "immediatebinding")
 		})
 
 		It("stress test [Slow]", func() {
@@ -109,7 +109,7 @@ func DefineImmediateBindingTests(d *deploy.Deployment) {
 							return
 						}
 						id := fmt.Sprintf("worker-%d-volume-%d", i, volume)
-						TestDynamicProvisioning(f.ClientSet, &claim, *sc.VolumeBindingMode, id)
+						TestDynamicProvisioning(f.ClientSet, f.Timeouts, &claim, *sc.VolumeBindingMode, id)
 					}
 				}()
 			}

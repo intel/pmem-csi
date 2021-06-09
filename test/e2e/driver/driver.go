@@ -27,8 +27,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
 	e2evolume "k8s.io/kubernetes/test/e2e/framework/volume"
-	"k8s.io/kubernetes/test/e2e/storage/testpatterns"
-	"k8s.io/kubernetes/test/e2e/storage/testsuites"
+	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
 	"k8s.io/kubernetes/test/e2e/storage/utils"
 
 	. "github.com/onsi/ginkgo"
@@ -37,7 +36,7 @@ import (
 
 // DynamicDriver has the ability to return a modified copy of itself with additional options set.
 type DynamicDriver interface {
-	testsuites.TestDriver
+	storageframework.TestDriver
 
 	// WithStorageClassNameSuffix sets a suffix which gets added
 	// to the name of all future storage classes that
@@ -52,10 +51,10 @@ type DynamicDriver interface {
 
 // CSIDriver exposes the CSI driver name, something that is normally hidden.
 type CSIDriver interface {
-	GetCSIDriverName(config *testsuites.PerTestConfig) string
+	GetCSIDriverName(config *storageframework.PerTestConfig) string
 }
 
-func New(name, csiDriverName string, fsTypes []string, scManifests map[string]string) testsuites.TestDriver {
+func New(name, csiDriverName string, fsTypes []string, scManifests map[string]string) storageframework.TestDriver {
 	if fsTypes == nil {
 		fsTypes = []string{"", "ext4", "xfs"}
 	}
@@ -67,15 +66,15 @@ func New(name, csiDriverName string, fsTypes []string, scManifests map[string]st
 		}
 	}
 	return &manifestDriver{
-		driverInfo: testsuites.DriverInfo{
+		driverInfo: storageframework.DriverInfo{
 			Name:            name,
-			MaxFileSize:     testpatterns.FileSizeMedium,
+			MaxFileSize:     storageframework.FileSizeMedium,
 			SupportedFsType: sets.NewString(fsTypes...),
-			Capabilities: map[testsuites.Capability]bool{
-				testsuites.CapPersistence: true,
-				testsuites.CapFsGroup:     true,
-				testsuites.CapExec:        true,
-				testsuites.CapBlock:       true,
+			Capabilities: map[storageframework.Capability]bool{
+				storageframework.CapPersistence: true,
+				storageframework.CapFsGroup:     true,
+				storageframework.CapExec:        true,
+				storageframework.CapBlock:       true,
 			},
 			SupportedSizeRange: e2evolume.SizeRange{
 				// There is test in VolumeIO suite creating 102 MB of content
@@ -93,7 +92,7 @@ func New(name, csiDriverName string, fsTypes []string, scManifests map[string]st
 }
 
 type manifestDriver struct {
-	driverInfo    testsuites.DriverInfo
+	driverInfo    storageframework.DriverInfo
 	csiDriverName string
 	patchOptions  utils.PatchCSIOptions
 	manifests     []string
@@ -103,22 +102,22 @@ type manifestDriver struct {
 	parameters    map[string]string
 }
 
-var _ testsuites.TestDriver = &manifestDriver{}
-var _ testsuites.DynamicPVTestDriver = &manifestDriver{}
-var _ testsuites.EphemeralTestDriver = &manifestDriver{}
+var _ storageframework.TestDriver = &manifestDriver{}
+var _ storageframework.DynamicPVTestDriver = &manifestDriver{}
+var _ storageframework.EphemeralTestDriver = &manifestDriver{}
 var _ DynamicDriver = &manifestDriver{}
 
-func (m *manifestDriver) GetDriverInfo() *testsuites.DriverInfo {
+func (m *manifestDriver) GetDriverInfo() *storageframework.DriverInfo {
 	return &m.driverInfo
 }
 
-func (m *manifestDriver) SkipUnsupportedTest(pattern testpatterns.TestPattern) {
+func (m *manifestDriver) SkipUnsupportedTest(pattern storageframework.TestPattern) {
 	if !m.driverInfo.SupportedFsType.Has(pattern.FsType) {
 		skipper.Skipf("fsType %q not supported", pattern.FsType)
 	}
 }
 
-func (m *manifestDriver) GetDynamicProvisionStorageClass(config *testsuites.PerTestConfig, fsType string) *storagev1.StorageClass {
+func (m *manifestDriver) GetDynamicProvisionStorageClass(config *storageframework.PerTestConfig, fsType string) *storagev1.StorageClass {
 	f := config.Framework
 
 	scManifest, ok := m.scManifest[fsType]
@@ -149,7 +148,7 @@ func (m *manifestDriver) GetDynamicProvisionStorageClass(config *testsuites.PerT
 	return sc
 }
 
-func (m *manifestDriver) PrepareTest(f *framework.Framework) (*testsuites.PerTestConfig, func()) {
+func (m *manifestDriver) PrepareTest(f *framework.Framework) (*storageframework.PerTestConfig, func()) {
 	// If the driver depends on Kata Containers, first make sure
 	// that we have it on at least one node.
 	if strings.HasSuffix(m.driverInfo.Name, "-kata") {
@@ -162,7 +161,7 @@ func (m *manifestDriver) PrepareTest(f *framework.Framework) (*testsuites.PerTes
 		}
 	}
 
-	config := &testsuites.PerTestConfig{
+	config := &storageframework.PerTestConfig{
 		Driver:    m,
 		Prefix:    "pmem",
 		Framework: f,
@@ -194,7 +193,7 @@ func (m *manifestDriver) finalPatchOptions(f *framework.Framework) utils.PatchCS
 	return o
 }
 
-func (m *manifestDriver) GetVolume(config *testsuites.PerTestConfig, volumeNumber int) (map[string]string, bool, bool) {
+func (m *manifestDriver) GetVolume(config *storageframework.PerTestConfig, volumeNumber int) (map[string]string, bool, bool) {
 	attributes := map[string]string{"size": m.driverInfo.SupportedSizeRange.Min}
 	shared := false
 	readOnly := false
@@ -209,7 +208,7 @@ func (m *manifestDriver) GetVolume(config *testsuites.PerTestConfig, volumeNumbe
 	return attributes, shared, readOnly
 }
 
-func (m *manifestDriver) GetCSIDriverName(config *testsuites.PerTestConfig) string {
+func (m *manifestDriver) GetCSIDriverName(config *storageframework.PerTestConfig) string {
 	// Return real driver name.
 	// We can't use m.driverInfo.Name as its not necessarily the real driver name
 	return m.csiDriverName

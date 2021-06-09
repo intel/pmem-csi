@@ -37,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/test/e2e/framework"
+	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
 	"k8s.io/kubernetes/test/e2e/storage/podlogs"
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
 
@@ -53,7 +54,7 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 	csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil)
 
 	// List of testSuites to be added below.
-	var csiTestSuites = []func() testsuites.TestSuite{
+	var csiTestSuites = []func() storageframework.TestSuite{
 		// TODO: investigate how useful these tests are and enable them.
 		// testsuites.InitMultiVolumeTestSuite,
 		testsuites.InitProvisioningTestSuite,
@@ -75,7 +76,7 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 		csiTestSuites = append(csiTestSuites, testsuites.InitEphemeralTestSuite)
 	}
 
-	testsuites.DefineTestSuite(csiTestDriver, csiTestSuites)
+	storageframework.DefineTestSuites(csiTestDriver, csiTestSuites)
 	DefineLateBindingTests(d)
 	DefineImmediateBindingTests(d)
 	DefineKataTests(d)
@@ -95,7 +96,7 @@ func DefineLateBindingTests(d *deploy.Deployment) {
 			csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil)
 			config, cl := csiTestDriver.PrepareTest(f)
 			cleanup = cl
-			sc = csiTestDriver.(testsuites.DynamicPVTestDriver).GetDynamicProvisionStorageClass(config, "ext4")
+			sc = csiTestDriver.(storageframework.DynamicPVTestDriver).GetDynamicProvisionStorageClass(config, "ext4")
 			lateBindingMode := storagev1.VolumeBindingWaitForFirstConsumer
 			sc.VolumeBindingMode = &lateBindingMode
 
@@ -135,7 +136,7 @@ func DefineLateBindingTests(d *deploy.Deployment) {
 		})
 
 		It("works", func() {
-			TestDynamicProvisioning(f.ClientSet, &claim, *sc.VolumeBindingMode, "latebinding")
+			TestDynamicProvisioning(f.ClientSet, f.Timeouts, &claim, *sc.VolumeBindingMode, "latebinding")
 		})
 
 		It("unsets unsuitable selected node", func() {
@@ -154,7 +155,7 @@ func DefineLateBindingTests(d *deploy.Deployment) {
 				"volume.kubernetes.io/selected-node":            selectedNode,
 				"volume.beta.kubernetes.io/storage-provisioner": d.DriverName,
 			}
-			TestDynamicProvisioning(f.ClientSet, &claim, *sc.VolumeBindingMode, "latebinding")
+			TestDynamicProvisioning(f.ClientSet, f.Timeouts, &claim, *sc.VolumeBindingMode, "latebinding")
 		})
 
 		It("stress test [Slow]", func() {
@@ -195,7 +196,7 @@ func DefineLateBindingTests(d *deploy.Deployment) {
 							return
 						}
 						id := fmt.Sprintf("worker-%d-volume-%d", i, volume)
-						TestDynamicProvisioning(f.ClientSet, &claim, *sc.VolumeBindingMode, id)
+						TestDynamicProvisioning(f.ClientSet, f.Timeouts, &claim, *sc.VolumeBindingMode, id)
 					}
 				}()
 			}
@@ -215,7 +216,7 @@ func DefineKataTests(d *deploy.Deployment) {
 		},
 	)
 	Context("Kata Containers", func() {
-		testsuites.DefineTestSuite(kataDriver, []func() testsuites.TestSuite{
+		storageframework.DefineTestSuites(kataDriver, []func() storageframework.TestSuite{
 			dax.InitDaxTestSuite,
 		})
 	})

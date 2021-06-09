@@ -18,8 +18,7 @@ import (
 
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
-	"k8s.io/kubernetes/test/e2e/storage/testpatterns"
-	"k8s.io/kubernetes/test/e2e/storage/testsuites"
+	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
 
 	"github.com/intel/pmem-csi/pkg/k8sutil"
 	"github.com/intel/pmem-csi/pkg/version"
@@ -54,10 +53,10 @@ func baseSupportsKubernetes(ver version.Version) bool {
 }
 
 type skewTestSuite struct {
-	tsInfo testsuites.TestSuiteInfo
+	tsInfo storageframework.TestSuiteInfo
 }
 
-var _ testsuites.TestSuite = &skewTestSuite{}
+var _ storageframework.TestSuite = &skewTestSuite{}
 
 var (
 	// The version skew tests run with combinations of the
@@ -66,7 +65,7 @@ var (
 	// CSIInlineVolume cannot be tested because the current cluster setup for the PMEM-CSI scheduler
 	// extender used NodeCacheSupported=true and PMEM-CSI 0.7.x doesn't support that. Immediate binding
 	// works.
-	volTypes      = []testpatterns.TestVolType{ /* testpatterns.CSIInlineVolume, */ testpatterns.DynamicPV}
+	volTypes      = []storageframework.TestVolType{ /* storageframework.CSIInlineVolume, */ storageframework.DynamicPV}
 	volParameters = []map[string]string{
 		nil,
 		// We cannot test cache volumes because of https://github.com/intel/pmem-csi/issues/733:
@@ -86,9 +85,9 @@ var (
 
 // InitSkewTestSuite dynamically generates testcases for version skew testing.
 // Each test case represents a certain kind of volume supported by PMEM-CSI.
-func InitSkewTestSuite() testsuites.TestSuite {
+func InitSkewTestSuite() storageframework.TestSuite {
 	suite := &skewTestSuite{
-		tsInfo: testsuites.TestSuiteInfo{
+		tsInfo: storageframework.TestSuiteInfo{
 			Name: "skew",
 		},
 	}
@@ -103,13 +102,13 @@ func InitSkewTestSuite() testsuites.TestSuite {
 					Parameters: parameters,
 				}
 				for _, volMode := range volModes {
-					pattern := testpatterns.TestPattern{
+					pattern := storageframework.TestPattern{
 						Name:    driver.EncodeTestPatternName(volType, volMode, scp),
 						VolType: volType,
 						VolMode: volMode,
 						FsType:  fs,
 					}
-					if volType == testpatterns.CSIInlineVolume {
+					if volType == storageframework.CSIInlineVolume {
 						if haveCSIInline {
 							// Only generate a single test pattern for inline volumes
 							// because we don't want the number of testcases to explode.
@@ -133,21 +132,21 @@ func InitSkewTestSuite() testsuites.TestSuite {
 	return suite
 }
 
-func (p *skewTestSuite) GetTestSuiteInfo() testsuites.TestSuiteInfo {
+func (p *skewTestSuite) GetTestSuiteInfo() storageframework.TestSuiteInfo {
 	return p.tsInfo
 }
 
-func (p *skewTestSuite) SkipRedundantSuite(driver testsuites.TestDriver, pattern testpatterns.TestPattern) {
+func (p *skewTestSuite) SkipUnsupportedTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) {
 }
 
 type local struct {
-	config      *testsuites.PerTestConfig
+	config      *storageframework.PerTestConfig
 	testCleanup func()
 
-	unused, usedBefore, usedAfter *testsuites.VolumeResource
+	unused, usedBefore, usedAfter *storageframework.VolumeResource
 }
 
-func (p *skewTestSuite) DefineTests(driver testsuites.TestDriver, pattern testpatterns.TestPattern) {
+func (p *skewTestSuite) DefineTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) {
 	var l local
 
 	f := framework.NewDefaultFramework("skew")
@@ -341,9 +340,9 @@ func (p *skewTestSuite) DefineTests(driver testsuites.TestDriver, pattern testpa
 
 // createVolumeResource takes one of the test patterns prepared by InitSkewTestSuite and
 // creates a volume for it.
-func createVolumeResource(pmemDriver testsuites.TestDriver, config *testsuites.PerTestConfig, suffix string, pattern testpatterns.TestPattern) *testsuites.VolumeResource {
+func createVolumeResource(pmemDriver storageframework.TestDriver, config *storageframework.PerTestConfig, suffix string, pattern storageframework.TestPattern) *storageframework.VolumeResource {
 	_, _, scp, err := driver.DecodeTestPatternName(pattern.Name)
 	Expect(err).NotTo(HaveOccurred(), "decode test pattern name")
 	pmemDriver = pmemDriver.(driver.DynamicDriver).WithStorageClassNameSuffix(suffix).WithParameters(scp.Parameters)
-	return testsuites.CreateVolumeResource(pmemDriver, config, pattern, e2evolume.SizeRange{})
+	return storageframework.CreateVolumeResource(pmemDriver, config, pattern, e2evolume.SizeRange{})
 }
