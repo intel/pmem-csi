@@ -297,6 +297,9 @@ for a complete list of supported properties.
 
 Here is a minimal example driver deployment created with a custom resource:
 
+**NOTE**: `nodeSelector` must match with node's label set in
+[Installation and setup](#installation-and-setup) section.
+
 ``` ShellSession
 $ kubectl create -f - <<EOF
 apiVersion: pmem-csi.intel.com/v1beta1
