@@ -11,11 +11,13 @@ ARG GO_VERSION="1.16.1"
 # run instead of just using some older, cached result.
 ARG CACHEBUST
 
+# We want newer ndctl that is available in buster:
+RUN echo 'deb http://ftp.debian.org/debian buster-backports main' > /etc/apt/sources.list.d/buster-backports.list
 # In contrast to the runtime image below, here we can afford to install additional
 # tools and recommended packages. But this image gets pushed to a registry by the CI as a cache,
 # so it still makes sense to keep this layer small by removing /var/cache.
 RUN ${APT_GET} update && \
-    ${APT_GET} install -y gcc libndctl-dev make git curl iproute2 pkg-config xfsprogs e2fsprogs parted openssh-client python3 python3-venv equivs && \
+    ${APT_GET} install -y gcc libndctl-dev/buster-backports make git curl iproute2 pkg-config xfsprogs e2fsprogs parted openssh-client python3 python3-venv equivs && \
     rm -rf /var/cache/*
 RUN curl -L https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz | tar -zxf - -C / && \
     mkdir -p /usr/local/bin/ && \
@@ -43,10 +45,11 @@ COPY --from=build python3_100.0_all.deb /var/cache/python3_100.0_all.deb
 # lvm2 - volume management
 # ndctl - pulls in the necessary library, useful by itself
 # fio - only included in testing images
+RUN echo 'deb http://ftp.debian.org/debian buster-backports main' > /etc/apt/sources.list.d/buster-backports.list
 RUN ${APT_GET} update && \
     mkdir -p /usr/local/share && \
     dpkg -i /var/cache/python3_100.0_all.deb && \
-    bash -c 'set -o pipefail; ${APT_GET} install -y --no-install-recommends file xfsprogs e2fsprogs lvm2 ndctl \
+    bash -c 'set -o pipefail; ${APT_GET} install -y --no-install-recommends file xfsprogs e2fsprogs lvm2 libndctl-dev/buster-backports ndctl/buster-backports \
        | tee --append /usr/local/share/package-install.log' && \
     rm -rf /var/cache/*
 
