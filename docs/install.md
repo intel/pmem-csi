@@ -62,11 +62,11 @@ storage class also chooses which filesystem is used (xfs or ext4) and
 enables [Kata Containers support](#kata-containers-support).
 
 Optionally, the administrator can enable [the scheduler
-extensions](#enable-scheduler-extensions) (recommended) and monitoring
-of resource usage via the [metrics support](#metrics-support).
+extensions](#enable-scheduler-extensions) and monitoring of resource
+usage via the [metrics support](#metrics-support).
 
 It is [recommended](./design.md#dynamic-provisioning-of-local-volumes)
-to enable the scheduler extensions in combination with
+to enable the scheduler extensions and use
 `volumeBindingMode: WaitForFirstConsumer` as in the
 [`pmem-storageclass-late-binding.yaml`](/deploy/common/pmem-storageclass-late-binding.yaml)
 example. This ensures that pods get scheduled onto nodes that have
@@ -75,6 +75,12 @@ random whether the scheduler picks a node that has PMEM available and
 immediate binding (the default volume binding mode) might work
 better. However, then pods might not be able to run when the node
 where volumes were created are overloaded.
+
+Starting with Kubernetes 1.21, PMEM-CSI uses [storage capacity
+tracking](https://kubernetes.io/docs/concepts/storage/storage-capacity/)
+to handle Pod scheduling and the scheduler extensions are not needed
+anymore. `WaitForFirstConsumer` still is the recommended volume
+binding mode.
 
 Optionally, the log output format can be changed from the default
 "text" format (= the traditional glog format) to "json" (= output via
@@ -1257,7 +1263,7 @@ $ kubectl create --kustomize my-webhook
 [Kubernetes
 1.19](https://kubernetes.io/blog/2020/09/01/ephemeral-volumes-with-storage-capacity-tracking/)
 introduces support for publishing and using storage capacity
-information for pod scheduling. PMEM-CSI must be deployed
+information for pod scheduling. It became beta in 1.21. PMEM-CSI must be deployed
 differently to use this feature:
 
 - `external-provisioner` must be told to publish storage capacity
@@ -1266,21 +1272,9 @@ differently to use this feature:
   scheduler, otherwise it ignores that information when considering
   pods with unbound volume.
 
-Because the `CSIStorageCapacity` feature is still alpha in 1.19 and
-driver deployment would fail on a cluster without support for it, none
-of the normal deployment files nor the operator enable that. Instead,
-special kustomize variants are provided in
-`deploy/kubernetes-1.19-alpha*`.
+The deployments for Kubernetes >= 1.21 do this automatically. The
+alpha API in 1.19 and 1.20 is no longer supported.
 
-They can be used for example in the QEMU test cluster with:
-
-```console
-$ TEST_KUBERNETES_VERSION=1.19 make start
-...
-$ TEST_KUBERNETES_FLAVOR=-alpha test/setup-deployment.sh
-INFO: deploying from /nvme/gopath/src/github.com/intel/pmem-csi/deploy/kubernetes-1.19-alpha/lvm/testing
-...
-```
 
 ### Metrics support
 
