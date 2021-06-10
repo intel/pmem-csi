@@ -28,6 +28,7 @@ There is a more detailed explanation in the following paragraphs.
 | *Name* field in namespace | *Name* gets set to 'pmem-csi' to achieve own vs. foreign marking | *Name* gets set to VolumeID, without attempting own vs. foreign marking  |
 |Minimum volume size| 4 MB                   | 1 GB (see also alignment adjustment below) |
 |Alignment requirements |LVM creation aligns size up to next 4MB boundary  |driver aligns  size up to next alignment boundary. The default alignment step is 1 GB. Device(s) in interleaved mode will require larger minimum as size has to be at least one alignment step. The possibly bigger alignment step is calculated as interleave-set-size multiplied by 1 GB |
+|Huge pages supported<sup>4</sup> | maybe| yes|
 
 <sup>1 </sup> **Free space fragmentation** is a problem when there appears to
 be enough free capacity for a new namespace, but there isn't a contiguous
@@ -55,6 +56,14 @@ Programming](https://pmem.io/ndctl/ndctl-create-namespace.html) for
 details. `devdax` mode is not supported. Though a
 raw block volume would be useful when a filesystem isn't needed, Kubernetes
 cannot handle [binding a character device to a loop device](https://github.com/kubernetes/kubernetes/blob/7c87b5fb55ca096c007c8739d4657a5a4e29fb09/pkg/volume/util/util.go#L531-L534).
+
+<sup>4 </sup> **Huge pages supported**: ext4 and XFS filesystems are created using the options that should enable huge
+ page support, as explained in section "Verifying IO Alignment" in
+ ["Using Persistent Memory Devices with the Linux Device Mapper"]
+(https://pmem.io/2018/05/15/using_persistent_memory_devices_with_the_linux_device_mapper.html).
+[Testing that support by observing page faults](/test/cmd/pmem-access-hugepages/main.go) confirmed that
+this worked for direct mode. It did not work for LVM mode in the QEMU virtual machines, but it cannot be
+ruled out that it works elsewhere.
 
 ## LVM device mode
 

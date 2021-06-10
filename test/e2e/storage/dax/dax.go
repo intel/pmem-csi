@@ -29,6 +29,8 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework/volume"
 	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
 
+	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
+	"github.com/intel/pmem-csi/test/e2e/deploy"
 	"github.com/intel/pmem-csi/test/e2e/ephemeral"
 	pmempod "github.com/intel/pmem-csi/test/e2e/pod"
 
@@ -357,4 +359,138 @@ func testDaxOutside(
 	By(fmt.Sprintf("Deleting pod %s", pod.Name))
 	err := e2epod.DeletePodWithWait(f.ClientSet, pod)
 	framework.ExpectNoError(err, "while deleting pod")
+}
+
+// Hugepage page fault testing part starts here
+const (
+	accessHugepagesBinary = "_work/pmem-access-hugepages"
+)
+
+var _ = deploy.DescribeForSome("dax", func(d *deploy.Deployment) bool {
+	// Run these tests for all driver deployments that were created
+	// through the operator, where device mode is Direct.
+	return !d.HasOperator && d.HasDriver && d.Mode == api.DeviceModeDirect
+}, func(d *deploy.Deployment) {
+	var l local
+	f := framework.NewDefaultFramework("dax")
+	init := func() {
+		l = local{}
+
+		// Build pmem-access-hugepages helper binary.
+		l.root = os.Getenv("REPO_ROOT")
+		build := exec.Command("/bin/sh", "-c", os.Getenv("GO")+" build -o "+accessHugepagesBinary+" ./test/cmd/pmem-access-hugepages")
+		build.Stdout = GinkgoWriter
+		build.Stderr = GinkgoWriter
+		build.Dir = l.root
+		By("Compiling with: " + strings.Join(build.Args, " "))
+		err := build.Run()
+		framework.ExpectNoError(err, "compile ./test/cmd/pmem-access-hugepages")
+	}
+
+	config := &storageframework.PerTestConfig{
+		Driver:    nil,
+		Prefix:    "pmem",
+		Framework: f,
+	}
+	fstype := ""
+	vsource := v1.VolumeSource{
+		CSI: &v1.CSIVolumeSource{
+			Driver: "pmem-csi.intel.com",
+			FSType: &fstype,
+			VolumeAttributes: map[string]string{
+				"size": "110Mi",
+			},
+		},
+	}
+	It("should cause hugepage paging event with default fs", func() {
+		init()
+		testHugepageInPod(f, l.root, &vsource, config)
+	})
+	/* there is issue in kubelet causing panic and retry loop when fsType is set to ext4 or xfs.
+		   The following 2 items can be enabled after that gets fixed.
+	           https://github.com/kubernetes/kubernetes/issues/102651
+		        It("should cause hugepage paging event with ext4", func() {
+				init()
+				fsExt4 := "ext4"
+				vsource.CSI.FSType = &fsExt4
+				testHugepageInPod(f, l.root, &vsource, config)
+			})
+			It("should cause hugepage paging event with xfs", func() {
+				init()
+				fsXFS := "xfs"
+				vsource.CSI.FSType = &fsXFS
+				testHugepageInPod(f, l.root, &vsource, config)
+			})*/
+})
+
+func testHugepageInPod(
+	f *framework.Framework,
+	root string,
+	source *v1.VolumeSource,
+	config *storageframework.PerTestConfig,
+) {
+	pod := CreatePod(f, "hugepage-test", v1.PersistentVolumeFilesystem, source, config, false)
+	defer func() {
+		DeletePod(f, pod)
+	}()
+	testHugepage(f, pod, root, source)
+	DeletePod(f, pod)
+}
+
+func testHugepage(
+	f *framework.Framework,
+	pod *v1.Pod,
+	root string,
+	source *v1.VolumeSource,
+) {
+	ns := f.Namespace.Name
+	containerName := pod.Spec.Containers[0].Name
+
+	// run trace monitor on all workers
+	for worker := 1; ; worker++ {
+		sshcmd := fmt.Sprintf("%s/_work/%s/ssh.%d", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"), worker)
+		if _, err := os.Stat(sshcmd); err == nil {
+			ssh := exec.Command(sshcmd, "sudo sh -c 'echo 1 > /sys/kernel/debug/tracing/events/fs_dax/dax_pmd_fault_done/enable; echo 1 > /sys/kernel/debug/tracing/tracing_on; cat /sys/kernel/debug/tracing/trace_pipe > /tmp/tracetmp 2>&1 &'")
+			_, err = ssh.Output()
+			if err != nil {
+				framework.Failf("Failed to start pagefault tracing: %v", err)
+			}
+		} else {
+			// ssh wrapper does not exist: all nodes handled.
+			break
+		}
+	}
+
+	accessOutput, _ := pmempod.RunInPod(f, root, []string{accessHugepagesBinary}, accessHugepagesBinary, ns, pod.Name, containerName)
+	By(fmt.Sprintf("Output from pmem-access-hugepages pod:[%s]", accessOutput))
+	for worker := 1; ; worker++ {
+		sshcmd := fmt.Sprintf("%s/_work/%s/ssh.%d", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"), worker)
+		if _, err := os.Stat(sshcmd); err == nil {
+			ssh := exec.Command(sshcmd, "sudo sh -c 'echo 0 > /sys/kernel/debug/tracing/events/fs_dax/dax_pmd_fault_done/enable; echo 0 > /sys/kernel/debug/tracing/tracing_on; pkill -f cat\\ /sys/kernel/debug/tracing/trace_pipe'")
+			_, err = ssh.Output()
+			if err != nil {
+				framework.Failf("Failed to stop pagefault tracing: %v", err)
+			}
+
+			// There may be garbage (zero values) at start, we get better results by counting from end, thats why we use NF-relative fields in awk
+			ssh = exec.Command(sshcmd, "cat /tmp/tracetmp|awk '{print $(NF-13) $(NF-9)}'")
+			traceOutput, _ := ssh.Output()
+			if len(traceOutput) > 0 { // there was output from trace, get fault type
+				ssh := exec.Command(sshcmd, "cat /tmp/tracetmp|awk '{print $NF}'")
+				faultType, _ := ssh.Output()
+				By(fmt.Sprintf("Worker %d has tracer output: fault type:[%s] inode+addr:[%s]",
+					worker, strings.TrimSpace(string(faultType)), strings.TrimSpace(string(traceOutput))))
+
+				// Trace event NOPAGE means, hugepage fault happened. Trace event FALLBACK means, no page fault.
+				framework.ExpectEqual(strings.TrimSpace(string(faultType)), "NOPAGE", "page fault type has to be NOPAGE")
+				framework.ExpectEqual(accessOutput, strings.TrimSpace(string(traceOutput)), "mapped inode and addr must match traced values")
+				break
+			}
+		} else {
+			// ssh wrapper does not exist: all nodes handled.
+			// If we reach this break here instead of one above, no node had tracer output, this is not what we planned.
+			framework.Fail("No worker had trace output")
+			break
+		}
+	}
 }

@@ -270,6 +270,17 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
+	if ephemeral && fsType == "xfs" {
+		// FS was created only in ephemeral case.
+		// Only if created filesytem and it was XFS:
+		// Tune XFS file system to serve huge pages:
+		// Set file system extent size to 2 MiB sized and aligned block allocations.
+		_, err := pmemexec.RunCommand("xfs_io", "-c", "extsize 2m", hostMount)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+
 	if !volumeParameters.GetKataContainers() {
 		// A normal volume, return early.
 		return &csi.NodePublishVolumeResponse{}, nil
@@ -532,6 +543,15 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
+	if existingFsType == "" && requestedFsType == "xfs" {
+		// Only if created a new filesytem and it was XFS:
+		// Align XFS file system for hugepages
+		_, err := pmemexec.RunCommand("xfs_io", "-c", "extsize 2m", stagingtargetPath)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+
 	return &csi.NodeStageVolumeResponse{}, nil
 }
 
@@ -646,17 +666,20 @@ func (ns *nodeServer) provisionDevice(device *pmdmanager.PmemDeviceInfo, fsType 
 	cmd := ""
 	var args []string
 	// hard-code block size to 4k to avoid smaller values and trouble to dax mount option
-	if fsType == "ext4" {
+	switch fsType {
+	case "ext4":
 		cmd = "mkfs.ext4"
-		args = []string{"-b 4096", "-F", device.Path}
-	} else if fsType == "xfs" {
+		args = []string{"-b", "4096", "-E", "stride=512,stripe_width=512", "-F", device.Path}
+	case "xfs":
 		cmd = "mkfs.xfs"
-		// reflink and DAX are mutually exclusive
+		// reflink=0: reflink and DAX are mutually exclusive
 		// (http://man7.org/linux/man-pages/man8/mkfs.xfs.8.html).
-		args = []string{"-b", "size=4096", "-m", "reflink=0", "-f", device.Path}
-	} else {
+		// su=2m,sw=1: use 2MB-aligned and -sized block allocations
+		args = []string{"-b", "size=4096", "-m", "reflink=0", "-d", "su=2m,sw=1", "-f", device.Path}
+	default:
 		return fmt.Errorf("Unsupported filesystem '%s'. Supported filesystems types: 'xfs', 'ext4'", fsType)
 	}
+
 	output, err := pmemexec.RunCommand(cmd, args...)
 	if err != nil {
 		return fmt.Errorf("mkfs failed: output:[%s] err:[%v]", output, err)
