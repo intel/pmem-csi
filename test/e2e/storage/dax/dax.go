@@ -222,7 +222,19 @@ func getPod(
 		if pod.Labels == nil {
 			pod.Labels = map[string]string{}
 		}
-		pod.Labels["io.katacontainers.config.hypervisor.memory_offset"] = "2147483648" // large enough for all test volumes
+
+		// The additional memory range must be large enough for all test volumes.
+		// https://github.com/kata-containers/kata-containers/blob/main/docs/how-to/how-to-set-sandbox-config-kata.md#hypervisor-options
+		// Must be an uint32.
+		pod.Labels["io.katacontainers.config.hypervisor.memory_offset"] = "2147483648" // 2GiB
+
+		// FSGroup not supported (?) by Kata Containers
+		// (https://github.com/intel/pmem-csi/issues/987#issuecomment-858350521),
+		// we must run as root.
+		pod.Spec.SecurityContext = &v1.PodSecurityContext{
+			RunAsUser:  &root,
+			RunAsGroup: &root,
+		}
 	} else {
 		e2epod.SetNodeSelection(&pod.Spec, config.ClientNodeSelection)
 	}
