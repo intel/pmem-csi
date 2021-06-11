@@ -416,24 +416,7 @@ spec:
           name: webhook-cert
         - mountPath: /var/lib/pmem-csi-coverage
           name: coverage-dir
-      initContainers:
-      - command:
-        - chown
-        - -R
-        - pmem-csi:pmem-csi
-        - /var/lib/pmem-csi-coverage
-        image: intel/pmem-csi-driver-test:canary
-        imagePullPolicy: Always
-        name: coverage-init
-        securityContext:
-          privileged: true
-          runAsUser: 0
-        volumeMounts:
-        - mountPath: /var/lib/pmem-csi-coverage
-          name: coverage-dir
       priorityClassName: system-cluster-critical
-      securityContext:
-        runAsUser: 1000
       serviceAccountName: pmem-csi-intel-com-webhooks
       tolerations:
       - effect: NoSchedule

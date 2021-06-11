@@ -226,6 +226,16 @@ A production deployment can improve upon that by using some other key
 delivery mechanism, like for example
 [Vault](https://www.vaultproject.io/).
 
+The PMEM-CSI controller runs with the default security context. On
+upstream Kubernetes, this means that it runs as root. The expectation
+is that actual production deployments of PMEM-CSI will avoid that, for
+example with the help of [OpenShift's dynamid UID
+assignment](https://www.openshift.com/blog/a-guide-to-openshift-and-uids).
+
+The PMEM-CSI node driver must run as root because it has to access the
+node's `/dev` and `/sys` and needs to execute privileged operations
+like mounting.
+
 ## Volume Persistency
 
 In a typical CSI deployment, volumes are provided by a storage backend

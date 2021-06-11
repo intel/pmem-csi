@@ -147,10 +147,6 @@ spec:
         app.kubernetes.io/instance: pmem-csi.intel.com
         pmem-csi.intel.com/webhook: ignore
     spec:
-      securityContext:
-        runAsNonRoot: true
-        # UID 1000 is defined in Dockerfile
-        runAsUser: 1000
       serviceAccountName: pmem-csi-intel-com-webhooks
       # Allow this pod to run on all nodes and
       # prevent eviction (https://github.com/kubernetes-csi/csi-driver-host-path/issues/47#issuecomment-538469081).

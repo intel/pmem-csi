@@ -413,9 +413,6 @@ spec:
         - mountPath: /certs
           name: webhook-cert
       priorityClassName: system-cluster-critical
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
       serviceAccountName: pmem-csi-intel-com-webhooks
       tolerations:
       - effect: NoSchedule

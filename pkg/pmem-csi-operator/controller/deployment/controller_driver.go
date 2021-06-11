@@ -1042,8 +1042,6 @@ func (d *pmemCSIDeployment) getControllerProvisionerClusterRoleBinding(crb *rbac
 
 func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 	replicas := int32(1)
-	true := true
-	pmemcsiUser := int64(1000)
 
 	// To make sure that the default values set by the API server
 	// are not unset by the operator we choose to update only specific
@@ -1083,11 +1081,6 @@ func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 		})
 	ss.Spec.Template.ObjectMeta.Annotations = map[string]string{
 		"pmem-csi.intel.com/scrape": "containers",
-	}
-	ss.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{
-		// Controller pod must run as non-root user
-		RunAsNonRoot: &true,
-		RunAsUser:    &pmemcsiUser,
 	}
 	ss.Spec.Template.Spec.PriorityClassName = "system-cluster-critical"
 	ss.Spec.Template.Spec.ServiceAccountName = d.GetHyphenedName() + "-webhooks"
