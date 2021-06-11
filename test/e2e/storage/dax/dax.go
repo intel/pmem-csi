@@ -219,14 +219,14 @@ func getPod(
 		pod.Spec.NodeSelector = map[string]string{
 			"katacontainers.io/kata-runtime": "true",
 		}
-		if pod.Labels == nil {
-			pod.Labels = map[string]string{}
+		if pod.Annotations == nil {
+			pod.Annotations = map[string]string{}
 		}
 
 		// The additional memory range must be large enough for all test volumes.
 		// https://github.com/kata-containers/kata-containers/blob/main/docs/how-to/how-to-set-sandbox-config-kata.md#hypervisor-options
 		// Must be an uint32.
-		pod.Labels["io.katacontainers.config.hypervisor.memory_offset"] = "2147483648" // 2GiB
+		pod.Annotations["io.katacontainers.config.hypervisor.memory_offset"] = "2147483648" // 2GiB
 
 		// FSGroup not supported (?) by Kata Containers
 		// (https://github.com/intel/pmem-csi/issues/987#issuecomment-858350521),

@@ -879,7 +879,7 @@ done globally by setting the `memory_offset` in the
 file](https://github.com/kata-containers/runtime/blob/ee985a608015d81772901c1d9999190495fc9a0a/cli/config/configuration-qemu.toml.in#L86-L91)
 or per-pod by setting the
 [`io.katacontainers.config.hypervisor.memory_offset`
-label](https://github.com/kata-containers/documentation/blob/master/how-to/how-to-set-sandbox-config-kata.md#hypervisor-options)
+annotation](https://github.com/kata-containers/documentation/blob/master/how-to/how-to-set-sandbox-config-kata.md#hypervisor-options)
 in the pod meta data. In both cases, the value has to be large enough
 for all PMEM volumes used by the pod, otherwise pod creation will fail
 with an error similar to this:
@@ -888,11 +888,23 @@ with an error similar to this:
 Error: container create failed: QMP command failed: not enough space, currently 0x8000000 in use of total space for memory devices 0x3c100000
 ```
 
+**Note**:
+* The offset is currently (= Kata Containers 2.1.0) limited to
+32 bit, which implies that volumes cannot be larger than 4GiB. An
+enhancement request for [Kata Containers is
+pending](https://github.com/kata-containers/kata-containers/issues/2006).
+* A newer version is also needed for a fix of [issue
+#2018](https://github.com/kata-containers/kata-containers/issues/2018).
+* kata-deploy, at least in Kata Containers 2.1.0, does [not enable the
+  `memory_offset` annotation](https://github.com/kata-containers/kata-containers/issues/2088), leading to
+  `failed to create containerd task: annotation io.katacontainers.config.hypervisor.memory_offset is not enabled`
+  errors.
+
 The examples for usage of Kata Containers [with
 ephemeral](/deploy/common/pmem-kata-app-ephemeral.yaml) and
 [persistent](/deploy/common/pmem-kata-app.yaml) volumes use the pod
 label. They assume that the `kata-qemu` runtime class [is
-installed](https://github.com/kata-containers/packaging/tree/1.11.0-rc0/kata-deploy#run-a-sample-workload).
+installed](https://github.com/kata-containers/kata-containers/tree/2.1.0/tools/packaging/kata-deploy#run-a-sample-workload).
 
 For the QEMU test cluster,
 [`setup-kata-containers.sh`](/test/setup-kata-containers.sh) can be
