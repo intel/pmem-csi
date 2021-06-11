@@ -4,6 +4,26 @@ metadata:
   name: pmem-csi-intel-com-controller
   namespace: default
 ---
+# This role binding corresponds to what the following command creates:
+# oc adm policy add-scc-to-user privileged -z pmem-csi-intel-com-controller
+#
+# One difference is that we don't use the name system:openshift:scc:privileged
+# for the object. That object is managed by oc and the admin, whereas this
+# one here is under control of PMEM-CSI (YAML or operator).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pmem-csi-intel-com-node-openshift-cfg
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:privileged
+subjects:
+- kind: ServiceAccount
+  name: pmem-csi-intel-com-controller
+  namespace: default
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:

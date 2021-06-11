@@ -574,6 +574,19 @@ var subObjectHandlers = map[string]redeployObject{
 			return nil
 		},
 	},
+	"node OpenShift role binding": {
+		objType: reflect.TypeOf(&rbacv1.RoleBinding{}),
+		object: func(d *pmemCSIDeployment) client.Object {
+			return &rbacv1.RoleBinding{
+				TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: d.getObjectMeta(d.NodeOpenShiftRoleBindingName(), false),
+			}
+		},
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
+			d.getNodeOpenShiftRoleBinding(o.(*rbacv1.RoleBinding))
+			return nil
+		},
+	},
 
 	"node setup cluster role": {
 		objType: reflect.TypeOf(&rbacv1.ClusterRole{}),
@@ -946,6 +959,21 @@ func (d *pmemCSIDeployment) getControllerProvisionerRole(role *rbacv1.Role) {
 				"get",
 			},
 		},
+	}
+}
+
+func (d *pmemCSIDeployment) getNodeOpenShiftRoleBinding(rb *rbacv1.RoleBinding) {
+	rb.Subjects = []rbacv1.Subject{
+		{
+			Kind:      "ServiceAccount",
+			Name:      d.ProvisionerServiceAccountName(),
+			Namespace: d.namespace,
+		},
+	}
+	rb.RoleRef = rbacv1.RoleRef{
+		APIGroup: "rbac.authorization.k8s.io",
+		Kind:     "ClusterRole",
+		Name:     "system:openshift:scc:privileged",
 	}
 }
 

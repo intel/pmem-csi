@@ -546,6 +546,12 @@ func (d *PmemCSIDeployment) ProvisionerServiceAccountName() string {
 	return d.GetHyphenedName() + "-controller"
 }
 
+// ProvisionerRoleBindingName returns the name of the node driver's
+// RoleBinding object name for OpenShift
+func (d *PmemCSIDeployment) NodeOpenShiftRoleBindingName() string {
+	return d.GetHyphenedName() + "-node-openshift-cfg"
+}
+
 // ProvisionerRoleName returns the name of the provisioner's
 // RBAC Role object name used by the deployment
 func (d *PmemCSIDeployment) ProvisionerRoleName() string {
