@@ -174,33 +174,24 @@ pipeline {
 
         // Some stages are skipped entirely when testing PRs, the
         // others skip certain tests in that case:
-        // - production deployment is only tested with Kubernetes 1.16
-        //   and testing deployment only with Kubernetes 1.18
+        // - production deployment is tested on the oldest supported Kubernetes
+        //   (less tests, runs faster)
+        // - testing deployment is tested on the newest supported Kubernetes
+        //   (more tests, runs longer, thus gets to use the existing worker)
         stage('Testing') {
             parallel {
-                // This runs most tests and thus gets to use the initial worker immediately.
-                stage('1.20') {
+                stage('1.21') {
                     options {
                         timeout(time: 12, unit: "HOURS")
                     }
                     steps {
-                        TestInVM("", "fedora", "", "1.20", "Top.Level..[[:alpha:]]*-production[[:space:]]")
+                        // Skip production, i.e. run testing.
+                        TestInVM("", "fedora", "", "1.21", "Top.Level..[[:alpha:]]*-production[[:space:]]")
                     }
                 }
 
                 // All others set up their own worker.
-                stage('1.19') {
-                    options {
-                        timeout(time: 12, unit: "HOURS")
-                    }
-                    agent {
-                        label "pmem-csi"
-                    }
-                    steps {
-                        TestInVM("fedora-1.19", "fedora", "", "1.19", "Top.Level..[[:alpha:]]*-production[[:space:]]")
-                    }
-                }
-                stage('1.18') {
+                stage('1.20') {
                     when {
 		        beforeAgent true
 		        not { changeRequest() }
@@ -212,7 +203,19 @@ pipeline {
                         label "pmem-csi"
                     }
                     steps {
-                        TestInVM("fedora-1.18", "fedora", "", "1.18", "")
+                        TestInVM("fedora-1.20", "fedora", "", "1.20", "")
+                    }
+                }
+                stage('1.19') {
+                    options {
+                        timeout(time: 12, unit: "HOURS")
+                    }
+                    agent {
+                        label "pmem-csi"
+                    }
+                    steps {
+                        // Skip testing, i.e. run production.
+                        TestInVM("fedora-1.19", "fedora", "", "1.19",  "Top.Level..[[:alpha:]]*-testing[[:space:]]")
                     }
                 }
             }

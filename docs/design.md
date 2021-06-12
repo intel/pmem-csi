@@ -181,10 +181,11 @@ provisioning"](https://github.com/kubernetes-csi/external-provisioner/tree/v2.1.
 - The scheduler extensions help the scheduler with picking nodes where
   volumes can be created. Without them, the risk of choosing nodes
   without PMEM may be too high and manual pod scheduling may be needed
-  to avoid long delays when starting pods. In the future with
-  Kubernetes >= 1.21, [storage capacity
+  to avoid long delays when starting pods. Starting with
+  Kubernetes 1.21, [storage capacity
   tracking](https://kubernetes.io/docs/concepts/storage/storage-capacity/)
-  will be another solution for that problem.
+  is used to solve this problem and the scheduler extensions are not
+  needed anymore.
 - For volumes with storage classes that use immediate binding, the
   different `external-provisioner` instances compete with each for
   ownership of the volume by setting the "selected node"

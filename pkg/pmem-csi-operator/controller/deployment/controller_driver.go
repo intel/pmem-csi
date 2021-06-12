@@ -145,6 +145,15 @@ type pmemCSIDeployment struct {
 	controllerCABundle []byte
 }
 
+func (d *pmemCSIDeployment) withStorageCapacity() bool {
+	// Right now this is based only on the Kubernetes version.
+	// Disabling the v1beta1 API is not supported, any Kubernetes
+	// version > 1.21 is expected to have the API. There's also
+	// no way to override the usage of the feature via the operator
+	// API.
+	return d.k8sVersion.Compare(1, 21) >= 0
+}
+
 // Reconcile reconciles the driver deployment. When adding new
 // objects, extend also currentObjects above and the RBAC rules in
 // deploy/kustomize/operator/operator.yaml.
@@ -722,9 +731,15 @@ func (d *pmemCSIDeployment) deleteObsoleteObjects(ctx context.Context, r *Reconc
 func (d *pmemCSIDeployment) getCSIDriver(csiDriver *storagev1.CSIDriver) {
 	attachRequired := false
 	podInfoOnMount := true
+	storageCapacity := d.withStorageCapacity()
 
 	csiDriver.Spec.AttachRequired = &attachRequired
 	csiDriver.Spec.PodInfoOnMount = &podInfoOnMount
+	if storageCapacity {
+		// Only set if supported. We never need to overwrite
+		// true with false, so this is okay.
+		csiDriver.Spec.StorageCapacity = &storageCapacity
+	}
 
 	// Volume lifecycle modes are supported only after k8s v1.16
 	if d.k8sVersion.Compare(1, 16) >= 0 {
@@ -1378,7 +1393,7 @@ func (d *pmemCSIDeployment) getNodeDriverContainer() corev1.Container {
 
 func (d *pmemCSIDeployment) getProvisionerContainer() corev1.Container {
 	true := true
-	return corev1.Container{
+	container := corev1.Container{
 		Name:            "external-provisioner",
 		Image:           d.Spec.ProvisionerImage,
 		ImagePullPolicy: d.Spec.PullPolicy,
@@ -1420,6 +1435,31 @@ func (d *pmemCSIDeployment) getProvisionerContainer() corev1.Container {
 		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
 	}
+
+	if d.withStorageCapacity() {
+		container.Args = append(container.Args, "--enable-capacity")
+		container.Env = append(container.Env, []corev1.EnvVar{
+			{
+				Name: "NAMESPACE",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						APIVersion: "v1",
+						FieldPath:  "metadata.namespace",
+					},
+				},
+			},
+			{
+				Name: "POD_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						APIVersion: "v1",
+						FieldPath:  "metadata.name",
+					},
+				},
+			},
+		}...)
+	}
+	return container
 }
 
 func (d *pmemCSIDeployment) getNodeRegistrarContainer() corev1.Container {

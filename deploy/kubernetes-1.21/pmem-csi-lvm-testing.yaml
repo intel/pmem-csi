@@ -4,7 +4,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-controller
   namespace: pmem-csi
 ---
@@ -12,7 +12,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-node-setup
   namespace: pmem-csi
 ---
@@ -20,7 +20,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-webhooks
   namespace: pmem-csi
 ---
@@ -28,7 +28,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-external-provisioner-cfg
   namespace: pmem-csi
 rules:
@@ -83,7 +83,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-webhooks-cfg
   namespace: pmem-csi
 rules:
@@ -100,7 +100,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-external-provisioner-runner
 rules:
 - apiGroups:
@@ -175,7 +175,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-node-setup-runner
 rules:
 - apiGroups:
@@ -189,7 +189,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-webhooks-runner
 rules:
 - apiGroups:
@@ -236,7 +236,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-csi-provisioner-role-cfg
   namespace: pmem-csi
 roleRef:
@@ -252,7 +252,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-webhooks-role-cfg
   namespace: pmem-csi
 roleRef:
@@ -268,7 +268,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-csi-provisioner-role
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -283,7 +283,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-node-setup-role
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -298,7 +298,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-webhooks-role
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -313,7 +313,7 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-controller
   namespace: pmem-csi
 spec:
@@ -323,7 +323,7 @@ spec:
   selector:
     app.kubernetes.io/instance: pmem-csi.intel.com
     app.kubernetes.io/name: pmem-csi-controller
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -333,7 +333,7 @@ metadata:
     app.kubernetes.io/instance: pmem-csi.intel.com
     app.kubernetes.io/name: pmem-csi-controller
     app.kubernetes.io/part-of: pmem-csi
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-controller
   namespace: pmem-csi
 spec:
@@ -342,7 +342,7 @@ spec:
     matchLabels:
       app.kubernetes.io/instance: pmem-csi.intel.com
       app.kubernetes.io/name: pmem-csi-controller
-      pmem-csi.intel.com/deployment: direct-testing
+      pmem-csi.intel.com/deployment: lvm-testing
   serviceName: pmem-csi-intel-com-controller
   template:
     metadata:
@@ -353,7 +353,7 @@ spec:
         app.kubernetes.io/instance: pmem-csi.intel.com
         app.kubernetes.io/name: pmem-csi-controller
         app.kubernetes.io/part-of: pmem-csi
-        pmem-csi.intel.com/deployment: direct-testing
+        pmem-csi.intel.com/deployment: lvm-testing
         pmem-csi.intel.com/webhook: ignore
     spec:
       containers:
@@ -439,7 +439,7 @@ metadata:
     app.kubernetes.io/instance: pmem-csi.intel.com
     app.kubernetes.io/name: pmem-csi-node
     app.kubernetes.io/part-of: pmem-csi
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-node
   namespace: pmem-csi
 spec:
@@ -447,7 +447,7 @@ spec:
     matchLabels:
       app.kubernetes.io/instance: pmem-csi.intel.com
       app.kubernetes.io/name: pmem-csi-node
-      pmem-csi.intel.com/deployment: direct-testing
+      pmem-csi.intel.com/deployment: lvm-testing
   template:
     metadata:
       annotations:
@@ -457,13 +457,13 @@ spec:
         app.kubernetes.io/instance: pmem-csi.intel.com
         app.kubernetes.io/name: pmem-csi-node
         app.kubernetes.io/part-of: pmem-csi
-        pmem-csi.intel.com/deployment: direct-testing
+        pmem-csi.intel.com/deployment: lvm-testing
         pmem-csi.intel.com/webhook: ignore
     spec:
       containers:
       - command:
         - /usr/local/bin/pmem-csi-driver
-        - -deviceManager=direct
+        - -deviceManager=lvm
         - -v=3
         - -logging-format=text
         - -mode=node
@@ -528,7 +528,7 @@ spec:
         env:
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
-        image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.1.0
+        image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.2.0
         imagePullPolicy: IfNotPresent
         name: driver-registrar
         resources:
@@ -554,13 +554,22 @@ spec:
         - --worker-threads=5
         - --metrics-address=:10011
         - -v=5
+        - --enable-capacity
         env:
         - name: NODE_NAME
           valueFrom:
             fieldRef:
               apiVersion: v1
               fieldPath: spec.nodeName
-        image: k8s.gcr.io/sig-storage/csi-provisioner:v2.1.1
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        image: k8s.gcr.io/sig-storage/csi-provisioner:v2.2.2
         imagePullPolicy: IfNotPresent
         name: external-provisioner
         ports:
@@ -626,7 +635,7 @@ metadata:
     app.kubernetes.io/instance: pmem-csi.intel.com
     app.kubernetes.io/name: pmem-csi-node-setup
     app.kubernetes.io/part-of: pmem-csi
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-node-setup
   namespace: pmem-csi
 spec:
@@ -634,7 +643,7 @@ spec:
     matchLabels:
       app.kubernetes.io/instance: pmem-csi.intel.com
       app.kubernetes.io/name: pmem-csi-node-setup
-      pmem-csi.intel.com/deployment: direct-testing
+      pmem-csi.intel.com/deployment: lvm-testing
   template:
     metadata:
       labels:
@@ -642,7 +651,7 @@ spec:
         app.kubernetes.io/instance: pmem-csi.intel.com
         app.kubernetes.io/name: pmem-csi-node-setup
         app.kubernetes.io/part-of: pmem-csi
-        pmem-csi.intel.com/deployment: direct-testing
+        pmem-csi.intel.com/deployment: lvm-testing
         pmem-csi.intel.com/webhook: ignore
     spec:
       containers:
@@ -701,7 +710,7 @@ metadata:
     app.kubernetes.io/instance: pmem-csi.intel.com
     app.kubernetes.io/name: pmem-csi-node-testing
     app.kubernetes.io/part-of: pmem-csi
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-node-testing
   namespace: pmem-csi
 spec:
@@ -709,7 +718,7 @@ spec:
     matchLabels:
       app.kubernetes.io/instance: pmem-csi.intel.com
       app.kubernetes.io/name: pmem-csi-node-testing
-      pmem-csi.intel.com/deployment: direct-testing
+      pmem-csi.intel.com/deployment: lvm-testing
   template:
     metadata:
       labels:
@@ -717,7 +726,7 @@ spec:
         app.kubernetes.io/instance: pmem-csi.intel.com
         app.kubernetes.io/name: pmem-csi-node-testing
         app.kubernetes.io/part-of: pmem-csi
-        pmem-csi.intel.com/deployment: direct-testing
+        pmem-csi.intel.com/deployment: lvm-testing
         pmem-csi.intel.com/webhook: ignore
     spec:
       containers:
@@ -757,11 +766,12 @@ apiVersion: storage.k8s.io/v1
 kind: CSIDriver
 metadata:
   labels:
-    pmem-csi.intel.com/deployment: direct-testing
+    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi.intel.com
 spec:
   attachRequired: false
   podInfoOnMount: true
+  storageCapacity: true
   volumeLifecycleModes:
   - Persistent
   - Ephemeral
