@@ -252,14 +252,6 @@ ${KUBECTL} label --overwrite ns kube-system pmem-csi.intel.com/webhook=ignore
 if [ "${TEST_DEPLOYMENT_QUIET}" = "" ]; then
     cat <<EOF
 
-To try out the PMEM-CSI driver with persistent volumes:
-   cat deploy/common/pmem-pvc.yaml | ${KUBECTL} create -f -
-   cat deploy/common/pmem-app.yaml | ${KUBECTL} create -f -
-
-To try out the PMEM-CSI driver with cache volumes:
-   cat deploy/common/pmem-pvc-cache.yaml | ${KUBECTL} create -f -
-   cat deploy/common/pmem-app-cache.yaml | ${KUBECTL} create -f -
-
 To try out the PMEM-CSI driver with persistent volumes that use late binding:
    cat deploy/common/pmem-pvc-late-binding.yaml | ${KUBECTL} create -f -
    cat deploy/common/pmem-app-late-binding.yaml | ${KUBECTL} create -f -
