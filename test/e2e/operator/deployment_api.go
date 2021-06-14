@@ -688,9 +688,10 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		for _, testcase := range testcases.UpdateTests() {
 			testcase := testcase
 			Context(testcase.Name, func() {
-				testIt := func(restart bool) {
+				testIt := func(name string, restart bool) {
 					deployment := *testcase.Deployment.DeepCopyObject().(*api.PmemCSIDeployment)
 
+					deployment.Name = deployment.Name + "-" + name
 					// Use fake images to prevent pods from actually starting.
 					deployment.Spec.Image = dummyImage
 					deployment.Spec.NodeRegistrarImage = dummyImage
@@ -728,11 +729,11 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				}
 
 				It("while running", func() {
-					testIt(false)
+					testIt("while-running", false)
 				})
 
 				It("while stopped", func() {
-					testIt(true)
+					testIt("while-stopped", true)
 				})
 			})
 		}
