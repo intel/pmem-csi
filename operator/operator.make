@@ -46,6 +46,12 @@ MANIFESTS_DIR=$(REPO_ROOT)/deploy/kustomize/olm-catalog
 CATALOG_DIR=$(REPO_ROOT)/deploy/olm-catalog
 BUNDLE_DIR=$(REPO_ROOT)/deploy/olm-bundle/$(MAJOR_MINOR_PATCH_VERSION)
 CRD_DIR=$(REPO_ROOT)/deploy/crd
+# CHANNELS: A comma-separated list of channels the generated
+# bundle belongs to. This supposed to be all the channel names we support.
+# Currently, alpha(all < v1.0) and stable(=v1.0)
+CHANNELS?=alpha,stable
+# DEFAULT_CHANNEL: The default channel for the generated bundle.
+DEFAULT_CHANNEL?=stable
 
 PATCH_VERSIONS := sed -i -e 's;X\.Y\.Z;$(MAJOR_MINOR_PATCH_VERSION);g' -e 's;X\.Y;$(MAJOR_MINOR_VERSION);g'
 PATCH_REPLACES := sed -i -e 's;\(.*\)\(version:.*\);\1replaces: pmem-csi-operator.v$(REPLACES)\n\1\2;g'
@@ -69,7 +75,7 @@ operator-generate-crd: controller-gen
 operator-generate-bundle: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) _work/kustomize operator-generate-crd
 	@echo "Generating operator bundle in $(BUNDLE_DIR) ..."
 	@_work/kustomize build --load-restrictor LoadRestrictionsNone $(MANIFESTS_DIR) | $< generate bundle --version=$(MAJOR_MINOR_PATCH_VERSION) \
-        --kustomize-dir=$(MANIFESTS_DIR) --output-dir=$(BUNDLE_DIR)
+        --kustomize-dir=$(MANIFESTS_DIR) --output-dir=$(BUNDLE_DIR) --channels ${CHANNELS} --default-channel ${DEFAULT_CHANNEL}
 	$(PATCH_VERSIONS) $(BUNDLE_DIR)/manifests/pmem-csi-operator.clusterserviceversion.yaml
 ifdef REPLACES
 	@$(PATCH_REPLACES) $(BUNDLE_DIR)/manifests/pmem-csi-operator.clusterserviceversion.yaml
