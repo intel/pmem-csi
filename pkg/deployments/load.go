@@ -171,14 +171,14 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 		return nil, err
 	}
 
-	scheduler, err := loadYAML("deploy/kustomize/scheduler/scheduler-service.yaml", patchYAML, enabled, patchUnstructured)
+	scheduler, err := loadYAML("kustomize/scheduler/scheduler-service.yaml", patchYAML, enabled, patchUnstructured)
 	if err != nil {
 		return nil, err
 	}
 	objects = append(objects, scheduler...)
 
 	if deployment.Spec.MutatePods != api.MutatePodsNever {
-		webhook, err := loadYAML("deploy/kustomize/webhook/webhook.yaml", patchYAML, enabled, patchUnstructured)
+		webhook, err := loadYAML("kustomize/webhook/webhook.yaml", patchYAML, enabled, patchUnstructured)
 		if err != nil {
 			return nil, err
 		}
@@ -308,7 +308,7 @@ func patchPodTemplate(obj *unstructured.Unstructured, deployment api.PmemCSIDepl
 }
 
 func yamlPath(kubernetes version.Version, deviceMode api.DeviceMode) string {
-	return fmt.Sprintf("deploy/kubernetes-%s/%s/pmem-csi.yaml", kubernetes, deviceMode)
+	return fmt.Sprintf("kubernetes-%s/%s/pmem-csi.yaml", kubernetes, deviceMode)
 }
 
 func loadYAML(path string,

@@ -207,8 +207,7 @@ $(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
 		echo 'resources: [ pmem-csi.yaml ]' > $$dir/kustomization.yaml; \
 	fi
 
-kustomize: _work/go-bindata clean_kustomize_output $(KUSTOMIZE_OUTPUT)
-	$< -o deploy/bindata_generated.go -pkg deploy deploy/kubernetes-*/*/pmem-csi.yaml deploy/kustomize/webhook/webhook.yaml deploy/kustomize/scheduler/scheduler-service.yaml
+kustomize: clean_kustomize_output $(KUSTOMIZE_OUTPUT)
 
 clean_kustomize_output:
 	rm -rf deploy/kubernetes-*
@@ -223,13 +222,6 @@ clean: clean-kustomize
 clean-kustomize:
 	rm -f _work/kustomize-*
 	rm -f _work/kustomize
-
-.PHONY: clean-go-bindata
-clean: clean-go-bindata
-clean-go-bindata:
-	rm -f _work/go-bindata
-_work/go-bindata:
-	$(GO_BINARY) build -o $@ github.com/go-bindata/go-bindata/go-bindata
 
 .PHONY: test-kustomize $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
 test: test-kustomize
