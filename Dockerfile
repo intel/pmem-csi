@@ -13,6 +13,7 @@ ARG CACHEBUST
 
 # We want newer ndctl that is available in buster:
 RUN echo 'deb http://ftp.debian.org/debian buster-backports main' > /etc/apt/sources.list.d/buster-backports.list
+RUN echo 'deb-src http://ftp.debian.org/debian buster-backports main' >> /etc/apt/sources.list.d/buster-backports.list
 # In contrast to the runtime image below, here we can afford to install additional
 # tools and recommended packages. But this image gets pushed to a registry by the CI as a cache,
 # so it still makes sense to keep this layer small by removing /var/cache.
@@ -46,6 +47,7 @@ COPY --from=build python3_100.0_all.deb /var/cache/python3_100.0_all.deb
 # ndctl - pulls in the necessary library, useful by itself
 # fio - only included in testing images
 RUN echo 'deb http://ftp.debian.org/debian buster-backports main' > /etc/apt/sources.list.d/buster-backports.list
+RUN echo 'deb-src http://ftp.debian.org/debian buster-backports main' >> /etc/apt/sources.list.d/buster-backports.list
 RUN ${APT_GET} update && \
     mkdir -p /usr/local/share && \
     dpkg -i /var/cache/python3_100.0_all.deb && \
