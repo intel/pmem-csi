@@ -381,7 +381,7 @@ spec:
         image: intel/pmem-csi-driver:canary
         imagePullPolicy: IfNotPresent
         livenessProbe:
-          failureThreshold: 5
+          failureThreshold: 6
           httpGet:
             path: /metrics
             port: metrics
@@ -399,6 +399,15 @@ spec:
             memory: 128Mi
         securityContext:
           readOnlyRootFilesystem: true
+        startupProbe:
+          failureThreshold: 60
+          httpGet:
+            path: /metrics
+            port: metrics
+            scheme: HTTP
+          periodSeconds: 1
+          successThreshold: 1
+          timeoutSeconds: 5
         terminationMessagePath: /dev/termination-log
         volumeMounts:
         - mountPath: /certs
@@ -473,7 +482,7 @@ spec:
         image: intel/pmem-csi-driver:canary
         imagePullPolicy: IfNotPresent
         livenessProbe:
-          failureThreshold: 5
+          failureThreshold: 6
           httpGet:
             path: /metrics
             port: metrics
@@ -493,12 +502,12 @@ spec:
           privileged: true
           runAsUser: 0
         startupProbe:
-          failureThreshold: 30
+          failureThreshold: 300
           httpGet:
             path: /metrics
             port: metrics
             scheme: HTTP
-          periodSeconds: 10
+          periodSeconds: 1
           successThreshold: 1
           timeoutSeconds: 5
         terminationMessagePath: /tmp/termination-log
@@ -571,7 +580,7 @@ spec:
         image: k8s.gcr.io/sig-storage/csi-provisioner:v2.2.2
         imagePullPolicy: IfNotPresent
         livenessProbe:
-          failureThreshold: 5
+          failureThreshold: 6
           httpGet:
             path: /metrics
             port: metrics
@@ -590,12 +599,12 @@ spec:
         securityContext:
           readOnlyRootFilesystem: true
         startupProbe:
-          failureThreshold: 30
+          failureThreshold: 300
           httpGet:
             path: /metrics
             port: metrics
             scheme: HTTP
-          periodSeconds: 10
+          periodSeconds: 1
           successThreshold: 1
           timeoutSeconds: 5
         volumeMounts:

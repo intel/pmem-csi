@@ -24,10 +24,9 @@
       scheme: HTTP
       path: /metrics
       port: metrics
-    # Allow it to fail 5 times. This is conservative
-    # because the probe is new. It might get reduced
-    # to 1 later.
-    failureThreshold: 5
+    # Allow it to for a total duration of one minute.
+    # This is conservative because the probe is new.
+    failureThreshold: 6
     periodSeconds: 10
     successThreshold: 1
     timeoutSeconds: 5
@@ -39,8 +38,9 @@
       path: /metrics
       port: metrics
     # Startup may be slower when LVM needs to be set up first.
-    failureThreshold: 30
-    periodSeconds: 10
+    # Check more frequently to get it into a ready state quickly.
+    failureThreshold: 300
+    periodSeconds: 1
     successThreshold: 1
     timeoutSeconds: 5
 
@@ -68,10 +68,9 @@
       scheme: HTTP
       path: /metrics
       port: metrics
-    # Allow it to fail 5 times. This is conservative
-    # because the probe is new. It might get reduced
-    # to 1 later.
-    failureThreshold: 5
+    # Same settings as for driver because the provisioner
+    # waits for the driver.
+    failureThreshold: 6
     periodSeconds: 10
     successThreshold: 1
     timeoutSeconds: 5
@@ -82,9 +81,7 @@
       scheme: HTTP
       path: /metrics
       port: metrics
-    # The provisioner waits for the driver, so startup
-    # may be slower when LVM needs to be set up first.
-    failureThreshold: 30
-    periodSeconds: 10
+    failureThreshold: 300
+    periodSeconds: 1
     successThreshold: 1
     timeoutSeconds: 5

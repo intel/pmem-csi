@@ -23,10 +23,22 @@
       scheme: HTTP
       path: /metrics
       port: metrics
-    # Allow it to fail 5 times. This is conservative
-    # because the probe is new. It might get reduced
-    # to 1 later.
-    failureThreshold: 5
+    # Allow it to for a total duration of one minute.
+    # This is conservative because the probe is new.
+    failureThreshold: 6
     periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 5
+- op: add
+  path: /spec/template/spec/containers/0/startupProbe
+  value:
+    httpGet:
+      scheme: HTTP
+      path: /metrics
+      port: metrics
+    # Check more frequently while the container starts up
+    # to get it into a ready state quickly.
+    failureThreshold: 60
+    periodSeconds: 1
     successThreshold: 1
     timeoutSeconds: 5
