@@ -250,6 +250,7 @@ BUILDDIR      = _output
 # repo (= github.com/intel/pmem-csi/deploy, a syntax that is only
 # valid there) if set.
 GEN_DOCS = $(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O) && \
+	$(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" -b linkcheck2 $(SPHINXOPTS) $(O) && \
 	( ! [ "$$GITHUB_SHA" ] || ! [ "$$GITHUB_REPOSITORY" ] || \
 	  find $(BUILDDIR)/html/ -name '*.html' | \
 	  xargs sed -i -e "s;github.com/intel/pmem-csi/\\(deploy/\\S*\\);github.com/$$GITHUB_REPOSITORY/\\1?ref=$$GITHUB_SHA;g" ) && \

@@ -42,6 +42,7 @@ from sphinx.util.nodes import get_node_line
 logger = logging.getLogger(__name__)
 
 uri_re = re.compile('([a-z]+:)?//')  # matches to foo:// and // (a protocol relative URL)
+file_re = re.compile(r'(.*\.(?:md|rst|html))(?:#(.*))?') # matches /foo.md#anchor and #anchor and ../foo.md
 
 Hyperlink = NamedTuple('Hyperlink', (('uri', str),
                                      ('docname', str),
@@ -110,12 +111,18 @@ def check_anchor(response: requests.requests.Response, anchor: str) -> bool:
     parser.close()
     return parser.found
 
+def check_anchor_body(body: bytes, anchor: str) -> bool:
+    """Returns True if anchor was found in the body, False otherwise.
+    """
+    parser = AnchorCheckParser(anchor)
+    parser.feed(body)
+    return parser.found
 
 class CheckExternalLinksBuilder(DummyBuilder):
     """
     Checks for broken external links.
     """
-    name = 'linkcheck'
+    name = 'linkcheck2'
     epilog = __('Look for any errors in the above output or in '
                 '%(outdir)s/output.txt')
 
@@ -448,7 +455,16 @@ class HyperlinkAvailabilityCheckWorker(Thread):
                     response = requests.get(req_url, stream=True, config=self.config,
                                             auth=auth_info, **kwargs)
                     response.raise_for_status()
-                    found = check_anchor(response, unquote(anchor))
+                    anchor_str = unquote(anchor)
+                    # Hack (?): https://github.com/container-storage-interface/spec/blob/master/spec.md#getplugininfo
+                    # is a valid anchor, but the actual id of the anchor is user-content-getplugininfo, which causes
+                    # the anchor check to fail:
+                    # <a id="user-content-getplugininfo" class="anchor" aria-hidden="true" href="#getplugininfo">
+                    #
+                    # Might have to be fixed in AnchorCheckParser instead?
+                    if req_url.startswith('https://github.com/'):
+                        anchor_str = "user-content-" + anchor_str
+                    found = check_anchor(response, anchor_str)
 
                     if not found:
                         raise Exception(__("Anchor '%s' not found") % anchor)
@@ -507,7 +523,7 @@ class HyperlinkAvailabilityCheckWorker(Thread):
 
         def check(docname: str) -> Tuple[str, str, int]:
             # check for various conditions without bothering the network
-            if len(uri) == 0 or uri.startswith(('#', 'mailto:', 'tel:')):
+            if len(uri) == 0 or uri.startswith(('mailto:', 'tel:')):
                 return 'unchecked', '', 0
             elif not uri.startswith(('http:', 'https:')):
                 if uri_re.match(uri):
@@ -515,11 +531,44 @@ class HyperlinkAvailabilityCheckWorker(Thread):
                     return 'unchecked', '', 0
                 else:
                     srcdir = path.dirname(self.env.doc2path(docname))
-                    if path.exists(path.join(srcdir, uri)):
+                    parts = file_re.match(uri)
+                    if not parts and uri.startswith('#'):
+                        parts = (uri, '', uri[1:])
+                    if parts:
+                        # A document link. Check that the document exists by reading the generated
+                        # HTML. This only works if the documented was already written out, which is
+                        # not the case during the initial pass. The Makefile has to first generate
+                        # without link checking, then a second time with link checking enabled.
+                        if parts[1]:
+                            filename = path.join(path.dirname(docname), parts[1])
+                        else:
+                            filename = docname + ".md"
+                        htmlfile = "_output/html/"+filename.replace(".md", ".html").replace(".rst", ".html")
+                        if path.exists(htmlfile):
+                            # Optionally check anchor.
+                            if parts[2]:
+                                anchor = parts[2]
+                                with open(htmlfile, encoding='utf-8') as f:
+                                    content = f.read()
+                                if not check_anchor_body(content, anchor):
+                                    self._broken[uri] = ''
+                                    return 'broken', "Anchor '%s' not found in %s" % (anchor, htmlfile), 0
+                            return 'working', '', 0
+                        else:
+                            self._broken[uri] = ''
+                            return 'broken', 'file %s not found' % htmlfile, 0
+                    elif uri.startswith("/"):
+                        # Absolute path is treated as relative to the current build directory.
+                        if path.exists("." + uri):
+                            return 'working', '', 0
+                        else:
+                            self._broken[uri] = ''
+                            return 'broken', 'file not found in build directory', 0
+                    elif path.exists(path.join(srcdir, uri)):
                         return 'working', '', 0
                     else:
                         self._broken[uri] = ''
-                        return 'broken', '', 0
+                        return 'broken', 'file not found relative to ' + srcdir, 0
             elif uri in self._good:
                 return 'working', 'old', 0
             elif uri in self._broken:
@@ -619,7 +668,7 @@ class HyperlinkAvailabilityCheckWorker(Thread):
 
 
 class HyperlinkCollector(SphinxPostTransform):
-    builders = ('linkcheck',)
+    builders = ('linkcheck2',)
     default_priority = 800
 
     def run(self, **kwargs: Any) -> None:
@@ -650,17 +699,17 @@ def setup(app: Sphinx) -> Dict[str, Any]:
     app.add_builder(CheckExternalLinksBuilder)
     app.add_post_transform(HyperlinkCollector)
 
-    app.add_config_value('linkcheck_ignore', [], None)
-    app.add_config_value('linkcheck_auth', [], None)
-    app.add_config_value('linkcheck_request_headers', {}, None)
-    app.add_config_value('linkcheck_retries', 1, None)
-    app.add_config_value('linkcheck_timeout', None, None, [int])
-    app.add_config_value('linkcheck_workers', 5, None)
-    app.add_config_value('linkcheck_anchors', True, None)
-    # Anchors starting with ! are ignored since they are
-    # commonly used for dynamic pages
-    app.add_config_value('linkcheck_anchors_ignore', ["^!"], None)
-    app.add_config_value('linkcheck_rate_limit_timeout', 300.0, None)
+    # app.add_config_value('linkcheck2_ignore', [], None)
+    # app.add_config_value('linkcheck2_auth', [], None)
+    # app.add_config_value('linkcheck2_request_headers', {}, None)
+    # app.add_config_value('linkcheck2_retries', 1, None)
+    # app.add_config_value('linkcheck2_timeout', None, None, [int])
+    # app.add_config_value('linkcheck2_workers', 5, None)
+    # app.add_config_value('linkcheck2_anchors', True, None)
+    # # Anchors starting with ! are ignored since they are
+    # # commonly used for dynamic pages
+    # app.add_config_value('linkcheck2_anchors_ignore', ["^!"], None)
+    # app.add_config_value('linkcheck2_rate_limit_timeout', 300.0, None)
 
     return {
         'version': 'builtin',

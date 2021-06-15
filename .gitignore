@@ -6,3 +6,5 @@ Manifest
 /_build
 /deploy/olm-bundle
 /deploy/kustomize/olm-catalog/crd
+
+*.pyc
