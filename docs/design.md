@@ -278,7 +278,7 @@ volumes](https://kubernetes.io/docs/concepts/storage/ephemeral-volumes/#generic-
 which are an alpha feature in Kubernetes 1.19 and supported by
 PMEM-CSI because they use the normal volume provisioning process.
 
-See [exposing persistent and cache volumes](install.md#expose-persistent-and-cache-volumes-to-applications) for configuration information.
+See [volume parameters](install.md#volume-parameters) for configuration information.
 
 ## Volume Size
 

@@ -82,7 +82,7 @@ the master node.
 
 After `make start`, PMEM-CSI is *not* installed yet. Either install
 manually as [described for a normal
-cluster](#run-pmem-csi-on-kubernetes) or use the
+cluster](install.md#installation-and-setup) or use the
 [setup-deployment.sh](/test/setup-deployment.sh) script.
 
 ## Configuration options
