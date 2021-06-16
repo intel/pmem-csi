@@ -1,25 +1,5 @@
 # Installation and Usage
 
-- [Prerequisites](#prerequisites)
-    - [Software required](#software-required)
-    - [Hardware required](#hardware-required)
-    - [Persistent memory pre-provisioning](#persistent-memory-pre-provisioning)
-- [Installation and setup](#installation-and-setup)
-    - [Install PMEM-CSI driver](#install-pmem-csi-driver)
-      - [Install using the operator](#install-using-the-operator)
-      - [Install via YAML files](#install-via-yaml-files)
-    - [Volume parameters](#volume-parameters)
-    - [Creating volumes](#creating-volumes)
-    - [Troubleshooting](#troubleshooting)
-    - [Automatic node setup](#automatic-node-setup)
-    - [Kata Containers support](#kata-containers-support)
-    - [Ephemeral inline volumes](#ephemeral-inline-volumes)
-    - [Raw block volumes](#raw-block-volumes)
-    - [Enable scheduler extensions](#enable-scheduler-extensions)
-    - [Metrics support](#metrics-support)
-- [PMEM-CSI Deployment CRD](#pmem-csi-deployment-crd)
-- [Filing issues and contributing](#filing-issues-and-contributing)
-
 ## Overview
 
 This section summarizes the steps that may be needed during the entire

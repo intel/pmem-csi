@@ -1,18 +1,5 @@
 # Design and architecture
 
-- [Design](#design)
-    - [Architecture and Operation](#architecture-and-operation)
-    - [LVM device mode](#lvm-device-mode)
-    - [Direct device mode](#direct-device-mode)
-    - [Kata Containers support](#kata-containers-support)
-    - [Dynamic provisioning of local volumes](#dynamic-provisioning-of-local-volumes)
-    - [Communication between components](#communication-between-components)
-    - [Security](#security)
-    - [Volume Persistency](#volume-persistency)
-    - [Volume Size](#volume-size)
-    - [Capacity-aware pod scheduling](#capacity-aware-pod-scheduling)
-    - [PMEM-CSI operator](#pmem-csi-operator)
-
 ## Architecture and Operation
 
 The PMEM-CSI driver can operate in two different device modes: *LVM* and
