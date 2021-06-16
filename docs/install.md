@@ -318,8 +318,8 @@ for a complete list of supported properties.
 
 Here is a minimal example driver deployment created with a custom resource:
 
-**NOTE**: `nodeSelector` must match with node's label set in
-[Installation and setup](#installation-and-setup) section.
+**NOTE**: `nodeSelector` must match the node label that was set in the
+[installation and setup](#installation-and-setup) section.
 
 ``` ShellSession
 $ kubectl create -f - <<EOF
