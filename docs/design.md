@@ -9,9 +9,10 @@
     - [Communication between components](#communication-between-components)
     - [Security](#security)
     - [Volume Persistency](#volume-persistency)
+    - [Volume Size](#volume-size)
     - [Capacity-aware pod scheduling](#capacity-aware-pod-scheduling)
     - [PMEM-CSI operator](#pmem-csi-operator)
-        
+
 ## Architecture and Operation
 
 The PMEM-CSI driver can operate in two different device modes: *LVM* and
@@ -291,6 +292,37 @@ which are an alpha feature in Kubernetes 1.19 and supported by
 PMEM-CSI because they use the normal volume provisioning process.
 
 See [exposing persistent and cache volumes](install.md#expose-persistent-and-cache-volumes-to-applications) for configuration information.
+
+## Volume Size
+
+The size of a volume reflects how much of the underlying storage that
+is managed by PMEM-CSI is required for the volume. That size is also
+what needs to be specified when requesting a volume.
+
+For LVM, the number of blocks taken away from a volume group is the
+same as the number of blocks in the new logical volume. For direct
+mode, there is [some additional
+overhead](https://docs.pmem.io/ndctl-user-guide/managing-namespaces#fsdax-and-devdax-capacity-considerations). PMEM-CSI
+stores the additional meta data on the PMEM device (`--map=dev` in
+ndctl) because that way, volumes can be used without affecting the
+available DRAM on a node. The size of a namespace as listed by ndctl
+refers to the usable size in the block device for the namespace, which
+is less than the amount of PMEM reserved for the namespace in the
+region and thus also less than the requested volume size.
+
+In both modes, the filesystem created on the block device introduces
+further overhead. The overhead for the filesystem and the additional
+meta data in direct mode is something that users must consider when
+deploying applications.
+
+*Note*: Applications can request to map a file into memory that is too
+large for the filesystem. Attempts to actually *use* all of the mapped
+file then will lead to page faults once all available storage is
+exhausted. Applications should use `fallocate` to ensure that this
+won't happen. See [the memcached example
+YAML](/deploy/kustomize/memcached/persistent/memcached-persistent.yaml)
+for a way how to deal with this for applications that do not use
+`fallocate` themselves.
 
 ## Capacity-aware pod scheduling
 
