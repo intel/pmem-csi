@@ -1272,6 +1272,7 @@ func (d *pmemCSIDeployment) getNodeDriverCommand() []string {
 
 func (d *pmemCSIDeployment) getControllerContainer() corev1.Container {
 	true := true
+
 	c := corev1.Container{
 		Name:            "pmem-driver",
 		Image:           d.Spec.Image,
@@ -1303,6 +1304,8 @@ func (d *pmemCSIDeployment) getControllerContainer() corev1.Container {
 		SecurityContext: &corev1.SecurityContext{
 			ReadOnlyRootFilesystem: &true,
 		},
+		LivenessProbe: getMetricsProbe(6, 10),
+		StartupProbe:  getMetricsProbe(60, 1),
 	}
 
 	if d.Spec.ControllerTLSSecret != "" {
@@ -1386,6 +1389,8 @@ func (d *pmemCSIDeployment) getNodeDriverContainer() corev1.Container {
 		},
 		TerminationMessagePath:   "/tmp/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+		LivenessProbe:            getMetricsProbe(6, 10),
+		StartupProbe:             getMetricsProbe(300, 1),
 	}
 
 	return c
@@ -1434,6 +1439,8 @@ func (d *pmemCSIDeployment) getProvisionerContainer() corev1.Container {
 		},
 		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
+		LivenessProbe:            getMetricsProbe(6, 10),
+		StartupProbe:             getMetricsProbe(300, 1),
 	}
 
 	if d.withStorageCapacity() {
@@ -1667,6 +1674,22 @@ func (d *pmemCSIDeployment) getObjectMeta(name string, isClusterResource bool) m
 		meta.Namespace = d.namespace
 	}
 	return meta
+}
+
+func getMetricsProbe(failureThreshold int32, periodSeconds int32) *corev1.Probe {
+	return &corev1.Probe{
+		Handler: corev1.Handler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Scheme: "HTTP",
+				Path:   "/metrics",
+				Port:   intstr.FromString("metrics"),
+			},
+		},
+		SuccessThreshold: 1,
+		TimeoutSeconds:   5,
+		PeriodSeconds:    periodSeconds,
+		FailureThreshold: failureThreshold,
+	}
 }
 
 func joinMaps(left, right map[string]string) map[string]string {

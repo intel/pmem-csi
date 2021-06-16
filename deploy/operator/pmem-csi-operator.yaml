@@ -189,6 +189,15 @@ spec:
           value: x509ignoreCN=0
         image: intel/pmem-csi-driver:canary
         imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 5
+          httpGet:
+            path: /metrics
+            port: metrics
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
         name: pmem-csi-operator
         ports:
         - containerPort: 8080

@@ -172,6 +172,18 @@ spec:
           volumeMounts:
           - name: tmp
             mountPath: /tmp
+          livenessProbe:
+            httpGet:
+              scheme: HTTP
+              path: /metrics
+              port: metrics
+            # Allow it to fail 5 times. This is conservative
+            # because the probe is new. It might get reduced
+            # to 1 later.
+            failureThreshold: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
       volumes:
       - name: tmp
         emptyDir: {}

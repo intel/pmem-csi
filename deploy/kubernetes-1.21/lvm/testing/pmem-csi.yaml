@@ -382,6 +382,15 @@ spec:
               fieldPath: metadata.namespace
         image: intel/pmem-csi-driver-test:canary
         imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 6
+          httpGet:
+            path: /metrics
+            port: metrics
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
         name: pmem-driver
         ports:
         - containerPort: 10010
@@ -392,6 +401,15 @@ spec:
             memory: 128Mi
         securityContext:
           readOnlyRootFilesystem: true
+        startupProbe:
+          failureThreshold: 60
+          httpGet:
+            path: /metrics
+            port: metrics
+            scheme: HTTP
+          periodSeconds: 1
+          successThreshold: 1
+          timeoutSeconds: 5
         terminationMessagePath: /dev/termination-log
         volumeMounts:
         - mountPath: /certs
@@ -487,6 +505,15 @@ spec:
           value: /tmp/termination-log
         image: intel/pmem-csi-driver-test:canary
         imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 6
+          httpGet:
+            path: /metrics
+            port: metrics
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
         name: pmem-driver
         ports:
         - containerPort: 10010
@@ -498,6 +525,15 @@ spec:
         securityContext:
           privileged: true
           runAsUser: 0
+        startupProbe:
+          failureThreshold: 300
+          httpGet:
+            path: /metrics
+            port: metrics
+            scheme: HTTP
+          periodSeconds: 1
+          successThreshold: 1
+          timeoutSeconds: 5
         terminationMessagePath: /tmp/termination-log
         volumeMounts:
         - mountPath: /var/lib/kubelet/plugins/kubernetes.io/csi
@@ -571,6 +607,15 @@ spec:
               fieldPath: metadata.name
         image: k8s.gcr.io/sig-storage/csi-provisioner:v2.2.2
         imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 6
+          httpGet:
+            path: /metrics
+            port: metrics
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
         name: external-provisioner
         ports:
         - containerPort: 10011
@@ -581,6 +626,15 @@ spec:
             memory: 128Mi
         securityContext:
           readOnlyRootFilesystem: true
+        startupProbe:
+          failureThreshold: 300
+          httpGet:
+            path: /metrics
+            port: metrics
+            scheme: HTTP
+          periodSeconds: 1
+          successThreshold: 1
+          timeoutSeconds: 5
         volumeMounts:
         - mountPath: /csi
           name: socket-dir
