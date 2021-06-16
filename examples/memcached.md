@@ -184,7 +184,7 @@ deployment](/deploy/kustomize/memcached/persistent/memcached-persistent.yaml)
 uses a stateful set because that can automatically create persistent
 volumes for each instance. The shell wrapper around memcached
 translates the normal [`SIGTERM` shutdown
-signal](https://kubernetes.io/docs/concepts/workloads/pods/pod/#termination-of-pods)
+signal](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination)
 into `SIGUSR1`.
 
 Deploying like that becomes less flexible because the memcached pods

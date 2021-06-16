@@ -4,7 +4,7 @@
 
 ### Build PMEM-CSI
 
-1.  Use `make build-images` to produce Docker\* container images.
+1.  Use `make build-images` to produce Docker\* container images.g180
 
 2.  Use `make push-images` to push Docker container images to a Docker image
     registry. The default is to push to a local
@@ -171,7 +171,7 @@ Network ports are opened as configured in manifest files:
 
 - metrics endpoint: typical port values 10010 (PMEM-CSI) and 10011
   (external-provisioner)
-- webhook endpoint: disabled by default, port chosen when [enabling the scheduler extensions](../README.md#enable-scheduler-extensions)
+- webhook endpoint: disabled by default, port chosen when [enabling the scheduler extensions](install.md#enable-scheduler-extensions)
 
 ### Local sockets
 
@@ -185,8 +185,8 @@ The Kubernetes CSI API is used over a local socket inside the same host.
 ### Command line arguments
 
 See the `main.go` files of the
-[pmem-csi-driver](./pkg/pmem-csi-driver/main.go) and
-the [pmem-csi-operator](./pkg/pmem-csi-operator/main.go) commands.
+[pmem-csi-driver](/pkg/pmem-csi-driver/main.go) and
+the [pmem-csi-operator](/pkg/pmem-csi-operator/main.go) commands.
 
 ### Environment variables
 
@@ -242,7 +242,7 @@ make test_e2e TEST_E2E_FOCUS=lvm-production.*late.binding.*stress.test
 ```
 
 Alternatively, one can run the
-[`hack/stress-driver.sh`](hack/stress-driver.sh)
+[`hack/stress-driver.sh`](/hack/stress-driver.sh)
 helper script to generate load on the driver
 ```console
 ROUNDS=500 VOL_COUNT=5 ./hack/stress-driver.sh

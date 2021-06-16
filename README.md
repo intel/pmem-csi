@@ -107,13 +107,12 @@ Docker\* Hub. Those images contain license texts under
 
 ## Content
 
-- [PMEM-CSI for Kubernetes](#pmem-csi-for-kubernetes)
-    - [Supported Kubernetes versions](#supported-kubernetes-versions)
-    - [Design and architecture](docs/design.md)
-    - [Installation and Usage](docs/install.md)
-       - [Prerequisites](docs/install.md#prerequisites)
-       - [Installation and setup](docs/install.md#installation-and-setup)
-       - [Filing issues and contributing](docs/install.md#filing-issues-and-contributing)
-    - [Develop and contribute](docs/DEVELOPMENT.md)
-    - [Automated testing](docs/autotest.md)
-    - [Application examples](examples/readme.rst)
+- [Supported Kubernetes versions](#supported-kubernetes-versions)
+- [Design and architecture](docs/design.md)
+- [Installation and Usage](docs/install.md)
+   - [Prerequisites](docs/install.md#prerequisites)
+   - [Installation and setup](docs/install.md#installation-and-setup)
+   - [Filing issues and contributing](docs/install.md#filing-issues-and-contributing)
+- [Develop and contribute](docs/DEVELOPMENT.md)
+- [Automated testing](docs/autotest.md)
+- [Application examples](examples/readme.rst)
