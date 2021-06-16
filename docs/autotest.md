@@ -1,13 +1,5 @@
 # Automated testing
 
-- [Automated testing](#automated-testing)
-    - [Unit testing and code quality](#unit-testing-and-code-quality)
-    - [QEMU and Kubernetes](#qemu-and-kubernetes)
-    - [Starting and stopping a test cluster](#starting-and-stopping-a-test-cluster)
-    - [Running commands on test cluster nodes over ssh](#running-commands-on-test-cluster-nodes-over-ssh)
-    - [Configuration options](#configuration-options)
-    - [Running E2E tests](#running-e2e-tests)
-
 ## Unit testing and code quality
 
 Use the `make test` command.

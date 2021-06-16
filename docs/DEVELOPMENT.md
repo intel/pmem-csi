@@ -1,37 +1,5 @@
 # Develop and Contribute
 
-- [Setup](#setup)
-    - [Build PMEM-CSI](#build-pmem-csi)
-- [Code quality](#code-quality)
-    - [Coding style](#coding-style)
-    - [Input validation](#input-validation)
-- [Release management](#release-management)
-    - [Branching](#branching)
-    - [Tagging](#tagging)
-    - [Release checklist](#release-checklist)
-    - [Release PMEM-CSI operator](#release-pmem-csi-operator)
-- [APIs](#apis)
-    - [CSI API](#csi-api)
-    - [Network ports](#network-ports)
-    - [Local sockets](#local-sockets)
-    - [Command line arguments](#command-line-arguments)
-    - [Environment variables](#environment-variables)
-    - [Logging](#logging)
-- [Performance and resource measurements](#performance-and-resource-measurements)
-- [Switching device mode](#switching-device-mode)
-    - [Going from LVM device mode to direct device mode](#going-from-lvm-device-mode-to-direct-device-mode)
-    - [Going from direct device mode to LVM device mode](#going-from-direct-device-mode-to-lvm-device-mode)
-- [Accessing system directories in a container](#accessing-system-directories-in-a-container)
-    - [Read-only access to /sys](#read-only-access-to-sys)
-    - [Access to /dev of host](#access-to-dev-of-host)
-- [Repository elements that are generated or created separately](#repository-elements-which-are-generated-or-created-separately)
-    - [Top-level README diagrams describing LVM and Direct device modes](#top-level-readme-diagrams-describing-lvm-and-direct-device-modes)
-    - [Top-level README diagram describing communication channels](#top-level-readme-diagram-describing-communication-channels)
-    - [Diagrams describing provisioning sequence](#diagrams-describing-provisioning-sequence)
-    - [RegistryServer spec](#registryserver-spec)
-    - [Table of Contents in README and DEVELOPMENT](#table-of-contents-in-readme-and-development)
-- [Edit, build, and deploy the Read the Docs site](#build-edit-and-deploy-the-read-the-docs-site)
-
 ## Setup
 
 ### Build PMEM-CSI
