@@ -19,7 +19,8 @@ import (
 
 // StateManager manages the driver persistent state, i.e, volumes information
 type StateManager interface {
-	// Create creates an entry in the state with given id and data
+	// Create creates an entry in the state with given id and data, overwriting
+	// any existing one with the same id.
 	Create(id string, data interface{}) error
 	// Delete deletes an entry found with the id from the state
 	Delete(id string) error
@@ -56,12 +57,14 @@ func NewFileState(directory string) (StateManager, error) {
 	}, nil
 }
 
-// Create saves the volume metadata to file named <id>.json
+// Create saves the volume metadata to file named <id>.json, overwriting
+// any existing one with the same ID.
 func (fs *fileState) Create(id string, data interface{}) error {
 	fs.lock.Lock()
 	defer fs.lock.Unlock()
 
-	file := path.Join(fs.location, id+".json")
+	suffix := ".tmp"
+	file := path.Join(fs.location, id+".json"+suffix)
 	// Create new file for synchronous writes
 	fp, err := os.OpenFile(file, os.O_WRONLY|os.O_SYNC|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
@@ -79,6 +82,10 @@ func (fs *fileState) Create(id string, data interface{}) error {
 
 	if err := fp.Close(); err != nil {
 		return fmt.Errorf("failed to close state file: %w", err)
+	}
+
+	if err := os.Rename(file, file[:len(file)-len(suffix)]); err != nil {
+		return fmt.Errorf("failed to rename state file: %w", err)
 	}
 
 	return fs.syncStateDir()

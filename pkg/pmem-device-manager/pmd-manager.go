@@ -75,9 +75,10 @@ type PmemDeviceManager interface {
 	// GetName returns current device manager's operation mode
 	GetMode() api.DeviceMode
 
-	// CreateDevice creates a new block device with give name, size and namespace mode
+	// CreateDevice creates a new block device with give name, size and namespace mode.
+	// It returns the actual volume size which will always be at least as large as requested.
 	// Possible errors: ErrNotEnoughSpace, ErrDeviceExists
-	CreateDevice(name string, size uint64) error
+	CreateDevice(name string, size uint64) (uint64, error)
 
 	// GetDevice returns the block device information for given name
 	// Possible errors: ErrDeviceNotFound

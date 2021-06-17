@@ -10,6 +10,7 @@ import (
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
+	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 	"k8s.io/klog/v2"
@@ -127,7 +128,7 @@ func (lvm *pmemLvm) GetCapacity() (capacity Capacity, err error) {
 	return capacity, nil
 }
 
-func (lvm *pmemLvm) CreateDevice(volumeId string, size uint64) error {
+func (lvm *pmemLvm) CreateDevice(volumeId string, size uint64) (uint64, error) {
 	lvmMutex.Lock()
 	defer lvmMutex.Unlock()
 	// Check that such volume does not exist. In certain error states, for example when
@@ -136,27 +137,26 @@ func (lvm *pmemLvm) CreateDevice(volumeId string, size uint64) error {
 	// Avoid device filling with garbage entries by returning error.
 	// Overall, no point having more than one namespace with same volumeId.
 	if _, err := lvm.getDevice(volumeId); err == nil {
-		return pmemerr.DeviceExists
+		return 0, pmemerr.DeviceExists
 	}
 	vgs, err := getVolumeGroups(lvm.volumeGroups)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	// Adjust up to next alignment boundary, if not aligned already.
-	// This logic relies on size guaranteed to be nonzero,
-	// which is now achieved by check in upper layer.
-	// If zero size possible then we would need to check and increment by lvmAlign,
-	// because LVM does not tolerate creation of zero size.
-	if reminder := size % lvmAlign; reminder != 0 {
-		klog.V(5).Infof("CreateDevice align size up by %v: from %v", lvmAlign-reminder, size)
-		size += lvmAlign - reminder
-		klog.V(5).Infof("CreateDevice align size up: to %v", size)
+	actual := (size + lvmAlign - 1) / lvmAlign * lvmAlign
+	if actual == 0 {
+		actual = lvmAlign
 	}
-	strSz := strconv.FormatUint(size, 10) + "B"
+	if actual != size {
+		klog.V(5).Infof("CreateDevice increased size from %s to %s to satisfy LVM alignment of %s",
+			pmemlog.CapacityRef(int64(size)), pmemlog.CapacityRef(int64(actual)), pmemlog.CapacityRef(int64(lvmAlign)))
+	}
+	strSz := strconv.FormatUint(actual, 10) + "B"
 
 	for _, vg := range vgs {
 		// use first Vgroup with enough available space
-		if vg.free >= size {
+		if vg.free >= actual {
 			// In some container environments clearing device fails with race condition.
 			// So, we ask lvm not to clear(-Zn) the newly created device, instead we do ourself in later stage.
 			// lvcreate takes size in MBytes if no unit
@@ -166,22 +166,22 @@ func (lvm *pmemLvm) CreateDevice(volumeId string, size uint64) error {
 				// clear start of device to avoid old data being recognized as file system
 				device, err := getUncachedDevice(volumeId, vg.name)
 				if err != nil {
-					return err
+					return 0, err
 				}
 				if err := waitDeviceAppears(device); err != nil {
-					return err
+					return 0, err
 				}
 				if err := clearDevice(device, false); err != nil {
-					return fmt.Errorf("clear device %q: %v", volumeId, err)
+					return 0, fmt.Errorf("clear device %q: %v", volumeId, err)
 				}
 
 				lvm.devices[device.VolumeId] = device
 
-				return nil
+				return actual, nil
 			}
 		}
 	}
-	return pmemerr.NotEnoughSpace
+	return 0, pmemerr.NotEnoughSpace
 }
 
 func (lvm *pmemLvm) DeleteDevice(volumeId string, flush bool) error {

@@ -88,8 +88,9 @@ func runTests(mode string) {
 	It("Should create a new device", func() {
 		name := "test-dev-new"
 		size := uint64(2) * 1024 * 1024 // 2Mb
-		err := dm.CreateDevice(name, size)
+		actual, err := dm.CreateDevice(name, size)
 		Expect(err).Should(BeNil(), "Failed to create new device")
+		Expect(actual).Should(BeNumerically(">=", size), "device at least as large as requested")
 
 		cleanupList[name] = true
 
@@ -103,8 +104,9 @@ func runTests(mode string) {
 	It("Should support recreating a device", func() {
 		name := "test-dev"
 		size := uint64(2) * 1024 * 1024 // 2Mb
-		err := dm.CreateDevice(name, size)
+		actual, err := dm.CreateDevice(name, size)
 		Expect(err).Should(BeNil(), "Failed to create new device")
+		Expect(actual).Should(BeNumerically(">=", size), "device at least as large as requested")
 
 		cleanupList[name] = true
 
@@ -118,8 +120,9 @@ func runTests(mode string) {
 		Expect(err).Should(BeNil(), "Failed to delete device")
 		cleanupList[name] = false
 
-		err = dm.CreateDevice(name, size)
+		actual, err = dm.CreateDevice(name, size)
 		Expect(err).Should(BeNil(), "Failed to recreate the same device")
+		Expect(actual).Should(BeNumerically(">=", size), "device at least as large as requested")
 		cleanupList[name] = true
 	})
 
@@ -146,8 +149,9 @@ func runTests(mode string) {
 		for i := 1; i <= max_devices; i++ {
 			name := fmt.Sprintf("list-dev-%d", i)
 			sizes[name] = uint64(rand.Intn(15)+1) * 1024 * 1024
-			err := dm.CreateDevice(name, sizes[name])
+			actual, err := dm.CreateDevice(name, sizes[name])
 			Expect(err).Should(BeNil(), "Failed to create new device")
+			Expect(actual).Should(BeNumerically(">=", sizes[name]), "device at least as large as requested")
 			cleanupList[name] = true
 		}
 		list, err = dm.ListDevices()
@@ -189,8 +193,9 @@ func runTests(mode string) {
 	It("Should delete devices", func() {
 		name := "delete-dev"
 		size := uint64(2) * 1024 * 1024 // 2Mb
-		err := dm.CreateDevice(name, size)
+		actual, err := dm.CreateDevice(name, size)
 		Expect(err).Should(BeNil(), "Failed to create new device")
+		Expect(actual).Should(BeNumerically(">=", size), "device at least as large as requested")
 		cleanupList[name] = true
 
 		dev, err := dm.GetDevice(name)

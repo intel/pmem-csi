@@ -17,6 +17,7 @@ type Namespace struct {
 	DeviceName_      string
 	BlockDeviceName_ string
 	Size_            uint64
+	Overhead_        uint64
 	Mode_            ndctl.NamespaceMode
 	Type_            ndctl.NamespaceType
 	Enabled_         bool
@@ -47,6 +48,10 @@ func (ns *Namespace) BlockDeviceName() string {
 
 func (ns *Namespace) Size() uint64 {
 	return ns.Size_
+}
+
+func (ns *Namespace) RawSize() uint64 {
+	return ns.Size_ + ns.Overhead_
 }
 
 func (ns *Namespace) Mode() ndctl.NamespaceMode {

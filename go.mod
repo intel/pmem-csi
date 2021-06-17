@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	github.com/aws/aws-sdk-go v1.35.37 // indirect
-	github.com/container-storage-interface/spec v1.3.0
+	github.com/container-storage-interface/spec v1.5.0
 	github.com/go-bindata/go-bindata v3.1.2+incompatible
 	github.com/go-logr/logr v0.4.0
 	github.com/google/go-cmp v0.5.5
@@ -24,6 +24,7 @@ require (
 	golang.org/x/sys v0.0.0-20210603081109-ebe580a85c40
 	google.golang.org/genproto v0.0.0-20210207032614-bba0dbe2a9ea // indirect
 	google.golang.org/grpc v1.35.0
+	google.golang.org/protobuf v1.26.0
 	gopkg.in/freddierice/go-losetup.v1 v1.0.0-20170407175016-fc9adea44124
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.21.1

@@ -50,6 +50,8 @@ import (
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
 
+	pmemlog "github.com/intel/pmem-csi/pkg/logger"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 	pmeme2epod "github.com/intel/pmem-csi/test/e2e/pod"
 
@@ -72,7 +74,14 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 	return d.Testing
 }, func(d *deploy.Deployment) {
 	config := sanity.NewTestConfig()
-	config.TestVolumeSize = 1 * 1024 * 1024
+	// The size has to be large enough that even after rounding up to
+	// the next alignment boundary, the final volume size is still about
+	// the same. The "should fail when requesting to create a volume with already existing name and different capacity"
+	// test assumes that doubling the size will be too large to reuse the
+	// already created volume.
+	//
+	// In practice, the largest alignment that we have seen is 96MiB.
+	config.TestVolumeSize = 96 * 1024 * 1024
 	// The actual directories will be created as unique
 	// temp directories inside these directories.
 	// We intentionally do not use the real /var/lib/kubelet/pods as
@@ -299,8 +308,6 @@ fi
 			execOnTestNode("sync")
 			v.namePrefix = "state-volume"
 
-			// We intentionally check the state of the controller on the node here.
-			// The master caches volumes and does not get rebooted.
 			initialVolumes, err := ncc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
 			framework.ExpectNoError(err, "list volumes")
 
@@ -469,6 +476,73 @@ fi
 			Expect(resp.AvailableCapacity).To(Equal(nodeCapacity), "capacity mismatch")
 		})
 
+		It("handle fragmentation", func() {
+			// The key idea behind this test is to create
+			// four volumes that consume all available
+			// space.  Then all but the second volume get
+			// deleted. That creates a situation where in
+			// direct mode, the largest volume size is
+			// smaller than the total available space.
+			//
+			// Because these volumes can be large, shredding gets disabled.
+			v.sc.Config.TestVolumeParameters = map[string]string{
+				parameters.EraseAfter: "false",
+			}
+			resp, err := ncc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
+			Expect(err).Should(BeNil(), "Failed to get node initial capacity")
+			nodeCapacity := resp.AvailableCapacity
+
+			if nodeCapacity%4 != 0 {
+				framework.Failf("total capacity %s not a multiple of 4", pmemlog.CapacityRef(nodeCapacity))
+			}
+			volumeSize := nodeCapacity / 4
+
+			// Round down to a 4Mi alignment for LVM mode.
+			lvmAlign := int64(4 * 1024 * 1024)
+			volumeSize = volumeSize / lvmAlign * lvmAlign
+
+			By(fmt.Sprintf("creating four volumes of %s each", pmemlog.CapacityRef(volumeSize)))
+			var volumes []*csi.Volume
+			for i := 0; i < 4; i++ {
+				v.namePrefix = fmt.Sprintf("frag-%d", i)
+				_, vol := v.create(volumeSize, nodeID)
+				volumes = append(volumes, vol)
+				resp, err := ncc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
+				Expect(err).Should(BeNil(), "Failed to get updated capacity")
+				Expect(pmemlog.CapacityRef(resp.AvailableCapacity).String()).To(Equal(pmemlog.CapacityRef(nodeCapacity-int64(i+1)*volumeSize).String()), "remaining capacity after creating volume #%d", i)
+				if i < 3 {
+					Expect(resp.MaximumVolumeSize).NotTo(BeNil(), "have MaximumVolumeSize")
+					Expect(resp.MaximumVolumeSize.Value).To(BeNumerically(">=", volumeSize), "MaximVolumeSize large enough for next volume")
+				}
+			}
+
+			By("deleting all but the second volume")
+			for i := 0; i < 4; i++ {
+				if i == 1 {
+					continue
+				}
+				vol := volumes[i]
+				_, err := v.cc.DeleteVolume(v.ctx, &csi.DeleteVolumeRequest{
+					VolumeId: vol.GetVolumeId(),
+				})
+				Expect(err).Should(BeNil(), fmt.Sprintf("Volume #%d cannot be deleted", i))
+			}
+
+			resp, err = ncc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
+			Expect(err).Should(BeNil(), "Failed to get capacity after deleting three volumes")
+			Expect(pmemlog.CapacityRef(resp.AvailableCapacity).String()).To(Equal(pmemlog.CapacityRef(nodeCapacity-volumeSize).String()), "available capacity while one volume exists")
+			Expect(resp.MaximumVolumeSize).NotTo(BeNil(), "have MaximumVolumeSize")
+			if d.Mode == api.DeviceModeLVM {
+				Expect(resp.MaximumVolumeSize.Value).To(BeNumerically(">=", 3*volumeSize), "MaximVolumeSize includes space of all three deleted volumes when using LVM")
+			} else {
+				Expect(pmemlog.CapacityRef(resp.MaximumVolumeSize.Value).String()).To(Equal(pmemlog.CapacityRef(2*volumeSize).String()), "MaximVolumeSize includes space of the last two deleted volumes when using direct mode")
+			}
+
+			By("creating one larger volume")
+			v.namePrefix = "frag-final"
+			v.create(resp.MaximumVolumeSize.Value, nodeID)
+		})
+
 		It("excessive message sizes should be rejected", func() {
 			req := &csi.GetCapacityRequest{
 				AccessibleTopology: &csi.Topology{
@@ -505,6 +579,11 @@ fi
 			v.remove(vol, name)
 		})
 
+		It("CreateVolume handles zero size", func() {
+			_, vol := v.create(0, nodeID)
+			Expect(vol.CapacityBytes).Should(BeNumerically(">", int64(0)), "actual volume must have non-zero size")
+		})
+
 		It("CreateVolume should return ResourceExhausted", func() {
 			v.namePrefix = "resource-exhausted"
 
@@ -513,7 +592,7 @@ fi
 
 		It("NodeUnstageVolume for unknown volume", func() {
 			_, err := v.nc.NodeUnstageVolume(v.ctx, &csi.NodeUnstageVolumeRequest{
-				VolumeId: "no-such-volume",
+				VolumeId:          "no-such-volume",
 				StagingTargetPath: "/foo/bar",
 			})
 			Expect(err).ShouldNot(BeNil(), "NodeUnstageVolume should have failed")
@@ -713,7 +792,7 @@ fi
 						Expect(len(currentVolumes.Entries)).To(Equal(len(node.volumes)+1), "one additional volume on node %s", nodeName)
 						for _, e := range currentVolumes.Entries {
 							if e.Volume.VolumeId == vol.VolumeId {
-								Expect(e.Volume.CapacityBytes).To(Equal(sizeInBytes), "additional volume size on node %s", nodeName)
+								Expect(e.Volume.CapacityBytes).To(Equal(vol.CapacityBytes), "additional volume size on node %s", nodeName)
 								break
 							}
 						}
@@ -741,7 +820,7 @@ fi
 				Expect(len(currentVolumes.Entries)).To(Equal(len(node.volumes)+1), "one additional volume on node %s", nodeID)
 				for _, e := range currentVolumes.Entries {
 					if e.Volume.VolumeId == vol.VolumeId {
-						Expect(e.Volume.CapacityBytes).To(Equal(sizeInBytes), "additional volume size on node %s", nodeID)
+						Expect(e.Volume.CapacityBytes).To(Equal(vol.CapacityBytes), "additional volume size on node %s", nodeID)
 						break
 					}
 				}
@@ -957,7 +1036,7 @@ func (v volume) create(sizeInBytes int64, nodeID string, expectedStatus ...codes
 	Expect(vol).NotTo(BeNil())
 	Expect(vol.GetVolume()).NotTo(BeNil())
 	Expect(vol.GetVolume().GetVolumeId()).NotTo(BeEmpty())
-	Expect(vol.GetVolume().GetCapacityBytes()).To(Equal(sizeInBytes), "volume capacity")
+	Expect(vol.GetVolume().GetCapacityBytes()).To(BeNumerically(">=", sizeInBytes), "volume capacity")
 
 	return name, vol.GetVolume()
 }

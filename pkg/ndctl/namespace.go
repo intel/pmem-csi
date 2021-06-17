@@ -85,8 +85,11 @@ type Namespace interface {
 	DeviceName() string
 	// BlockDeviceName returns the block device name of the namespace.
 	BlockDeviceName() string
-	// Size returns the size of the namespace.
+	// Size returns the size of the device provided by the namespace.
 	Size() uint64
+	// RawSize returns the amount of PMEM used by the namespace
+	// in the underlying region, which is more than Size().
+	RawSize() uint64
 	// Mode returns the namespace mode.
 	Mode() NamespaceMode
 	// Type returns the namespace type.
@@ -183,6 +186,15 @@ func (ns *namespace) Size() uint64 {
 	}
 
 	return uint64(size)
+}
+
+func (ns *namespace) RawSize() uint64 {
+	switch ns.Mode() {
+	case FsdaxMode:
+		return uint64(C.ndctl_namespace_get_size(ns))
+	default:
+		return ns.Size()
+	}
 }
 
 func (ns *namespace) Mode() NamespaceMode {
