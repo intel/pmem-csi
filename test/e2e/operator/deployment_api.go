@@ -637,7 +637,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				// Delete Volume created in `from` device mode
 				deletePVC(f, pvc.Namespace, pvc.Name)
 			},
-			"use volume": func(from, to api.DeviceMode, depName string, pvc *corev1.PersistentVolumeClaim) {
+			"use volume in same mode": func(from, to api.DeviceMode, depName string, pvc *corev1.PersistentVolumeClaim) {
 				// Switch back to original device mode
 				switchDeploymentMode(c, f, depName, d.Namespace, from)
 
@@ -660,6 +660,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					postSwitch := postSwitch
 					It(name, func() {
 						driverName := ctx + "-" + strings.Replace(name, " ", "-", -1)
+						percent100 := intstr.FromString("100%")
 						deployment := api.PmemCSIDeployment{
 							ObjectMeta: metav1.ObjectMeta{
 								Name: driverName,
@@ -671,6 +672,8 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 									// Provided by NFD.
 									"feature.node.kubernetes.io/memory-nv.dax": "true",
 								},
+								// Speed up restarts by doing it on all nodes in parallel.
+								MaxUnavailable: &percent100,
 							},
 						}
 
@@ -1162,17 +1165,19 @@ func switchDeploymentMode(c *deploy.Cluster, f *framework.Framework, depName, ns
 	deployment.Spec.DeviceMode = mode
 	deployment = deploy.UpdateDeploymentCR(f, deployment)
 
-	// Wait till all the existing daemonset pods restarted
-	for _, pod := range podNames {
-		Eventually(func() bool {
+	// Wait till all the existing daemonset pods are deleted.
+	Eventually(func() []string {
+		var runningPods []string
+		for _, pod := range podNames {
 			_, err := f.ClientSet.CoreV1().Pods(ns).Get(context.Background(), pod, metav1.GetOptions{})
 			if err != nil && errors.IsNotFound(err) {
-				return true
+				continue
 			}
-			deploy.LogError(err, "Failed to fetch daemon set: %v", err)
-			return false
-		}, "3m", "1s").Should(BeTrue(), "Pod restart '%s'", pod)
-	}
+			deploy.LogError(err, "Failed to fetch pod: %v", err)
+			runningPods = append(runningPods, pod)
+		}
+		return runningPods
+	}, "3m", "5s").Should(BeEmpty(), "all DaemonSet pods deleted")
 
 	deploy.WaitForPMEMDriver(c,
 		&deploy.Deployment{
