@@ -118,6 +118,14 @@ spec:
               logLevel:
                 description: LogLevel number for the log verbosity
                 type: integer
+              maxUnavailable:
+                anyOf:
+                - type: integer
+                - type: string
+                description: DaemonSets use the default RollingUpdate strategy with
+                  at most 1 node not having a running driver pod. That limit can be
+                  increased with this setting, either with a higher integer or a percentage.
+                x-kubernetes-int-or-string: true
               mutatePods:
                 description: MutatePod defines how a mutating pod webhook is configured
                   if a controller is started. The field is ignored if the controller

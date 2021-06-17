@@ -1140,6 +1140,18 @@ func (d *pmemCSIDeployment) getNodeDaemonSet(ds *appsv1.DaemonSet) {
 			"app.kubernetes.io/instance": d.Name,
 		},
 	}
+	ds.Spec.UpdateStrategy.Type = appsv1.RollingUpdateDaemonSetStrategyType
+	if ds.Spec.UpdateStrategy.RollingUpdate == nil {
+		ds.Spec.UpdateStrategy.RollingUpdate = &appsv1.RollingUpdateDaemonSet{}
+	}
+	maxUnavailable := d.Spec.MaxUnavailable
+	if maxUnavailable == nil {
+		// nil is not the default in the DaemonSet, we have to set "1" explicitly
+		// to avoid redundant patching.
+		one := intstr.FromInt(1)
+		maxUnavailable = &one
+	}
+	ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable = maxUnavailable
 	ds.Spec.Template.ObjectMeta.Labels = joinMaps(
 		d.Spec.Labels,
 		map[string]string{

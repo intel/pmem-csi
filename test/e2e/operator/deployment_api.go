@@ -190,7 +190,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 	}
 
 	Context("deployment", func() {
-
+		percent := intstr.FromString("50%")
 		tests := map[string]api.PmemCSIDeployment{
 			"with defaults": getDeployment("test-deployment-with-defaults"),
 			"with explicit values": {
@@ -225,6 +225,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 							corev1.ResourceMemory: resource.MustParse("100Mi"),
 						},
 					},
+					MaxUnavailable: &percent,
 				},
 			},
 		}

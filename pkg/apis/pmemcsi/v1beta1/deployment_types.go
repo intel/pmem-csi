@@ -14,6 +14,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // DeviceMode type decleration for allowed driver device managers
@@ -131,6 +132,10 @@ type DeploymentSpec struct {
 	Labels map[string]string `json:"labels,omitempty"`
 	// KubeletDir kubelet's root directory path
 	KubeletDir string `json:"kubeletDir,omitempty"`
+	// DaemonSets use the default RollingUpdate strategy with at most 1 node
+	// not having a running driver pod. That limit can be increased with
+	// this setting, either with a higher integer or a percentage.
+	MaxUnavailable *intstr.IntOrString `json:"maxUnavailable,omitempty"`
 }
 
 // DeploymentConditionType type for representing a deployment status condition

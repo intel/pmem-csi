@@ -140,6 +140,9 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 					panic(fmt.Errorf("set node resources: %v", err))
 				}
 				outerSpec := obj.Object["spec"].(map[string]interface{})
+				updateStrategy := outerSpec["updateStrategy"].(map[string]interface{})
+				rollingUpdate := updateStrategy["rollingUpdate"].(map[string]interface{})
+				rollingUpdate["maxUnavailable"] = deployment.Spec.MaxUnavailable
 				template := outerSpec["template"].(map[string]interface{})
 				spec := template["spec"].(map[string]interface{})
 				if deployment.Spec.NodeSelector != nil {
