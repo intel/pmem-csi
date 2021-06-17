@@ -185,7 +185,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 
 		dm, err := ns.getDeviceManagerForVolume(req.VolumeId)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "%v", err)
+			return nil, err
 		}
 
 		if device, err = dm.GetDevice(req.VolumeId); err != nil {
@@ -506,7 +506,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 
 	dm, err := ns.getDeviceManagerForVolume(req.VolumeId)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "%v", err)
+		return nil, err
 	}
 
 	device, err := dm.GetDevice(req.VolumeId)
@@ -575,7 +575,7 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 
 	dm, err := ns.getDeviceManagerForVolume(req.VolumeId)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "%v", err)
+		return nil, err
 	}
 	// by spec, we have to return OK if asked volume is not mounted on asked path,
 	// so we look up the current device by volumeID and see is that device
@@ -722,7 +722,6 @@ func (ns *nodeServer) mount(sourcePath, targetPath string, mountOptions []string
 	if len(mountOptions) != 0 {
 		args = append(args, "-o", strings.Join(mountOptions, ","))
 	}
-
 	args = append(args, sourcePath, targetPath)
 	if _, err := pmemexec.RunCommand("mount", args...); err != nil {
 		return fmt.Errorf("mount filesystem failed: %s", err.Error())
@@ -733,11 +732,12 @@ func (ns *nodeServer) mount(sourcePath, targetPath string, mountOptions []string
 
 // getDeviceManagerForVolume checks the stored volume parametes for the
 // given id and returns the device manager which creates that volume.
+// NOT_FOUND is returned when the volume does not exist.
 func (ns *nodeServer) getDeviceManagerForVolume(id string) (pmdmanager.PmemDeviceManager, error) {
 
 	vol := ns.cs.getVolumeByID(id)
 	if vol == nil {
-		return nil, fmt.Errorf("unknown volume: %s", id)
+		return nil, status.Errorf(codes.NotFound, "unknown volume: "+id)
 	}
 
 	v, err := parameters.Parse(parameters.NodeVolumeOrigin, vol.Params)
@@ -749,7 +749,7 @@ func (ns *nodeServer) getDeviceManagerForVolume(id string) (pmdmanager.PmemDevic
 	if v.GetDeviceMode() != dm.GetMode() {
 		dm, err = pmdmanager.New(v.GetDeviceMode(), 0)
 		if err != nil {
-			return nil, fmt.Errorf("failed to initialize device manager for volume '%s'(volume mode: '%s'): %v", id, v.GetDeviceMode(), err)
+			return nil, fmt.Errorf("failed to initialize device manager for volume %q, volume mode %q: %v", id, v.GetDeviceMode(), err)
 		}
 	}
 

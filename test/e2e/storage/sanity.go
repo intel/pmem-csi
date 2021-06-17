@@ -511,6 +511,19 @@ fi
 			v.create(1024*1024*1024*1024*1024, nodeID, codes.ResourceExhausted)
 		})
 
+		It("NodeUnstageVolume for unknown volume", func() {
+			_, err := v.nc.NodeUnstageVolume(v.ctx, &csi.NodeUnstageVolumeRequest{
+				VolumeId: "no-such-volume",
+				StagingTargetPath: "/foo/bar",
+			})
+			Expect(err).ShouldNot(BeNil(), "NodeUnstageVolume should have failed")
+			s, ok := status.FromError(err)
+			if !ok {
+				framework.Failf("Expected a status error, got %T: %v", err, err)
+			}
+			Expect(s.Code()).Should(BeEquivalentTo(codes.NotFound), "Expected volume not found")
+		})
+
 		It("stress test", func() {
 			// The load here consists of n workers which
 			// create and test volumes in parallel until
