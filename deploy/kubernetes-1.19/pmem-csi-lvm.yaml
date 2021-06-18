@@ -639,6 +639,10 @@ spec:
           path: /sys
           type: DirectoryOrCreate
         name: sys-dir
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
 ---
 apiVersion: apps/v1
 kind: DaemonSet

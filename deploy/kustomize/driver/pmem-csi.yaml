@@ -214,6 +214,11 @@ spec:
     matchLabels:
         app.kubernetes.io/name: pmem-csi-node
         app.kubernetes.io/instance: pmem-csi.intel.com
+  updateStrategy:
+    # These are the defaults, added here explicitly to show that we use them.
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
   template:
     metadata:
       labels:
