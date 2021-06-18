@@ -8,7 +8,9 @@ import (
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	pmemerr "github.com/intel/pmem-csi/pkg/errors"
+	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	"github.com/intel/pmem-csi/pkg/ndctl"
+
 	"k8s.io/klog/v2"
 	"k8s.io/utils/mount"
 )
@@ -114,18 +116,22 @@ func (pmem *pmemNdctl) GetCapacity() (capacity Capacity, err error) {
 				continue
 			}
 
-			regionalign := r.GetAlign()
-			available := r.MaxAvailableExtent()
-			klog.V(4).Infof("GetCapacity: initial available value by Region state: %d", available)
-			// align down by regionalign, avoid claiming having more than what we really can serve
-			available /= regionalign
-			available *= regionalign
-			klog.V(4).Infof("GetCapacity: available after regionalign down: %d", available)
-			if available > capacity.MaxVolumeSize {
-				capacity.MaxVolumeSize = available
+			align := r.GetAlign()
+			maxVolumeSize := r.MaxAvailableExtent()
+			available := r.AvailableSize()
+			size := r.Size()
+			klog.V(4).Infof("GetCapacity: region %s: MaxAvailableExtent=%s AvailableSize=%s Size=%s, Align=%s",
+				r.DeviceName(), pmemlog.CapacityRef(int64(maxVolumeSize)), pmemlog.CapacityRef(int64(available)), pmemlog.CapacityRef(int64(size)), pmemlog.CapacityRef(int64(align)))
+			if align == 0 {
+				align = 1
 			}
-			capacity.Available += available
-			capacity.Managed += r.Size()
+			// align down by the region's alignment, avoid claiming having more than what we really can serve
+			maxVolumeSize = maxVolumeSize / align * align
+			if maxVolumeSize > capacity.MaxVolumeSize {
+				capacity.MaxVolumeSize = maxVolumeSize
+			}
+			capacity.Available += available / align * align
+			capacity.Managed += size
 		}
 	}
 	// TODO: we should maintain capacity when adding or subtracting
@@ -133,13 +139,13 @@ func (pmem *pmemNdctl) GetCapacity() (capacity Capacity, err error) {
 	return capacity, nil
 }
 
-func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64) error {
+func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64) (uint64, error) {
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
 
 	ndctx, err := ndctl.NewContext()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer ndctx.Free()
 
@@ -149,7 +155,7 @@ func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64) error {
 	// Avoid device filling with garbage entries by returning error.
 	// Overall, no point having more than one namespace with same name.
 	if _, err := getDevice(ndctx, volumeId); err == nil {
-		return pmemerr.DeviceExists
+		return 0, pmemerr.DeviceExists
 	}
 
 	ns, err := ndctl.CreateNamespace(ndctx, ndctl.CreateNamespaceOpts{
@@ -158,19 +164,23 @@ func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64) error {
 		Mode: "fsdax",
 	})
 	if err != nil {
-		return err
+		return 0, err
 	}
-	klog.V(3).Infof("Namespace created: %+v", ns)
+	nsSize := ns.Size()
+	actual := ns.RawSize()
+	klog.V(3).Infof("Namespace created, usable size %s, raw size %s: %+v",
+		pmemlog.CapacityRef(int64(nsSize)), pmemlog.CapacityRef(int64(actual)), ns)
+
 	// clear start of device to avoid old data being recognized as file system
 	device, err := getDevice(ndctx, volumeId)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if err := clearDevice(device, false); err != nil {
-		return fmt.Errorf("clear device %q: %v", volumeId, err)
+		return 0, fmt.Errorf("clear device %q: %v", volumeId, err)
 	}
 
-	return nil
+	return actual, nil
 }
 
 func (pmem *pmemNdctl) DeleteDevice(volumeId string, flush bool) error {

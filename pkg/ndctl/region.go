@@ -13,6 +13,7 @@ import (
 	"k8s.io/klog/v2"
 
 	pmemerr "github.com/intel/pmem-csi/pkg/errors"
+	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 )
 
 type RegionType string
@@ -65,7 +66,7 @@ type Region interface {
 	AdaptAlign(align uint64) (uint64, error)
 	// FsdaxAlignment returns the default alignment for an fsdax namespace.
 	FsdaxAlignment() (uint64, error)
-	// GetAlign returns region alignment.
+	// GetAlign returns region alignment. 0 if unknown.
 	GetAlign() uint64
 }
 
@@ -146,7 +147,11 @@ func (r *region) SeedNamespace() Namespace {
 }
 
 func (r *region) GetAlign() uint64 {
-	return uint64(C.ndctl_region_get_align(r))
+	align := C.ndctl_region_get_align(r)
+	if align == C.ULONG_MAX {
+		return 0
+	}
+	return uint64(align)
 }
 
 func (r *region) CreateNamespace(opts CreateNamespaceOpts) (Namespace, error) {
@@ -192,23 +197,26 @@ func (r *region) CreateNamespace(opts CreateNamespaceOpts) (Namespace, error) {
 	align := mib2
 	namespacealign := align * r.InterleaveWays()
 	regionalign := r.GetAlign()
+	if regionalign == 0 {
+		regionalign = 1
+	}
 	// Size has to be aligned both by namespace alignment times interleave_ways, and also by region alignment
 	lcmalign := LCM(namespacealign, regionalign)
-	klog.V(3).Infof("%s: Least Common Multiple of namespacealign:%d and regionalign:%d is %d",
-		regionName, namespacealign, regionalign, lcmalign)
-	if opts.Size == 0 || opts.Size%lcmalign != 0 {
+	size := opts.Size
+	if size == 0 || size%lcmalign != 0 {
 		// Align up to least-common-multiple alignment boundary.
-		alignedsize := (opts.Size/lcmalign + 1) * lcmalign
-		klog.V(3).Infof("%s: namespace size must align to LCM alignment:%d, adjust up from %d to %d",
-			regionName, lcmalign, opts.Size, alignedsize)
-		opts.Size = alignedsize
+		size = (size/lcmalign + 1) * lcmalign
+		klog.V(3).Infof("%s: namespace size must align with region alignment %s and namespace alignment %s, adjust up from %s to %s",
+			r.DeviceName(),
+			pmemlog.CapacityRef(int64(regionalign)), pmemlog.CapacityRef(int64(namespacealign)),
+			pmemlog.CapacityRef(int64(opts.Size)), pmemlog.CapacityRef(int64(size)))
 	}
 	available := r.MaxAvailableExtent()
 	if available == uint64(C.ULLONG_MAX) {
 		available = r.AvailableSize()
 	}
-	if opts.Size > available {
-		return nil, fmt.Errorf("create namespace with size %v: %w", opts.Size, pmemerr.NotEnoughSpace)
+	if size > available {
+		return nil, fmt.Errorf("create namespace with size %v: %w", size, pmemerr.NotEnoughSpace)
 	}
 
 	/* setup_namespace */
@@ -226,7 +234,7 @@ func (r *region) CreateNamespace(opts CreateNamespaceOpts) (Namespace, error) {
 		uid, _ := uuid.NewUUID()
 		err = ns.SetUUID(uid)
 		if err == nil {
-			err = ns.SetSize(opts.Size)
+			err = ns.SetSize(size)
 		}
 		if err == nil && opts.Name != "" {
 			err = ns.SetAltName(opts.Name)
@@ -266,7 +274,8 @@ func (r *region) CreateNamespace(opts CreateNamespaceOpts) (Namespace, error) {
 		return nil, err
 	}
 
-	klog.V(3).Infof("%s: Namespace created: size:%d uuid:%v", regionName, ns.Size(), ns.UUID())
+	klog.V(3).Infof("%s: namespace created: usable size %s, raw size %s, uuid %v",
+		regionName, pmemlog.CapacityRef(int64(ns.Size())), pmemlog.CapacityRef(int64(ns.RawSize())), ns.UUID())
 	return ns, nil
 }
 

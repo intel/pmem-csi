@@ -94,7 +94,7 @@ RUNTIME_DEPS += sed \
 	-e 's;\(github.com/go-openapi/swag\);go-openapi/swag,https://\1;' \
 	-e 's;\(github.com/gogo/protobuf\);gogo protobuf,https://\1;' \
 	-e 's;\(github.com/golang/groupcache\);golang-groupcache,https://\1;' \
-	-e 's;\(github.com/golang/protobuf\);golang-protobuf,https://\1;' \
+	-e 's;\(github.com/golang/protobuf\|google.golang.org/protobuf\);golang-protobuf,https://github.com/golang/protobuf;' \
 	-e 's;\(github.com/google/go-cmp\);go-cmp,https://\1;' \
 	-e 's;\(github.com/google/gofuzz\);Google gofuzz,https://\1;' \
 	-e 's;\(github.com/google/uuid\);google uuid,https://\1;' \

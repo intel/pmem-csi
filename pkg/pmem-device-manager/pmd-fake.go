@@ -65,17 +65,17 @@ func (dm *fakeDM) getCapacity() Capacity {
 	}
 }
 
-func (dm *fakeDM) CreateDevice(volumeId string, size uint64) error {
+func (dm *fakeDM) CreateDevice(volumeId string, size uint64) (uint64, error) {
 	dm.mutex.Lock()
 	defer dm.mutex.Unlock()
 
 	_, ok := dm.devices[volumeId]
 	if ok {
-		return pmemerr.DeviceExists
+		return 0, pmemerr.DeviceExists
 	}
 
 	if size > dm.getCapacity().MaxVolumeSize {
-		return pmemerr.NotEnoughSpace
+		return 0, pmemerr.NotEnoughSpace
 	}
 
 	dm.devices[volumeId] = &PmemDeviceInfo{
@@ -83,7 +83,7 @@ func (dm *fakeDM) CreateDevice(volumeId string, size uint64) error {
 		Size:     size,
 		Path:     FakeDevicePathPrefix + volumeId,
 	}
-	return nil
+	return size, nil
 }
 
 func (dm *fakeDM) DeleteDevice(volumeId string, flush bool) error {

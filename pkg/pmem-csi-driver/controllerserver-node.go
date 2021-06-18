@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 	"k8s.io/klog/v2"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -258,13 +259,8 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 			}
 		}()
 	}
-	if asked <= 0 {
-		// Allocating volumes of zero size isn't supported.
-		// We use some arbitrary small minimum size instead.
-		// It will get rounded up by below layer to meet the alignment.
-		asked = 1
-	}
-	if err := cs.dm.CreateDevice(volumeID, uint64(asked)); err != nil {
+	actualSize, err := cs.dm.CreateDevice(volumeID, uint64(asked))
+	if err != nil {
 		code := codes.Internal
 		if errors.Is(err, pmemerr.NotEnoughSpace) {
 			code = codes.ResourceExhausted
@@ -272,8 +268,19 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 		statusErr = status.Errorf(code, "device creation failed: %v", err)
 		return
 	}
-	// TODO(?): determine and return actual size here?
-	actual = asked
+	actual = int64(actualSize)
+	if vol.Size != actual {
+		// Update volume size and store that persistently.
+		vol.Size = actual
+		if err := cs.sm.Create(volumeID, vol); err != nil {
+			// We are in a difficult place now. We have
+			// created the volume, but couldn't update the
+			// metadata about it. The best we can do now
+			// is probably to proceed, hoping that whatever
+			// meta data was written is still valid.
+			klog.Warningf("updating state with new volume size failed: %v", err)
+		}
+	}
 
 	cs.mutex.Lock()
 	defer cs.mutex.Unlock()
@@ -459,10 +466,9 @@ func (cs *nodeControllerServer) GetCapacity(ctx context.Context, req *csi.GetCap
 	}
 
 	return &csi.GetCapacityResponse{
-		// Maximum volume size works better for capacity-aware
-		// pod scheduling than the available size. The other
-		// capacity values are available as metric.
-		AvailableCapacity: int64(cap.MaxVolumeSize),
+		AvailableCapacity: int64(cap.Available),
+		// This is what Kubernetes >= 1.21 will use.
+		MaximumVolumeSize: wrapperspb.Int64(int64(cap.MaxVolumeSize)),
 	}, nil
 }
 
