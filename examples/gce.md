@@ -8,7 +8,7 @@ form](https://docs.google.com/forms/d/e/1FAIpQLSeX1tN6Qt-aQUK2iVVioClFX5N-061jqO
  
 This document explains how to bring up Kubernetes on those machines
 with the [scripts from
-Kubernetes](https://kubernetes.io/docs/setup/production-environment/turnkey/gce/)
+Kubernetes](https://github.com/kubernetes/kubernetes/blob/master/cluster/kube-up.sh)
 and how to install PMEM-CSI.
 
 It was written for and tested with the v0.5.0 release of PMEM-CSI, but
@@ -157,7 +157,7 @@ $ qemu-system-x86_64 -enable-kvm -machine accel=kvm,usb=off  -nographic \
 As for the `debian-9` image on a GCE VM, this machine will have a `/dev/pmem0`.
 
 Now build a normal image ("base" or "dev") and [create a GCE image
-from it](https://cloud.google.com/container-optimized-os/docs/how-to/building-from-open-source#running_on_compute_engine).
+from it](https://cloud.google.com/container-optimized-os/docs/how-to/building-from-open-source).
 
 ### Starting and stopping Kubernetes
 
@@ -206,7 +206,7 @@ To stop the cluster, use the same env variables for the
 After the previous step, `kubectl` works and is configured to use the
 new cluster. What follows next are the steps explained in more details
 in the top-level README's [Run PMEM-CSI on
-Kubernetes](../docs/install.md#run-pmem-csi-on-kubernetes) section.
+Kubernetes](../docs/install.md#install-pmem-csi-driver) section.
 
 First the worker nodes need to be labeled:
 

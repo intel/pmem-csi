@@ -1,25 +1,5 @@
 # Installation and Usage
 
-- [Prerequisites](#prerequisites)
-    - [Software required](#software-required)
-    - [Hardware required](#hardware-required)
-    - [Persistent memory pre-provisioning](#persistent-memory-pre-provisioning)
-- [Installation and setup](#installation-and-setup)
-    - [Install PMEM-CSI driver](#install-pmem-csi-driver)
-      - [Install using the operator](#install-using-the-operator)
-      - [Install via YAML files](#install-via-yaml-files)
-    - [Volume parameters](#volume-parameters)
-    - [Creating volumes](#creating-volumes)
-    - [Troubleshooting](#troubleshooting)
-    - [Automatic node setup](#automatic-node-setup)
-    - [Kata Containers support](#kata-containers-support)
-    - [Ephemeral inline volumes](#ephemeral-inline-volumes)
-    - [Raw block volumes](#raw-block-volumes)
-    - [Enable scheduler extensions](#enable-scheduler-extensions)
-    - [Metrics support](#metrics-support)
-- [PMEM-CSI Deployment CRD](#pmem-csi-deployment-crd)
-- [Filing issues and contributing](#filing-issues-and-contributing)
-
 ## Overview
 
 This section summarizes the steps that may be needed during the entire
@@ -294,8 +274,8 @@ PMEM-CSI operator or by using reference yaml files provided in source code.
 
 #### Install using the operator
 
-[PMEM-CSI operator](./design.md#operator) facilitates deploying and managing
-the [PMEM-CSI driver](https://github.com/intel/pmem-csi) on a Kubernetes cluster.
+The [PMEM-CSI operator](./design.md#pmem-csi-operator) facilitates deploying and managing
+the PMEM-CSI driver on a Kubernetes cluster.
 
 ##### Installing the operator from Operator Hub
 
@@ -338,8 +318,8 @@ for a complete list of supported properties.
 
 Here is a minimal example driver deployment created with a custom resource:
 
-**NOTE**: `nodeSelector` must match with node's label set in
-[Installation and setup](#installation-and-setup) section.
+**NOTE**: `nodeSelector` must match the node label that was set in the
+[installation and setup](#installation-and-setup) section.
 
 ``` ShellSession
 $ kubectl create -f - <<EOF
@@ -962,7 +942,7 @@ This is the original implementation of ephemeral inline volumes for
 CSI drivers in Kubernetes. It is currently available as a beta feature
 in Kubernetes.
 
-Volume requests [embedded in the pod spec](https://kubernetes-csi.github.io/docs/ephemeral-local-volumes.html#example-of-inline-csi-pod-spec) are provisioned as
+Volume requests [embedded in the pod spec with the `csi` field](https://kubernetes-csi.github.io/docs/ephemeral-local-volumes.html) are provisioned as
 ephemeral volumes. The volume request could use below fields as
 [`volumeAttributes`](https://kubernetes.io/docs/concepts/storage/volumes/#csi):
 
@@ -1584,7 +1564,7 @@ deployment is in the `Failed` state, then one can look into the event(s) using
 > has to take extreme care of such deployments by ensuring that not more than
 > one driver ends up running on the same node(s). Nodes on which a PMEM-CSI
 > driver could run can be configured by using `nodeSelector` property of
-> [`DeploymentSpec`](#deployment-crd-api).
+> [`DeploymentSpec`](#pmem-csi-deployment-crd).
 
 #### Operator metrics data
 
