@@ -210,8 +210,8 @@ func (r *Region) AdaptAlign(align uint64) (uint64, error) {
 	return align, nil
 }
 
-func (r *Region) FsdaxAlignment() (uint64, error) {
-	return mib2, nil
+func (r *Region) FsdaxAlignment() uint64 {
+	return mib2
 }
 
 func (r *Region) namespaces(onlyActive bool) []ndctl.Namespace {

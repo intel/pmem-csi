@@ -9,6 +9,7 @@ import (
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	pmemlog "github.com/intel/pmem-csi/pkg/logger"
+	"github.com/intel/pmem-csi/pkg/math"
 	"github.com/intel/pmem-csi/pkg/ndctl"
 
 	"k8s.io/klog/v2"
@@ -116,15 +117,19 @@ func (pmem *pmemNdctl) GetCapacity() (capacity Capacity, err error) {
 				continue
 			}
 
-			align := r.GetAlign()
+			regionAlign := r.GetAlign()
+			namespaceAlign := r.FsdaxAlignment()
 			maxVolumeSize := r.MaxAvailableExtent()
 			available := r.AvailableSize()
 			size := r.Size()
-			klog.V(4).Infof("GetCapacity: region %s: MaxAvailableExtent=%s AvailableSize=%s Size=%s, Align=%s",
-				r.DeviceName(), pmemlog.CapacityRef(int64(maxVolumeSize)), pmemlog.CapacityRef(int64(available)), pmemlog.CapacityRef(int64(size)), pmemlog.CapacityRef(int64(align)))
-			if align == 0 {
-				align = 1
+			klog.V(4).Infof("GetCapacity: region %s: MaxAvailableExtent=%s AvailableSize=%s Size=%s, RegionAlign=%s NamespaceAlign=%s",
+				r.DeviceName(), pmemlog.CapacityRef(int64(maxVolumeSize)), pmemlog.CapacityRef(int64(available)), pmemlog.CapacityRef(int64(size)), pmemlog.CapacityRef(int64(regionAlign)), pmemlog.CapacityRef(int64(namespaceAlign)))
+
+			if regionAlign == 0 {
+				regionAlign = 1
 			}
+			align := math.LCM(regionAlign, namespaceAlign)
+
 			// align down by the region's alignment, avoid claiming having more than what we really can serve
 			maxVolumeSize = maxVolumeSize / align * align
 			if maxVolumeSize > capacity.MaxVolumeSize {
