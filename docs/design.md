@@ -47,8 +47,7 @@ cannot handle [binding a character device to a loop device](https://github.com/k
 
 <sup>4 </sup> **Huge pages supported**: ext4 and XFS filesystems are created using the options that should enable huge
  page support, as explained in section "Verifying IO Alignment" in
- ["Using Persistent Memory Devices with the Linux Device Mapper"]
-(https://pmem.io/2018/05/15/using_persistent_memory_devices_with_the_linux_device_mapper.html).
+ ["Using Persistent Memory Devices with the Linux Device Mapper"](https://pmem.io/2018/05/15/using_persistent_memory_devices_with_the_linux_device_mapper.html).
 [Testing that support by observing page faults](/test/cmd/pmem-access-hugepages/main.go) confirmed that
 this worked for direct mode. It did not work for LVM mode in the QEMU virtual machines, but it cannot be
 ruled out that it works elsewhere.
