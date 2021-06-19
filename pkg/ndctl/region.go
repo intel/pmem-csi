@@ -14,6 +14,7 @@ import (
 
 	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	pmemlog "github.com/intel/pmem-csi/pkg/logger"
+	"github.com/intel/pmem-csi/pkg/math"
 )
 
 type RegionType string
@@ -65,7 +66,8 @@ type Region interface {
 	// AdaptAlign modifies the alignment for the region.
 	AdaptAlign(align uint64) (uint64, error)
 	// FsdaxAlignment returns the default alignment for an fsdax namespace.
-	FsdaxAlignment() (uint64, error)
+	// It always returns a non-zero value.
+	FsdaxAlignment() uint64
 	// GetAlign returns region alignment. 0 if unknown.
 	GetAlign() uint64
 }
@@ -201,7 +203,7 @@ func (r *region) CreateNamespace(opts CreateNamespaceOpts) (Namespace, error) {
 		regionalign = 1
 	}
 	// Size has to be aligned both by namespace alignment times interleave_ways, and also by region alignment
-	lcmalign := LCM(namespacealign, regionalign)
+	lcmalign := math.LCM(namespacealign, regionalign)
 	size := opts.Size
 	if size == 0 || size%lcmalign != 0 {
 		// Align up to least-common-multiple alignment boundary.
@@ -291,8 +293,7 @@ func (r *region) AdaptAlign(align uint64) (uint64, error) {
 	return align, nil
 }
 
-func (r *region) FsdaxAlignment() (uint64, error) {
-	var align uint64
+func (r *region) FsdaxAlignment() uint64 {
 	// https://github.com/pmem/ndctl/blob/ea014c0c9ec8d0ef945d072dcc52b306c7a686f9/ndctl/namespace.c#L724-L732
 	pfn := C.ndctl_region_get_pfn_seed(r)
 
@@ -304,11 +305,9 @@ func (r *region) FsdaxAlignment() (uint64, error) {
 	// attribute.
 	//
 	if pfn != nil && C.ndctl_pfn_has_align(pfn) != 0 {
-		align = (uint64)(C.ndctl_pfn_get_align(pfn))
-	} else {
-		align = mib2
+		return (uint64)(C.ndctl_pfn_get_align(pfn))
 	}
-	return align, nil
+	return mib2
 }
 
 func (r *region) DestroyNamespace(ns Namespace, force bool) error {
@@ -381,20 +380,4 @@ func (r *region) namespaces(onlyActive bool) []Namespace {
 	}
 
 	return namespaces
-}
-
-// Functions GCD and LCM borrowed from Go playground, simplified for 2 arguments.
-// greatest common divisor (GCD) via Euclidean algorithm
-func GCD(a, b uint64) uint64 {
-	for b != 0 {
-		t := b
-		b = a % b
-		a = t
-	}
-	return a
-}
-
-// find Least Common Multiple (LCM) via GCD
-func LCM(a, b uint64) uint64 {
-	return a * b / GCD(a, b)
 }

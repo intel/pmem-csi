@@ -114,8 +114,7 @@ func (lvm *pmemLvm) GetCapacity() (capacity Capacity, err error) {
 
 	for _, vg := range vgs {
 		if vg.free > capacity.MaxVolumeSize {
-			// TODO: alignment?
-			capacity.MaxVolumeSize = vg.free
+			capacity.MaxVolumeSize = vg.free / lvmAlign * lvmAlign
 		}
 		capacity.Available += vg.free
 		capacity.Managed += vg.size
