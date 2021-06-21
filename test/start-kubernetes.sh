@@ -65,7 +65,7 @@ case ${TEST_DISTRO} in
     fedora)
         CLOUD_USER=${CLOUD_USER:-fedora}
         EFI=${EFI:-false}
-        TEST_DISTRO_VERSION=${TEST_DISTRO_VERSION:-33}
+        TEST_DISTRO_VERSION=${TEST_DISTRO_VERSION:-34}
         FEDORA_CLOUDIMG_REL=${FEDORA_CLOUDIMG_REL:-1.2}
         IMAGE_URL=${IMAGE_URL:-https://download.fedoraproject.org/pub/fedora/linux/releases/${TEST_DISTRO_VERSION}/Cloud/x86_64/images}
         CLOUD_IMAGE=${CLOUD_IMAGE:-Fedora-Cloud-Base-${TEST_DISTRO_VERSION}-${FEDORA_CLOUDIMG_REL}.x86_64.raw.xz}
@@ -365,7 +365,7 @@ function init_kubernetes_cluster() (
     pids=""
     IPS=$(print_ips)
     # in Fedora-3[123] case, add a flag to kernel cmdline and reboot to disable cgroups v2
-    if [[ "$TEST_DISTRO" = "fedora" && "$TEST_DISTRO_VERSION" =~ 3[1-3] ]]; then
+    if [[ "$TEST_DISTRO" = "fedora" && "$TEST_DISTRO_VERSION" =~ 3[1-4] ]]; then
         SYSTEMD_UNIFIED_CGROUP_HIERARCHY=systemd.unified_cgroup_hierarchy
         for ip in ${IPS}; do
             GRUB_BFS=$(ssh $SSH_ARGS ${CLOUD_USER}@${ip} "grep ^GRUB_ENABLE_BLSCFG /etc/default/grub | sed -e \"s;\(GRUB_ENABLE_BLSCFG=\)\(.*\);\2;g\"")
