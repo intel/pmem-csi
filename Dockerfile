@@ -110,7 +110,7 @@ RUN cd /usr/local/share/package-sources && \
         else \
             echo "    $pkg"; \
         fi; \
-    done | sort -u; \
+    done && \
     rm -rf /var/cache/*
 
 # build pmem-csi-driver

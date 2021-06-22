@@ -49,27 +49,6 @@ esac
 
 k8sversion=$(kubeadm version -o short)
 distro=`egrep "^ID=" /etc/os-release |awk -F= '{print $2}'`
-case $distro in
-    clear-linux-os)
-	# From https://kubernetes.io/docs/setup/independent/create-cluster-kubeadm/#pod-network
-	# However, the commit currently listed there for 1.16 is broken. Current master fixes some issues
-	# and works.
-	podnetworkingurl=https://raw.githubusercontent.com/coreos/flannel/v0.12.0/Documentation/kube-flannel.yml
-	# Needed for flannel (https://clearlinux.org/latest/tutorials/kubernetes.html).
-	kubeadm_config_cluster="$kubeadm_config_cluster
-networking:
-  podSubnet: \"10.244.0.0/16\""
-	;;
-    fedora)
-	# Use Calico on Fedora as it is the only CNI plugin that is tested by kubeadm.
-	# https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/#pod-network
-	podnetworkingurl=https://docs.projectcalico.org/manifests/calico.yaml
-	;;
-    *)
-	echo "ERROR: unsupported distro=$distro"
-	exit 1
-	;;
-esac
 
 list_gates () (
     IFS=","
@@ -295,7 +274,7 @@ kubectl get pods --all-namespaces
 
 ${TEST_CONFIGURE_POST_MASTER}
 
-kubectl apply -f $podnetworkingurl
+kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')"
 
 # Install addon storage CRDs, needed if certain feature gates are enabled.
 # Only applicable to Kubernetes 1.13 and older. 1.14 will have them as builtin APIs.

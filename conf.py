@@ -8,6 +8,8 @@ from os import getenv
 from pygments.lexers.shell import BashSessionLexer
 from sphinx.highlighting import lexers
 
+sys.path.append(os.path.abspath("./docs/sphinx_ext"))
+
 #############
 #
 # Add a special lexer to add a class to console lexer

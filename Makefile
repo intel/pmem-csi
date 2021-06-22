@@ -207,8 +207,7 @@ $(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
 		echo 'resources: [ pmem-csi.yaml ]' > $$dir/kustomization.yaml; \
 	fi
 
-kustomize: _work/go-bindata clean_kustomize_output $(KUSTOMIZE_OUTPUT)
-	$< -o deploy/bindata_generated.go -pkg deploy deploy/kubernetes-*/*/pmem-csi.yaml deploy/kustomize/webhook/webhook.yaml deploy/kustomize/scheduler/scheduler-service.yaml
+kustomize: clean_kustomize_output $(KUSTOMIZE_OUTPUT)
 
 clean_kustomize_output:
 	rm -rf deploy/kubernetes-*
@@ -223,13 +222,6 @@ clean: clean-kustomize
 clean-kustomize:
 	rm -f _work/kustomize-*
 	rm -f _work/kustomize
-
-.PHONY: clean-go-bindata
-clean: clean-go-bindata
-clean-go-bindata:
-	rm -f _work/go-bindata
-_work/go-bindata:
-	$(GO_BINARY) build -o $@ github.com/go-bindata/go-bindata/go-bindata
 
 .PHONY: test-kustomize $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
 test: test-kustomize
@@ -256,6 +248,7 @@ BUILDDIR      = _output
 # repo (= github.com/intel/pmem-csi/deploy, a syntax that is only
 # valid there) if set.
 GEN_DOCS = $(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS) $(O) && \
+	$(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" -b linkcheck2 $(SPHINXOPTS) $(O) && \
 	( ! [ "$$GITHUB_SHA" ] || ! [ "$$GITHUB_REPOSITORY" ] || \
 	  find $(BUILDDIR)/html/ -name '*.html' | \
 	  xargs sed -i -e "s;github.com/intel/pmem-csi/\\(deploy/\\S*\\);github.com/$$GITHUB_REPOSITORY/\\1?ref=$$GITHUB_SHA;g" ) && \

@@ -185,7 +185,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 
 		dm, err := ns.getDeviceManagerForVolume(req.VolumeId)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "%v", err)
+			return nil, err
 		}
 
 		if device, err = dm.GetDevice(req.VolumeId); err != nil {
@@ -268,6 +268,17 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	}
 	if err := ns.mount(srcPath, hostMount, mountFlags, rawBlock); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	if ephemeral && fsType == "xfs" {
+		// FS was created only in ephemeral case.
+		// Only if created filesytem and it was XFS:
+		// Tune XFS file system to serve huge pages:
+		// Set file system extent size to 2 MiB sized and aligned block allocations.
+		_, err := pmemexec.RunCommand("xfs_io", "-c", "extsize 2m", hostMount)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
 	}
 
 	if !volumeParameters.GetKataContainers() {
@@ -495,7 +506,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 
 	dm, err := ns.getDeviceManagerForVolume(req.VolumeId)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "%v", err)
+		return nil, err
 	}
 
 	device, err := dm.GetDevice(req.VolumeId)
@@ -532,6 +543,15 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
+	if existingFsType == "" && requestedFsType == "xfs" {
+		// Only if created a new filesytem and it was XFS:
+		// Align XFS file system for hugepages
+		_, err := pmemexec.RunCommand("xfs_io", "-c", "extsize 2m", stagingtargetPath)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+
 	return &csi.NodeStageVolumeResponse{}, nil
 }
 
@@ -555,7 +575,7 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 
 	dm, err := ns.getDeviceManagerForVolume(req.VolumeId)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "%v", err)
+		return nil, err
 	}
 	// by spec, we have to return OK if asked volume is not mounted on asked path,
 	// so we look up the current device by volumeID and see is that device
@@ -646,17 +666,20 @@ func (ns *nodeServer) provisionDevice(device *pmdmanager.PmemDeviceInfo, fsType 
 	cmd := ""
 	var args []string
 	// hard-code block size to 4k to avoid smaller values and trouble to dax mount option
-	if fsType == "ext4" {
+	switch fsType {
+	case "ext4":
 		cmd = "mkfs.ext4"
-		args = []string{"-b 4096", "-F", device.Path}
-	} else if fsType == "xfs" {
+		args = []string{"-b", "4096", "-E", "stride=512,stripe_width=512", "-F", device.Path}
+	case "xfs":
 		cmd = "mkfs.xfs"
-		// reflink and DAX are mutually exclusive
+		// reflink=0: reflink and DAX are mutually exclusive
 		// (http://man7.org/linux/man-pages/man8/mkfs.xfs.8.html).
-		args = []string{"-b", "size=4096", "-m", "reflink=0", "-f", device.Path}
-	} else {
+		// su=2m,sw=1: use 2MB-aligned and -sized block allocations
+		args = []string{"-b", "size=4096", "-m", "reflink=0", "-d", "su=2m,sw=1", "-f", device.Path}
+	default:
 		return fmt.Errorf("Unsupported filesystem '%s'. Supported filesystems types: 'xfs', 'ext4'", fsType)
 	}
+
 	output, err := pmemexec.RunCommand(cmd, args...)
 	if err != nil {
 		return fmt.Errorf("mkfs failed: output:[%s] err:[%v]", output, err)
@@ -699,7 +722,6 @@ func (ns *nodeServer) mount(sourcePath, targetPath string, mountOptions []string
 	if len(mountOptions) != 0 {
 		args = append(args, "-o", strings.Join(mountOptions, ","))
 	}
-
 	args = append(args, sourcePath, targetPath)
 	if _, err := pmemexec.RunCommand("mount", args...); err != nil {
 		return fmt.Errorf("mount filesystem failed: %s", err.Error())
@@ -710,11 +732,12 @@ func (ns *nodeServer) mount(sourcePath, targetPath string, mountOptions []string
 
 // getDeviceManagerForVolume checks the stored volume parametes for the
 // given id and returns the device manager which creates that volume.
+// NOT_FOUND is returned when the volume does not exist.
 func (ns *nodeServer) getDeviceManagerForVolume(id string) (pmdmanager.PmemDeviceManager, error) {
 
 	vol := ns.cs.getVolumeByID(id)
 	if vol == nil {
-		return nil, fmt.Errorf("unknown volume: %s", id)
+		return nil, status.Errorf(codes.NotFound, "unknown volume: "+id)
 	}
 
 	v, err := parameters.Parse(parameters.NodeVolumeOrigin, vol.Params)
@@ -726,7 +749,7 @@ func (ns *nodeServer) getDeviceManagerForVolume(id string) (pmdmanager.PmemDevic
 	if v.GetDeviceMode() != dm.GetMode() {
 		dm, err = pmdmanager.New(v.GetDeviceMode(), 0)
 		if err != nil {
-			return nil, fmt.Errorf("failed to initialize device manager for volume '%s'(volume mode: '%s'): %v", id, v.GetDeviceMode(), err)
+			return nil, fmt.Errorf("failed to initialize device manager for volume %q, volume mode %q: %v", id, v.GetDeviceMode(), err)
 		}
 	}
 

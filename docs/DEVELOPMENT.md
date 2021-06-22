@@ -1,42 +1,10 @@
 # Develop and Contribute
 
-- [Setup](#setup)
-    - [Build PMEM-CSI](#build-pmem-csi)
-- [Code quality](#code-quality)
-    - [Coding style](#coding-style)
-    - [Input validation](#input-validation)
-- [Release management](#release-management)
-    - [Branching](#branching)
-    - [Tagging](#tagging)
-    - [Release checklist](#release-checklist)
-    - [Release PMEM-CSI operator](#release-pmem-csi-operator)
-- [APIs](#apis)
-    - [CSI API](#csi-api)
-    - [Network ports](#network-ports)
-    - [Local sockets](#local-sockets)
-    - [Command line arguments](#command-line-arguments)
-    - [Environment variables](#environment-variables)
-    - [Logging](#logging)
-- [Performance and resource measurements](#performance-and-resource-measurements)
-- [Switching device mode](#switching-device-mode)
-    - [Going from LVM device mode to direct device mode](#going-from-lvm-device-mode-to-direct-device-mode)
-    - [Going from direct device mode to LVM device mode](#going-from-direct-device-mode-to-lvm-device-mode)
-- [Accessing system directories in a container](#accessing-system-directories-in-a-container)
-    - [Read-only access to /sys](#read-only-access-to-sys)
-    - [Access to /dev of host](#access-to-dev-of-host)
-- [Repository elements that are generated or created separately](#repository-elements-which-are-generated-or-created-separately)
-    - [Top-level README diagrams describing LVM and Direct device modes](#top-level-readme-diagrams-describing-lvm-and-direct-device-modes)
-    - [Top-level README diagram describing communication channels](#top-level-readme-diagram-describing-communication-channels)
-    - [Diagrams describing provisioning sequence](#diagrams-describing-provisioning-sequence)
-    - [RegistryServer spec](#registryserver-spec)
-    - [Table of Contents in README and DEVELOPMENT](#table-of-contents-in-readme-and-development)
-- [Edit, build, and deploy the Read the Docs site](#build-edit-and-deploy-the-read-the-docs-site)
-
 ## Setup
 
 ### Build PMEM-CSI
 
-1.  Use `make build-images` to produce Docker\* container images.
+1.  Use `make build-images` to produce Docker\* container images.g180
 
 2.  Use `make push-images` to push Docker container images to a Docker image
     registry. The default is to push to a local
@@ -203,7 +171,7 @@ Network ports are opened as configured in manifest files:
 
 - metrics endpoint: typical port values 10010 (PMEM-CSI) and 10011
   (external-provisioner)
-- webhook endpoint: disabled by default, port chosen when [enabling the scheduler extensions](../README.md#enable-scheduler-extensions)
+- webhook endpoint: disabled by default, port chosen when [enabling the scheduler extensions](install.md#enable-scheduler-extensions)
 
 ### Local sockets
 
@@ -217,8 +185,8 @@ The Kubernetes CSI API is used over a local socket inside the same host.
 ### Command line arguments
 
 See the `main.go` files of the
-[pmem-csi-driver](./pkg/pmem-csi-driver/main.go) and
-the [pmem-csi-operator](./pkg/pmem-csi-operator/main.go) commands.
+[pmem-csi-driver](/pkg/pmem-csi-driver/main.go) and
+the [pmem-csi-operator](/pkg/pmem-csi-operator/main.go) commands.
 
 ### Environment variables
 
@@ -274,7 +242,7 @@ make test_e2e TEST_E2E_FOCUS=lvm-production.*late.binding.*stress.test
 ```
 
 Alternatively, one can run the
-[`hack/stress-driver.sh`](hack/stress-driver.sh)
+[`hack/stress-driver.sh`](/hack/stress-driver.sh)
 helper script to generate load on the driver
 ```console
 ROUNDS=500 VOL_COUNT=5 ./hack/stress-driver.sh
