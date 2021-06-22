@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package pmdmanager
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -45,7 +46,7 @@ func (dm *fakeDM) GetMode() api.DeviceMode {
 	return api.DeviceModeFake
 }
 
-func (dm *fakeDM) GetCapacity() (capacity Capacity, err error) {
+func (dm *fakeDM) GetCapacity(ctx context.Context) (capacity Capacity, err error) {
 	dm.mutex.Lock()
 	defer dm.mutex.Unlock()
 
@@ -65,7 +66,7 @@ func (dm *fakeDM) getCapacity() Capacity {
 	}
 }
 
-func (dm *fakeDM) CreateDevice(volumeId string, size uint64) (uint64, error) {
+func (dm *fakeDM) CreateDevice(ctx context.Context, volumeId string, size uint64) (uint64, error) {
 	dm.mutex.Lock()
 	defer dm.mutex.Unlock()
 
@@ -86,7 +87,7 @@ func (dm *fakeDM) CreateDevice(volumeId string, size uint64) (uint64, error) {
 	return size, nil
 }
 
-func (dm *fakeDM) DeleteDevice(volumeId string, flush bool) error {
+func (dm *fakeDM) DeleteDevice(ctx context.Context, volumeId string, flush bool) error {
 	dm.mutex.Lock()
 	defer dm.mutex.Unlock()
 
@@ -96,7 +97,7 @@ func (dm *fakeDM) DeleteDevice(volumeId string, flush bool) error {
 	return nil
 }
 
-func (dm *fakeDM) ListDevices() ([]*PmemDeviceInfo, error) {
+func (dm *fakeDM) ListDevices(ctx context.Context) ([]*PmemDeviceInfo, error) {
 	dm.mutex.Lock()
 	defer dm.mutex.Unlock()
 
@@ -108,7 +109,7 @@ func (dm *fakeDM) ListDevices() ([]*PmemDeviceInfo, error) {
 	return devices, nil
 }
 
-func (dm *fakeDM) GetDevice(volumeId string) (*PmemDeviceInfo, error) {
+func (dm *fakeDM) GetDevice(ctx context.Context, volumeId string) (*PmemDeviceInfo, error) {
 	dm.mutex.Lock()
 	defer dm.mutex.Unlock()
 

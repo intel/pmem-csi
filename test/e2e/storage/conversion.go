@@ -173,9 +173,9 @@ func testRawNamespaceConversion(f *framework.Framework, driverName, namespace st
 		if err != nil {
 			return fmt.Errorf("get pmem-driver output on master node: %v", err)
 		}
-		parts := regexp.MustCompile(`PMEM-CSI ready. Capacity:[^\n]*(\d+)\s*\S+ available[^\n]*`).FindStringSubmatch(output)
+		parts := regexp.MustCompile(`"PMEM-CSI ready." capacity="[^\n]*(\d+)\s*\S+ available[^\n]*`).FindStringSubmatch(output)
 		if len(parts) != 2 {
-			return fmt.Errorf("pod %s has not printed the expected `PMEM-CSI ready. Capacity: ...` log message yet", pod.Name)
+			return fmt.Errorf("pod %s has not printed the expected `PMEM-CSI ready.` log message yet", pod.Name)
 		}
 		if parts[1] == "0" {
 			return fmt.Errorf("pod %s is ready, but without any capacity: %s", pod.Name, parts[0])

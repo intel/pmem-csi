@@ -8,9 +8,8 @@ package ndctl
 import "C"
 
 import (
+	gocontext "context"
 	"fmt"
-
-	"k8s.io/klog/v2"
 
 	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 )
@@ -48,25 +47,25 @@ var _ Context = &context{}
 
 // NewContext Initializes new context
 func NewContext() (Context, error) {
-	var ctx *context
+	var ndctx *context
 
-	if rc := C.ndctl_new(&ctx); rc != 0 {
+	if rc := C.ndctl_new(&ndctx); rc != 0 {
 		return nil, fmt.Errorf("Create context failed with error: %s", cErrorString(rc))
 	}
 
-	return ctx, nil
+	return ndctx, nil
 }
 
-func (ctx *context) Free() {
-	if ctx != nil {
-		C.ndctl_unref((*C.struct_ndctl_ctx)(ctx))
+func (ndctx *context) Free() {
+	if ndctx != nil {
+		C.ndctl_unref((*C.struct_ndctl_ctx)(ndctx))
 	}
 }
 
-func (ctx *context) GetBuses() []Bus {
+func (ndctx *context) GetBuses() []Bus {
 	var buses []Bus
 
-	for ndbus := C.ndctl_bus_get_first(ctx); ndbus != nil; ndbus = C.ndctl_bus_get_next(ndbus) {
+	for ndbus := C.ndctl_bus_get_first(ndctx); ndbus != nil; ndbus = C.ndctl_bus_get_next(ndbus) {
 		buses = append(buses, ndbus)
 	}
 	return buses
@@ -74,16 +73,13 @@ func (ctx *context) GetBuses() []Bus {
 
 // CreateNamespace creates a new namespace with given opts in some arbitrary
 // region. It returns an error if creation fails in all regions.
-func CreateNamespace(ctx Context, opts CreateNamespaceOpts) (Namespace, error) {
+func CreateNamespace(ctx gocontext.Context, ndctx Context, opts CreateNamespaceOpts) (Namespace, error) {
 	var err error
 	var ns Namespace
-	for _, bus := range ctx.GetBuses() {
+	for _, bus := range ndctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
-			if ns, err = r.CreateNamespace(opts); err == nil {
-				klog.V(3).Infof("Namespace %s created in %s", ns.Name(), r.DeviceName())
+			if ns, err = r.CreateNamespace(ctx, opts); err == nil {
 				return ns, nil
-			} else {
-				klog.Errorf("Namespace creation failure in %s: %s", r.DeviceName(), err.Error())
 			}
 		}
 	}
@@ -91,8 +87,8 @@ func CreateNamespace(ctx Context, opts CreateNamespaceOpts) (Namespace, error) {
 }
 
 // DestroyNamespaceByName deletes the namespace with the given name.
-func DestroyNamespaceByName(ctx Context, name string) error {
-	ns, err := GetNamespaceByName(ctx, name)
+func DestroyNamespaceByName(ndctx Context, name string) error {
+	ns, err := GetNamespaceByName(ndctx, name)
 	if err != nil {
 		return err
 	}
@@ -102,8 +98,8 @@ func DestroyNamespaceByName(ctx Context, name string) error {
 }
 
 // GetNamespaceByName gets the namespace details for a given name.
-func GetNamespaceByName(ctx Context, name string) (Namespace, error) {
-	for _, bus := range ctx.GetBuses() {
+func GetNamespaceByName(ndctx Context, name string) (Namespace, error) {
+	for _, bus := range ndctx.GetBuses() {
 		for _, r := range bus.AllRegions() {
 			for _, ns := range r.AllNamespaces() {
 				if ns.Name() == name {
@@ -116,9 +112,9 @@ func GetNamespaceByName(ctx Context, name string) (Namespace, error) {
 }
 
 // GetActiveNamespaces returns a list of all active namespaces in all regions.
-func GetActiveNamespaces(ctx Context) []Namespace {
+func GetActiveNamespaces(ndctx Context) []Namespace {
 	var list []Namespace
-	for _, bus := range ctx.GetBuses() {
+	for _, bus := range ndctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
 			nss := r.ActiveNamespaces()
 			list = append(list, nss...)
@@ -129,9 +125,9 @@ func GetActiveNamespaces(ctx Context) []Namespace {
 }
 
 // GetAllNamespaces returns a list of all namespaces in all regions including idle namespaces.
-func GetAllNamespaces(ctx Context) []Namespace {
+func GetAllNamespaces(ndctx Context) []Namespace {
 	var list []Namespace
-	for _, bus := range ctx.GetBuses() {
+	for _, bus := range ndctx.GetBuses() {
 		for _, r := range bus.AllRegions() {
 			nss := r.AllNamespaces()
 			list = append(list, nss...)
@@ -142,8 +138,8 @@ func GetAllNamespaces(ctx Context) []Namespace {
 }
 
 // IsSpaceAvailable checks if a region is available with given free size.
-func IsSpaceAvailable(ctx Context, size uint64) bool {
-	for _, bus := range ctx.GetBuses() {
+func IsSpaceAvailable(ndctx Context, size uint64) bool {
+	for _, bus := range ndctx.GetBuses() {
 		for _, r := range bus.ActiveRegions() {
 			if r.MaxAvailableExtent() >= size && NamespaceType(r.Type()) == PmemNamespace {
 				return true

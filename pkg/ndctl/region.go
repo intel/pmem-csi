@@ -7,10 +7,10 @@ package ndctl
 //#include <ndctl/ndctl.h>
 import "C"
 import (
+	gocontext "context"
 	"fmt"
 
 	"github.com/google/uuid"
-	"k8s.io/klog/v2"
 
 	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	pmemlog "github.com/intel/pmem-csi/pkg/logger"
@@ -60,11 +60,9 @@ type Region interface {
 	// SeedNamespace returns the initial namespace in the region.
 	SeedNamespace() Namespace
 	// CreateNamespace creates a new namespace in the region.
-	CreateNamespace(opts CreateNamespaceOpts) (Namespace, error)
+	CreateNamespace(ctx gocontext.Context, opts CreateNamespaceOpts) (Namespace, error)
 	// DestroyNamespace destroys the given namespace in the region.
 	DestroyNamespace(ns Namespace, force bool) error
-	// AdaptAlign modifies the alignment for the region.
-	AdaptAlign(align uint64) (uint64, error)
 	// FsdaxAlignment returns the default alignment for an fsdax namespace.
 	// It always returns a non-zero value.
 	FsdaxAlignment() uint64
@@ -156,7 +154,10 @@ func (r *region) GetAlign() uint64 {
 	return uint64(align)
 }
 
-func (r *region) CreateNamespace(opts CreateNamespaceOpts) (Namespace, error) {
+func (r *region) CreateNamespace(ctx gocontext.Context, opts CreateNamespaceOpts) (Namespace, error) {
+	regionName := r.DeviceName()
+	logger := pmemlog.Get(ctx).WithName("CreateNamespace").WithValues("region", regionName)
+
 	var err error
 	/* Set defaults */
 	if opts.Type == "" {
@@ -182,7 +183,6 @@ func (r *region) CreateNamespace(opts CreateNamespaceOpts) (Namespace, error) {
 
 	/* Sanity checks */
 
-	regionName := r.DeviceName()
 	if !r.Enabled() {
 		return nil, fmt.Errorf("Region not enabled")
 	}
@@ -208,10 +208,13 @@ func (r *region) CreateNamespace(opts CreateNamespaceOpts) (Namespace, error) {
 	if size == 0 || size%lcmalign != 0 {
 		// Align up to least-common-multiple alignment boundary.
 		size = (size/lcmalign + 1) * lcmalign
-		klog.V(3).Infof("%s: namespace size must align with region alignment %s and namespace alignment %s, adjust up from %s to %s",
-			r.DeviceName(),
-			pmemlog.CapacityRef(int64(regionalign)), pmemlog.CapacityRef(int64(namespacealign)),
-			pmemlog.CapacityRef(int64(opts.Size)), pmemlog.CapacityRef(int64(size)))
+		logger.V(3).Info("Namespace size must be rounded up to alignment boundaries",
+			"region", r.DeviceName(),
+			"region-align", pmemlog.CapacityRef(int64(regionalign)),
+			"namespace-align", pmemlog.CapacityRef(int64(namespacealign)),
+			"old-size", pmemlog.CapacityRef(int64(opts.Size)),
+			"new-size", pmemlog.CapacityRef(int64(size)),
+		)
 	}
 	available := r.MaxAvailableExtent()
 	if available == uint64(C.ULLONG_MAX) {
@@ -244,7 +247,7 @@ func (r *region) CreateNamespace(opts CreateNamespaceOpts) (Namespace, error) {
 	}
 
 	if err == nil {
-		klog.V(5).Infof("setting namespace sector size: %v", opts.SectorSize)
+		logger.V(5).Info("Setting namespace sector size", "sector-size", opts.SectorSize)
 		err = ns.SetSectorSize(opts.SectorSize)
 	}
 	if err == nil {
@@ -254,18 +257,18 @@ func (r *region) CreateNamespace(opts CreateNamespaceOpts) (Namespace, error) {
 	if err == nil {
 		switch opts.Mode {
 		case FsdaxMode:
-			klog.V(5).Info("setting pfn")
+			logger.V(5).Info("Setting pfn")
 			err = ndns.SetPfnSeed(opts.Location, align)
 		case DaxMode:
-			klog.V(5).Info("setting dax")
+			logger.V(5).Info("Setting dax")
 			err = ndns.setDaxSeed(opts.Location, align)
 		case SectorMode:
-			klog.V(5).Info("setting btt")
+			logger.V(5).Info("Setting btt")
 			err = ndns.setBttSeed(opts.SectorSize)
 		}
 	}
 	if err == nil {
-		klog.V(5).Info("enabling namespace")
+		logger.V(5).Info("Enabling namespace")
 		err = ns.Enable()
 	}
 
@@ -276,21 +279,13 @@ func (r *region) CreateNamespace(opts CreateNamespaceOpts) (Namespace, error) {
 		return nil, err
 	}
 
-	klog.V(3).Infof("%s: namespace created: usable size %s, raw size %s, uuid %v",
-		regionName, pmemlog.CapacityRef(int64(ns.Size())), pmemlog.CapacityRef(int64(ns.RawSize())), ns.UUID())
+	logger.V(3).Info("Namespace created",
+		"namespace", ns.DeviceName(),
+		"usable-size", pmemlog.CapacityRef(int64(ns.Size())),
+		"raw-size", pmemlog.CapacityRef(int64(ns.RawSize())),
+		"uuid", ns.UUID(),
+	)
 	return ns, nil
-}
-
-func (r *region) AdaptAlign(align uint64) (uint64, error) {
-	resource := uint64(C.ndctl_region_get_resource(r))
-	if resource < uint64(C.ULLONG_MAX) && resource&(mib2-1) != 0 {
-		klog.V(4).Infof("%s: falling back to a 4K alignment", r.DeviceName())
-		align = kib4
-	}
-	if align != kib4 && align != mib2 && align != gib {
-		return 0, fmt.Errorf("unsupported alignment: %v", align)
-	}
-	return align, nil
 }
 
 func (r *region) FsdaxAlignment() uint64 {

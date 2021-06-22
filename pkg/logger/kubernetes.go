@@ -12,6 +12,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
+var (
+	KObj = klog.KObj
+	KRef = klog.KRef
+)
+
 // ObjectRef references a kubernetes object
 type ObjectRefWithType struct {
 	klog.ObjectRef

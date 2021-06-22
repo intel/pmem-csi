@@ -20,12 +20,12 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	"k8s.io/klog/v2"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 
 	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
+	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	pmemstate "github.com/intel/pmem-csi/pkg/pmem-state"
@@ -52,7 +52,9 @@ var _ grpcserver.Service = &nodeControllerServer{}
 
 var nodeVolumeMutex = keymutex.NewHashed(-1)
 
-func NewNodeControllerServer(nodeID string, dm pmdmanager.PmemDeviceManager, sm pmemstate.StateManager) *nodeControllerServer {
+func NewNodeControllerServer(ctx context.Context, nodeID string, dm pmdmanager.PmemDeviceManager, sm pmemstate.StateManager) *nodeControllerServer {
+	ctx, logger := pmemlog.WithName(ctx, "NewNodeControllerServer")
+
 	serverCaps := []csi.ControllerServiceCapability_RPC_Type{
 		csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME,
 		csi.ControllerServiceCapability_RPC_LIST_VOLUMES,
@@ -70,41 +72,41 @@ func NewNodeControllerServer(nodeID string, dm pmdmanager.PmemDeviceManager, sm 
 	// Restore provisioned volumes from state.
 	if sm != nil {
 		// Get actual devices at DeviceManager
-		devices, err := dm.ListDevices()
+		devices, err := dm.ListDevices(ctx)
 		if err != nil {
-			klog.Warningf("Failed to get volumes: %v", err)
+			logger.Error(err, "Failed to get volumes")
 		}
 		cleanupList := []string{}
 		ids, err := sm.GetAll()
 		if err != nil {
-			klog.Warningf("Failed to load state: %v", err)
+			logger.Error(err, "Failed to load state")
 		}
 
 		for _, id := range ids {
 			// retrieve volume info
 			vol := &nodeVolume{}
 			if err := sm.Get(id, vol); err != nil {
-				klog.Warningf("Failed to retrieve volume info for id %q from state: %v", id, err)
+				logger.Error(err, "Failed to retrieve volume info from persistent state", "volume-id", id)
 				continue
 			}
 			v, err := parameters.Parse(parameters.NodeVolumeOrigin, vol.Params)
 			if err != nil {
-				klog.Warningf("Failed to parse volume parameters for volume %q: %v", id, err)
+				logger.Error(err, "Failed to parse volume parameters for volume", "volume-id", id)
 				continue
 			}
 
 			found := false
 			if v.GetDeviceMode() != dm.GetMode() {
-				dm, err := pmdmanager.New(v.GetDeviceMode(), 0)
+				dm, err := pmdmanager.New(ctx, v.GetDeviceMode(), 0)
 				if err != nil {
-					klog.Warningf("Failed to initialize device manager for state volume '%s'(volume mode: '%s'): %v", id, v.GetDeviceMode(), err)
+					logger.Error(err, "Failed to initialize device manager for state volume", "volume-id", id, "device-mode", v.GetDeviceMode())
 					continue
 				}
 
-				if _, err := dm.GetDevice(id); err == nil {
+				if _, err := dm.GetDevice(ctx, id); err == nil {
 					found = true
 				} else if !errors.Is(err, pmemerr.DeviceNotFound) {
-					klog.Warningf("Failed to fetch device for state volume '%s'(volume mode: '%s'): %v", id, v.GetDeviceMode(), err)
+					logger.Error(err, "Failed to fetch device for state volume", "volume-id", id, "device-mode", v.GetDeviceMode())
 					// Let's ignore this volume
 					continue
 				}
@@ -128,7 +130,7 @@ func NewNodeControllerServer(nodeID string, dm pmdmanager.PmemDeviceManager, sm 
 
 		for _, id := range cleanupList {
 			if err := sm.Delete(id); err != nil {
-				klog.Warningf("Failed to delete stale volume %s from state: %s", id, err.Error())
+				logger.Error(err, "Failed to remove stale volume from state", "volume-id", id)
 			}
 		}
 	}
@@ -146,7 +148,6 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 	var resp *csi.CreateVolumeResponse
 
 	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
-		klog.Errorf("invalid create volume req: %v", req)
 		return nil, err
 	}
 
@@ -200,6 +201,9 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 	volumeCapabilities []*csi.VolumeCapability,
 	capacity *csi.CapacityRange,
 ) (volumeID string, actual int64, statusErr error) {
+	logger := pmemlog.Get(ctx).WithValues("volume-name", volumeName)
+	ctx = pmemlog.Set(ctx, logger)
+
 	// Keep volume name as part of volume parameters for use in
 	// getVolumeByName.
 	p.Name = &volumeName
@@ -207,7 +211,7 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 	asked := capacity.GetRequiredBytes()
 	if vol := cs.getVolumeByName(volumeName); vol != nil {
 		// Check if the size of existing volume can cover the new request
-		klog.V(4).Infof("CreateVolume: volume exists, name:%q id:%s size:%v", volumeName, vol.ID, vol.Size)
+		logger.V(4).Info("Volume exists", "volume-id", vol.ID, "size", pmemlog.CapacityRef(vol.Size))
 		if vol.Size < asked {
 			statusErr = status.Error(codes.AlreadyExists, fmt.Sprintf("smaller volume with the same name %q already exists", volumeName))
 			return
@@ -219,16 +223,18 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 		return
 	}
 
-	klog.V(4).Infof("CreateVolume: Name:%q req.Required:%v req.Limit:%v", volumeName, asked, capacity.GetLimitBytes())
-	volumeID = generateVolumeID("CreateVolume", volumeName)
+	volumeID = generateVolumeID(volumeName)
+	logger = logger.WithValues("volume-id", volumeID)
+	logger.V(4).Info("Creating new volume", "minimum-size", pmemlog.CapacityRef(asked), "maximum-size", pmemlog.CapacityRef(capacity.GetLimitBytes()))
+	ctx = pmemlog.Set(ctx, logger)
+
 	// Check do we have entry with newly generated VolumeID already
 	if vol := cs.getVolumeByID(volumeID); vol != nil {
 		// if we have, that has to be VolumeID collision, because above we checked
 		// that we don't have entry with such Name. VolumeID collision is very-very
 		// unlikely so we should not get here in any near future, if otherwise state is good.
-		klog.V(3).Infof("Controller CreateVolume: VolumeID:%s collision: existing name:%s new name:%s",
-			volumeID, vol.Params[parameters.Name], volumeName)
-		statusErr = status.Error(codes.Internal, "VolumeID/hash collision, cannot create unique Volume")
+		statusErr = status.Error(codes.Internal, fmt.Sprintf("VolumeID hash collision between old name %s and new name %s",
+			vol.Params[parameters.Name], volumeName))
 		return
 	}
 
@@ -254,12 +260,12 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 			// This is allowed to fail because orphaned entries will be detected eventually.
 			if statusErr != nil {
 				if err := cs.sm.Delete(volumeID); err != nil {
-					klog.Warningf("Delete volume state for id '%s' failed with error: %v", volumeID, err)
+					logger.Error(err, "Removing volume from persistent state failed")
 				}
 			}
 		}()
 	}
-	actualSize, err := cs.dm.CreateDevice(volumeID, uint64(asked))
+	actualSize, err := cs.dm.CreateDevice(ctx, volumeID, uint64(asked))
 	if err != nil {
 		code := codes.Internal
 		if errors.Is(err, pmemerr.NotEnoughSpace) {
@@ -278,36 +284,38 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 			// metadata about it. The best we can do now
 			// is probably to proceed, hoping that whatever
 			// meta data was written is still valid.
-			klog.Warningf("updating state with new volume size failed: %v", err)
+			logger.Error(err, "Updating state with new volume size failed")
 		}
 	}
 
 	cs.mutex.Lock()
 	defer cs.mutex.Unlock()
 	cs.pmemVolumes[volumeID] = vol
-	klog.V(3).Infof("CreateVolume: Record new volume as %v", *vol)
+	logger.V(5).Info("Created new volume", "volume", *vol)
 
 	return
 }
 
 func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
+	volumeID := req.GetVolumeId()
+	logger := pmemlog.Get(ctx).WithValues("volume-id", volumeID)
+	ctx = pmemlog.Set(ctx, logger)
 
 	// Check arguments
-	if len(req.GetVolumeId()) == 0 {
+	if volumeID == "" {
 		return nil, status.Error(codes.InvalidArgument, "Volume ID missing in request")
 	}
 
 	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_CREATE_DELETE_VOLUME); err != nil {
-		klog.Errorf("invalid delete volume req: %v", req)
 		return nil, err
 	}
 
 	// Serialize by VolumeId
-	nodeVolumeMutex.LockKey(req.VolumeId)
-	defer nodeVolumeMutex.UnlockKey(req.VolumeId) //nolint: errcheck
+	nodeVolumeMutex.LockKey(volumeID)
+	defer nodeVolumeMutex.UnlockKey(volumeID) //nolint: errcheck
 
-	klog.V(4).Infof("Node DeleteVolume: volumeID: %v", req.GetVolumeId())
-	vol := cs.getVolumeByID(req.VolumeId)
+	logger.V(4).Info("Starting to delete volume")
+	vol := cs.getVolumeByID(volumeID)
 	if vol == nil {
 		// Already deleted.
 		return &csi.DeleteVolumeResponse{}, nil
@@ -317,18 +325,18 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 		// This should never happen because PMEM-CSI itself created these parameters.
 		// But if it happens, better fail and force an admin to recover instead of
 		// potentially destroying data.
-		return nil, status.Errorf(codes.Internal, "previously stored volume parameters for volume with ID %q: %v", req.VolumeId, err)
+		return nil, status.Errorf(codes.Internal, "previously stored volume parameters for volume with ID %q: %v", volumeID, err)
 	}
 
 	dm := cs.dm
 	if dm.GetMode() != p.GetDeviceMode() {
-		dm, err = pmdmanager.New(p.GetDeviceMode(), 0)
+		dm, err = pmdmanager.New(ctx, p.GetDeviceMode(), 0)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to initialize device manager for volume(ID %q, mode: %s): %v", req.VolumeId, p.GetDeviceMode(), err)
+			return nil, status.Errorf(codes.Internal, "failed to initialize device manager for volume with ID %q and mode %s: %v", volumeID, p.GetDeviceMode(), err)
 		}
 	}
 
-	if err := dm.DeleteDevice(req.VolumeId, p.GetEraseAfter()); err != nil {
+	if err := dm.DeleteDevice(ctx, req.VolumeId, p.GetEraseAfter()); err != nil {
 		if errors.Is(err, pmemerr.DeviceInUse) {
 			return nil, status.Errorf(codes.FailedPrecondition, err.Error())
 		}
@@ -336,7 +344,7 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 	}
 	if cs.sm != nil {
 		if err := cs.sm.Delete(req.VolumeId); err != nil {
-			klog.Warning("Failed to remove volume from state: ", err)
+			logger.Error(err, "Failed to remove volume from state")
 		}
 	}
 
@@ -344,7 +352,7 @@ func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.Delet
 	defer cs.mutex.Unlock()
 	delete(cs.pmemVolumes, req.VolumeId)
 
-	klog.V(4).Infof("Node DeleteVolume: volume %s deleted", req.GetVolumeId())
+	logger.V(4).Info("Volume deleted")
 	return &csi.DeleteVolumeResponse{}, nil
 }
 
@@ -379,9 +387,7 @@ func (cs *nodeControllerServer) ValidateVolumeCapabilities(ctx context.Context, 
 }
 
 func (cs *nodeControllerServer) ListVolumes(ctx context.Context, req *csi.ListVolumesRequest) (*csi.ListVolumesResponse, error) {
-	klog.V(5).Info("ListVolumes")
 	if err := cs.ValidateControllerServiceRequest(csi.ControllerServiceCapability_RPC_LIST_VOLUMES); err != nil {
-		klog.Errorf("invalid list volumes req: %v", req)
 		return nil, err
 	}
 
@@ -460,7 +466,7 @@ func (cs *nodeControllerServer) ListVolumes(ctx context.Context, req *csi.ListVo
 }
 
 func (cs *nodeControllerServer) GetCapacity(ctx context.Context, req *csi.GetCapacityRequest) (*csi.GetCapacityResponse, error) {
-	cap, err := cs.dm.GetCapacity()
+	cap, err := cs.dm.GetCapacity(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
@@ -500,7 +506,7 @@ func (cs *nodeControllerServer) ControllerGetVolume(context.Context, *csi.Contro
 	return nil, status.Error(codes.Unimplemented, "")
 }
 
-func generateVolumeID(caller string, name string) string {
+func generateVolumeID(name string) string {
 	// VolumeID is hashed from Volume Name.
 	// Hashing guarantees same ID for repeated requests.
 	// Why do we generate new VolumeID via hashing?
@@ -522,6 +528,5 @@ func generateVolumeID(caller string, name string) string {
 		use = len(name)
 	}
 	id := name[0:use] + "-" + hash
-	klog.V(4).Infof("%s: Create VolumeID:%s based on name:%s", caller, id, name)
 	return id
 }

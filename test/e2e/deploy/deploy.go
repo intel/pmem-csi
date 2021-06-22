@@ -39,6 +39,7 @@ import (
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
 	"github.com/intel/pmem-csi/pkg/k8sutil"
+	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	"github.com/intel/pmem-csi/test/e2e/pod"
 	testconfig "github.com/intel/pmem-csi/test/test-config"
 
@@ -1048,6 +1049,7 @@ func EnsureDeployment(deploymentName string) *Deployment {
 
 // EnsureDeploymentNow checks the currently running driver and replaces it if necessary.
 func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
+	ctx, _ := pmemlog.WithName(context.Background(), "EnsureDeployment")
 	c, err := NewCluster(f.ClientSet, f.DynamicClient, f.ClientConfig())
 	framework.ExpectNoError(err, "get cluster information")
 	running, err := FindDeployment(c)
@@ -1097,7 +1099,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 		cmd := exec.Command("test/start-stop-olm.sh", "start")
 		cmd.Dir = root
 		cmd.Env = env
-		_, err := pmemexec.Run(cmd)
+		_, err := pmemexec.Run(ctx, cmd)
 		framework.ExpectNoError(err, "create operator deployment: %q", deployment.Name())
 		WaitForOLM(c, "olm")
 	}
@@ -1106,17 +1108,17 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 		// Find the latest dot release on the branch for which images are public.
 		// Most recent tag is listed first. We better avoid pulling over and over again
 		// to avoid throttling.
-		tags, err := pmemexec.RunCommand("git", "tag", "--sort=-version:refname")
+		tags, err := pmemexec.RunCommand(ctx, "git", "tag", "--sort=-version:refname")
 		framework.ExpectNoError(err, "fetch git tags")
 		scanner := bufio.NewScanner(strings.NewReader(tags))
 		var tag string
 		for scanner.Scan() {
 			tag = scanner.Text()
 			if strings.HasPrefix(tag, "v"+deployment.Version) {
-				if _, err := pmemexec.RunCommand("docker", "image", "inspect", "--format='exists'", "intel/pmem-csi-driver:"+tag); err == nil {
+				if _, err := pmemexec.RunCommand(ctx, "docker", "image", "inspect", "--format='exists'", "intel/pmem-csi-driver:"+tag); err == nil {
 					break
 				}
-				if _, err := pmemexec.RunCommand("docker", "image", "pull", "intel/pmem-csi-driver:"+tag); err == nil {
+				if _, err := pmemexec.RunCommand(ctx, "docker", "image", "pull", "intel/pmem-csi-driver:"+tag); err == nil {
 					break
 				}
 			}
@@ -1128,9 +1130,9 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 		workRoot := root + "/_work/pmem-csi-release-" + deployment.Version
 		err = os.RemoveAll(workRoot)
 		framework.ExpectNoError(err, "remove PMEM-CSI source code")
-		_, err = pmemexec.RunCommand("git", "clone", "--shared", root, workRoot)
+		_, err = pmemexec.RunCommand(ctx, "git", "clone", "--shared", root, workRoot)
 		framework.ExpectNoError(err, "clone repo", deployment.Version)
-		_, err = pmemexec.RunCommand("git", "-C", workRoot, "checkout", tag)
+		_, err = pmemexec.RunCommand(ctx, "git", "-C", workRoot, "checkout", tag)
 		framework.ExpectNoError(err, "check out release-%s = %s of PMEM-CSI", deployment.Version, tag)
 
 		// The setup script expects to have
@@ -1147,7 +1149,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 			make := exec.Command("make", "operator-generate-bundle", "VERSION="+tag, "REPO_ROOT="+workRoot)
 			make.Dir = root
 			make.Env = env
-			_, err := pmemexec.Run(make)
+			_, err := pmemexec.Run(ctx, make)
 			framework.ExpectNoError(err, "%s: generate bundle for operator version %s", deployment.Name(), deployment.Version)
 		}
 
@@ -1168,7 +1170,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 		cmd.Env = append(env,
 			"TEST_OPERATOR_NAMESPACE="+deployment.Namespace,
 			"TEST_OPERATOR_DEPLOYMENT_LABEL="+deployment.Label())
-		_, err := pmemexec.Run(cmd)
+		_, err := pmemexec.Run(ctx, cmd)
 		framework.ExpectNoError(err, "create operator deployment: %q", deployment.Name())
 		WaitForOperator(c, deployment.Namespace)
 	}
@@ -1186,7 +1188,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 				"TEST_DEPLOYMENTMODE="+deployment.DeploymentMode(),
 				"TEST_DRIVER_NAMESPACE="+deployment.Namespace,
 				"TEST_DEVICEMODE="+string(deployment.Mode))
-			_, err = pmemexec.Run(cmd)
+			_, err = pmemexec.Run(ctx, cmd)
 			framework.ExpectNoError(err, "create %s PMEM-CSI deployment", deployment.Name())
 		}
 
@@ -1199,6 +1201,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 }
 
 func StopOperator(d *Deployment) error {
+	ctx, _ := pmemlog.WithName(context.Background(), "StopOperator")
 	cmd := exec.Command("test/stop-operator.sh")
 	if d.HasOLM {
 		cmd.Args = append(cmd.Args, "-olm")
@@ -1212,7 +1215,7 @@ func StopOperator(d *Deployment) error {
 	cmd.Env = append(os.Environ(),
 		"TEST_OPERATOR_NAMESPACE="+d.Namespace,
 		"TEST_OPERATOR_DEPLOYMENT_LABEL="+d.Label())
-	_, err := pmemexec.Run(cmd)
+	_, err := pmemexec.Run(ctx, cmd)
 
 	return err
 }

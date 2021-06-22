@@ -23,6 +23,7 @@ import (
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	"github.com/intel/pmem-csi/pkg/k8sutil"
+	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	pmemstate "github.com/intel/pmem-csi/pkg/pmem-state"
@@ -33,7 +34,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"k8s.io/client-go/informers"
-	"k8s.io/klog/v2"
 )
 
 const (
@@ -175,15 +175,16 @@ func GetCSIDriver(cfg Config) (*csiDriver, error) {
 	}, nil
 }
 
-func (csid *csiDriver) Run() error {
+func (csid *csiDriver) Run(ctx context.Context) error {
 	s := grpcserver.NewNonBlockingGRPCServer()
 	// Ensure that the server is stopped before we return.
 	defer func() {
 		s.ForceStop()
 		s.Wait()
 	}()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	logger := pmemlog.Get(ctx)
 
 	switch csid.cfg.Mode {
 	case Webhooks:
@@ -228,7 +229,7 @@ func (csid *csiDriver) Run() error {
 		// Now that all informers and indices are created we can run the factory.
 		globalFactory.Start(ctx.Done())
 		cacheSyncResult := globalFactory.WaitForCacheSync(ctx.Done())
-		klog.V(5).Infof("synchronized caches: %+v", cacheSyncResult)
+		logger.V(5).Info("Synchronized caches", "cache-sync-result", cacheSyncResult)
 		for t, v := range cacheSyncResult {
 			if !v {
 				return fmt.Errorf("failed to sync informer for type %v", t)
@@ -267,7 +268,7 @@ func (csid *csiDriver) Run() error {
 			pcp.startRescheduler(ctx, cancel)
 		}
 	case Node:
-		dm, err := pmdmanager.New(csid.cfg.DeviceManager, csid.cfg.PmemPercentage)
+		dm, err := pmdmanager.New(ctx, csid.cfg.DeviceManager, csid.cfg.PmemPercentage)
 		if err != nil {
 			return err
 		}
@@ -286,22 +287,22 @@ func (csid *csiDriver) Run() error {
 
 		// Create GRPC servers
 		ids := NewIdentityServer(csid.cfg.DriverName, csid.cfg.Version)
-		cs := NewNodeControllerServer(csid.cfg.NodeID, dm, sm)
+		cs := NewNodeControllerServer(ctx, csid.cfg.NodeID, dm, sm)
 		ns := NewNodeServer(cs, filepath.Clean(csid.cfg.StateBasePath)+"/mount")
 
 		services := []grpcserver.Service{ids, ns, cs}
-		if err := s.Start(csid.cfg.Endpoint, csid.cfg.NodeID, nil, cmm, services...); err != nil {
+		if err := s.Start(ctx, csid.cfg.Endpoint, csid.cfg.NodeID, nil, cmm, services...); err != nil {
 			return err
 		}
 
 		// Also collect metrics data via the device manager.
 		pmdmanager.CapacityCollector{PmemDeviceCapacity: dm}.MustRegister(prometheus.DefaultRegisterer, csid.cfg.NodeID, csid.cfg.DriverName)
 
-		capacity, err := dm.GetCapacity()
+		capacity, err := dm.GetCapacity(ctx)
 		if err != nil {
 			return fmt.Errorf("get initial capacity: %v", err)
 		}
-		klog.Infof("PMEM-CSI ready. Capacity: %s", capacity)
+		logger.Info("PMEM-CSI ready.", "capacity", capacity)
 	case ForceConvertRawNamespaces:
 		client, err := k8sutil.NewClient(config.KubeAPIQPS, config.KubeAPIBurst)
 		if err != nil {
@@ -322,7 +323,7 @@ func (csid *csiDriver) Run() error {
 		// "RestartPolicy: OnFailure" would solve that, but
 		// isn't supported for DaemonSets
 		// (https://github.com/kubernetes/kubernetes/issues/24725).
-		klog.V(2).Info("raw namespace conversion is done, waiting for termination signal")
+		logger.Info("Raw namespace conversion is done, waiting for termination signal.")
 	default:
 		return fmt.Errorf("Unsupported device mode '%v", csid.cfg.Mode)
 	}
@@ -333,14 +334,14 @@ func (csid *csiDriver) Run() error {
 		if err != nil {
 			return err
 		}
-		klog.V(2).Infof("Prometheus endpoint started at http://%s%s", addr, csid.cfg.metricsPath)
+		logger.Info("Prometheus endpoint started.", "endpoint", fmt.Sprintf("http://%s%s", addr, csid.cfg.metricsPath))
 	}
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	select {
 	case sig := <-c:
-		klog.V(3).Infof("Caught signal %s, terminating.", sig)
+		logger.Info("Caught signal, terminating.", "signal", sig)
 		// We sleep briefly to give sidecars a chance to shut down cleanly
 		// before we close the CSI socket and force them to shut down
 		// abnormally, because the latter causes lots of debug output
@@ -377,9 +378,14 @@ func (csid *csiDriver) startMetrics(ctx context.Context, cancel func()) (string,
 // be used in Dial("tcp") to reach the server (useful for testing when
 // "listen" does not include a port).
 func (csid *csiDriver) startHTTPSServer(ctx context.Context, cancel func(), listen string, handler http.Handler, useTLS bool) (string, error) {
+	name := "HTTP server"
+	if useTLS {
+		name = "HTTPS server"
+	}
+	logger := pmemlog.Get(ctx).WithName(name).WithValues("listen", listen)
 	var config *tls.Config
 	if useTLS {
-		c, err := pmemgrpc.LoadServerTLS(csid.cfg.CAFile, csid.cfg.CertFile, csid.cfg.KeyFile, "")
+		c, err := pmemgrpc.LoadServerTLS(ctx, csid.cfg.CAFile, csid.cfg.CertFile, csid.cfg.KeyFile, "")
 		if err != nil {
 			return "", fmt.Errorf("initialize HTTPS config: %v", err)
 		}
@@ -388,7 +394,7 @@ func (csid *csiDriver) startHTTPSServer(ctx context.Context, cancel func(), list
 	server := http.Server{
 		Addr: listen,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			klog.V(5).Infof("HTTP request: %s %q from %s %s", r.Method, r.URL.Path, r.RemoteAddr, r.UserAgent())
+			logger.V(5).Info("Handling request", "method", r.Method, "path", r.URL.Path, "peer", r.RemoteAddr, "agent", r.UserAgent())
 			handler.ServeHTTP(w, r)
 		}),
 		TLSConfig: config,
@@ -408,7 +414,7 @@ func (csid *csiDriver) startHTTPSServer(ctx context.Context, cancel func(), list
 			err = server.Serve(listener)
 		}
 		if err != http.ErrServerClosed {
-			klog.Errorf("%s HTTP(S) server error: %v", listen, err)
+			logger.Error(err, "Failed")
 		}
 		// Also stop main thread.
 		cancel()
@@ -420,5 +426,6 @@ func (csid *csiDriver) startHTTPSServer(ctx context.Context, cancel func(), list
 		server.Close()
 	}()
 
+	logger.V(3).Info("Started", "addr", tcpListener.Addr())
 	return tcpListener.Addr().String(), nil
 }

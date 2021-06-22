@@ -216,7 +216,7 @@ func NewReconcileDeployment(ctx context.Context, client client.Client, opts pmem
 	ctx = logger.Set(ctx, l)
 
 	if opts.Namespace == "" {
-		opts.Namespace = k8sutil.GetNamespace()
+		opts.Namespace = k8sutil.GetNamespace(ctx)
 	}
 
 	if opts.DriverImage == "" {

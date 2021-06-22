@@ -265,7 +265,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			// Run in-cluster kubectl from master node
 			ssh := os.Getenv("REPO_ROOT") + "/_work/" + os.Getenv("CLUSTER") + "/ssh.0"
-			out, err := exec.RunCommand(ssh, "kubectl", "get", "pmemcsideployments.pmem-csi.intel.com", "--no-headers")
+			out, err := exec.RunCommand(ctx, ssh, "kubectl", "get", "pmemcsideployments.pmem-csi.intel.com", "--no-headers")
 			Expect(err).ShouldNot(HaveOccurred(), "kubectl get: %v", out)
 			Expect(out).Should(MatchRegexp(`%s\s+%s\s+.*"?%s"?:"?%s"?.*\s+%s\s+%s\s+[0-9]+(s|m)`,
 				d.Name, d.Spec.DeviceMode, lblKey, lblValue, d.Spec.Image, d.Status.Phase), "fields mismatch")
@@ -315,9 +315,9 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					framework.ExpectNoError(err, "get pod logs for running controller-0")
 
 					if format == api.LogFormatJSON {
-						Expect(output).To(MatchRegexp(`\{"ts":\d+.\d+,"msg":"Version:`), "PMEM-CSI driver output in JSON")
+						Expect(output).To(MatchRegexp(`\{"ts":\d+.\d+,"msg":.*"version":`), "PMEM-CSI driver output in JSON")
 					} else {
-						Expect(output).To(MatchRegexp(`I.*main.go:.*Version: `), "PMEM-CSI driver output in glog format")
+						Expect(output).To(MatchRegexp(`I.*main.go:.*version="`), "PMEM-CSI driver output in glog format")
 					}
 					framework.Logf("got pod log: %s", output)
 				})

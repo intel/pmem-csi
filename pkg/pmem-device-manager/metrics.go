@@ -7,6 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 package pmdmanager
 
 import (
+	"context"
+
+	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -59,7 +62,11 @@ func (cc CapacityCollector) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect implements prometheus.Collector.Collect.
 func (cc CapacityCollector) Collect(ch chan<- prometheus.Metric) {
-	capacity, err := cc.GetCapacity()
+	ctx := context.TODO() // would be nicer to get it from caller
+	logger := pmemlog.Get(ctx).WithName("Prometheus Collect")
+	pmemlog.Set(ctx, logger)
+
+	capacity, err := cc.GetCapacity(ctx)
 	if err != nil {
 		return
 	}

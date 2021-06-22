@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package fake
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -110,7 +111,7 @@ func (r *Region) GetAlign() uint64 {
 	return r.RegionAlign_
 }
 
-func (r *Region) CreateNamespace(opts ndctl.CreateNamespaceOpts) (ndctl.Namespace, error) {
+func (r *Region) CreateNamespace(ctx context.Context, opts ndctl.CreateNamespaceOpts) (ndctl.Namespace, error) {
 	var err error
 	/* Set defaults */
 	if opts.Type == "" {
@@ -204,10 +205,6 @@ func (r *Region) DestroyNamespace(ns ndctl.Namespace, force bool) error {
 	}
 
 	return fmt.Errorf("namespace %v not", ns)
-}
-
-func (r *Region) AdaptAlign(align uint64) (uint64, error) {
-	return align, nil
 }
 
 func (r *Region) FsdaxAlignment() uint64 {
