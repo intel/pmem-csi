@@ -165,21 +165,12 @@ func CreatePod(
 	)
 	privileged := volumeMode == v1.PersistentVolumeBlock
 	root := int64(0)
-	pmemUID := int64(1000) // Set explicitly in the PMEM-CSI Dockerfile.
-	pmemGID := int64(1000) // Set indirectly.
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: f.Namespace.Name,
 		},
 		Spec: v1.PodSpec{
-			// Use non-root security context to trigger filesystem
-			// ownership change of the PMEM volume.
-			SecurityContext: &v1.PodSecurityContext{
-				RunAsUser:  &pmemUID,
-				RunAsGroup: &pmemGID,
-				FSGroup:    &pmemGID,
-			},
 			Containers: []v1.Container{
 				{
 					Name:    containerName,

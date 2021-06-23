@@ -159,12 +159,12 @@ KUSTOMIZE :=
 
 # For each supported Kubernetes version, we provide four different flavors.
 # The "testing" flavor of the generated files contains both
-# the loglevel changes and enables coverage data collection.
+# the loglevel changes but does not enable coverage data collection.
 KUSTOMIZE_KUBERNETES_OUTPUT = \
     deploy/kubernetes-X.XX/pmem-csi-direct.yaml=deploy/kustomize/kubernetes-base-direct \
     deploy/kubernetes-X.XX/pmem-csi-lvm.yaml=deploy/kustomize/kubernetes-base-lvm \
-    deploy/kubernetes-X.XX/pmem-csi-direct-testing.yaml=deploy/kustomize/kubernetes-base-direct-coverage \
-    deploy/kubernetes-X.XX/pmem-csi-lvm-testing.yaml=deploy/kustomize/kubernetes-base-lvm-coverage \
+    deploy/kubernetes-X.XX/pmem-csi-direct-testing.yaml=deploy/kustomize/kubernetes-base-direct-testing \
+    deploy/kubernetes-X.XX/pmem-csi-lvm-testing.yaml=deploy/kustomize/kubernetes-base-lvm-testing \
 
 # Kubernetes versions derived from kubernetes-base.
 #

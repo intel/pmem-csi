@@ -574,6 +574,19 @@ var subObjectHandlers = map[string]redeployObject{
 			return nil
 		},
 	},
+	"node OpenShift role binding": {
+		objType: reflect.TypeOf(&rbacv1.RoleBinding{}),
+		object: func(d *pmemCSIDeployment) client.Object {
+			return &rbacv1.RoleBinding{
+				TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: d.getObjectMeta(d.NodeOpenShiftRoleBindingName(), false),
+			}
+		},
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
+			d.getNodeOpenShiftRoleBinding(o.(*rbacv1.RoleBinding))
+			return nil
+		},
+	},
 
 	"node setup cluster role": {
 		objType: reflect.TypeOf(&rbacv1.ClusterRole{}),
@@ -949,6 +962,21 @@ func (d *pmemCSIDeployment) getControllerProvisionerRole(role *rbacv1.Role) {
 	}
 }
 
+func (d *pmemCSIDeployment) getNodeOpenShiftRoleBinding(rb *rbacv1.RoleBinding) {
+	rb.Subjects = []rbacv1.Subject{
+		{
+			Kind:      "ServiceAccount",
+			Name:      d.ProvisionerServiceAccountName(),
+			Namespace: d.namespace,
+		},
+	}
+	rb.RoleRef = rbacv1.RoleRef{
+		APIGroup: "rbac.authorization.k8s.io",
+		Kind:     "ClusterRole",
+		Name:     "system:openshift:scc:privileged",
+	}
+}
+
 func (d *pmemCSIDeployment) getControllerProvisionerRoleBinding(rb *rbacv1.RoleBinding) {
 	rb.Subjects = []rbacv1.Subject{
 		{
@@ -1042,8 +1070,6 @@ func (d *pmemCSIDeployment) getControllerProvisionerClusterRoleBinding(crb *rbac
 
 func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 	replicas := int32(1)
-	true := true
-	pmemcsiUser := int64(1000)
 
 	// To make sure that the default values set by the API server
 	// are not unset by the operator we choose to update only specific
@@ -1083,11 +1109,6 @@ func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 		})
 	ss.Spec.Template.ObjectMeta.Annotations = map[string]string{
 		"pmem-csi.intel.com/scrape": "containers",
-	}
-	ss.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{
-		// Controller pod must run as non-root user
-		RunAsNonRoot: &true,
-		RunAsUser:    &pmemcsiUser,
 	}
 	ss.Spec.Template.Spec.PriorityClassName = "system-cluster-critical"
 	ss.Spec.Template.Spec.ServiceAccountName = d.GetHyphenedName() + "-webhooks"

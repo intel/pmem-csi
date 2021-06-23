@@ -4,19 +4,35 @@ metadata:
   name: pmem-csi-intel-com-controller
   namespace: default
 ---
+# This role binding corresponds to what the following command creates:
+# oc adm policy add-scc-to-user privileged -z pmem-csi-intel-com-controller
+#
+# One difference is that we don't use the name system:openshift:scc:privileged
+# for the object. That object is managed by oc and the admin, whereas this
+# one here is under control of PMEM-CSI (YAML or operator).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pmem-csi-intel-com-node-openshift-cfg
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:privileged
+subjects:
+- kind: ServiceAccount
+  name: pmem-csi-intel-com-controller
+  namespace: default
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  labels:
-    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-webhooks
   namespace: default
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  labels:
-    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-webhooks-cfg
   namespace: default
 rules:
@@ -32,8 +48,6 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  labels:
-    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-webhooks-runner
 rules:
 - apiGroups:
@@ -79,8 +93,6 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  labels:
-    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-webhooks-role-cfg
   namespace: default
 roleRef:
@@ -95,8 +107,6 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  labels:
-    pmem-csi.intel.com/deployment: lvm-testing
   name: pmem-csi-intel-com-webhooks-role
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -147,10 +157,6 @@ spec:
         app.kubernetes.io/instance: pmem-csi.intel.com
         pmem-csi.intel.com/webhook: ignore
     spec:
-      securityContext:
-        runAsNonRoot: true
-        # UID 1000 is defined in Dockerfile
-        runAsUser: 1000
       serviceAccountName: pmem-csi-intel-com-webhooks
       # Allow this pod to run on all nodes and
       # prevent eviction (https://github.com/kubernetes-csi/csi-driver-host-path/issues/47#issuecomment-538469081).

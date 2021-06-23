@@ -253,6 +253,22 @@ kind: RoleBinding
 metadata:
   labels:
     pmem-csi.intel.com/deployment: direct-testing
+  name: pmem-csi-intel-com-node-openshift-cfg
+  namespace: pmem-csi
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:privileged
+subjects:
+- kind: ServiceAccount
+  name: pmem-csi-intel-com-controller
+  namespace: pmem-csi
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    pmem-csi.intel.com/deployment: direct-testing
   name: pmem-csi-intel-com-webhooks-role-cfg
   namespace: pmem-csi
 roleRef:
@@ -370,7 +386,6 @@ spec:
         - -schedulerListen=:8000
         - -metricsListen=:10010
         - -v=5
-        - -coverprofile=/var/lib/pmem-csi-coverage/pmem-csi-driver-controller-*.out
         env:
         - name: TERMINATION_LOG_PATH
           value: /dev/termination-log
@@ -380,7 +395,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: intel/pmem-csi-driver-test:canary
+        image: intel/pmem-csi-driver:canary
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 6
@@ -414,26 +429,7 @@ spec:
         volumeMounts:
         - mountPath: /certs
           name: webhook-cert
-        - mountPath: /var/lib/pmem-csi-coverage
-          name: coverage-dir
-      initContainers:
-      - command:
-        - chown
-        - -R
-        - pmem-csi:pmem-csi
-        - /var/lib/pmem-csi-coverage
-        image: intel/pmem-csi-driver-test:canary
-        imagePullPolicy: Always
-        name: coverage-init
-        securityContext:
-          privileged: true
-          runAsUser: 0
-        volumeMounts:
-        - mountPath: /var/lib/pmem-csi-coverage
-          name: coverage-dir
       priorityClassName: system-cluster-critical
-      securityContext:
-        runAsUser: 1000
       serviceAccountName: pmem-csi-intel-com-webhooks
       tolerations:
       - effect: NoSchedule
@@ -444,10 +440,6 @@ spec:
       - name: webhook-cert
         secret:
           secretName: pmem-csi-intel-com-controller-secret
-      - hostPath:
-          path: /var/lib/pmem-csi-coverage
-          type: DirectoryOrCreate
-        name: coverage-dir
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -492,7 +484,6 @@ spec:
         - -pmemPercentage=100
         - -metricsListen=:10010
         - -v=5
-        - -coverprofile=/var/lib/pmem-csi-coverage/pmem-csi-driver-node-*.out
         env:
         - name: KUBE_NODE_NAME
           valueFrom:
@@ -503,7 +494,7 @@ spec:
           value: pmem-csi.intel.com
         - name: TERMINATION_LOG_PATH
           value: /tmp/termination-log
-        image: intel/pmem-csi-driver-test:canary
+        image: intel/pmem-csi-driver:canary
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 6
@@ -553,8 +544,6 @@ spec:
         - mountPath: /var/lib/pmem-csi.intel.com
           mountPropagation: Bidirectional
           name: pmem-state-dir
-        - mountPath: /var/lib/pmem-csi-coverage
-          name: coverage-dir
       - args:
         - -v=3
         - --kubelet-registration-path=/var/lib/kubelet/plugins/$(PMEM_CSI_DRIVER_NAME)/csi.sock
@@ -667,10 +656,6 @@ spec:
           path: /sys
           type: DirectoryOrCreate
         name: sys-dir
-      - hostPath:
-          path: /var/lib/pmem-csi-coverage
-          type: DirectoryOrCreate
-        name: coverage-dir
   updateStrategy:
     rollingUpdate:
       maxUnavailable: 1
@@ -719,7 +704,7 @@ spec:
               fieldPath: spec.nodeName
         - name: TERMINATION_LOG_PATH
           value: /tmp/termination-log
-        image: intel/pmem-csi-driver-test:canary
+        image: intel/pmem-csi-driver:canary
         imagePullPolicy: IfNotPresent
         name: pmem-driver
         securityContext:
