@@ -21,8 +21,21 @@ TIMEOUT=300
 while [ "$SECONDS" -lt "$TIMEOUT" ]; do
     # We either get "No resources found in default namespace." or header plus node names.
     if [ $(${KUBECTL} get nodes -l katacontainers.io/kata-runtime=true 2>&1 | wc -l) -gt 1 ]; then
+        # Hack for https://github.com/kata-containers/kata-containers/issues/2088:
+        # wait some more until hopefully all nodes are configured, then fix the
+        # configuration so that memory_offset is enabled.
+        sleep 30
+
         echo "Kata Containers runtime available on:"
         ${KUBECTL} get nodes -l katacontainers.io/kata-runtime=true
+
+        echo "Updating /opt/kata/share/defaults/kata-containers/configuration-qemu.toml on each node"
+        for pod in $(${KUBECTL} get pods -n kube-system -l name=kata-deploy -o 'jsonpath={.items[*].metadata.name}'); do
+            ${KUBECTL} exec -t -n kube-system $pod -- /bin/sh <<EOF
+sed -i -e 's;enable_annotations.*=.*\[\];enable_annotations = [ "memory_offset" ];' /opt/kata/share/defaults/kata-containers/configuration-qemu.toml
+EOF
+        done
+
         exit 0
     fi
     sleep 1
