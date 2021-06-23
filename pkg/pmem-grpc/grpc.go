@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/kubernetes-csi/csi-lib-utils/connection"
@@ -19,10 +20,13 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/resolver"
 	"google.golang.org/grpc/status"
-	"k8s.io/klog/v2"
 
+	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 )
+
+// grpcRequestCounter is used to assign a unique ID to all incoming gRPC requests.
+var grpcRequestCounter uint64
 
 func unixDialer(addr string, timeout time.Duration) (net.Conn, error) {
 	return net.DialTimeout("unix", addr, timeout)
@@ -76,23 +80,28 @@ func NewServer(endpoint, errorPrefix string, tlsConfig *tls.Config, csiMetricsMa
 	}
 
 	interceptors := []grpc.UnaryServerInterceptor{
+		func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+			// Prepare a logger instance which always adds GRPC as prefix and a unique
+			// counter. This makes it possible to determine which log messages belong
+			// to which request and which are unrelated to gRPC.
+			logger := pmemlog.Get(ctx)
+			methodName := info.FullMethod[strings.LastIndex(info.FullMethod, "/")+1:]
+			logger = logger.WithName(methodName).WithValues("request-counter", atomic.AddUint64(&grpcRequestCounter, 1))
+			ctx = pmemlog.Set(ctx, logger)
+
+			resp, err := handler(ctx, req)
+			if errorPrefix != "" && err != nil {
+				// We loose any additional details here that might be attached
+				// to the status, but that's okay because we shouldn't have any.
+				originalStatus := status.Convert(err)
+				extendedStatus := status.New(originalStatus.Code(),
+					errorPrefix+": "+originalStatus.Message())
+				// Return the extended error.
+				return resp, extendedStatus.Err()
+			}
+			return resp, err
+		},
 		pmemcommon.LogGRPCServer,
-	}
-	if errorPrefix != "" {
-		interceptors = append(interceptors,
-			func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-				resp, err := handler(ctx, req)
-				if err != nil {
-					// We loose any additional details here that might be attached
-					// to the status, but that's okay because we shouldn't have any.
-					originalStatus := status.Convert(err)
-					extendedStatus := status.New(originalStatus.Code(),
-						errorPrefix+": "+originalStatus.Message())
-					// Return the extended error.
-					return resp, extendedStatus.Err()
-				}
-				return resp, err
-			})
 	}
 	if csiMetricsManager != nil {
 		interceptors = append(interceptors,
@@ -108,7 +117,7 @@ func NewServer(endpoint, errorPrefix string, tlsConfig *tls.Config, csiMetricsMa
 
 // ServerTLS prepares the TLS configuration needed for a server with given
 // encoded certficate and private key.
-func ServerTLS(caCert, cert, key []byte, peerName string) (*tls.Config, error) {
+func ServerTLS(ctx context.Context, caCert, cert, key []byte, peerName string) (*tls.Config, error) {
 	certPool := x509.NewCertPool()
 	if ok := certPool.AppendCertsFromPEM(caCert); !ok {
 		return nil, fmt.Errorf("failed to  append CA certificate to pool")
@@ -119,21 +128,22 @@ func ServerTLS(caCert, cert, key []byte, peerName string) (*tls.Config, error) {
 		return nil, err
 	}
 
-	return serverConfig(certPool, &certificate, peerName), nil
+	return serverConfig(ctx, certPool, &certificate, peerName), nil
 }
 
 // LoadServerTLS prepares the TLS configuration needed for a server with the given certificate files.
 // peerName is either the name that the client is expected to have a certificate for or empty,
 // in which case any client is allowed to connect.
-func LoadServerTLS(caFile, certFile, keyFile, peerName string) (*tls.Config, error) {
+func LoadServerTLS(ctx context.Context, caFile, certFile, keyFile, peerName string) (*tls.Config, error) {
 	certPool, peerCert, err := loadCertificate(caFile, certFile, keyFile)
 	if err != nil {
 		return nil, err
 	}
-	return serverConfig(certPool, peerCert, peerName), nil
+	return serverConfig(ctx, certPool, peerCert, peerName), nil
 }
 
-func serverConfig(certPool *x509.CertPool, peerCert *tls.Certificate, peerName string) *tls.Config {
+func serverConfig(ctx context.Context, certPool *x509.CertPool, peerCert *tls.Certificate, peerName string) *tls.Config {
+	logger := pmemlog.Get(ctx).WithName("serverConfig").WithValues("peername", peerName)
 	return &tls.Config{
 		GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
 			if info == nil {
@@ -180,7 +190,7 @@ func serverConfig(certPool *x509.CertPool, peerCert *tls.Certificate, peerName s
 					}
 
 					for _, name := range verifiedChains[0][0].DNSNames {
-						klog.Infof("VerifyPeerCertificate: DNSName=%s", name)
+						logger.V(5).Info("verify peer", "dnsname", name)
 						if name == peerName {
 							return nil
 						}
@@ -188,7 +198,7 @@ func serverConfig(certPool *x509.CertPool, peerCert *tls.Certificate, peerName s
 					// For backword compatibility - using CN as hostName
 					commonName := verifiedChains[0][0].Subject.CommonName
 					if commonName == peerName {
-						klog.Warningf("Use of CommonName certificates is deprecated; Use a SAN certificate instead.")
+						logger.Info("Use of CommonName certificates is deprecated. Use a SAN certificate instead.")
 						return nil
 					}
 					return fmt.Errorf("certificate is not signed for %q hostname", peerName)

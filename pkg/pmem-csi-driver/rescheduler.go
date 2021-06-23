@@ -11,7 +11,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/intel/pmem-csi/pkg/logger"
+	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	"github.com/intel/pmem-csi/pkg/types"
 
 	v1 "k8s.io/api/core/v1"
@@ -20,7 +20,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	storagelistersv1 "k8s.io/client-go/listers/storage/v1"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/klog/v2"
 	"sigs.k8s.io/sig-storage-lib-external-provisioner/v6/controller"
 )
 
@@ -79,7 +78,7 @@ type pmemCSIProvisioner struct {
 // into a problem, either during the startup phase (blocking) or later
 // at runtime (in a go routine).
 func (pcp *pmemCSIProvisioner) startRescheduler(ctx context.Context, cancel func()) {
-	l := logger.Get(ctx).WithName("rescheduler")
+	l := pmemlog.Get(ctx).WithName("rescheduler")
 
 	l.Info("starting")
 	go func() {
@@ -93,7 +92,7 @@ func (pcp *pmemCSIProvisioner) startRescheduler(ctx context.Context, cancel func
 // starts working on the PVC. We only deal with those which need to be
 // rescheduled.
 func (pcp *pmemCSIProvisioner) ShouldProvision(ctx context.Context, pvc *v1.PersistentVolumeClaim) bool {
-	l := logger.Get(ctx)
+	l := pmemlog.Get(ctx)
 
 	reschedule, err := pcp.shouldReschedule(ctx, pvc, nil)
 	if err != nil {
@@ -137,9 +136,9 @@ func (pcp *pmemCSIProvisioner) Delete(context.Context, *v1.PersistentVolume) err
 }
 
 func (pcp *pmemCSIProvisioner) shouldReschedule(ctx context.Context, pvc *v1.PersistentVolumeClaim, node *v1.Node) (bool, error) {
-	l := logger.Get(ctx).WithName("ShouldReschedulePVC").WithValues("pvc", klog.KObj(pvc))
+	l := pmemlog.Get(ctx).WithName("ShouldReschedulePVC").WithValues("pvc", pmemlog.KObj(pvc))
 	if node != nil {
-		l = l.WithValues("node", klog.KObj(node))
+		l = l.WithValues("node", pmemlog.KObj(node))
 	}
 
 	// "node" might be nil. Check the label directly.

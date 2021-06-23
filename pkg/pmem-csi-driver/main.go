@@ -8,14 +8,14 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 
-	"k8s.io/klog/v2"
-
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	"github.com/intel/pmem-csi/pkg/logger"
+	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 )
 
@@ -66,7 +66,12 @@ func Main() int {
 		return 0
 	}
 
-	klog.V(3).Info("Version: ", version)
+	ctx := context.Background()
+	logger := pmemlog.Get(ctx)
+	ctx = pmemlog.Set(ctx, logger)
+
+	logger.Info("PMEM-CSI started.", "version", version)
+	defer logger.Info("PMEM-CSI stopped.")
 
 	if config.schedulerListen != "" && config.Mode != Webhooks {
 		pmemcommon.ExitError("scheduler listening", errors.New("only supported in the controller"))
@@ -80,7 +85,7 @@ func Main() int {
 		return 1
 	}
 
-	if err = driver.Run(); err != nil {
+	if err = driver.Run(ctx); err != nil {
 		pmemcommon.ExitError("failed to run driver", err)
 		return 1
 	}

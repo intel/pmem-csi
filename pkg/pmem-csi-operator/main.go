@@ -66,7 +66,7 @@ func Main() int {
 	ctx := context.Background()
 
 	// Retrieve namespace to watch for new deployments and to create sub-resources
-	namespace := k8sutil.GetNamespace()
+	namespace := k8sutil.GetNamespace(ctx)
 
 	// Create a new Cmd to provide shared dependencies and start components
 	mgr, err := manager.New(cfg, manager.Options{

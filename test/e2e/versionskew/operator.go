@@ -39,6 +39,7 @@ var _ = deploy.DescribeForSome("versionskew", func(d *deploy.Deployment) bool {
 
 	f := framework.NewDefaultFramework("skew")
 	f.SkipNamespaceCreation = true
+	ctx := context.Background()
 
 	BeforeEach(func() {
 		var err error
@@ -78,7 +79,7 @@ var _ = deploy.DescribeForSome("versionskew", func(d *deploy.Deployment) bool {
 			semver := current + ".0"
 			defer func() {
 				// Remove generated bundle
-				_, err := pmemexec.RunCommand("rm", "-rf", root+"/deploy/olm-bundle/"+semver)
+				_, err := pmemexec.RunCommand(ctx, "rm", "-rf", root+"/deploy/olm-bundle/"+semver)
 				framework.ExpectNoError(err, "remove generated bundle: %v", err)
 			}()
 			// (Re)Generate olm-bundle with future release version number
@@ -86,7 +87,7 @@ var _ = deploy.DescribeForSome("versionskew", func(d *deploy.Deployment) bool {
 			make := exec.Command("make", "operator-generate-bundle", "VERSION=v"+semver)
 			make.Dir = root
 			make.Env = os.Environ()
-			_, err := pmemexec.Run(make)
+			_, err := pmemexec.Run(ctx, make)
 			framework.ExpectNoError(err, "%s: generate bundle for operator version %s", d.Name(), d.Version)
 		}
 

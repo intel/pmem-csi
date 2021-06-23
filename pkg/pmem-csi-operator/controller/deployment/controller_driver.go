@@ -12,7 +12,7 @@ import (
 	"reflect"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
-	"github.com/intel/pmem-csi/pkg/logger"
+	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/metrics"
 	"github.com/intel/pmem-csi/pkg/types"
 	"github.com/intel/pmem-csi/pkg/version"
@@ -29,7 +29,6 @@ import (
 	apiruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -158,7 +157,7 @@ func (d *pmemCSIDeployment) withStorageCapacity() bool {
 // objects, extend also currentObjects above and the RBAC rules in
 // deploy/kustomize/operator/operator.yaml.
 func (d *pmemCSIDeployment) reconcile(ctx context.Context, r *ReconcileDeployment) error {
-	l := logger.Get(ctx).WithName("reconcile")
+	l := pmemlog.Get(ctx).WithName("reconcile")
 	l.V(3).Info("start", "deployment", d.Name, "phase", d.Status.Phase)
 	var allObjects []apiruntime.Object
 	redeployAll := func() error {
@@ -199,12 +198,12 @@ func (d *pmemCSIDeployment) getSubObject(ctx context.Context, r *ReconcileDeploy
 	if err != nil {
 		return fmt.Errorf("internal error %T: %v", obj, err)
 	}
-	l := logger.Get(ctx).WithName("getSubObject")
+	l := pmemlog.Get(ctx).WithName("getSubObject")
 
-	l.V(3).Info("get", "object", logger.KObjWithType(objMeta))
+	l.V(3).Info("get", "object", pmemlog.KObjWithType(objMeta))
 	if err := r.Get(obj); err != nil {
 		if errors.IsNotFound(err) {
-			l.V(3).Info("not found", logger.KObjWithType(objMeta))
+			l.V(3).Info("not found", pmemlog.KObjWithType(objMeta))
 			return nil
 		}
 		return err
@@ -235,15 +234,15 @@ type redeployObject struct {
 //  6. If the update in step-5 was success, then call the ro.postUpdate() callback
 //     to run any post update steps.
 func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment, ro redeployObject) (finalObj client.Object, finalErr error) {
-	l := logger.Get(ctx).WithName("redeploy")
+	l := pmemlog.Get(ctx).WithName("redeploy")
 
 	// Get an instance with right type and meta data, prepare for logging.
 	o := ro.object(d)
 	if o == nil {
 		return nil, fmt.Errorf("nil object")
 	}
-	l = l.WithValues("object", klog.KObj(o))
-	ctx = logger.Set(ctx, l)
+	l = l.WithValues("object", pmemlog.KObj(o))
+	ctx = pmemlog.Set(ctx, l)
 
 	// Retrieve actual object from APIserver, it it exists.
 	if err := d.getSubObject(ctx, r, o); err != nil {
@@ -636,8 +635,8 @@ var v1SecretPtr = reflect.TypeOf(&corev1.Secret{})
 // is reverted.
 func (d *pmemCSIDeployment) handleEvent(ctx context.Context, metaData metav1.Object, obj apiruntime.Object, r *ReconcileDeployment) error {
 	objType := reflect.TypeOf(obj)
-	l := logger.Get(ctx).WithName("deployment/event")
-	l.V(5).Info("start", "object", logger.KObjWithType(metaData), "type", objType)
+	l := pmemlog.Get(ctx).WithName("deployment/event")
+	l.V(5).Info("start", "object", pmemlog.KObjWithType(metaData), "type", objType)
 
 	objName := metaData.GetName()
 	for name, handler := range subObjectHandlers {
@@ -651,7 +650,7 @@ func (d *pmemCSIDeployment) handleEvent(ctx context.Context, metaData metav1.Obj
 		if objName != metaObj.GetName() {
 			continue
 		}
-		l.V(3).Info("redeploying", "name", name, "object", logger.KObjWithType(metaData))
+		l.V(3).Info("redeploying", "name", name, "object", pmemlog.KObjWithType(metaData))
 		org := d.DeepCopy()
 		if _, err := d.redeploy(ctx, r, handler); err != nil {
 			return fmt.Errorf("failed to redeploy %s: %v", name, err)
@@ -665,7 +664,7 @@ func (d *pmemCSIDeployment) handleEvent(ctx context.Context, metaData metav1.Obj
 }
 
 func objectIsObsolete(ctx context.Context, objList []apiruntime.Object, toFind unstructured.Unstructured) (bool, error) {
-	l := logger.Get(ctx)
+	l := pmemlog.Get(ctx)
 	l.V(5).Info("checking for obsolete object", "name", toFind.GetName(), "gkv", toFind.GetObjectKind().GroupVersionKind())
 	for i := range objList {
 		metaObj, err := meta.Accessor(objList[i])
@@ -692,7 +691,7 @@ func (d *pmemCSIDeployment) isOwnerOf(obj unstructured.Unstructured) bool {
 }
 
 func (d *pmemCSIDeployment) deleteObsoleteObjects(ctx context.Context, r *ReconcileDeployment, newObjects []apiruntime.Object) error {
-	l := logger.Get(ctx).WithName("deleteObsoleteObjects")
+	l := pmemlog.Get(ctx).WithName("deleteObsoleteObjects")
 	for _, obj := range newObjects {
 		metaObj, _ := meta.Accessor(obj)
 		l.V(5).Info("new object", "name", metaObj.GetName(), "gkv", obj.GetObjectKind().GroupVersionKind())

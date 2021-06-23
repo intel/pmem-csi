@@ -19,7 +19,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"k8s.io/klog/v2"
 	"k8s.io/utils/keymutex"
 	"k8s.io/utils/mount"
 
@@ -27,6 +26,7 @@ import (
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	"github.com/intel/pmem-csi/pkg/imagefile"
+	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	"github.com/intel/pmem-csi/pkg/volumepathhandler"
@@ -110,12 +110,15 @@ func (ns *nodeServer) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVo
 }
 
 func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
+	volumeID := req.GetVolumeId()
+	logger := pmemlog.Get(ctx).WithValues("volume-id", volumeID)
+	ctx = pmemlog.Set(ctx, logger)
 
 	// Check arguments
 	if req.GetVolumeCapability() == nil {
 		return nil, status.Error(codes.InvalidArgument, "Volume capability missing in request")
 	}
-	if len(req.GetVolumeId()) == 0 {
+	if volumeID == "" {
 		return nil, status.Error(codes.InvalidArgument, "Volume ID missing in request")
 	}
 	if len(req.GetTargetPath()) == 0 {
@@ -123,8 +126,8 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	}
 
 	// Serialize by VolumeId
-	volumeMutex.LockKey(req.GetVolumeId())
-	defer volumeMutex.UnlockKey(req.GetVolumeId())
+	volumeMutex.LockKey(volumeID)
+	defer volumeMutex.UnlockKey(volumeID)
 
 	var ephemeral bool
 	var device *pmdmanager.PmemDeviceInfo
@@ -137,8 +140,14 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	fsType := req.GetVolumeCapability().GetMount().GetFsType()
 	volumeContext := req.GetVolumeContext()
 	// volumeContext contains the original volume name for persistent volumes.
-	klog.V(3).Infof("NodePublishVolume request: VolID:%s targetpath:%v sourcepath:%v readonly:%v mount flags:%v fsType:%v context:%q",
-		req.GetVolumeId(), targetPath, srcPath, readOnly, mountFlags, fsType, volumeContext)
+	logger.V(3).Info("Publishing volume",
+		"target-path", targetPath,
+		"source-path", srcPath,
+		"read-only", readOnly,
+		"mount-flags", mountFlags,
+		"fs-type", fsType,
+		"volume-context", volumeContext,
+	)
 
 	// Kubernetes v1.16+ would request ephemeral volumes via VolumeContext
 	val, ok := req.GetVolumeContext()[parameters.Ephemeral]
@@ -153,8 +162,8 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		// 1) No Volume found with given volume id
 		// 2) No provisioner info found in VolumeContext "storage.kubernetes.io/csiProvisionerIdentity"
 		// 3) No StagingPath in the request
-		if device, err = ns.cs.dm.GetDevice(req.VolumeId); err != nil && !errors.Is(err, pmemerr.DeviceNotFound) {
-			return nil, status.Errorf(codes.Internal, "failed to get device details for volume id '%s': %v", req.VolumeId, err)
+		if device, err = ns.cs.dm.GetDevice(ctx, volumeID); err != nil && !errors.Is(err, pmemerr.DeviceNotFound) {
+			return nil, status.Errorf(codes.Internal, "failed to get device details for volume id '%s': %v", volumeID, err)
 		}
 		_, ok := req.GetVolumeContext()[volumeProvisionerIdentity]
 		ephemeral = device == nil && !ok && len(srcPath) == 0
@@ -183,16 +192,16 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		}
 		volumeParameters = v
 
-		dm, err := ns.getDeviceManagerForVolume(req.VolumeId)
+		dm, err := ns.getDeviceManagerForVolume(ctx, volumeID)
 		if err != nil {
 			return nil, err
 		}
 
-		if device, err = dm.GetDevice(req.VolumeId); err != nil {
+		if device, err = dm.GetDevice(ctx, volumeID); err != nil {
 			if errors.Is(err, pmemerr.DeviceNotFound) {
-				return nil, status.Errorf(codes.NotFound, "no device found with volume id %q: %v", req.VolumeId, err)
+				return nil, status.Errorf(codes.NotFound, "no device found with volume id %q: %v", volumeID, err)
 			}
-			return nil, status.Errorf(codes.Internal, "failed to get device details for volume id %q: %v", req.VolumeId, err)
+			return nil, status.Errorf(codes.Internal, "failed to get device details for volume id %q: %v", volumeID, err)
 		}
 		mountFlags = append(mountFlags, "bind")
 	}
@@ -230,15 +239,18 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 			}
 			for i := len(mpList) - 1; i >= 0; i-- {
 				if mpList[i].Path == targetPath {
-					klog.V(5).Infof("NodePublishVolume[%s]: Existing mountFlags:'%s', fsTyp: '%s'", req.VolumeId, mpList[i].Opts, mpList[i].Type)
+					logger.V(5).Info("Found mounted filesystem",
+						"mount-options", mpList[i].Opts,
+						"fs-type", mpList[i].Type,
+					)
 					if (fsType == "" || mpList[i].Type == fsType) && findMountFlags(mountFlags, mpList[i].Opts) {
-						klog.V(5).Infof("NodePublishVolume[%s]: parameters match existing, return OK", req.VolumeId)
+						logger.V(3).Info("Parameters match existing filesystem, done")
 						return &csi.NodePublishVolumeResponse{}, nil
 					}
 					break
 				}
 			}
-			klog.V(5).Infof("NodePublishVolume[%s]: parameters do not match existing volume, return ALREADY_EXISTS", req.VolumeId)
+			logger.V(3).Info("Parameters do not match existing filesystem, bailing out")
 			return nil, status.Error(codes.AlreadyExists, "Volume published but is incompatible")
 		}
 	}
@@ -266,7 +278,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		}
 		hostMount = filepath.Join(ns.mountDirectory, req.GetVolumeId())
 	}
-	if err := ns.mount(srcPath, hostMount, mountFlags, rawBlock); err != nil {
+	if err := ns.mount(ctx, srcPath, hostMount, mountFlags, rawBlock); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
@@ -275,7 +287,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 		// Only if created filesytem and it was XFS:
 		// Tune XFS file system to serve huge pages:
 		// Set file system extent size to 2 MiB sized and aligned block allocations.
-		_, err := pmemexec.RunCommand("xfs_io", "-c", "extsize 2m", hostMount)
+		_, err := pmemexec.RunCommand(ctx, "xfs_io", "-c", "extsize 2m", hostMount)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
@@ -333,13 +345,13 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	// file was created by the current version and thus use the fixed offset.
 	offset := int64(imagefile.HeaderSize)
 	handler := volumepathhandler.VolumePathHandler{}
-	loopDev, err := handler.AttachFileDeviceWithOffset(imageFile, offset)
+	loopDev, err := handler.AttachFileDeviceWithOffset(ctx, imageFile, offset)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "create loop device: "+err.Error())
 	}
 
 	// TODO: Try to mount with dax first, fall back to mount without it if not supported.
-	if err := ns.mount(loopDev, targetPath, []string{}, false); err != nil {
+	if err := ns.mount(ctx, loopDev, targetPath, []string{}, false); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
@@ -347,24 +359,27 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 }
 
 func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
+	volumeID := req.GetVolumeId()
+	targetPath := req.GetTargetPath()
+	logger := pmemlog.Get(ctx).WithValues("volume-id", volumeID, "target-path", targetPath)
+	ctx = pmemlog.Set(ctx, logger)
 
 	// Check arguments
-	if len(req.GetVolumeId()) == 0 {
+	if volumeID == "" {
 		return nil, status.Error(codes.InvalidArgument, "Volume ID missing in request")
 	}
-	targetPath := req.GetTargetPath()
-	if len(targetPath) == 0 {
+	if targetPath == "" {
 		return nil, status.Error(codes.InvalidArgument, "Target path missing in request")
 	}
 
 	// Serialize by VolumeId
-	volumeMutex.LockKey(req.VolumeId)
-	defer volumeMutex.UnlockKey(req.VolumeId)
+	volumeMutex.LockKey(volumeID)
+	defer volumeMutex.UnlockKey(volumeID)
 
 	var vol *nodeVolume
-	if vol = ns.cs.getVolumeByID(req.VolumeId); vol == nil {
-		// For ephemeral volumes we use req.VolumeId as volume name.
-		vol = ns.cs.getVolumeByName(req.VolumeId)
+	if vol = ns.cs.getVolumeByID(volumeID); vol == nil {
+		// For ephemeral volumes we use volumeID as volume name.
+		vol = ns.cs.getVolumeByName(volumeID)
 	}
 
 	// The CSI spec 1.2 requires that the SP returns NOT_FOUND
@@ -383,7 +398,7 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	// have such a volume, then we are done.
 	notMnt, err := ns.mounter.IsLikelyNotMountPoint(targetPath)
 	if (notMnt || err != nil && !os.IsNotExist(err)) && vol == nil {
-		klog.V(5).Infof("NodeUnpublishVolume: %s is not mount point, no such volume -> done", targetPath)
+		logger.V(3).Info("Target path is not a mount point, no such volume -> done")
 		return &csi.NodeUnpublishVolumeResponse{}, nil
 	}
 
@@ -394,7 +409,7 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 			// It is a mount point and we don't know the volume. Don't
 			// do anything because the call is invalid. We return
 			// NOT_FOUND as required by the spec.
-			return nil, status.Errorf(codes.NotFound, "no volume found with volume id %q", req.VolumeId)
+			return nil, status.Errorf(codes.NotFound, "no volume found with volume id %q", volumeID)
 		}
 		// No volume, no mount point. Looks like an
 		// idempotent call for an operation that was
@@ -408,17 +423,17 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 		// This should never happen because PMEM-CSI itself created these parameters.
 		// But if it happens, better fail and force an admin to recover instead of
 		// potentially destroying data.
-		return nil, status.Errorf(codes.Internal, "previously stored volume parameters for volume with ID %q: %v", req.VolumeId, err)
+		return nil, status.Errorf(codes.Internal, "previously stored volume parameters for volume with ID %q: %v", volumeID, err)
 	}
 
 	// Unmounting the image if still mounted. It might have been unmounted before if
 	// a previous NodeUnpublishVolume call was interrupted.
 	if err == nil && !notMnt {
-		klog.V(3).Infof("NodeUnpublishVolume: unmount %s", targetPath)
+		logger.V(3).Info("Unmounting at target path")
 		if err := ns.mounter.Unmount(targetPath); err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
-		klog.V(5).Infof("NodeUnpublishVolume: volume id:%s targetpath:%s has been unmounted", req.VolumeId, targetPath)
+		logger.V(5).Info("Unmounted")
 	}
 
 	if p.GetKataContainers() {
@@ -431,28 +446,33 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, status.Error(codes.Internal, "unexpected error while removing target path: "+err.Error())
 	}
-	klog.V(5).Infof("NodeUnpublishVolume: volume id:%s targetpath:%s has been removed with error: %v", req.VolumeId, targetPath, err)
+	logger.V(5).Info("Target path removed with harmless error or no error", "error", err)
 
 	if p.GetPersistency() == parameters.PersistencyEphemeral {
 		if _, err := ns.cs.DeleteVolume(ctx, &csi.DeleteVolumeRequest{VolumeId: vol.ID}); err != nil {
-			return nil, status.Error(codes.Internal, fmt.Sprintf("Failed to delete ephemeral volume %s: %s", req.VolumeId, err.Error()))
+			return nil, status.Error(codes.Internal, fmt.Sprintf("Failed to delete ephemeral volume %s: %s", volumeID, err.Error()))
 		}
 	}
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
 
-func (ns *nodeServer) nodeUnpublishKataContainerImage(cxt context.Context, req *csi.NodeUnpublishVolumeRequest, p parameters.Volume) error {
+func (ns *nodeServer) nodeUnpublishKataContainerImage(ctx context.Context, req *csi.NodeUnpublishVolumeRequest, p parameters.Volume) error {
 	// Reconstruct where the volume was mounted before creating the image file.
 	hostMount := filepath.Join(ns.mountDirectory, req.GetVolumeId())
 
 	// We know the parent and the well-known image name, so we have the full path now
 	// and can detach the loop device from it.
 	imageFile := filepath.Join(hostMount, kataContainersImageFilename)
-	handler := volumepathhandler.VolumePathHandler{}
+
+	logger := pmemlog.Get(ctx).WithName("nodeUnpublishKataContainerImage").WithValues("image-file", imageFile)
+	ctx = pmemlog.Set(ctx, logger)
+
 	// This will warn if the loop device is not found, but won't treat that as an error.
 	// This is the behavior that we want.
-	if err := handler.DetachFileDevice(imageFile); err != nil {
+	logger.V(3).Info("Removing Kata Containers image file loop device")
+	handler := volumepathhandler.VolumePathHandler{}
+	if err := handler.DetachFileDevice(ctx, imageFile); err != nil {
 		return status.Error(codes.Internal, fmt.Sprintf("remove loop device for Kata Container image file %q: %v", imageFile, err))
 	}
 
@@ -460,6 +480,7 @@ func (ns *nodeServer) nodeUnpublishKataContainerImage(cxt context.Context, req *
 	// when mounting a persistent volume a second time. If not,
 	// it'll get deleted together with the device. But before
 	// the device can be deleted, we need to unmount it.
+	logger.V(3).Info("Unmounting Kata Containers image file mount")
 	if err := ns.mounter.Unmount(hostMount); err != nil {
 		return status.Error(codes.Internal, fmt.Sprintf("unmount ephemeral Kata Container volume: %v", err))
 	}
@@ -471,13 +492,16 @@ func (ns *nodeServer) nodeUnpublishKataContainerImage(cxt context.Context, req *
 }
 
 func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
+	volumeID := req.GetVolumeId()
+	stagingtargetPath := req.GetStagingTargetPath()
+	logger := pmemlog.Get(ctx).WithValues("volume-id", volumeID, "staging-target-path", stagingtargetPath)
+	ctx = pmemlog.Set(ctx, logger)
 
 	// Check arguments
-	if len(req.GetVolumeId()) == 0 {
+	if volumeID == "" {
 		return nil, status.Error(codes.InvalidArgument, "Volume ID missing in request")
 	}
-	stagingtargetPath := req.GetStagingTargetPath()
-	if len(stagingtargetPath) == 0 {
+	if stagingtargetPath == "" {
 		return nil, status.Error(codes.InvalidArgument, "Target path missing in request")
 	}
 	if req.GetVolumeCapability() == nil {
@@ -501,24 +525,26 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	defer volumeMutex.UnlockKey(req.GetVolumeId())
 
 	mountOptions := req.GetVolumeCapability().GetMount().GetMountFlags()
-	klog.V(4).Infof("NodeStageVolume: VolumeID:%v Staging target path:%v Requested fsType:%v Requested mount options:%v",
-		req.GetVolumeId(), stagingtargetPath, requestedFsType, mountOptions)
+	logger.V(3).Info("Staging volume",
+		"fs-type", requestedFsType,
+		"mount-options", mountOptions,
+	)
 
-	dm, err := ns.getDeviceManagerForVolume(req.VolumeId)
+	dm, err := ns.getDeviceManagerForVolume(ctx, volumeID)
 	if err != nil {
 		return nil, err
 	}
 
-	device, err := dm.GetDevice(req.VolumeId)
+	device, err := dm.GetDevice(ctx, volumeID)
 	if err != nil {
 		if errors.Is(err, pmemerr.DeviceNotFound) {
-			return nil, status.Errorf(codes.NotFound, "no device found with volume id %q: %v", req.VolumeId, err)
+			return nil, status.Errorf(codes.NotFound, "no device found with volume id %q: %v", volumeID, err)
 		}
-		return nil, status.Errorf(codes.Internal, "failed to get device details for volume id %q: %v", req.VolumeId, err)
+		return nil, status.Errorf(codes.Internal, "failed to get device details for volume id %q: %v", volumeID, err)
 	}
 
 	// Check does devicepath already contain a filesystem?
-	existingFsType, err := determineFilesystemType(device.Path)
+	existingFsType, err := determineFilesystemType(ctx, device.Path)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -527,26 +553,26 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 	if existingFsType != "" {
 		// Is existing filesystem type same as requested?
 		if existingFsType == requestedFsType {
-			klog.V(4).Infof("Skip mkfs as %v file system already exists on %v", existingFsType, device.Path)
+			logger.V(4).Info("Skipping mkfs as file system already exists on device", "device", device.Path)
 		} else {
 			return nil, status.Error(codes.AlreadyExists, "File system with different type exists")
 		}
 	} else {
-		if err = ns.provisionDevice(device, requestedFsType); err != nil {
+		if err = ns.provisionDevice(ctx, device, requestedFsType); err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
 
 	mountOptions = append(mountOptions, "dax=always")
 
-	if err = ns.mount(device.Path, stagingtargetPath, mountOptions, false /* raw block */); err != nil {
+	if err = ns.mount(ctx, device.Path, stagingtargetPath, mountOptions, false /* raw block */); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	if existingFsType == "" && requestedFsType == "xfs" {
 		// Only if created a new filesytem and it was XFS:
 		// Align XFS file system for hugepages
-		_, err := pmemexec.RunCommand("xfs_io", "-c", "extsize 2m", stagingtargetPath)
+		_, err := pmemexec.RunCommand(ctx, "xfs_io", "-c", "extsize 2m", stagingtargetPath)
 		if err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
@@ -556,35 +582,36 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 }
 
 func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolumeRequest) (*csi.NodeUnstageVolumeResponse, error) {
+	volumeID := req.GetVolumeId()
+	stagingtargetPath := req.GetStagingTargetPath()
+	logger := pmemlog.Get(ctx).WithValues("volume-id", volumeID, "staging-target-path", stagingtargetPath)
+	ctx = pmemlog.Set(ctx, logger)
 
 	// Check arguments
-	if len(req.GetVolumeId()) == 0 {
+	if volumeID == "" {
 		return nil, status.Error(codes.InvalidArgument, "Volume ID missing in request")
 	}
-	stagingtargetPath := req.GetStagingTargetPath()
-	if len(stagingtargetPath) == 0 {
+	if stagingtargetPath == "" {
 		return nil, status.Error(codes.InvalidArgument, "Target path missing in request")
 	}
 
 	// Serialize by VolumeId
-	volumeMutex.LockKey(req.GetVolumeId())
-	defer volumeMutex.UnlockKey(req.GetVolumeId())
+	volumeMutex.LockKey(volumeID)
+	defer volumeMutex.UnlockKey(volumeID)
 
-	klog.V(4).Infof("NodeUnStageVolume: VolumeID:%v Staging target path:%v",
-		req.GetVolumeId(), stagingtargetPath)
-
-	dm, err := ns.getDeviceManagerForVolume(req.VolumeId)
+	logger.V(3).Info("Unstage volume")
+	dm, err := ns.getDeviceManagerForVolume(ctx, volumeID)
 	if err != nil {
 		return nil, err
 	}
 	// by spec, we have to return OK if asked volume is not mounted on asked path,
 	// so we look up the current device by volumeID and see is that device
 	// mounted on staging target path
-	if _, err := dm.GetDevice(req.VolumeId); err != nil {
+	if _, err := dm.GetDevice(ctx, volumeID); err != nil {
 		if errors.Is(err, pmemerr.DeviceNotFound) {
-			return nil, status.Errorf(codes.NotFound, "no device found with volume id '%s': %s", req.VolumeId, err.Error())
+			return nil, status.Errorf(codes.NotFound, "no device found with volume id '%s': %s", volumeID, err.Error())
 		}
-		return nil, status.Errorf(codes.Internal, "failed to get device details for volume id '%s': %s", req.VolumeId, err.Error())
+		return nil, status.Errorf(codes.Internal, "failed to get device details for volume id '%s': %s", volumeID, err.Error())
 	}
 
 	// Find out device name for mounted path
@@ -593,13 +620,11 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 		return nil, err
 	}
 	if mountedDev == "" {
-		klog.Warningf("NodeUnstageVolume: No device name for mount point '%v'", stagingtargetPath)
+		logger.Info("No device name found for staging target path, skipping unmount")
 		return &csi.NodeUnstageVolumeResponse{}, nil
 	}
-	klog.V(4).Infof("NodeUnstageVolume: detected mountedDev: %v", mountedDev)
-	klog.V(3).Infof("NodeUnStageVolume: umount %s", stagingtargetPath)
+	logger.V(3).Info("Unmounting", "device", mountedDev)
 	if err := ns.mounter.Unmount(stagingtargetPath); err != nil {
-		klog.Errorf("NodeUnstageVolume: Umount failed: %v", err)
 		return nil, err
 	}
 
@@ -613,6 +638,8 @@ func (ns *nodeServer) NodeExpandVolume(context.Context, *csi.NodeExpandVolumeReq
 // createEphemeralDevice creates new pmem device for given req.
 // On failure it returns one of status errors.
 func (ns *nodeServer) createEphemeralDevice(ctx context.Context, req *csi.NodePublishVolumeRequest, p parameters.Volume) (*pmdmanager.PmemDeviceInfo, error) {
+	ctx, _ = pmemlog.WithName(ctx, "createEphemeralDevice")
+
 	// If the caller has use the heuristic for detecting ephemeral volumes, the flag won't
 	// be set. Fix that here.
 	ephemeral := parameters.PersistencyEphemeral
@@ -620,7 +647,7 @@ func (ns *nodeServer) createEphemeralDevice(ctx context.Context, req *csi.NodePu
 
 	// Create new device, using the same code that the normal CreateVolume also uses,
 	// so internally this volume will be tracked like persistent volumes.
-	volumeID, _, err := ns.cs.createVolumeInternal(ctx, p, req.VolumeId,
+	volumeID, _, err := ns.cs.createVolumeInternal(ctx, p, req.GetVolumeId(),
 		[]*csi.VolumeCapability{req.VolumeCapability},
 		&csi.CapacityRange{RequiredBytes: p.GetSize()},
 	)
@@ -629,13 +656,13 @@ func (ns *nodeServer) createEphemeralDevice(ctx context.Context, req *csi.NodePu
 		return nil, err
 	}
 
-	device, err := ns.cs.dm.GetDevice(volumeID)
+	device, err := ns.cs.dm.GetDevice(ctx, volumeID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("ephemeral inline volume: device not found after creating volume %q: %v", volumeID, err))
 	}
 
 	// Create filesystem
-	if err := ns.provisionDevice(device, req.GetVolumeCapability().GetMount().GetFsType()); err != nil {
+	if err := ns.provisionDevice(ctx, device, req.GetVolumeCapability().GetMount().GetFsType()); err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("ephemeral inline volume: failed to create filesystem: %v", err))
 	}
 
@@ -644,21 +671,23 @@ func (ns *nodeServer) createEphemeralDevice(ctx context.Context, req *csi.NodePu
 
 // provisionDevice initializes the device with requested filesystem.
 // It can be called multiple times for the same device (idempotent).
-func (ns *nodeServer) provisionDevice(device *pmdmanager.PmemDeviceInfo, fsType string) error {
+func (ns *nodeServer) provisionDevice(ctx context.Context, device *pmdmanager.PmemDeviceInfo, fsType string) error {
+	ctx, logger := pmemlog.WithName(ctx, "provisionDevice")
+
 	if fsType == "" {
 		// Empty FsType means "unspecified" and we pick default, currently hard-coded to ext4
 		fsType = defaultFilesystem
 	}
 
 	// Check does devicepath already contain a filesystem?
-	existingFsType, err := determineFilesystemType(device.Path)
+	existingFsType, err := determineFilesystemType(ctx, device.Path)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
 	if existingFsType != "" {
 		// Is existing filesystem type same as requested?
 		if existingFsType == fsType {
-			klog.V(4).Infof("Skip mkfs as %v file system already exists on %v", existingFsType, device.Path)
+			logger.V(4).Info("Skipping mkfs because file system already exists", "fs-type", existingFsType, "device", device.Path)
 			return nil
 		}
 		return status.Error(codes.AlreadyExists, "File system with different type exists")
@@ -680,7 +709,7 @@ func (ns *nodeServer) provisionDevice(device *pmdmanager.PmemDeviceInfo, fsType 
 		return fmt.Errorf("Unsupported filesystem '%s'. Supported filesystems types: 'xfs', 'ext4'", fsType)
 	}
 
-	output, err := pmemexec.RunCommand(cmd, args...)
+	output, err := pmemexec.RunCommand(ctx, cmd, args...)
 	if err != nil {
 		return fmt.Errorf("mkfs failed: output:[%s] err:[%v]", output, err)
 	}
@@ -689,7 +718,7 @@ func (ns *nodeServer) provisionDevice(device *pmdmanager.PmemDeviceInfo, fsType 
 }
 
 // mount creates the target path (parent must exist) and mounts the source there. It is idempotent.
-func (ns *nodeServer) mount(sourcePath, targetPath string, mountOptions []string, rawBlock bool) error {
+func (ns *nodeServer) mount(ctx context.Context, sourcePath, targetPath string, mountOptions []string, rawBlock bool) error {
 	notMnt, err := ns.mounter.IsLikelyNotMountPoint(targetPath)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to determine if '%s' is a valid mount point: %s", targetPath, err.Error())
@@ -723,7 +752,7 @@ func (ns *nodeServer) mount(sourcePath, targetPath string, mountOptions []string
 		args = append(args, "-o", strings.Join(mountOptions, ","))
 	}
 	args = append(args, sourcePath, targetPath)
-	if _, err := pmemexec.RunCommand("mount", args...); err != nil {
+	if _, err := pmemexec.RunCommand(ctx, "mount", args...); err != nil {
 		return fmt.Errorf("mount filesystem failed: %s", err.Error())
 	}
 
@@ -733,7 +762,7 @@ func (ns *nodeServer) mount(sourcePath, targetPath string, mountOptions []string
 // getDeviceManagerForVolume checks the stored volume parametes for the
 // given id and returns the device manager which creates that volume.
 // NOT_FOUND is returned when the volume does not exist.
-func (ns *nodeServer) getDeviceManagerForVolume(id string) (pmdmanager.PmemDeviceManager, error) {
+func (ns *nodeServer) getDeviceManagerForVolume(ctx context.Context, id string) (pmdmanager.PmemDeviceManager, error) {
 
 	vol := ns.cs.getVolumeByID(id)
 	if vol == nil {
@@ -747,7 +776,7 @@ func (ns *nodeServer) getDeviceManagerForVolume(id string) (pmdmanager.PmemDevic
 
 	dm := ns.cs.dm
 	if v.GetDeviceMode() != dm.GetMode() {
-		dm, err = pmdmanager.New(v.GetDeviceMode(), 0)
+		dm, err = pmdmanager.New(ctx, v.GetDeviceMode(), 0)
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize device manager for volume %q, volume mode %q: %v", id, v.GetDeviceMode(), err)
 		}
@@ -757,7 +786,7 @@ func (ns *nodeServer) getDeviceManagerForVolume(id string) (pmdmanager.PmemDevic
 }
 
 // This is based on function used in LV-CSI driver
-func determineFilesystemType(devicePath string) (string, error) {
+func determineFilesystemType(ctx context.Context, devicePath string) (string, error) {
 	if devicePath == "" {
 		return "", fmt.Errorf("null device path")
 	}
@@ -767,7 +796,7 @@ func determineFilesystemType(devicePath string) (string, error) {
 	// has inconvenient output.
 	// We do *not* use `lsblk` as that requires udev to be up-to-date which
 	// is often not the case when a device is erased using `dd`.
-	output, err := pmemexec.RunCommand("file", "-bsL", devicePath)
+	output, err := pmemexec.RunCommand(ctx, "file", "-bsL", devicePath)
 	if err != nil {
 		return "", err
 	}
@@ -776,7 +805,7 @@ func determineFilesystemType(devicePath string) (string, error) {
 		return "", nil
 	}
 	// Some filesystem was detected, use blkid to figure out what it is.
-	output, err = pmemexec.RunCommand("blkid", "-c", "/dev/null", "-o", "full", devicePath)
+	output, err = pmemexec.RunCommand(ctx, "blkid", "-c", "/dev/null", "-o", "full", devicePath)
 	if err != nil {
 		return "", err
 	}
@@ -834,7 +863,6 @@ func findMountFlags(flags []string, findIn []string) bool {
 			}
 		}
 		if !found {
-			klog.V(5).Infof("Mount flag '%s' not found in %v", f, findIn)
 			return false
 		}
 	}

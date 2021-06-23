@@ -11,31 +11,40 @@ import (
 	"github.com/kubernetes-csi/csi-lib-utils/protosanitizer"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	"k8s.io/klog/v2"
+
+	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 )
 
 // LogGRPCServer logs the server-side call information via klog.
 func LogGRPCServer(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	klog.V(3).Infof("GRPC call: %s", info.FullMethod)
-	klog.V(5).Infof("GRPC request: %+v", protosanitizer.StripSecrets(req))
+	logger := pmemlog.Get(ctx)
+	values := []interface{}{"full-method", info.FullMethod}
+	if logger.V(5).Enabled() {
+		values = append(values, "request", protosanitizer.StripSecrets(req))
+	}
+	logger.V(3).Info("Processing gRPC call", values...)
 	resp, err := handler(ctx, req)
 	if err != nil {
-		klog.Errorf("GRPC error: %v", err)
+		logger.Error(err, "gRPC call failed")
 	} else {
-		klog.V(5).Infof("GRPC response: %+v", protosanitizer.StripSecrets(resp))
+		logger.V(5).Info("Completed gRPC call", "response", protosanitizer.StripSecrets(resp))
 	}
 	return resp, err
 }
 
 // LogGRPCClient does the same as LogGRPCServer, only on the client side.
 func LogGRPCClient(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-	klog.V(3).Infof("GRPC call: %s", method)
-	klog.V(5).Infof("GRPC request: %+v", protosanitizer.StripSecrets(req))
+	logger := pmemlog.Get(ctx)
+	values := []interface{}{"full-method", method}
+	if logger.V(5).Enabled() {
+		values = append(values, "request", protosanitizer.StripSecrets(req))
+	}
+	logger.V(3).Info("Invoking gRPC call", values...)
 	err := invoker(ctx, method, req, reply, cc, opts...)
 	if err != nil {
-		klog.Errorf("GRPC error: %v", err)
+		logger.Error(err, "Received gRPC error")
 	} else {
-		klog.V(5).Infof("GRPC response: %+v", protosanitizer.StripSecrets(reply))
+		logger.V(5).Info("Received gRPC response", "response", protosanitizer.StripSecrets(reply))
 	}
 	return err
 }

@@ -17,16 +17,18 @@ limitations under the License.
 package volumepathhandler
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 
-	"k8s.io/klog/v2"
 	"k8s.io/utils/exec"
 	"k8s.io/utils/mount"
 
 	"k8s.io/apimachinery/pkg/types"
+
+	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 )
 
 const (
@@ -39,28 +41,28 @@ const (
 // BlockVolumePathHandler defines a set of operations for handling block volume-related operations
 type BlockVolumePathHandler interface {
 	// MapDevice creates a symbolic link to block device under specified map path
-	MapDevice(devicePath string, mapPath string, linkName string, bindMount bool) error
+	MapDevice(ctx context.Context, devicePath string, mapPath string, linkName string, bindMount bool) error
 	// UnmapDevice removes a symbolic link to block device under specified map path
-	UnmapDevice(mapPath string, linkName string, bindMount bool) error
+	UnmapDevice(ctx context.Context, mapPath string, linkName string, bindMount bool) error
 	// RemovePath removes a file or directory on specified map path
-	RemoveMapPath(mapPath string) error
+	RemoveMapPath(ctx context.Context, mapPath string) error
 	// IsSymlinkExist retruns true if specified symbolic link exists
-	IsSymlinkExist(mapPath string) (bool, error)
+	IsSymlinkExist(ctx context.Context, mapPath string) (bool, error)
 	// IsDeviceBindMountExist retruns true if specified bind mount exists
-	IsDeviceBindMountExist(mapPath string) (bool, error)
+	IsDeviceBindMountExist(ctx context.Context, mapPath string) (bool, error)
 	// GetDeviceBindMountRefs searches bind mounts under global map path
-	GetDeviceBindMountRefs(devPath string, mapPath string) ([]string, error)
+	GetDeviceBindMountRefs(ctx context.Context, devPath string, mapPath string) ([]string, error)
 	// FindGlobalMapPathUUIDFromPod finds {pod uuid} symbolic link under globalMapPath
 	// corresponding to map path symlink, and then return global map path with pod uuid.
-	FindGlobalMapPathUUIDFromPod(pluginDir, mapPath string, podUID types.UID) (string, error)
+	FindGlobalMapPathUUIDFromPod(ctx context.Context, pluginDir, mapPath string, podUID types.UID) (string, error)
 	// AttachFileDevice takes a path to a regular file and makes it available as an
 	// attached block device.
-	AttachFileDevice(path string) (string, error)
+	AttachFileDevice(ctx context.Context, path string) (string, error)
 	// DetachFileDevice takes a path to the attached block device and
 	// detach it from block device.
-	DetachFileDevice(path string) error
+	DetachFileDevice(ctx context.Context, path string) error
 	// GetLoopDevice returns the full path to the loop device associated with the given path.
-	GetLoopDevice(path string) (string, error)
+	GetLoopDevice(ctx context.Context, path string) (string, error)
 }
 
 // NewBlockVolumePathHandler returns a new instance of BlockVolumeHandler.
@@ -74,7 +76,9 @@ type VolumePathHandler struct {
 }
 
 // MapDevice creates a symbolic link to block device under specified map path
-func (v VolumePathHandler) MapDevice(devicePath string, mapPath string, linkName string, bindMount bool) error {
+func (v VolumePathHandler) MapDevice(ctx context.Context, devicePath string, mapPath string, linkName string, bindMount bool) error {
+	ctx, logger := pmemlog.WithName(ctx, "MapDevice")
+
 	// Example of global map path:
 	//   globalMapPath/linkName: plugins/kubernetes.io/{PluginName}/{DefaultKubeletVolumeDevicesDirName}/{volumePluginDependentPath}/{podUid}
 	//   linkName: {podUid}
@@ -91,9 +95,11 @@ func (v VolumePathHandler) MapDevice(devicePath string, mapPath string, linkName
 	if !filepath.IsAbs(mapPath) {
 		return fmt.Errorf("the map path should be absolute: map path: %s", mapPath)
 	}
-	klog.V(5).Infof("MapDevice: devicePath %s", devicePath)
-	klog.V(5).Infof("MapDevice: mapPath %s", mapPath)
-	klog.V(5).Infof("MapDevice: linkName %s", linkName)
+	logger.V(5).Info("Setting up",
+		"device-path", devicePath,
+		"map-path", mapPath,
+		"link-name", linkName,
+	)
 
 	// Check and create mapPath
 	_, err := os.Stat(mapPath)
@@ -105,12 +111,14 @@ func (v VolumePathHandler) MapDevice(devicePath string, mapPath string, linkName
 	}
 
 	if bindMount {
-		return mapBindMountDevice(v, devicePath, mapPath, linkName)
+		return mapBindMountDevice(ctx, v, devicePath, mapPath, linkName)
 	}
 	return mapSymlinkDevice(v, devicePath, mapPath, linkName)
 }
 
-func mapBindMountDevice(v VolumePathHandler, devicePath string, mapPath string, linkName string) error {
+func mapBindMountDevice(ctx context.Context, v VolumePathHandler, devicePath string, mapPath string, linkName string) error {
+	ctx, logger := pmemlog.WithName(ctx, "mapBindMountDevice")
+
 	// Check bind mount exists
 	linkPath := filepath.Join(mapPath, string(linkName))
 
@@ -132,11 +140,11 @@ func mapBindMountDevice(v VolumePathHandler, devicePath string, mapPath string, 
 		// Check if device file
 		// TODO: Need to check if this device file is actually the expected bind mount
 		if file.Mode()&os.ModeDevice == os.ModeDevice {
-			klog.Warningf("Warning: Map skipped because bind mount already exist on the path: %v", linkPath)
+			logger.V(2).Info("Warning: Map skipped because bind mount already exist on the path", "link-path", linkPath)
 			return nil
 		}
 
-		klog.Warningf("Warning: file %s is already exist but not mounted, skip creating file", linkPath)
+		logger.V(2).Info("Warning: file already exists but is not mounted, skip creating file", "link-path", linkPath)
 	}
 
 	// Bind mount file
@@ -160,26 +168,28 @@ func mapSymlinkDevice(v VolumePathHandler, devicePath string, mapPath string, li
 }
 
 // UnmapDevice removes a symbolic link associated to block device under specified map path
-func (v VolumePathHandler) UnmapDevice(mapPath string, linkName string, bindMount bool) error {
+func (v VolumePathHandler) UnmapDevice(ctx context.Context, mapPath string, linkName string, bindMount bool) error {
+	ctx, logger := pmemlog.WithName(ctx, "UnmapDevice")
 	if len(mapPath) == 0 {
 		return fmt.Errorf("failed to unmap device from map path. mapPath is empty")
 	}
-	klog.V(5).Infof("UnmapDevice: mapPath %s", mapPath)
-	klog.V(5).Infof("UnmapDevice: linkName %s", linkName)
+	logger.V(5).Info("Unmapping", "map-path", mapPath, "link-path", linkName)
 
 	if bindMount {
-		return unmapBindMountDevice(v, mapPath, linkName)
+		return unmapBindMountDevice(ctx, v, mapPath, linkName)
 	}
-	return unmapSymlinkDevice(v, mapPath, linkName)
+	return unmapSymlinkDevice(ctx, v, mapPath, linkName)
 }
 
-func unmapBindMountDevice(v VolumePathHandler, mapPath string, linkName string) error {
+func unmapBindMountDevice(ctx context.Context, v VolumePathHandler, mapPath string, linkName string) error {
+	ctx, logger := pmemlog.WithName(ctx, "unmapBindMountDevice")
+
 	// Check bind mount exists
 	linkPath := filepath.Join(mapPath, string(linkName))
-	if isMountExist, checkErr := v.IsDeviceBindMountExist(linkPath); checkErr != nil {
+	if isMountExist, checkErr := v.IsDeviceBindMountExist(ctx, linkPath); checkErr != nil {
 		return checkErr
 	} else if !isMountExist {
-		klog.Warningf("Warning: Unmap skipped because bind mount does not exist on the path: %v", linkPath)
+		logger.V(2).Info("Warning: Unmap skipped because bind mount does not exist on the path", "link-path", linkPath)
 
 		// Check if linkPath still exists
 		if _, err := os.Stat(linkPath); err != nil {
@@ -210,24 +220,27 @@ func unmapBindMountDevice(v VolumePathHandler, mapPath string, linkName string) 
 	return nil
 }
 
-func unmapSymlinkDevice(v VolumePathHandler, mapPath string, linkName string) error {
+func unmapSymlinkDevice(ctx context.Context, v VolumePathHandler, mapPath string, linkName string) error {
+	ctx, logger := pmemlog.WithName(ctx, "unmapSymlinkDevice")
+
 	// Check symbolic link exists
 	linkPath := filepath.Join(mapPath, string(linkName))
-	if islinkExist, checkErr := v.IsSymlinkExist(linkPath); checkErr != nil {
+	if islinkExist, checkErr := v.IsSymlinkExist(ctx, linkPath); checkErr != nil {
 		return checkErr
 	} else if !islinkExist {
-		klog.Warningf("Warning: Unmap skipped because symlink does not exist on the path: %v", linkPath)
+		logger.V(2).Info("Warning: Unmap skipped because symlink does not exist on the path", "link-path", linkPath)
 		return nil
 	}
 	return os.Remove(linkPath)
 }
 
 // RemoveMapPath removes a file or directory on specified map path
-func (v VolumePathHandler) RemoveMapPath(mapPath string) error {
+func (v VolumePathHandler) RemoveMapPath(ctx context.Context, mapPath string) error {
+	ctx, logger := pmemlog.WithName(ctx, "RemoveMapPath")
 	if len(mapPath) == 0 {
 		return fmt.Errorf("failed to remove map path. mapPath is empty")
 	}
-	klog.V(5).Infof("RemoveMapPath: mapPath %s", mapPath)
+	logger.V(5).Info("Removing", "map-path", mapPath)
 	err := os.RemoveAll(mapPath)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove directory %s: %v", mapPath, err)
@@ -238,7 +251,7 @@ func (v VolumePathHandler) RemoveMapPath(mapPath string) error {
 // IsSymlinkExist returns true if specified file exists and the type is symbolik link.
 // If file doesn't exist, or file exists but not symbolic link, return false with no error.
 // On other cases, return false with error from Lstat().
-func (v VolumePathHandler) IsSymlinkExist(mapPath string) (bool, error) {
+func (v VolumePathHandler) IsSymlinkExist(ctx context.Context, mapPath string) (bool, error) {
 	fi, err := os.Lstat(mapPath)
 	if err != nil {
 		// If file doesn't exist, return false and no error
@@ -259,7 +272,7 @@ func (v VolumePathHandler) IsSymlinkExist(mapPath string) (bool, error) {
 // IsDeviceBindMountExist returns true if specified file exists and the type is device.
 // If file doesn't exist, or file exists but not device, return false with no error.
 // On other cases, return false with error from Lstat().
-func (v VolumePathHandler) IsDeviceBindMountExist(mapPath string) (bool, error) {
+func (v VolumePathHandler) IsDeviceBindMountExist(ctx context.Context, mapPath string) (bool, error) {
 	fi, err := os.Lstat(mapPath)
 	if err != nil {
 		// If file doesn't exist, return false and no error
@@ -279,7 +292,8 @@ func (v VolumePathHandler) IsDeviceBindMountExist(mapPath string) (bool, error) 
 }
 
 // GetDeviceBindMountRefs searches bind mounts under global map path
-func (v VolumePathHandler) GetDeviceBindMountRefs(devPath string, mapPath string) ([]string, error) {
+func (v VolumePathHandler) GetDeviceBindMountRefs(ctx context.Context, devPath string, mapPath string) ([]string, error) {
+	ctx, logger := pmemlog.WithName(ctx, "GetDeviceBindMountRefs")
 	var refs []string
 	files, err := ioutil.ReadDir(mapPath)
 	if err != nil {
@@ -293,6 +307,6 @@ func (v VolumePathHandler) GetDeviceBindMountRefs(devPath string, mapPath string
 		// TODO: Might need to check if the file is actually linked to devPath
 		refs = append(refs, filepath.Join(mapPath, filename))
 	}
-	klog.V(5).Infof("GetDeviceBindMountRefs: refs %v", refs)
+	logger.V(5).Info("Completed", "refs", refs)
 	return refs, nil
 }

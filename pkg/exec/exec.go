@@ -9,27 +9,29 @@ package exec
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os/exec"
 	"sync"
 
-	"k8s.io/klog/v2"
+	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 )
 
 // RunCommand executes the command with logging through klog, with
 // output processed line-by-line with the command path as prefix. It
 // returns the combined output and, if there was a problem, includes
 // that output and the command in the error.
-func RunCommand(cmd string, args ...string) (string, error) {
-	return Run(exec.Command(cmd, args...))
+func RunCommand(ctx context.Context, cmd string, args ...string) (string, error) {
+	return Run(ctx, exec.Command(cmd, args...))
 }
 
 // Run does the same as RunCommand but takes a pre-populated
 // cmd. Stdout and stderr are ignored and replaced with the output
 // handling described for RunCommand.
-func Run(cmd *exec.Cmd) (string, error) {
-	klog.V(4).Infof("Executing: %s", cmd)
+func Run(ctx context.Context, cmd *exec.Cmd) (string, error) {
+	logger := pmemlog.Get(ctx).WithValues("command", cmd.Path)
+	logger.V(4).Info("Starting command", "args", cmd.Args)
 
 	r, w := io.Pipe()
 	r2, w2 := io.Pipe()
@@ -41,13 +43,13 @@ func Run(cmd *exec.Cmd) (string, error) {
 	// Collect stdout and stderr separately. Storing in the
 	// combined buffer is a bit racy, but we need to know which
 	// output is stdout.
-	go dumpOutput(&wg, r, []io.Writer{&stdout, &both}, cmd.Path+": stdout: ")
-	go dumpOutput(&wg, r2, []io.Writer{&both}, cmd.Path+": stderr: ")
+	go dumpOutput(pmemlog.Set(ctx, logger.WithName("stdout")), &wg, r, []io.Writer{&stdout, &both})
+	go dumpOutput(pmemlog.Set(ctx, logger.WithName("stderr")), &wg, r2, []io.Writer{&both})
 	err := cmd.Run()
 	w.Close()
 	w2.Close()
 	wg.Wait()
-	klog.V(4).Infof("%s terminated, with %d bytes of stdout, %d of combined output and error %v", cmd.Path, stdout.Len(), both.Len(), err)
+	logger.V(4).Info("Command terminated", "stdout-len", stdout.Len(), "combined-len", both.Len(), "error", err)
 
 	switch {
 	case err != nil && both.Len() > 0:
@@ -58,7 +60,8 @@ func Run(cmd *exec.Cmd) (string, error) {
 	return string(stdout.Bytes()), err
 }
 
-func dumpOutput(wg *sync.WaitGroup, in io.Reader, out []io.Writer, prefix string) {
+func dumpOutput(ctx context.Context, wg *sync.WaitGroup, in io.Reader, out []io.Writer) {
+	logger := pmemlog.Get(ctx)
 	defer wg.Done()
 	scanner := bufio.NewScanner(in)
 	for scanner.Scan() {
@@ -66,7 +69,7 @@ func dumpOutput(wg *sync.WaitGroup, in io.Reader, out []io.Writer, prefix string
 			o.Write(scanner.Bytes())
 			o.Write([]byte("\n"))
 		}
-		klog.V(5).Infof("%s%s", prefix, scanner.Text())
+		logger.V(5).Info(scanner.Text())
 	}
 }
 

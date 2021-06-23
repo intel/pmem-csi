@@ -79,10 +79,23 @@ func testRawNamespaceConversion(f *framework.Framework, driverName, namespace st
 	// labels which might have cause the PMEM-CSI driver to run
 	// on the master node. None of the other tests expect that.
 	defer func() {
+		By("destroying volume groups again")
+		vgs := exec.Command(sshcmd, "sudo vgs --noheadings --options name")
+		out, err := vgs.Output() // ignore stderr, it may contain warnings
+		if err != nil {
+			framework.Logf("listing volume groups with %+v failed: %s", vgs, string(out))
+		}
+		for _, vg := range strings.Split(string(out), "\n") {
+			vgremove := exec.Command(sshcmd, "sudo vgremove "+vg)
+			out, err := vgremove.CombinedOutput()
+			if err != nil {
+				framework.Logf("removing volume group with %+v failed: %s", vgremove, string(out))
+			}
+		}
+
 		By("destroying namespace again")
 		cmd := exec.Command(sshcmd, "sudo ndctl destroy-namespace --force all")
-		out, err := cmd.CombinedOutput()
-		if err != nil {
+		if out, err := cmd.CombinedOutput(); err != nil {
 			framework.Logf("erasing namespaces with %+v failed: %s", cmd, string(out))
 		}
 
@@ -160,9 +173,9 @@ func testRawNamespaceConversion(f *framework.Framework, driverName, namespace st
 		if err != nil {
 			return fmt.Errorf("get pmem-driver output on master node: %v", err)
 		}
-		parts := regexp.MustCompile(`PMEM-CSI ready. Capacity:[^\n]*(\d+)\s*\S+ available[^\n]*`).FindStringSubmatch(output)
+		parts := regexp.MustCompile(`"PMEM-CSI ready." capacity="[^\n]*(\d+)\s*\S+ available[^\n]*`).FindStringSubmatch(output)
 		if len(parts) != 2 {
-			return fmt.Errorf("pod %s has not printed the expected `PMEM-CSI ready. Capacity: ...` log message yet", pod.Name)
+			return fmt.Errorf("pod %s has not printed the expected `PMEM-CSI ready.` log message yet", pod.Name)
 		}
 		if parts[1] == "0" {
 			return fmt.Errorf("pod %s is ready, but without any capacity: %s", pod.Name, parts[0])

@@ -1,6 +1,7 @@
 package pmdmanager
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -12,7 +13,6 @@ import (
 	"github.com/intel/pmem-csi/pkg/math"
 	"github.com/intel/pmem-csi/pkg/ndctl"
 
-	"k8s.io/klog/v2"
 	"k8s.io/utils/mount"
 )
 
@@ -30,12 +30,13 @@ var ndctlMutex = &sync.Mutex{}
 
 //NewPmemDeviceManagerNdctl Instantiates a new ndctl based pmem device manager
 // FIXME(avalluri): consider pmemPercentage while calculating available space
-func newPmemDeviceManagerNdctl(pmemPercentage uint) (PmemDeviceManager, error) {
+func newPmemDeviceManagerNdctl(ctx context.Context, pmemPercentage uint) (PmemDeviceManager, error) {
+	ctx, _ = pmemlog.WithName(ctx, "ndctl-New")
 	if pmemPercentage > 100 {
 		return nil, fmt.Errorf("invalid pmemPercentage '%d'. Value must be 0..100", pmemPercentage)
 	}
 
-	writable, err := sysIsWritable()
+	writable, err := sysIsWritable(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("check for writable /sys: %v", err)
 	}
@@ -53,7 +54,7 @@ func newPmemDeviceManagerNdctl(pmemPercentage uint) (PmemDeviceManager, error) {
 			}
 
 			// Check again, just to be sure.
-			writable, err = sysIsWritable()
+			writable, err = sysIsWritable(ctx)
 			if err != nil {
 				return nil, fmt.Errorf("check for writable /sys: %v", err)
 			}
@@ -72,23 +73,24 @@ func newPmemDeviceManagerNdctl(pmemPercentage uint) (PmemDeviceManager, error) {
 }
 
 // sysIsWritable returns true if any of the /sys mounts is writable.
-func sysIsWritable() (bool, error) {
+func sysIsWritable(ctx context.Context) (bool, error) {
+	logger := pmemlog.Get(ctx).WithName("sysIsWritable")
 	mounts, err := mount.New("").List()
 	if err != nil {
 		return false, fmt.Errorf("list mounts: %v", err)
 	}
 	for _, mnt := range mounts {
 		if mnt.Device == "sysfs" && mnt.Path == "/sys" {
-			klog.V(5).Infof("/sys mount options:%s", mnt.Opts)
+			logger.V(5).Info("Checking /sys", "mount-options", mnt.Opts)
 			for _, opt := range mnt.Opts {
 				if opt == "rw" {
-					klog.V(4).Info("/sys mounted read-write, good")
+					logger.V(4).Info("/sys mounted read-write, good")
 					return true, nil
 				} else if opt == "ro" {
-					klog.V(4).Info("/sys mounted read-only, bad")
+					logger.V(4).Info("/sys mounted read-only, bad")
 				}
 			}
-			klog.V(4).Info("/sys mounted with unknown options, bad")
+			logger.V(4).Info("/sys mounted with unknown options, bad")
 		}
 	}
 	return false, nil
@@ -98,7 +100,8 @@ func (pmem *pmemNdctl) GetMode() api.DeviceMode {
 	return api.DeviceModeDirect
 }
 
-func (pmem *pmemNdctl) GetCapacity() (capacity Capacity, err error) {
+func (pmem *pmemNdctl) GetCapacity(ctx context.Context) (capacity Capacity, err error) {
+	ctx, logger := pmemlog.WithName(ctx, "ndctl-GetCapacity")
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
 
@@ -122,8 +125,14 @@ func (pmem *pmemNdctl) GetCapacity() (capacity Capacity, err error) {
 			maxVolumeSize := r.MaxAvailableExtent()
 			available := r.AvailableSize()
 			size := r.Size()
-			klog.V(4).Infof("GetCapacity: region %s: MaxAvailableExtent=%s AvailableSize=%s Size=%s, RegionAlign=%s NamespaceAlign=%s",
-				r.DeviceName(), pmemlog.CapacityRef(int64(maxVolumeSize)), pmemlog.CapacityRef(int64(available)), pmemlog.CapacityRef(int64(size)), pmemlog.CapacityRef(int64(regionAlign)), pmemlog.CapacityRef(int64(namespaceAlign)))
+			logger.V(4).Info("Found a region",
+				"region", r.DeviceName(),
+				"max-available-extent", pmemlog.CapacityRef(int64(maxVolumeSize)),
+				"available", pmemlog.CapacityRef(int64(available)),
+				"size", pmemlog.CapacityRef(int64(size)),
+				"region-align", pmemlog.CapacityRef(int64(regionAlign)),
+				"namespace-align", pmemlog.CapacityRef(int64(namespaceAlign)),
+			)
 
 			if regionAlign == 0 {
 				regionAlign = 1
@@ -144,7 +153,8 @@ func (pmem *pmemNdctl) GetCapacity() (capacity Capacity, err error) {
 	return capacity, nil
 }
 
-func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64) (uint64, error) {
+func (pmem *pmemNdctl) CreateDevice(ctx context.Context, volumeId string, size uint64) (uint64, error) {
+	ctx, _ = pmemlog.WithName(ctx, "ndctl-CreateDevice")
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
 
@@ -163,7 +173,7 @@ func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64) (uint64, error
 		return 0, pmemerr.DeviceExists
 	}
 
-	ns, err := ndctl.CreateNamespace(ndctx, ndctl.CreateNamespaceOpts{
+	ns, err := ndctl.CreateNamespace(ctx, ndctx, ndctl.CreateNamespaceOpts{
 		Name: volumeId,
 		Size: size,
 		Mode: "fsdax",
@@ -171,24 +181,22 @@ func (pmem *pmemNdctl) CreateDevice(volumeId string, size uint64) (uint64, error
 	if err != nil {
 		return 0, err
 	}
-	nsSize := ns.Size()
 	actual := ns.RawSize()
-	klog.V(3).Infof("Namespace created, usable size %s, raw size %s: %+v",
-		pmemlog.CapacityRef(int64(nsSize)), pmemlog.CapacityRef(int64(actual)), ns)
 
 	// clear start of device to avoid old data being recognized as file system
 	device, err := getDevice(ndctx, volumeId)
 	if err != nil {
 		return 0, err
 	}
-	if err := clearDevice(device, false); err != nil {
+	if err := clearDevice(ctx, device, false); err != nil {
 		return 0, fmt.Errorf("clear device %q: %v", volumeId, err)
 	}
 
 	return actual, nil
 }
 
-func (pmem *pmemNdctl) DeleteDevice(volumeId string, flush bool) error {
+func (pmem *pmemNdctl) DeleteDevice(ctx context.Context, volumeId string, flush bool) error {
+	ctx, _ = pmemlog.WithName(ctx, "ndctl-DeleteDevice")
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
 
@@ -205,7 +213,7 @@ func (pmem *pmemNdctl) DeleteDevice(volumeId string, flush bool) error {
 		}
 		return err
 	}
-	if err := clearDevice(device, flush); err != nil {
+	if err := clearDevice(ctx, device, flush); err != nil {
 		if errors.Is(err, pmemerr.DeviceNotFound) {
 			return nil
 		}
@@ -214,7 +222,7 @@ func (pmem *pmemNdctl) DeleteDevice(volumeId string, flush bool) error {
 	return ndctl.DestroyNamespaceByName(ndctx, volumeId)
 }
 
-func (pmem *pmemNdctl) GetDevice(volumeId string) (*PmemDeviceInfo, error) {
+func (pmem *pmemNdctl) GetDevice(ctx context.Context, volumeId string) (*PmemDeviceInfo, error) {
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
 
@@ -227,7 +235,7 @@ func (pmem *pmemNdctl) GetDevice(volumeId string) (*PmemDeviceInfo, error) {
 	return getDevice(ndctx, volumeId)
 }
 
-func (pmem *pmemNdctl) ListDevices() ([]*PmemDeviceInfo, error) {
+func (pmem *pmemNdctl) ListDevices(ctx context.Context) ([]*PmemDeviceInfo, error) {
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
 

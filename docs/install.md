@@ -722,48 +722,15 @@ pmem-csi    pmem-csi-intel-com-node-jkbgz   3/3     Running   0          75s   1
 pmem-csi    pmem-csi-intel-com-node-th56d   3/3     Running   0          75s   192.168.220.67    pmem-csi-pmem-govm-worker2   <none>           <none>
 
 $ kubectl logs -n pmem-csi pmem-csi-intel-com-node-jkbgz pmem-driver
-I0526 14:40:15.350646       1 main.go:69] Version: v0.9.0-88-g602e0f88c
-I0526 14:40:15.351472       1 pmd-lvm.go:326] Create fsdax-namespaces in region0, allowed 50 %, real align 1073741824:
-total       :      68719476736
-avail       :      68719476736
-can use     :      34359738368
-I0526 14:40:15.351968       1 pmd-lvm.go:341] Calculated canUse:34359738368, available by Region info:68719476736
-I0526 14:40:15.352034       1 pmd-lvm.go:358] Create 34359738368-bytes fsdax-namespace
-I0526 14:40:15.355296       1 region.go:244] setting namespace sector size: 0
-I0526 14:40:15.357631       1 region.go:254] setting pfn
-I0526 14:40:15.793975       1 region.go:265] enabling namespace
-I0526 14:40:15.794737       1 exec.go:32] Executing: /sbin/pvs --noheadings -o vg_name /dev/pmem0
-I0526 14:40:15.806291       1 exec.go:69] /sbin/pvs: stderr:   Failed to find physical volume "/dev/pmem0".
-I0526 14:40:15.814110       1 exec.go:50] /sbin/pvs terminated, with 0 bytes of stdout, 47 of combined output and error exit status 5
-I0526 14:40:15.814277       1 exec.go:32] Executing: /sbin/vgdisplay ndbus0region0fsdax
-I0526 14:40:15.821343       1 exec.go:69] /sbin/vgdisplay: stderr:   Volume group "ndbus0region0fsdax" not found
-I0526 14:40:15.821477       1 exec.go:69] /sbin/vgdisplay: stderr:   Cannot process volume group ndbus0region0fsdax
-I0526 14:40:15.831688       1 exec.go:50] /sbin/vgdisplay terminated, with 0 bytes of stdout, 95 of combined output and error exit status 5
-I0526 14:40:15.831841       1 pmd-lvm.go:418] No volume group with name ndbus0region0fsdax, mark for creation
-I0526 14:40:15.831998       1 exec.go:32] Executing: /sbin/vgcreate --force ndbus0region0fsdax /dev/pmem0
-I0526 14:40:15.851768       1 exec.go:69] /sbin/vgcreate: stdout:   Physical volume "/dev/pmem0" successfully created.
-I0526 14:40:15.852864       1 exec.go:69] /sbin/vgcreate: stderr:   WARNING: This metadata update is NOT backed up.
-I0526 14:40:15.852905       1 exec.go:69] /sbin/vgcreate: stdout:   Volume group "ndbus0region0fsdax" successfully created
-I0526 14:40:15.861623       1 exec.go:50] /sbin/vgcreate terminated, with 110 bytes of stdout, 160 of combined output and error <nil>
-I0526 14:40:15.861746       1 exec.go:32] Executing: /sbin/vgs ndbus0region0fsdax
-I0526 14:40:15.870096       1 exec.go:69] /sbin/vgs: stdout:   VG                 #PV #LV #SN Attr   VSize   VFree  
-I0526 14:40:15.870237       1 exec.go:69] /sbin/vgs: stdout:   ndbus0region0fsdax   1   0   0 wz--n- <31.00g <31.00g
-I0526 14:40:15.880273       1 exec.go:50] /sbin/vgs terminated, with 112 bytes of stdout, 112 of combined output and error <nil>
-I0526 14:40:15.880373       1 exec.go:32] Executing: /sbin/lvs --noheadings --nosuffix -o lv_name,lv_path,lv_size --units B ndbus0region0fsdax
-I0526 14:40:15.899066       1 exec.go:50] /sbin/lvs terminated, with 0 bytes of stdout, 0 of combined output and error <nil>
-I0526 14:40:15.899553       1 mount_linux.go:163] Detected OS without systemd
-I0526 14:40:15.900187       1 exec.go:32] Executing: /sbin/vgs --noheadings --nosuffix -o vg_name,vg_size,vg_free --units B ndbus0region0fsdax
-I0526 14:40:15.900189       1 server.go:52] Listening for connections on address: /csi/csi.sock
-I0526 14:40:15.912667       1 exec.go:69] /sbin/vgs: stdout:   ndbus0region0fsdax 33281802240 33281802240
-I0526 14:40:15.925819       1 exec.go:50] /sbin/vgs terminated, with 45 bytes of stdout, 45 of combined output and error <nil>
-I0526 14:40:15.926627       1 exec.go:32] Executing: /sbin/vgs --noheadings --nosuffix -o vg_name,vg_size,vg_free --units B ndbus0region0fsdax
-I0526 14:40:15.941874       1 exec.go:69] /sbin/vgs: stdout:   ndbus0region0fsdax 33281802240 33281802240
-I0526 14:40:15.954167       1 exec.go:50] /sbin/vgs terminated, with 45 bytes of stdout, 45 of combined output and error <nil>
-I0526 14:40:15.954661       1 pmem-csi-driver.go:304] PMEM-CSI ready. Capacity: 31740Mi maximum volume size, 31740Mi available, 31740Mi managed, 64Gi total
-I0526 14:40:15.955139       1 pmem-csi-driver.go:336] Prometheus endpoint started at http://[::]:10010/metrics
+I0623 07:15:18.710690       1 main.go:73] "PMEM-CSI started." version="v0.9.0-188-gd451ec6f3-dirty"
+I0623 07:15:18.711645       1 pmd-lvm.go:328] "LVM-New/setupNS: Checking region for fsdax namespaces" region="region0" percentage=50 size="64Gi" available="64Gi" max-available-extent="64Gi" may-use="32Gi"
+I0623 07:15:18.712251       1 pmd-lvm.go:361] "LVM-New/setupNS: Create fsdax namespace" size="32Gi"
+I0623 07:15:19.041186       1 region.go:282] "LVM-New/setupNS/CreateNamespace: Namespace created" region="region0" namespace="namespace0.1" usable-size="32254Mi" raw-size="32Gi" uuid="c3e6fe52-d3f2-11eb-b33e-c2b1549139a7"
+I0623 07:15:19.079791       1 pmd-lvm.go:422] "LVM-New/setupVG/setupVGForNamespace: Creating new volume group" vg="ndbus0region0fsdax"
+I0623 07:15:19.130041       1 mount_linux.go:163] Detected OS without systemd
+I0623 07:15:19.130661       1 server.go:54] "GRPC Server: Listening for connections" endpoint="unix:///csi/csi.sock"
+I0623 07:15:19.180760       1 pmem-csi-driver.go:305] "PMEM-CSI ready." capacity="32252Mi maximum volume size, 32252Mi available, 32252Mi managed, 64Gi total"
 ```
-
-Depending on the log level, only the `PMEM-CSI ready` line might be printed.
 
 In a production environment, the [metrics support](#metrics-support)
 could be used to monitor available PMEM per node.
@@ -798,21 +765,21 @@ conversion.
 
 The output of a successful conversion will look like this:
 ```
-I0407 16:24:43.453802       1 main.go:69] Version: v0.9.0-29-g043b4e9c0-dirty
-I0407 16:24:43.456707       1 convert.go:78] "raw-namespace-conversion: checking for namespaces"
-I0407 16:24:43.457705       1 convert.go:80] "raw-namespace-conversion: checking" bus="{\"dev\":\"ndbus0\",\"dimms\":[{}],\"provider\":\"ACPI.NFIT\",\"regions\":[{}]}"
-I0407 16:24:43.458144       1 convert.go:82] "raw-namespace-conversion: checking" region="{\"available_size\":0,\"dev\":\"region0\",\"mappings\":[{}],\"max_available_extent\":0,\"namespaces\":[{}],\"size\":68719476736,\"type\":\"pmem\"}"
-I0407 16:24:43.458264       1 convert.go:89] "raw-namespace-conversion: checking" namespace="{\"blockdev\":\"pmem0\",\"dev\":\"namespace0.0\",\"enabled\":true,\"id\":0,\"mode\":\"raw\",\"name\":\"\",\"size\":68719476736,\"uuid\":\"40b5697c-9453-457d-b4b3-789718ac54ab\"}"
-I0407 16:24:43.458337       1 convert.go:98] "raw-namespace-conversion: converting raw namespace" namespace="{\"blockdev\":\"pmem0\",\"dev\":\"namespace0.0\",\"enabled\":true,\"id\":0,\"mode\":\"raw\",\"name\":\"\",\"size\":68719476736,\"uuid\":\"40b5697c-9453-457d-b4b3-789718ac54ab\"}"
-I0407 16:24:44.077114       1 convert.go:126] "raw-namespace-conversion: setting up volume group" namespace="{\"blockdev\":\"pmem0\",\"dev\":\"namespace0.0\",\"enabled\":false,\"id\":0,\"mode\":\"fsdax\",\"name\":\"\",\"size\":18446744073709551615,\"uuid\":\"00000000-0000-0000-0000-000000000000\"}" VG="ndbus0region0fsdax"
-I0407 16:24:44.111153       1 pmd-lvm.go:408] /dev/pmem0: already part of volume group ndbus0region0fsdax
-I0407 16:24:44.111352       1 pmd-lvm.go:412] no unused namespace found to add to this group: ndbus0region0fsdax
-I0407 16:24:44.111541       1 convert.go:132] "raw-namespace-conversion: converted to fsdax namespace" namespace="{\"blockdev\":\"pmem0\",\"dev\":\"namespace0.0\",\"enabled\":false,\"id\":0,\"mode\":\"fsdax\",\"name\":\"\",\"size\":18446744073709551615,\"uuid\":\"00000000-0000-0000-0000-000000000000\"}" VG="ndbus0region0fsdax"
-I0407 16:24:44.111573       1 convert.go:74] "raw-namespace-conversion: successful" converted=1
-I0407 16:24:44.127330       1 convert.go:171] "check-pmem: volume group will be used by PMEM-CSI in LVM mode" VG="ndbus0region0fsdax"
-I0407 16:24:44.150347       1 convert.go:200] "relabel: change node labels" node="pmem-csi-pmem-govm-master" patch="{\"metadata\":{\"labels\":{\"pmem-csi.intel.com/convert-raw-namespaces\": null, \"feature.node.kubernetes.io/memory-nv.dax\": \"true\"}}}"
-I0407 16:24:44.150370       1 pmem-csi-driver.go:325] raw namespace conversion is done, waiting for termination signal
-I0407 16:24:45.614284       1 pmem-csi-driver.go:343] Caught signal terminated, terminating.
+I0623 07:32:52.773207       1 main.go:73] "PMEM-CSI started." version="v0.9.0-188-gd451ec6f3-dirty"
+I0623 07:32:52.774386       1 convert.go:79] "ForceConvertRawNamespaces/convert: checking for namespaces"
+I0623 07:32:52.774871       1 convert.go:81] "ForceConvertRawNamespaces/convert: checking" bus="{\"dev\":\"ndbus0\",\"dimms\":[{}],\"provider\":\"ACPI.NFIT\",\"regions\":[{}]}"
+I0623 07:32:52.775316       1 convert.go:83] "ForceConvertRawNamespaces/convert: checking" region="{\"available_size\":0,\"dev\":\"region0\",\"mappings\":[{}],\"max_available_extent\":0,\"namespaces\":[{}],\"size\":68719476736,\"type\":\"pmem\"}"
+I0623 07:32:52.775444       1 convert.go:90] "ForceConvertRawNamespaces/convert: checking" namespace="{\"blockdev\":\"pmem0\",\"dev\":\"namespace0.0\",\"enabled\":true,\"id\":0,\"mode\":\"raw\",\"name\":\"\",\"size\":68719476736,\"uuid\":\"1711a2a0-358d-4b14-a43c-8efa1a9f7154\"}"
+I0623 07:32:52.775550       1 convert.go:99] "ForceConvertRawNamespaces/convert: converting raw namespace" namespace="{\"blockdev\":\"pmem0\",\"dev\":\"namespace0.0\",\"enabled\":true,\"id\":0,\"mode\":\"raw\",\"name\":\"\",\"size\":68719476736,\"uuid\":\"1711a2a0-358d-4b14-a43c-8efa1a9f7154\"}"
+I0623 07:32:53.397897       1 convert.go:127] "ForceConvertRawNamespaces/convert: setting up volume group" namespace="{\"blockdev\":\"pmem0\",\"dev\":\"namespace0.0\",\"enabled\":false,\"id\":0,\"mode\":\"fsdax\",\"name\":\"\",\"size\":18446744073709551615,\"uuid\":\"00000000-0000-0000-0000-000000000000\"}" vg="ndbus0region0fsdax"
+I0623 07:32:53.434094       1 pmd-lvm.go:422] "ForceConvertRawNamespaces/convert/setupVGForNamespace: Creating new volume group" vg="ndbus0region0fsdax"
+I0623 07:32:53.457108       1 convert.go:133] "ForceConvertRawNamespaces/convert: converted to fsdax namespace" namespace="{\"blockdev\":\"pmem0\",\"dev\":\"namespace0.0\",\"enabled\":false,\"id\":0,\"mode\":\"fsdax\",\"name\":\"\",\"size\":18446744073709551615,\"uuid\":\"00000000-0000-0000-0000-000000000000\"}" vg="ndbus0region0fsdax"
+I0623 07:32:53.457148       1 convert.go:75] "ForceConvertRawNamespaces/convert: successful" converted=1
+I0623 07:32:53.479512       1 convert.go:172] "ForceConvertRawNamespaces/havePMEM: Volume group will be used by PMEM-CSI in LVM mode" vg="ndbus0region0fsdax"
+I0623 07:32:53.523412       1 convert.go:200] "ForceConvertRawNamespaces/relabel: Change node labels" node="pmem-csi-pmem-govm-master" patch="{\"metadata\":{\"labels\":{\"pmem-csi.intel.com/convert-raw-namespaces\": null, \"feature.node.kubernetes.io/memory-nv.dax\": \"true\"}}}"
+I0623 07:32:53.523605       1 pmem-csi-driver.go:326] "Raw namespace conversion is done, waiting for termination signal."
+I0623 07:33:03.954098       1 pmem-csi-driver.go:344] "Caught signal, terminating." signal="terminated"
+I0623 07:33:05.016426       1 main.go:93] "PMEM-CSI stopped."
 ```
 
 It terminates once Kubernetes notices that the pod is no longer

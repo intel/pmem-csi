@@ -6,6 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 package pmdmanager
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -50,6 +51,7 @@ func runTests(mode string) {
 	var vg *testVGS
 	var cleanupList map[string]bool
 	var err error
+	ctx := context.Background()
 
 	BeforeEach(func() {
 		precheck()
@@ -60,9 +62,9 @@ func runTests(mode string) {
 			vg, err = createTestVGS(vgname, vgsize)
 			Expect(err).Should(BeNil(), "Failed to create volume group")
 
-			dm, err = newPmemDeviceManagerLVMForVGs([]string{vg.name})
+			dm, err = newPmemDeviceManagerLVMForVGs(ctx, []string{vg.name})
 		} else {
-			dm, err = newPmemDeviceManagerNdctl(100)
+			dm, err = newPmemDeviceManagerNdctl(ctx, 100)
 			if err != nil && strings.Contains(err.Error(), "/sys mounted read-only") {
 				Skip("/sys mounted read-only, cannot test direct mode")
 			}
@@ -77,7 +79,7 @@ func runTests(mode string) {
 				continue
 			}
 			By("Cleaning up device: " + devName)
-			dm.DeleteDevice(devName, false)
+			dm.DeleteDevice(ctx, devName, false)
 		}
 		if mode == ModeLVM {
 			err := vg.Clean()
@@ -88,13 +90,13 @@ func runTests(mode string) {
 	It("Should create a new device", func() {
 		name := "test-dev-new"
 		size := uint64(2) * 1024 * 1024 // 2Mb
-		actual, err := dm.CreateDevice(name, size)
+		actual, err := dm.CreateDevice(ctx, name, size)
 		Expect(err).Should(BeNil(), "Failed to create new device")
 		Expect(actual).Should(BeNumerically(">=", size), "device at least as large as requested")
 
 		cleanupList[name] = true
 
-		dev, err := dm.GetDevice(name)
+		dev, err := dm.GetDevice(ctx, name)
 		Expect(err).Should(BeNil(), "Failed to retrieve device info")
 		Expect(dev.VolumeId).Should(Equal(name), "Name mismatch")
 		Expect(dev.Size >= size).Should(BeTrue(), "Size mismatch")
@@ -104,30 +106,30 @@ func runTests(mode string) {
 	It("Should support recreating a device", func() {
 		name := "test-dev"
 		size := uint64(2) * 1024 * 1024 // 2Mb
-		actual, err := dm.CreateDevice(name, size)
+		actual, err := dm.CreateDevice(ctx, name, size)
 		Expect(err).Should(BeNil(), "Failed to create new device")
 		Expect(actual).Should(BeNumerically(">=", size), "device at least as large as requested")
 
 		cleanupList[name] = true
 
-		dev, err := dm.GetDevice(name)
+		dev, err := dm.GetDevice(ctx, name)
 		Expect(err).Should(BeNil(), "Failed to retrieve device info")
 		Expect(dev.VolumeId).Should(Equal(name), "Name mismatch")
 		Expect(dev.Size >= size).Should(BeTrue(), "Size mismatch")
 		Expect(dev.Path).ShouldNot(BeNil(), "Null device path")
 
-		err = dm.DeleteDevice(name, false)
+		err = dm.DeleteDevice(ctx, name, false)
 		Expect(err).Should(BeNil(), "Failed to delete device")
 		cleanupList[name] = false
 
-		actual, err = dm.CreateDevice(name, size)
+		actual, err = dm.CreateDevice(ctx, name, size)
 		Expect(err).Should(BeNil(), "Failed to recreate the same device")
 		Expect(actual).Should(BeNumerically(">=", size), "device at least as large as requested")
 		cleanupList[name] = true
 	})
 
 	It("Should fail to retrieve non-existent device", func() {
-		dev, err := dm.GetDevice("unknown")
+		dev, err := dm.GetDevice(ctx, "unknown")
 		Expect(err).ShouldNot(BeNil(), "Error expected")
 		Expect(errors.Is(err, pmemerr.DeviceNotFound)).Should(BeTrue(), "expected error is device not found error")
 		Expect(dev).Should(BeNil(), "returned device should be nil")
@@ -139,7 +141,7 @@ func runTests(mode string) {
 		sizes := map[string]uint64{}
 
 		// This test may run on a host which already has some volumes.
-		list, err := dm.ListDevices()
+		list, err := dm.ListDevices(ctx)
 		Expect(err).Should(BeNil(), "Failed to list devices")
 		numExisting := len(list)
 		for _, dev := range list {
@@ -149,12 +151,12 @@ func runTests(mode string) {
 		for i := 1; i <= max_devices; i++ {
 			name := fmt.Sprintf("list-dev-%d", i)
 			sizes[name] = uint64(rand.Intn(15)+1) * 1024 * 1024
-			actual, err := dm.CreateDevice(name, sizes[name])
+			actual, err := dm.CreateDevice(ctx, name, sizes[name])
 			Expect(err).Should(BeNil(), "Failed to create new device")
 			Expect(actual).Should(BeNumerically(">=", sizes[name]), "device at least as large as requested")
 			cleanupList[name] = true
 		}
-		list, err = dm.ListDevices()
+		list, err = dm.ListDevices(ctx)
 		Expect(err).Should(BeNil(), "Failed to list devices")
 		Expect(len(list)).Should(BeEquivalentTo(max_devices+numExisting), "count mismatch")
 		for _, dev := range list {
@@ -166,13 +168,13 @@ func runTests(mode string) {
 		for i := 1; i <= max_deletes; i++ {
 			name := fmt.Sprintf("list-dev-%d", i)
 			delete(sizes, name)
-			err = dm.DeleteDevice(name, false)
+			err = dm.DeleteDevice(ctx, name, false)
 			Expect(err).Should(BeNil(), "Error while deleting device '"+name+"'")
 			cleanupList[name] = false
 		}
 
 		// List device after deleting a device
-		list, err = dm.ListDevices()
+		list, err = dm.ListDevices(ctx)
 		Expect(err).Should(BeNil(), "Failed to list devices")
 		Expect(len(list)).Should(BeEquivalentTo(max_devices-max_deletes+numExisting), "count mismatch")
 		for _, dev := range list {
@@ -193,12 +195,12 @@ func runTests(mode string) {
 	It("Should delete devices", func() {
 		name := "delete-dev"
 		size := uint64(2) * 1024 * 1024 // 2Mb
-		actual, err := dm.CreateDevice(name, size)
+		actual, err := dm.CreateDevice(ctx, name, size)
 		Expect(err).Should(BeNil(), "Failed to create new device")
 		Expect(actual).Should(BeNumerically(">=", size), "device at least as large as requested")
 		cleanupList[name] = true
 
-		dev, err := dm.GetDevice(name)
+		dev, err := dm.GetDevice(ctx, name)
 		Expect(err).Should(BeNil(), "Failed to retrieve device info")
 		Expect(dev.VolumeId).Should(Equal(name), "Name mismatch")
 		Expect(dev.Size).Should(BeNumerically(">=", size), "Size mismatch")
@@ -210,7 +212,7 @@ func runTests(mode string) {
 		defer unmount(mountPath)
 
 		// Delete should fail as the device is in use
-		err = dm.DeleteDevice(name, true)
+		err = dm.DeleteDevice(ctx, name, true)
 		Expect(err).ShouldNot(BeNil(), "Error expected when deleting device in use: %s", dev.VolumeId)
 		Expect(errors.Is(err, pmemerr.DeviceInUse)).Should(BeTrue(), "Expected device busy error: %s", dev.VolumeId)
 		cleanupList[name] = false
@@ -219,16 +221,16 @@ func runTests(mode string) {
 		Expect(err).Should(BeNil(), "Failed to unmount the device: %s", dev.VolumeId)
 
 		// Delete should succeed
-		err = dm.DeleteDevice(name, true)
+		err = dm.DeleteDevice(ctx, name, true)
 		Expect(err).Should(BeNil(), "Failed to delete device")
 
-		dev, err = dm.GetDevice(name)
+		dev, err = dm.GetDevice(ctx, name)
 		Expect(err).ShouldNot(BeNil(), "GetDevice() should fail on deleted device")
 		Expect(errors.Is(err, pmemerr.DeviceNotFound)).Should(BeTrue(), "expected error is DeviceNodeFound")
 		Expect(dev).Should(BeNil(), "returned device should be nil")
 
 		// Delete call should not return any error on non-existing device
-		err = dm.DeleteDevice(name, true)
+		err = dm.DeleteDevice(ctx, name, true)
 		Expect(err).Should(BeNil(), "DeleteDevice() is not idempotent")
 	})
 }
@@ -258,6 +260,7 @@ func createTestVGS(vgname string, size uint64) (*testVGS, error) {
 	var file *os.File
 	var dev losetup.Device
 	var out string
+	ctx := context.Background()
 
 	By("Creating temporary file")
 	if file, err = ioutil.TempFile("", "test-lvm-dev"); err != nil {
@@ -295,27 +298,27 @@ func createTestVGS(vgname string, size uint64) (*testVGS, error) {
 		}
 	}()
 
-	if err = waitDeviceAppears(&PmemDeviceInfo{Path: dev.Path()}); err != nil {
+	if err = waitDeviceAppears(ctx, &PmemDeviceInfo{Path: dev.Path()}); err != nil {
 		return nil, fmt.Errorf("created loop device not appeared: %s", err.Error())
 	}
 
 	By("Creating physical volume")
 	// TODO: reuse vgm code
 	cmdArgs := []string{"--force", dev.Path()}
-	if out, err = pmemexec.RunCommand("pvcreate", cmdArgs...); err != nil { // nolint gosec
+	if out, err = pmemexec.RunCommand(ctx, "pvcreate", cmdArgs...); err != nil { // nolint gosec
 		return nil, fmt.Errorf("pvcreate failure(output:%s): %s", out, err.Error())
 	}
 
 	By("Creating volume group")
 	cmdArgs = []string{"--force", vgname, dev.Path()}
-	if out, err = pmemexec.RunCommand("vgcreate", cmdArgs...); err != nil { // nolint gosec
+	if out, err = pmemexec.RunCommand(ctx, "vgcreate", cmdArgs...); err != nil { // nolint gosec
 		return nil, fmt.Errorf("vgcreate failure(output:%s): %s", out, err.Error())
 	}
 
 	defer func() {
 		if err != nil {
 			By("Removing volume group due to failure")
-			pmemexec.RunCommand("vgremove", "--force", vgname)
+			pmemexec.RunCommand(ctx, "vgremove", "--force", vgname)
 		}
 	}()
 
@@ -327,8 +330,9 @@ func createTestVGS(vgname string, size uint64) (*testVGS, error) {
 }
 
 func (vg *testVGS) Clean() error {
+	ctx := context.Background()
 	By("Removing volume group")
-	if out, err := pmemexec.RunCommand("vgremove", "--force", vg.name); err != nil {
+	if out, err := pmemexec.RunCommand(ctx, "vgremove", "--force", vg.name); err != nil {
 		return fmt.Errorf("Fail to remove volume group(output:%s): %s", out, err.Error())
 	}
 
@@ -346,6 +350,7 @@ func (vg *testVGS) Clean() error {
 }
 
 func mountDevice(device *PmemDeviceInfo) (string, error) {
+	ctx := context.Background()
 	targetPath, err := ioutil.TempDir("/tmp", "lmv-mnt-path-")
 	if err != nil {
 		return "", err
@@ -354,7 +359,7 @@ func mountDevice(device *PmemDeviceInfo) (string, error) {
 	cmd := "mkfs.ext4"
 	args := []string{"-b 4096", "-F", device.Path}
 
-	if _, err := pmemexec.RunCommand(cmd, args...); err != nil {
+	if _, err := pmemexec.RunCommand(ctx, cmd, args...); err != nil {
 		os.Remove(targetPath)
 		return "", err
 	}
@@ -362,7 +367,7 @@ func mountDevice(device *PmemDeviceInfo) (string, error) {
 	cmd = "mount"
 	args = []string{"-c", device.Path, targetPath}
 
-	if _, err := pmemexec.RunCommand(cmd, args...); err != nil {
+	if _, err := pmemexec.RunCommand(ctx, cmd, args...); err != nil {
 		os.Remove(targetPath)
 		return "", err
 	}
@@ -371,8 +376,9 @@ func mountDevice(device *PmemDeviceInfo) (string, error) {
 }
 
 func unmount(path string) error {
+	ctx := context.Background()
 	args := []string{path}
-	if _, err := pmemexec.RunCommand("umount", args...); err != nil {
+	if _, err := pmemexec.RunCommand(ctx, "umount", args...); err != nil {
 		return err
 	}
 	return os.Remove(path)

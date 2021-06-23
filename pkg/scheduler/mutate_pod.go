@@ -24,6 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 )
 
 const (
@@ -34,11 +36,14 @@ const (
 
 // Handle implements admission.Handler interface.
 func (s scheduler) Handle(ctx context.Context, req admission.Request) admission.Response {
+	logger := pmemlog.Get(ctx).WithName("mutating-pod-webhook")
 	pod := &corev1.Pod{}
 	err := s.decoder.Decode(req, pod)
 	if err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
+	logger = logger.WithValues("pod", pmemlog.KObj(pod))
+	ctx = pmemlog.Set(ctx, logger)
 	if len(pod.Spec.Containers) == 0 {
 		return admission.Denied("pod has no containers")
 	}
@@ -58,14 +63,14 @@ func (s scheduler) Handle(ctx context.Context, req admission.Request) admission.
 	if err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
-	klog.V(5).Infof("mutate pod %s: PMEM-CSI storage classes %v", pod.Name, targets)
+	logger.V(5).Info("Checking storage classes", "storage-classes", targets)
 
 	filter, err := s.mustFilterPod(ctx, pod, targets)
 	if err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 	if !filter {
-		klog.V(5).Infof("mutate pod %s: does not use inline or delayed PMEM volumes", pod.Name)
+		logger.V(5).Info("Pod does not use inline or delayed PMEM volumes.")
 		return admission.Allowed("no relevant PMEM volumes")
 	}
 
@@ -86,7 +91,7 @@ func (s scheduler) Handle(ctx context.Context, req admission.Request) admission.
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
-	klog.V(5).Infof("mutate pod %s: uses PMEM", pod.Name)
+	logger.V(5).Info("Pod uses PMEM.")
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
 }
 
@@ -113,6 +118,7 @@ func (s scheduler) mustFilterSC(sc *storagev1.StorageClass) bool {
 }
 
 func (s scheduler) mustFilterPod(ctx context.Context, pod *corev1.Pod, targets map[string]bool) (bool, error) {
+	logger := pmemlog.Get(ctx)
 	for _, vol := range pod.Spec.Volumes {
 		if vol.PersistentVolumeClaim != nil {
 			pvcName := vol.PersistentVolumeClaim.ClaimName
@@ -127,7 +133,7 @@ func (s scheduler) mustFilterPod(ctx context.Context, pod *corev1.Pod, targets m
 					// A pod is getting created before its PVC. TopoLVM returns an error in this case (https://github.com/cybozu-go/topolvm/blob/7b79ee30e997a165b220d4519c784e50eaec36c8/hook/mutate_pod.go#L129-L136),
 					// but then pod creation fails while normally it would go through.
 					// We ignore the PVC instead.
-					klog.Warningf("pod mutator: pod %q with unknown pvc %q in namespace %q, ignoring the pvc", pod.Name, pvcName, pod.Namespace)
+					logger.Info("Pod with unknown pvc, ignoring the pvc", "pvc", klog.KRef(pod.Namespace, pvcName))
 					continue
 				}
 				return false, fmt.Errorf("check PVC %s/%s: %v", pod.Namespace, pvcName, err)

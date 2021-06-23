@@ -7,11 +7,13 @@ SPDX-License-Identifier: Apache-2.0
 package k8sutil
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/klog/v2"
+
+	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 )
 
 const (
@@ -22,17 +24,20 @@ const (
 
 // GetNamespace returns the namespace of the operator pod
 // defaults to "kube-system"
-func GetNamespace() string {
+func GetNamespace(ctx context.Context) string {
+	logger := pmemlog.Get(ctx).WithValues("namespace-file", namespaceFile)
 	ns := os.Getenv(namespaceEnvVar)
 	if ns == "" {
 		// If environment variable not set, give it a try to fetch it from
 		// mounted filesystem by Kubernetes
 		data, err := ioutil.ReadFile(namespaceFile)
 		if err != nil {
-			klog.Infof("Could not read namespace from %q: %v", namespaceFile, err)
+			logger.Info("Could not read namespace from secret, using fallback "+defaultOperatorNamespace,
+				"error", err,
+			)
 		} else {
 			ns = string(data)
-			klog.Infof("Operator Namespace: %q", ns)
+			logger.V(3).Info("Retrieved namespace from secret", "namespace", ns)
 		}
 	}
 

@@ -23,6 +23,7 @@ package volumepathhandler
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -31,30 +32,31 @@ import (
 	"regexp"
 	"strings"
 
+	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	"golang.org/x/sys/unix"
 
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/klog/v2"
 )
 
 // AttachFileDevice takes a path to a regular file and makes it available as an
 // attached block device.
-func (v VolumePathHandler) AttachFileDevice(path string) (string, error) {
-	return v.AttachFileDeviceWithOffset(path, 0)
+func (v VolumePathHandler) AttachFileDevice(ctx context.Context, path string) (string, error) {
+	return v.AttachFileDeviceWithOffset(ctx, path, 0)
 }
 
 // AttachFileDevice takes a path to a regular file and makes its content starting
 // at the given offset available as an attached block device.
-func (v VolumePathHandler) AttachFileDeviceWithOffset(path string, offset int64) (string, error) {
-	blockDevicePath, err := v.GetLoopDevice(path)
+func (v VolumePathHandler) AttachFileDeviceWithOffset(ctx context.Context, path string, offset int64) (string, error) {
+	ctx, logger := pmemlog.WithName(ctx, "AttachFileDevice")
+	blockDevicePath, err := v.GetLoopDevice(ctx, path)
 	if err != nil && err.Error() != ErrDeviceNotFound {
 		return "", fmt.Errorf("GetLoopDevice failed for path %s: %v", path, err)
 	}
 
 	// If no existing loop device for the path, create one
 	if blockDevicePath == "" {
-		klog.V(4).Infof("Creating device for path: %s", path)
-		blockDevicePath, err = makeLoopDevice(path, offset)
+		logger.V(4).Info("Creating device", "path", path)
+		blockDevicePath, err = makeLoopDevice(ctx, path, offset)
 		if err != nil {
 			return "", fmt.Errorf("makeLoopDevice failed for path %s: %v", path, err)
 		}
@@ -64,17 +66,18 @@ func (v VolumePathHandler) AttachFileDeviceWithOffset(path string, offset int64)
 
 // DetachFileDevice takes a path to the attached block device and
 // detach it from block device.
-func (v VolumePathHandler) DetachFileDevice(path string) error {
-	loopPath, err := v.GetLoopDevice(path)
+func (v VolumePathHandler) DetachFileDevice(ctx context.Context, path string) error {
+	ctx, logger := pmemlog.WithName(ctx, "DetachFileDevice")
+	loopPath, err := v.GetLoopDevice(ctx, path)
 	if err != nil {
 		if err.Error() == ErrDeviceNotFound {
-			klog.Warningf("couldn't find loopback device which takes file descriptor lock. Skip detaching device. device path: %q", path)
+			logger.V(2).Info("couldn't find loopback device which takes file descriptor lock. Skip detaching device.", "path", path)
 		} else {
 			return fmt.Errorf("GetLoopDevice failed for path %s: %v", path, err)
 		}
 	} else {
 		if len(loopPath) != 0 {
-			err = removeLoopDevice(loopPath)
+			err = removeLoopDevice(ctx, loopPath)
 			if err != nil {
 				return fmt.Errorf("removeLoopDevice failed for path %s: %v", path, err)
 			}
@@ -84,10 +87,11 @@ func (v VolumePathHandler) DetachFileDevice(path string) error {
 }
 
 // GetLoopDevice returns the full path to the loop device associated with the given path.
-func (v VolumePathHandler) GetLoopDevice(path string) (string, error) {
+func (v VolumePathHandler) GetLoopDevice(ctx context.Context, path string) (string, error) {
+	ctx, logger := pmemlog.WithName(ctx, "GetLoopDevice")
 	_, err := os.Stat(path)
 	if os.IsNotExist(err) {
-		klog.Warningf("loop device backing file %q not found, assuming loop device does not exist either", path)
+		logger.V(2).Info("Loop device backing file not found, assuming loop device does not exist either", "path", path)
 		return "", errors.New(ErrDeviceNotFound)
 	}
 	if err != nil {
@@ -98,14 +102,15 @@ func (v VolumePathHandler) GetLoopDevice(path string) (string, error) {
 	cmd := exec.Command(losetupPath, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		klog.V(2).Infof("Failed device discover command for path %s: %v %s", path, err, out)
+		logger.V(2).Info("Failed device discover command", "path", path, "error", err, "stdout", string(out))
 		return "", fmt.Errorf("losetup -j %s failed: %v", path, err)
 	}
-	klog.V(5).Infof("losetup -j %q: %s", path, out)
+	logger.V(5).Info("losetup -j", "path", path, "stdout", string(out))
 	return parseLosetupOutputForDevice(out, path)
 }
 
-func makeLoopDevice(path string, offset int64) (string, error) {
+func makeLoopDevice(ctx context.Context, path string, offset int64) (string, error) {
+	ctx, logger := pmemlog.WithName(ctx, "makeLoopDevice")
 	args := []string{"-f", "--show"}
 	if offset != 0 {
 		args = append(args, "-o", fmt.Sprintf("%d", offset))
@@ -114,7 +119,7 @@ func makeLoopDevice(path string, offset int64) (string, error) {
 	cmd := exec.Command(losetupPath, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		klog.V(2).Infof("Failed device create command for path: %s %v %s ", path, err, out)
+		logger.V(2).Info("Failed device create command", "path", path, "error", err, "stdout", out)
 		return "", fmt.Errorf("losetup -f --show %s failed: %v", path, err)
 	}
 
@@ -128,7 +133,8 @@ func makeLoopDevice(path string, offset int64) (string, error) {
 }
 
 // removeLoopDevice removes specified loopback device
-func removeLoopDevice(device string) error {
+func removeLoopDevice(ctx context.Context, device string) error {
+	ctx, logger := pmemlog.WithName(ctx, "removeLoopDevice")
 	args := []string{"-d", device}
 	cmd := exec.Command(losetupPath, args...)
 	out, err := cmd.CombinedOutput()
@@ -136,7 +142,7 @@ func removeLoopDevice(device string) error {
 		if _, err := os.Stat(device); os.IsNotExist(err) {
 			return nil
 		}
-		klog.V(2).Infof("Failed to remove loopback device: %s: %v %s", device, err, out)
+		logger.V(2).Info("Failed to remove loopback device", "device", device, "error", err, "stdout", string(out))
 		return fmt.Errorf("losetup -d %s failed: %v", device, err)
 	}
 	return nil
@@ -196,7 +202,8 @@ func parseLosetupOutputForDevice(output []byte, path string) (string, error) {
 // (See pkg/volume/volume.go for details on a global map path and a pod device map path.)
 // ex. mapPath symlink: pods/{podUid}}/{DefaultKubeletVolumeDevicesDirName}/{escapeQualifiedPluginName}/{volumeName} -> /dev/sdX
 //     globalMapPath/{pod uuid} bind mount: plugins/kubernetes.io/{PluginName}/{DefaultKubeletVolumeDevicesDirName}/{volumePluginDependentPath}/{pod uuid} -> /dev/sdX
-func (v VolumePathHandler) FindGlobalMapPathUUIDFromPod(pluginDir, mapPath string, podUID types.UID) (string, error) {
+func (v VolumePathHandler) FindGlobalMapPathUUIDFromPod(ctx context.Context, pluginDir, mapPath string, podUID types.UID) (string, error) {
+	ctx, logger := pmemlog.WithName(ctx, "FindGlobalMapPathUUIDFromPod")
 	var globalMapPathUUID string
 	// Find symbolic link named pod uuid under plugin dir
 	err := filepath.Walk(pluginDir, func(path string, fi os.FileInfo, err error) error {
@@ -204,8 +211,8 @@ func (v VolumePathHandler) FindGlobalMapPathUUIDFromPod(pluginDir, mapPath strin
 			return err
 		}
 		if (fi.Mode()&os.ModeDevice == os.ModeDevice) && (fi.Name() == string(podUID)) {
-			klog.V(5).Infof("FindGlobalMapPathFromPod: path %s, mapPath %s", path, mapPath)
-			if res, err := compareBindMountAndSymlinks(path, mapPath); err == nil && res {
+			logger.V(5).Info("Checking", "path", path, "map-path", mapPath)
+			if res, err := compareBindMountAndSymlinks(ctx, path, mapPath); err == nil && res {
 				globalMapPathUUID = path
 			}
 		}
@@ -214,7 +221,7 @@ func (v VolumePathHandler) FindGlobalMapPathUUIDFromPod(pluginDir, mapPath strin
 	if err != nil {
 		return "", fmt.Errorf("FindGlobalMapPathUUIDFromPod failed: %v", err)
 	}
-	klog.V(5).Infof("FindGlobalMapPathFromPod: globalMapPathUUID %s", globalMapPathUUID)
+	logger.V(5).Info("Found UUID", "global-map-path-uuid", globalMapPathUUID)
 	// Return path contains global map path + {pod uuid}
 	return globalMapPathUUID, nil
 }
@@ -222,7 +229,9 @@ func (v VolumePathHandler) FindGlobalMapPathUUIDFromPod(pluginDir, mapPath strin
 // compareBindMountAndSymlinks returns if global path (bind mount) and
 // pod path (symlink) are pointing to the same device.
 // If there is an error in checking it returns error.
-func compareBindMountAndSymlinks(global, pod string) (bool, error) {
+func compareBindMountAndSymlinks(ctx context.Context, global, pod string) (bool, error) {
+	ctx, logger := pmemlog.WithName(ctx, "compareBindMountAndSymlinks")
+
 	// To check if bind mount and symlink are pointing to the same device,
 	// we need to check if they are pointing to the devices that have same major/minor number.
 
@@ -242,7 +251,7 @@ func compareBindMountAndSymlinks(global, pod string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("getDeviceMajorMinor failed for path %s: %v", devPod, err)
 	}
-	klog.V(5).Infof("CompareBindMountAndSymlinks: devNumGlobal %s, devNumPod %s", devNumGlobal, devNumPod)
+	logger.V(5).Info("Checking", "dev-num-global", devNumGlobal, "dev-num-pod", devNumPod)
 
 	// Check if the major/minor number are the same
 	if devNumGlobal == devNumPod {

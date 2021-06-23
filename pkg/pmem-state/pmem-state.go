@@ -13,8 +13,6 @@ import (
 	"path"
 	"strings"
 	"sync"
-
-	"k8s.io/klog/v2"
 )
 
 // StateManager manages the driver persistent state, i.e, volumes information
@@ -73,10 +71,8 @@ func (fs *fileState) Create(id string, data interface{}) error {
 
 	if err := json.NewEncoder(fp).Encode(data); err != nil {
 		// cleanup file entry before returning error
-		fp.Close() //nolint: errcheck, gosec
-		if e := os.Remove(file); e != nil {
-			klog.Warningf("file-state: failed to remove state file: %v", e)
-		}
+		fp.Close()      //nolint: errcheck, gosec
+		os.Remove(file) //nolint: errcheck, gosec
 		return fmt.Errorf("failed to encode metadata: %w", err)
 	}
 
