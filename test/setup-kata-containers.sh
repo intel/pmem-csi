@@ -25,6 +25,7 @@ while [ "$SECONDS" -lt "$TIMEOUT" ]; do
         ${KUBECTL} get nodes -l katacontainers.io/kata-runtime=true
         exit 0
     fi
+    sleep 1
 done
 
 echo "kata-deploy has not labelled nodes after $TIMEOUT seconds. Is the container runtime perhaps Docker? It is not supported."
