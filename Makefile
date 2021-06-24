@@ -114,9 +114,9 @@ push-image push-test-image: push%-image: $(PUSH_IMAGE_DEP)
 
 # This ensures that all sources are available in the "vendor" directory for use
 # inside "docker build".
-populate-vendor-dir:
-	go mod tidy
-	go mod vendor
+populate-vendor-dir: check-go-version-$(GO_BINARY)
+	$(GO_BINARY) mod tidy
+	$(GO_BINARY) mod vendor
 
 .PHONY: print-image-version
 print-image-version:
