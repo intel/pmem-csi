@@ -205,20 +205,28 @@ func (r *region) CreateNamespace(ctx gocontext.Context, opts CreateNamespaceOpts
 	// Size has to be aligned both by namespace alignment times interleave_ways, and also by region alignment
 	lcmalign := math.LCM(namespacealign, regionalign)
 	size := opts.Size
+	available := r.MaxAvailableExtent()
+	if available == uint64(C.ULLONG_MAX) {
+		available = r.AvailableSize()
+	}
+	logger = logger.WithValues(
+		"region", r.DeviceName(),
+		"region-align", pmemlog.CapacityRef(int64(regionalign)),
+		"namespace-align", pmemlog.CapacityRef(int64(namespacealign)),
+		"common-align", pmemlog.CapacityRef(int64(lcmalign)),
+		"available", pmemlog.CapacityRef(int64(available)),
+	)
 	if size == 0 || size%lcmalign != 0 {
 		// Align up to least-common-multiple alignment boundary.
 		size = (size/lcmalign + 1) * lcmalign
 		logger.V(3).Info("Namespace size must be rounded up to alignment boundaries",
-			"region", r.DeviceName(),
-			"region-align", pmemlog.CapacityRef(int64(regionalign)),
-			"namespace-align", pmemlog.CapacityRef(int64(namespacealign)),
 			"old-size", pmemlog.CapacityRef(int64(opts.Size)),
 			"new-size", pmemlog.CapacityRef(int64(size)),
 		)
-	}
-	available := r.MaxAvailableExtent()
-	if available == uint64(C.ULLONG_MAX) {
-		available = r.AvailableSize()
+	} else {
+		logger.V(3).Info("Creating namespace with requested size",
+			"size", pmemlog.CapacityRef(int64(size)),
+		)
 	}
 	if size > available {
 		return nil, fmt.Errorf("create namespace with size %v: %w", size, pmemerr.NotEnoughSpace)
