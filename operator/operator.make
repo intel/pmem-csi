@@ -52,6 +52,13 @@ CRD_DIR=$(REPO_ROOT)/deploy/crd
 CHANNELS?=alpha,stable
 # DEFAULT_CHANNEL: The default channel for the generated bundle.
 DEFAULT_CHANNEL?=stable
+# The OpenShift versions we are compatible with.
+# A single version means that version and later.
+# See https://redhat-connect.gitbook.io/certified-operator-guide/ocp-deployment/operator-metadata/bundle-directory/managing-openshift-versions
+# 4.6 = Kubernetes 1.19
+# 4.7 = Kubernetes 1.20
+# 4.8 = Kubernetes 1.21
+OPENSHIFT_VERSIONS?=v4.6
 
 PATCH_VERSIONS := sed -i -e 's;X\.Y\.Z;$(MAJOR_MINOR_PATCH_VERSION);g' -e 's;X\.Y;$(MAJOR_MINOR_VERSION);g'
 PATCH_REPLACES := sed -i -e 's;\(.*\)\(version:.*\);\1replaces: pmem-csi-operator.v$(REPLACES)\n\1\2;g'
@@ -81,7 +88,7 @@ ifdef REPLACES
 	@$(PATCH_REPLACES) $(BUNDLE_DIR)/manifests/pmem-csi-operator.clusterserviceversion.yaml
 endif
 	$(PATCH_DATE) $(BUNDLE_DIR)/manifests/pmem-csi-operator.clusterserviceversion.yaml
-	@sed -i -e "s;$(BUNDLE_DIR)/;;g"  -e "/scorecard/d" bundle.Dockerfile
+	@sed -i -e "s;$(BUNDLE_DIR)/;;g"  -e "/scorecard/d" -e '/FROM scratch/a LABEL com.redhat.openshift.versions="$(OPENSHIFT_VERSIONS)"' bundle.Dockerfile
 	@sed -i -e "/scorecard/d" $(BUNDLE_DIR)/metadata/annotations.yaml
 	@mv bundle.Dockerfile $(BUNDLE_DIR)
 	@make operator-validate-bundle
