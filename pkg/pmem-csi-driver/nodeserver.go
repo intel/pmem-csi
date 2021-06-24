@@ -45,6 +45,13 @@ const (
 
 	// Mount point inside the target directory for the original volume.
 	kataContainersMount = "kata-containers-host-volume"
+
+	// "-o dax" is said to be deprecated (https://www.kernel.org/doc/Documentation/filesystems/dax.txt)
+	// but in practice works across a wider range of kernel versions whereas
+	// "-o dax=always", the recommended alternative, fails on old kernels.
+	// Given that "-o dax" is part of the kernel API, it's unlikely that
+	// support for it really gets removed, therefore we continue to use it.
+	daxMountFlag = "dax"
 )
 
 type volumeInfo struct {
@@ -183,7 +190,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 			return nil, err
 		}
 		srcPath = device.Path
-		mountFlags = append(mountFlags, "dax=always")
+		mountFlags = append(mountFlags, daxMountFlag)
 	} else {
 		// Validate parameters.
 		v, err := parameters.Parse(parameters.PersistentVolumeOrigin, req.GetVolumeContext())
@@ -568,7 +575,7 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		}
 	}
 
-	mountOptions = append(mountOptions, "dax=always")
+	mountOptions = append(mountOptions, daxMountFlag)
 
 	if err = ns.mount(ctx, device.Path, stagingtargetPath, mountOptions, false /* raw block */); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
