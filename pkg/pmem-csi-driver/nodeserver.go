@@ -480,11 +480,16 @@ func (ns *nodeServer) nodeUnpublishKataContainerImage(ctx context.Context, req *
 	// when mounting a persistent volume a second time. If not,
 	// it'll get deleted together with the device. But before
 	// the device can be deleted, we need to unmount it.
-	logger.V(3).Info("Unmounting Kata Containers image file mount")
-	if err := ns.mounter.Unmount(hostMount); err != nil {
-		return status.Error(codes.Internal, fmt.Sprintf("unmount ephemeral Kata Container volume: %v", err))
+	notMnt, err := ns.mounter.IsLikelyNotMountPoint(hostMount)
+	if notMnt || err != nil && !os.IsNotExist(err) {
+		logger.V(3).Info("Kata Container image file not mounted", "mountpoint", hostMount)
+	} else {
+		logger.V(3).Info("Unmounting Kata Containers image file mount", "mountpoint", hostMount)
+		if err := ns.mounter.Unmount(hostMount); err != nil {
+			return status.Error(codes.Internal, fmt.Sprintf("unmount ephemeral Kata Container volume: %v", err))
+		}
 	}
-	if err := os.Remove(hostMount); err != nil {
+	if err := os.Remove(hostMount); err != nil && !os.IsNotExist(err) {
 		return status.Error(codes.Internal, "unexpected error while removing ephemeral volume mount point: "+err.Error())
 	}
 

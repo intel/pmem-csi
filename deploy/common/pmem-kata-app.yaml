@@ -2,7 +2,7 @@ kind: Pod
 apiVersion: v1
 metadata:
   name: my-csi-kata-app
-  labels:
+  annotations:
     io.katacontainers.config.hypervisor.memory_offset: "2147483648" # 2Gi, must be at least as large as the PMEM volume
 spec:
   # see https://github.com/kata-containers/packaging/tree/1.11.0-rc0/kata-deploy#run-a-sample-workload

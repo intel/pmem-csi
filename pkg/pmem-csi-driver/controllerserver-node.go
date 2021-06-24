@@ -184,11 +184,16 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 		},
 	})
 
+	// Prepare the volume context. Including the name is useful for logging.
+	p.Name = &req.Name
+	volumeContext := p.ToContext()
+
 	resp = &csi.CreateVolumeResponse{
 		Volume: &csi.Volume{
 			VolumeId:           volumeID,
 			CapacityBytes:      size,
 			AccessibleTopology: topology,
+			VolumeContext:      volumeContext,
 		},
 	}
 

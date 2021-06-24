@@ -17,12 +17,10 @@ limitations under the License.
 package driver
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
 	storagev1 "k8s.io/api/storage/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
@@ -149,18 +147,6 @@ func (m *manifestDriver) GetDynamicProvisionStorageClass(config *storageframewor
 }
 
 func (m *manifestDriver) PrepareTest(f *framework.Framework) (*storageframework.PerTestConfig, func()) {
-	// If the driver depends on Kata Containers, first make sure
-	// that we have it on at least one node.
-	if strings.HasSuffix(m.driverInfo.Name, "-kata") {
-		nodes, err := f.ClientSet.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{
-			LabelSelector: "katacontainers.io/kata-runtime=true",
-		})
-		framework.ExpectNoError(err, "list nodes")
-		if len(nodes.Items) == 0 {
-			skipper.Skipf("no nodes found with Kata Container runtime")
-		}
-	}
-
 	config := &storageframework.PerTestConfig{
 		Driver:    m,
 		Prefix:    "pmem",

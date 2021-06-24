@@ -17,6 +17,7 @@ limitations under the License.
 package dax
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -139,18 +140,33 @@ func testDaxInPod(
 	config *storageframework.PerTestConfig,
 	withKataContainers bool,
 ) {
+	expectDax := true
+	if withKataContainers {
+		nodes, err := f.ClientSet.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{
+			LabelSelector: "katacontainers.io/kata-runtime=true",
+		})
+		framework.ExpectNoError(err, "list nodes")
+		if len(nodes.Items) == 0 {
+			// This is a simplified version of the full test where we don't
+			// attempt to use Kata Containers.
+			framework.Logf("no nodes found with Kata Container runtime, skipping testing with it")
+			expectDax = false
+			withKataContainers = false
+		}
+	}
+
 	pod := CreatePod(f, "dax-volume-test", volumeMode, source, config, withKataContainers)
 	defer func() {
 		DeletePod(f, pod)
 	}()
-	checkWithNormalRuntime := testDax(f, pod, root, volumeMode, source, withKataContainers)
+	checkWithNormalRuntime := testDax(f, pod, root, volumeMode, source, withKataContainers, expectDax)
 	DeletePod(f, pod)
 	if checkWithNormalRuntime {
 		testDaxOutside(f, pod, root)
 	}
 }
 
-func CreatePod(
+func getPod(
 	f *framework.Framework,
 	name string,
 	volumeMode v1.PersistentVolumeMode,
@@ -194,10 +210,22 @@ func CreatePod(
 		pod.Spec.NodeSelector = map[string]string{
 			"katacontainers.io/kata-runtime": "true",
 		}
-		if pod.Labels == nil {
-			pod.Labels = map[string]string{}
+		if pod.Annotations == nil {
+			pod.Annotations = map[string]string{}
 		}
-		pod.Labels["io.katacontainers.config.hypervisor.memory_offset"] = "2147483648" // large enough for all test volumes
+
+		// The additional memory range must be large enough for all test volumes.
+		// https://github.com/kata-containers/kata-containers/blob/main/docs/how-to/how-to-set-sandbox-config-kata.md#hypervisor-options
+		// Must be an uint32.
+		pod.Annotations["io.katacontainers.config.hypervisor.memory_offset"] = "2147483648" // 2GiB
+
+		// FSGroup not supported (?) by Kata Containers
+		// (https://github.com/intel/pmem-csi/issues/987#issuecomment-858350521),
+		// we must run as root.
+		pod.Spec.SecurityContext = &v1.PodSecurityContext{
+			RunAsUser:  &root,
+			RunAsGroup: &root,
+		}
 	} else {
 		e2epod.SetNodeSelection(&pod.Spec, config.ClientNodeSelection)
 	}
@@ -273,11 +301,31 @@ func CreatePod(
 			RunAsGroup: &root,
 		}
 	}
+	return pod
+}
+
+func CreatePod(f *framework.Framework,
+	name string,
+	volumeMode v1.PersistentVolumeMode,
+	source *v1.VolumeSource,
+	config *storageframework.PerTestConfig,
+	withKataContainers bool,
+) *v1.Pod {
+	pod := getPod(f, name, volumeMode, source, config, withKataContainers)
 
 	By(fmt.Sprintf("Creating pod %s", pod.Name))
 	ns := f.Namespace.Name
 	podClient := f.PodClientNS(ns)
 	createdPod := podClient.Create(pod)
+	defer func() {
+		if r := recover(); r != nil {
+			// Delete pod before raising the panic again,
+			// because the caller will not do it when this
+			// function doesn't return normally.
+			DeletePod(f, createdPod)
+			panic(r)
+		}
+	}()
 	podErr := e2epod.WaitForPodRunningInNamespace(f.ClientSet, createdPod)
 	framework.ExpectNoError(podErr, "running pod")
 
@@ -291,6 +339,7 @@ func testDax(
 	volumeMode v1.PersistentVolumeMode,
 	source *v1.VolumeSource,
 	withKataContainers bool,
+	expectDax bool,
 ) bool {
 	ns := f.Namespace.Name
 	containerName := pod.Spec.Containers[0].Name
@@ -303,8 +352,13 @@ func testDax(
 	By("checking that missing DAX support is detected")
 	pmempod.RunInPod(f, root, []string{daxCheckBinary}, daxCheckBinary+" /tmp/no-dax; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
 
-	By("checking volume for DAX support")
-	pmempod.RunInPod(f, root, []string{daxCheckBinary}, "lsblk; mount | grep /mnt; "+daxCheckBinary+" /mnt/daxtest", ns, pod.Name, containerName)
+	if expectDax {
+		By("checking volume for DAX support")
+		pmempod.RunInPod(f, root, []string{daxCheckBinary}, "lsblk; mount | grep /mnt; "+daxCheckBinary+" /mnt/daxtest", ns, pod.Name, containerName)
+	} else {
+		By("checking volume for missing DAX support")
+		pmempod.RunInPod(f, root, []string{daxCheckBinary}, "lsblk; mount | grep /mnt; "+daxCheckBinary+" /mnt/daxtest; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
+	}
 
 	// Data written in a container running under Kata Containers
 	// should be visible also in a normal container, unless the
