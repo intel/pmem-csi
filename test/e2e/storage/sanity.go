@@ -918,9 +918,7 @@ fi
 
 				v.publish(volName, vol)
 
-				i := strings.Split(nodeID, "worker")[1]
-
-				sshcmd := fmt.Sprintf("%s/_work/%s/ssh.%s", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"), i)
+				sshcmd := fmt.Sprintf("%s/_work/%s/ssh.%s", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"), nodeID)
 				// write some data to mounted volume
 				cmd := "sudo sh -c 'echo -n hello > " + v.getTargetPath() + "/target/test-file'"
 				ssh := exec.Command(sshcmd, cmd)

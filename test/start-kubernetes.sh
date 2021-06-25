@@ -4,6 +4,12 @@ set -o pipefail
 
 TEST_DIRECTORY=${TEST_DIRECTORY:-$(dirname $(readlink -f $0))}
 source ${TEST_CONFIG:-${TEST_DIRECTORY}/test-config.sh}
+
+if [ "${TEST_DISTRO}" = "openshift" ]; then
+    # The script below uses GoVM. For OpenShift we need a different approach.
+    exec "$TEST_DIRECTORY/start-stop-openshift.sh" start
+fi
+
 TEST_DISTRO=${TEST_DISTRO:-clear}
 DEPLOYMENT_SUFFIX=${DEPLOYMENT_SUFFIX:-govm}
 CLUSTER=${CLUSTER:-${TEST_DISTRO}-${DEPLOYMENT_SUFFIX}}
@@ -277,7 +283,6 @@ EOF
         vm_name=$(govm list -f '{{select (filterRegexp . "IP" "'${ip}'") "Name"}}') || die "failed to find VM for IP $ip"
         log_name=${CLUSTER_DIRECTORY}/${vm_name}.log
         ssh_script=${CLUSTER_DIRECTORY}/ssh.${vm_id}
-        ((vm_id=vm_id+1))
         if [[ "$vm_name" = *"worker"* ]]; then
             workers_ip+="$ip "
         fi
@@ -287,12 +292,14 @@ EOF
 exec ssh $SSH_ARGS ${CLOUD_USER}@${ip} "\$@"
 EOF
         ) >$ssh_script && chmod +x $ssh_script || die "failed to create $ssh_script"
+        ln -s ssh.${vm_id} ${CLUSTER_DIRECTORY}/ssh.${vm_name}
         ENV_VARS="env$(env_vars) HOSTNAME='$vm_name' IPADDR='$ip'"
         ENV_VARS+=" INIT_KUBERNETES=${INIT_CLUSTER}"
         # The local registry and the master node might be used as insecure registries, enabled that just in case.
         ENV_VARS+=" INSECURE_REGISTRIES='$TEST_INSECURE_REGISTRIES $TEST_LOCAL_REGISTRY pmem-csi-$CLUSTER-master:5000'"
         scp $SSH_ARGS ${TEST_DIRECTORY}/${setup_script} ${CLOUD_USER}@${ip}:. >/dev/null || die "failed to copy install scripts to $vm_name = $ip"
         ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo env $ENV_VARS ./$setup_script" </dev/null &> >(log_lines "$vm_name" "$log_name") &
+        ((vm_id=vm_id+1))
         pids+=" $!"
     done
     waitall $pids || die "at least one of the nodes failed"

@@ -188,3 +188,20 @@ $(case ${TEST_KUBERNETES_VERSION} in 1.19 | 1.20) echo 'GenericEphemeralVolume=t
 # that is going to be used by kube-scheduler to reach the scheduler
 # extender service (see test/setup-kubernetes.sh)
 : ${TEST_SCHEDULER_EXTENDER_NODE_PORT:=32000}
+
+# The OpenShift baremetal installer binary.
+: ${TEST_OPENSHIFT_INSTALLER:=openshift-baremetal-install}
+
+# The cluster and domain name for machines. With NetworkManager configured
+# as described in test/start-openshift.sh, machines will have a DNS entry
+# as <machine>.<cluster>.<domain>.
+: ${TEST_VIRT_CLUSTER_NAME:=tt}
+: ${TEST_VIRT_CLUSTER_DOMAIN:=testing}
+
+# The OpenShift pull secret from https://cloud.redhat.com/openshift/install/metal
+: ${TEST_OPENSHIFT_PULL_SECRET:=}
+
+# The OpenShift machines need different settings than the GoVM machines.
+: ${TEST_OPENSHIFT_NORMAL_MEM_SIZE:=$((16 * 1024))} # 16GiB
+: ${TEST_OPENSHIFT_PMEM_MEM_SIZE:=$((1 * 1024))} # 1GiB
+: ${TEST_OPENSHIFT_PMEM_LABEL_SIZE:=$((2 * 1024 * 1024))} # 2MiB
