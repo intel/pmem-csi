@@ -10,7 +10,6 @@ import (
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	pmemlog "github.com/intel/pmem-csi/pkg/logger"
-	"github.com/intel/pmem-csi/pkg/math"
 	"github.com/intel/pmem-csi/pkg/ndctl"
 
 	"k8s.io/utils/mount"
@@ -120,24 +119,15 @@ func (pmem *pmemNdctl) GetCapacity(ctx context.Context) (capacity Capacity, err 
 				continue
 			}
 
-			regionAlign := r.GetAlign()
-			namespaceAlign := r.FsdaxAlignment()
+			align, alignInfo := ndctl.CalculateAlignment(r)
 			maxVolumeSize := r.MaxAvailableExtent()
 			available := r.AvailableSize()
 			size := r.Size()
-			logger.V(4).Info("Found a region",
-				"region", r.DeviceName(),
+			logger.V(4).WithValues("region", r.DeviceName()).WithValues(alignInfo...).Info("Found a region",
 				"max-available-extent", pmemlog.CapacityRef(int64(maxVolumeSize)),
 				"available", pmemlog.CapacityRef(int64(available)),
 				"size", pmemlog.CapacityRef(int64(size)),
-				"region-align", pmemlog.CapacityRef(int64(regionAlign)),
-				"namespace-align", pmemlog.CapacityRef(int64(namespaceAlign)),
 			)
-
-			if regionAlign == 0 {
-				regionAlign = 1
-			}
-			align := math.LCM(regionAlign, namespaceAlign)
 
 			// align down by the region's alignment, avoid claiming having more than what we really can serve
 			maxVolumeSize = maxVolumeSize / align * align
