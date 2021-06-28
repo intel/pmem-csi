@@ -76,8 +76,7 @@ func GetHostVolumes(d *Deployment) Volumes {
 var ignored = regexp.MustCompile(`direct: "dev":"namespace|direct: "blockdev":"pmem`)
 
 func listVolumes(sshcmd, prefix, cmd string) []string {
-	i := 0
-	for {
+	for i := 0; ; i++ {
 		ssh := exec.Command(sshcmd, cmd)
 		// Intentional Output instead of CombinedOutput to dismiss warnings from stderr.
 		// lvs may emit lvmetad-related WARNING msg which can't be silenced using -q option.
@@ -86,7 +85,7 @@ func listVolumes(sshcmd, prefix, cmd string) []string {
 			if i >= 3 {
 				ginkgo.Fail(fmt.Sprintf("%s: repeated ssh attempts failed: %v", sshcmd, err))
 			}
-			ginkgo.By(fmt.Sprintf("%s: attempt #%d failed, retry: %v", sshcmd, i, err))
+			ginkgo.By(fmt.Sprintf("%s %s: attempt #%d failed, retry: %v", sshcmd, cmd, i, err))
 			time.Sleep(10 * time.Second)
 		} else {
 			var lines []string
