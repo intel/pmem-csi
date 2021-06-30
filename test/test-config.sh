@@ -166,6 +166,9 @@ fi
 # The default is the label set by NFD.
 : ${TEST_PMEM_NODE_LABEL:=feature.node.kubernetes.io/memory-nv.dax=true}
 
+# Set to true if the cluster already has a running olm.
+: ${TEST_HAVE_OLM:=false}
+
 # Kubernetes feature gates to enable/disable.
 # EndpointSlice is disabled because of https://github.com/kubernetes/kubernetes/issues/91287 (Kubernetes
 # < 1.19) and because there were random connection failures to node ports during sanity

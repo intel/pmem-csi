@@ -91,15 +91,6 @@ func WaitForOperator(c *Cluster, namespace string) *v1.Pod {
 	return operator
 }
 
-// WaitForOLM watis till the "olm-operator" Pod in given namspace
-// is ready else fails with exception.
-func WaitForOLM(c *Cluster, namespace string) *v1.Pod {
-	ginkgo.By("Waiting if the OLM deployment is ready...")
-	olm := c.WaitForAppInstance(labels.Set{"app": "olm-operator"}, "", namespace)
-	ginkgo.By("OLM is ready!")
-	return olm
-}
-
 // GetMetricsURL retrieves the metrics URL provided by a pod that
 // matches with the label set passed in podLabelSet.
 func GetMetricsURL(ctx context.Context, c *Cluster, namespace string, podLabels labels.Set) (string, error) {
@@ -1066,9 +1057,6 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 			if deployment.HasOperator {
 				WaitForOperator(c, deployment.Namespace)
 			}
-			if deployment.HasOLM {
-				WaitForOLM(c, "olm")
-			}
 			return
 		}
 		framework.Logf("have %s PMEM-CSI deployment in namespace %s, want %s in namespace %s-> delete existing deployment",
@@ -1101,7 +1089,6 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 		cmd.Env = env
 		_, err := pmemexec.Run(ctx, cmd)
 		framework.ExpectNoError(err, "create operator deployment: %q", deployment.Name())
-		WaitForOLM(c, "olm")
 	}
 
 	if deployment.Version != "" {
