@@ -1244,7 +1244,7 @@ func createPVC(f *framework.Framework, namespace, name, storageClassName string)
 			},
 			Resources: corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse("2Gi"),
+					corev1.ResourceStorage: resource.MustParse("100Mi"),
 				},
 			},
 		},
