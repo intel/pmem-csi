@@ -35,6 +35,9 @@ fi
 # on. Here we default to the IP address of the docker0 interface.
 : ${TEST_LOCAL_REGISTRY:=$(ip addr show dev docker0 2>/dev/null | (grep " inet " || echo localhost) | sed -e 's/.* inet //' -e 's;/.*;;'):5000}
 
+# Set to true if TEST_LOCAL_REGISTRY only supports access without TLS.
+: ${TEST_LOCAL_REGISTRY_SKIP_TLS:=true}
+
 # The registry used for PMEM-CSI image(s). Must be reachable from
 # inside the cluster.
 : ${TEST_PMEM_REGISTRY:=${TEST_LOCAL_REGISTRY}}

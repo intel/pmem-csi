@@ -91,7 +91,8 @@ function deploy_using_olm() {
   fi
 
   # Deploy the operator
-  ${BINDIR}/operator-sdk run bundle${upgrade} ${NAMESPACE} --timeout 5m ${TEST_LOCAL_REGISTRY}/pmem-csi-bundle:v${BUNDLE_VERSION} --skip-tls
+  ${BINDIR}/operator-sdk run bundle${upgrade} ${NAMESPACE} --timeout 5m ${TEST_LOCAL_REGISTRY}/pmem-csi-bundle:v${BUNDLE_VERSION} \
+           $(if ${TEST_LOCAL_REGISTRY_SKIP_TLS}; then echo '--skip-tls'; fi)
 }
 
 function deploy_using_yaml() {
