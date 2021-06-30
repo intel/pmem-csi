@@ -377,6 +377,7 @@ Service:
     type: ClusterIP
 ServiceAccount:
   secrets: ignore
+  imagePullSecrets: ignore # injected on OpenShift
 DaemonSet:` + defaultsApps + `
     updateStrategy: ignore
 StatefulSet:` + defaultsApps + `
