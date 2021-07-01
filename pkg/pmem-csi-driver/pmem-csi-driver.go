@@ -127,7 +127,8 @@ type Config struct {
 	KubeAPIBurst int
 
 	// parameters for Kubernetes scheduler extender
-	schedulerListen string
+	schedulerListen         string
+	insecureSchedulerListen string
 
 	// parameters for rescheduler and raw namespace conversion
 	nodeSelector types.NodeSelector
@@ -236,7 +237,7 @@ func (csid *csiDriver) Run(ctx context.Context) error {
 			}
 		}
 
-		if csid.cfg.schedulerListen != "" {
+		if csid.cfg.schedulerListen != "" || csid.cfg.insecureSchedulerListen != "" {
 			// Factory for the driver's namespace.
 			namespace := os.Getenv("POD_NAMESPACE")
 			if namespace == "" {
@@ -259,8 +260,15 @@ func (csid *csiDriver) Run(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("create scheduler: %v", err)
 			}
-			if _, err := csid.startHTTPSServer(ctx, cancel, csid.cfg.schedulerListen, sched, true /* TLS */); err != nil {
-				return err
+			if csid.cfg.schedulerListen != "" {
+				if _, err := csid.startHTTPSServer(ctx, cancel, csid.cfg.schedulerListen, sched, true /* TLS */); err != nil {
+					return err
+				}
+			}
+			if csid.cfg.insecureSchedulerListen != "" {
+				if _, err := csid.startHTTPSServer(ctx, cancel, csid.cfg.insecureSchedulerListen, sched, false /* not TLS */); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -385,7 +393,7 @@ func (csid *csiDriver) startHTTPSServer(ctx context.Context, cancel func(), list
 	logger := pmemlog.Get(ctx).WithName(name).WithValues("listen", listen)
 	var config *tls.Config
 	if useTLS {
-		c, err := pmemgrpc.LoadServerTLS(ctx, csid.cfg.CAFile, csid.cfg.CertFile, csid.cfg.KeyFile, "")
+		c, err := pmemgrpc.LoadServerTLS(ctx, csid.cfg.CAFile, csid.cfg.CertFile, csid.cfg.KeyFile, "" /* any peer can connect */)
 		if err != nil {
 			return "", fmt.Errorf("initialize HTTPS config: %v", err)
 		}

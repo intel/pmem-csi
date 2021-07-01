@@ -165,6 +165,8 @@ spec:
         - -mode=webhooks
         - -drivername=$(PMEM_CSI_DRIVER_NAME)
         - -nodeSelector={"storage":"pmem"}
+        # ca.crt is present in pmem-csi-intel-com-controller-secret but not required for anything at
+        # the moment.
         - -caFile=/certs/ca.crt
         - -certFile=/certs/tls.crt
         - -keyFile=/certs/tls.key
