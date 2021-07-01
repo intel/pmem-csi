@@ -33,7 +33,6 @@ import (
 )
 
 const (
-	controllerServicePort  = 10000
 	controllerMetricsPort  = 10010
 	nodeControllerPort     = 10001
 	nodeMetricsPort        = 10010
@@ -401,19 +400,6 @@ var subObjectHandlers = map[string]redeployObject{
 					ss.Status.ReadyReplicas, ss.Status.Replicas)
 			}
 			d.SetDriverStatus(api.ControllerDriver, status, reason)
-			return nil
-		},
-	},
-	"controller service": {
-		objType: reflect.TypeOf(&corev1.Service{}),
-		object: func(d *pmemCSIDeployment) client.Object {
-			return &corev1.Service{
-				TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-				ObjectMeta: d.getObjectMeta(d.ControllerServiceName(), false),
-			}
-		},
-		modify: func(d *pmemCSIDeployment, o client.Object) error {
-			d.getControllerService(o.(*corev1.Service))
 			return nil
 		},
 	},
@@ -791,10 +777,6 @@ func (d *pmemCSIDeployment) getService(service *corev1.Service, t corev1.Service
 	}
 }
 
-func (d *pmemCSIDeployment) getControllerService(service *corev1.Service) {
-	d.getService(service, corev1.ServiceTypeClusterIP, controllerServicePort)
-}
-
 func (d *pmemCSIDeployment) getWebhooksRole(role *rbacv1.Role) {
 	role.Rules = []rbacv1.PolicyRule{
 		{
@@ -1111,7 +1093,7 @@ func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 			"app.kubernetes.io/instance": d.Name,
 		},
 	}
-	ss.Spec.ServiceName = d.ControllerServiceName()
+	ss.Spec.ServiceName = "unused"
 	ss.Spec.Template.ObjectMeta.Labels = joinMaps(
 		d.Spec.Labels,
 		map[string]string{

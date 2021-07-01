@@ -325,22 +325,6 @@ subjects:
   name: pmem-csi-intel-com-webhooks
   namespace: pmem-csi
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    pmem-csi.intel.com/deployment: lvm-testing
-  name: pmem-csi-intel-com-controller
-  namespace: pmem-csi
-spec:
-  ports:
-  - port: 10000
-    targetPort: 10000
-  selector:
-    app.kubernetes.io/instance: pmem-csi.intel.com
-    app.kubernetes.io/name: pmem-csi-controller
-    pmem-csi.intel.com/deployment: lvm-testing
----
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -359,7 +343,7 @@ spec:
       app.kubernetes.io/instance: pmem-csi.intel.com
       app.kubernetes.io/name: pmem-csi-controller
       pmem-csi.intel.com/deployment: lvm-testing
-  serviceName: pmem-csi-intel-com-controller
+  serviceName: unused
   template:
     metadata:
       annotations:

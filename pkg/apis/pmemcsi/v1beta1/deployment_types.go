@@ -486,12 +486,6 @@ func (d *PmemCSIDeployment) CSIDriverName() string {
 	return d.GetName()
 }
 
-// ControllerServiceName returns the name of the controller
-// Service object used by the deployment
-func (d *PmemCSIDeployment) ControllerServiceName() string {
-	return d.GetHyphenedName() + "-controller"
-}
-
 // MetricsServiceName returns the name of the controller metrics
 // Service object used by the deployment
 func (d *PmemCSIDeployment) MetricsServiceName() string {

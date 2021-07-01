@@ -117,20 +117,6 @@ subjects:
   name: pmem-csi-intel-com-webhooks
   namespace: default
 ---
-# TODO: is this service still needed?
-apiVersion: v1
-kind: Service
-metadata:
-  name: pmem-csi-intel-com-controller
-  namespace: default
-spec:
-  selector:
-    app.kubernetes.io/name: pmem-csi-controller
-    app.kubernetes.io/instance: pmem-csi.intel.com
-  ports:
-  - port: 10000
-    targetPort: 10000
----
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -147,7 +133,9 @@ spec:
     matchLabels:
       app.kubernetes.io/name: pmem-csi-controller
       app.kubernetes.io/instance: pmem-csi.intel.com
-  serviceName: pmem-csi-intel-com-controller
+  # Has to be set even when the service itself does not
+  # exist and is not needed (https://github.com/kubernetes/kubernetes/issues/69608).
+  serviceName: unused
   template:
     metadata:
       labels:
