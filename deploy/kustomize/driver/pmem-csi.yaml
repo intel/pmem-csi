@@ -167,7 +167,7 @@ spec:
         - -nodeSelector={"storage":"pmem"}
         # ca.crt is present in pmem-csi-intel-com-controller-secret but not required for anything at
         # the moment.
-        - -caFile=/certs/ca.crt
+        - -caFile=
         - -certFile=/certs/tls.crt
         - -keyFile=/certs/tls.key
         - -schedulerListen=:8000

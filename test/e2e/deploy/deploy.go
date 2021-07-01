@@ -31,14 +31,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2/klogr"
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
-	"github.com/intel/pmem-csi/pkg/k8sutil"
 	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	"github.com/intel/pmem-csi/test/e2e/pod"
 	testconfig "github.com/intel/pmem-csi/test/test-config"
@@ -227,7 +225,7 @@ func WaitForPMEMDriver(c *Cluster, d *Deployment) (metricsURL string) {
 				if actualNodes != c.NumNodes()-1 {
 					return fmt.Errorf("only %d of %d nodes have registered", actualNodes, c.NumNodes()-1)
 				}
-			case d.Version == "0.9" || !d.StorageCapacitySupported(c.cfg):
+			case d.Version == "0.9" || !c.StorageCapacitySupported():
 				// It is possible that we just
 				// (re)configured the mutating pod
 				// webhook. We must be sure that
@@ -768,14 +766,6 @@ func (d Deployment) Label() string {
 	return d.Name()
 }
 
-// StorageCapacitySupported checks that the v1beta1 CSIStorageCapacity API is supported.
-// It only checks the Kubernetes version.
-func (d *Deployment) StorageCapacitySupported(cfg *rest.Config) bool {
-	ver, err := k8sutil.GetKubernetesVersion(cfg)
-	framework.ExpectNoError(err, "check Kubernetes version")
-	return ver.Compare(1, 21) >= 0
-}
-
 // FindDeployment checks whether there is a PMEM-CSI driver and/or
 // operator deployment in the cluster. A deployment is found via its
 // deployment resp. statefulset object, which must have a
@@ -1164,7 +1154,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 	if deployment.HasDriver {
 		if deployment.HasOperator {
 			// Deploy driver through operator.
-			dep := deployment.GetDriverDeployment()
+			dep := deployment.GetDriverDeployment(c)
 			EnsureDeploymentCR(f, dep)
 		} else {
 			// Deploy with script.
@@ -1209,7 +1199,7 @@ func StopOperator(d *Deployment) error {
 
 // GetDriverDeployment returns the spec for the driver deployment that is used
 // for deployments like operator-lvm-production.
-func (d *Deployment) GetDriverDeployment() api.PmemCSIDeployment {
+func (d *Deployment) GetDriverDeployment(c *Cluster) api.PmemCSIDeployment {
 	dep := api.PmemCSIDeployment{
 		// TypeMeta is needed because
 		// DefaultUnstructuredConverter does not add it for us. Is there a better way?
@@ -1239,11 +1229,18 @@ func (d *Deployment) GetDriverDeployment() api.PmemCSIDeployment {
 		},
 	}
 
-	if d.HasController {
-		// The controller is enabled, using a secret that must have
-		// been prepared beforehand.
-		dep.Spec.ControllerTLSSecret = strings.ReplaceAll(d.DriverName, ".", "-") + "-controller-secret"
+	if d.HasController && !c.StorageCapacitySupported() {
 		dep.Spec.MutatePods = api.MutatePodsAlways
+		if c.isOpenShift {
+			// Use certificates prepared by OpenShift.
+			dep.Spec.ControllerTLSSecret = api.ControllerTLSSecretOpenshift
+		} else {
+			// Use a secret that must have been prepared beforehand.
+			dep.Spec.ControllerTLSSecret = strings.ReplaceAll(d.DriverName, ".", "-") + "-controller-secret"
+		}
+		// The scheduler must have been configured manually. We just
+		// create the corresponding service in the namespace where the
+		// driver is going to run.
 		portStr := testconfig.GetOrFail("TEST_SCHEDULER_EXTENDER_NODE_PORT")
 		port, err := strconv.ParseInt(portStr, 10, 32)
 		if err != nil {

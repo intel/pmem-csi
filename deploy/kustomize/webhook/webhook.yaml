@@ -24,7 +24,7 @@ webhooks:
     admissionReviewVersions: ["v1"]
     clientConfig:
       service:
-        name: pmem-csi-intel-com-scheduler
+        name: pmem-csi-intel-com-webhook
         namespace: pmem-csi
         path: /pod/mutate
       caBundle:

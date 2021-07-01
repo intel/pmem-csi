@@ -435,6 +435,10 @@ func TestDeploymentController(t *testing.T) {
 				schedulerNodePort:   31000,
 				objects:             []runtime.Object{createSecret("controller-secret", testNamespace, dataOkay)},
 			},
+			"openshift": {
+				name:                "test-controller",
+				controllerTLSSecret: "-openshift-",
+			},
 		}
 
 		for name, d := range cases {

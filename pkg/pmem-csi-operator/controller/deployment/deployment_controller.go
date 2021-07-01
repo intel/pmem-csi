@@ -448,7 +448,13 @@ func (r *ReconcileDeployment) newDeployment(ctx context.Context, deployment *api
 		k8sVersion:        r.k8sVersion,
 	}
 
-	if d.Spec.ControllerTLSSecret != "" {
+	switch d.Spec.ControllerTLSSecret {
+	case "":
+		// Nothing to do.
+	case api.ControllerTLSSecretOpenshift:
+		// Nothing to load, we just add annotations.
+	default:
+		// Load the specified secret.
 		secret := &corev1.Secret{
 			TypeMeta: metav1.TypeMeta{
 				APIVersion: "v1",

@@ -319,7 +319,11 @@ for a complete list of supported properties.
 Here is a minimal example driver deployment created with a custom resource:
 
 **NOTE**: `nodeSelector` must match the node label that was set in the
-[installation and setup](#installation-and-setup) section.
+[installation and setup](#installation-and-setup) section. The PMEM-CSI
+[scheduler extender](design.md#scheduler-extender) and
+[webhook](design.md#pod-admission-webhook) are not enabled in this basic
+installation. See [below](#enable-scheduler-extensions) for
+instructions about that.
 
 ``` ShellSession
 $ kubectl create -f - <<EOF
@@ -435,6 +439,11 @@ creation can be skipped. However, the YAML deployment files always create the PM
 controller StatefulSet which needs the certificates. Without them, the
 `pmem-csi-intel-com-controller-0` pod cannot start, so it is recommended to create
 certificates or customize the deployment so that this StatefulSet is not created.
+
+On OpenShift, certificates can be created automatically as described
+in https://docs.openshift.com/container-platform/4.6/security/certificates/service-serving-certificate.html.
+The PMEM-CSI operator uses that approach and therefore is a
+simpler way to install PMEM-CSI on OpenShift.
 
 Certificates can be created by running the `./test/setup-ca-kubernetes.sh` script for your cluster.
 This script requires "cfssl" tools which can be downloaded.
@@ -976,11 +985,19 @@ That example demonstrates how to handle some details:
 
 ### Enable scheduler extensions
 
+#### Manual scheduler configuration
+
+**NOTE**: this sections provides an in-depth explanation that makes no
+assumptions about how the cluster works. For simpler install
+instructions on OpenShift see [below](#openshift-scheduler-configuration).
+
 The PMEM-CSI scheduler extender and admission webhook are provided by
 the PMEM-CSI controller. They need to be enabled during deployment via
 the `--schedulerListen=[<listen address>]:<port>` parameter. The
 listen address is optional and can be left out. The port is where a
-HTTPS server will run.
+HTTPS server will run. The YAML files already enable this. The
+operator has the `controllerTLSSecret` and `mutatePods` properties in
+the [`DeploymentSpec`](#deploymentspec).
 
 The controller needs TLS certificates which must be created in
 advance. The YAML files expects them in a secret called
@@ -1217,6 +1234,152 @@ EOF
 $ kubectl create --kustomize my-webhook
 ```
 
+#### OpenShift scheduler configuration
+
+**NOTE**: The scheduler extensions are only needed on OpenShift 4.6
+and 4.7. On OpenShift 4.8, [storage capacity
+tracking](#storage-capacity-tracking) can and should be used instead.
+
+The operator should be used on OpenShift. When creating the
+deployment, set `controllerTLSSecret` to the special string
+`-openshift-`:
+
+``` ShellSession
+$ kubectl create -f - <<EOF
+apiVersion: pmem-csi.intel.com/v1beta1
+kind: PmemCSIDeployment
+metadata:
+  name: pmem-csi.intel.com
+spec:
+  deviceMode: lvm
+  nodeSelector:
+    feature.node.kubernetes.io/memory-nv.dax: "true"
+  controllerTLSSecret: -openshift-
+EOF
+```
+
+The webhook and the API server then get configured by the operator
+with [certificates created automatically by
+OpenShift](https://docs.openshift.com/container-platform/4.6/security/certificates/service-serving-certificate.html).
+
+The scheduler must be configured manually, using the same API as for
+[configuring scheduler
+policies](https://docs.openshift.com/container-platform/4.6/nodes/scheduling/nodes-scheduler-default.html#nodes-scheduler-default-modifying_nodes-scheduler-default). This
+can be done before or after deploying the PMEM-CSI driver. The
+configuration change can be left in place after removing a PMEM-CSI
+because it will then be ignored. However, without this step pods that
+use PMEM-CSI volumes will not get scheduled.
+
+Communication between the kube-scheduler and PMEM-CSI will be done via
+http and a service that listens on a dynamically allocated host
+port. This approach is necessary because:
+- kube-scheduler uses the host network and thus cannot connect to a
+  service that is only available inside the cluster and
+- There is no API for configuring TLS certificates.
+
+First, define the service inside the namespace where the PMEM-CSI
+operator runs:
+
+``` ShellSession
+oc apply -f - <<EOF
+apiVersion: v1
+kind: Service
+metadata:
+  name: pmem-csi-intel-com-http-scheduler
+  namespace: pmem-csi
+spec:
+  selector:
+    app.kubernetes.io/name: pmem-csi-controller
+    app.kubernetes.io/instance: pmem-csi.intel.com # This must be the name of the PMEM-CSI deployment.
+  type: NodePort
+  ports:
+  - targetPort: 8001
+    port: 80
+EOF
+```
+
+Then create a scheduler policy. If such a policy already exists, the
+`extenders` section below must be added to it.
+
+``` ShellSession
+oc create -f - <<EOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scheduler-policy
+  namespace: openshift-config
+data:
+  policy.cfg: |
+    {
+      "kind" : "Policy",
+      "apiVersion" : "v1",
+      "extenders" : [
+        { "urlPrefix": "http://127.0.0.1:$(oc get service/pmem-csi-intel-com-http-scheduler -n pmem-csi -o jsonpath={.spec.ports[*].nodePort})",
+          "filterVerb": "filter",
+          "prioritizeVerb": "prioritize",
+          "nodeCacheCapable": true,
+          "weight": 1,
+          "managedResources": [
+            { "name": "pmem-csi.intel.com/scheduler",
+              "ignoredByScheduler": true
+            }
+          ]
+        }
+      ]
+    }
+EOF
+```
+
+Finally, activate the usage of that policy by updating the existing
+`scheduler/cluster` object. If a policy was set already, this command
+will fail with `The request is invalid`, in which case the existing
+policy config map must be edited.
+
+``` console
+$ oc patch scheduler/cluster --type json \
+   --patch '[{"op":"test","path":"/spec/policy/name","value":""}, {"op":"replace","path":"/spec/policy/name","value":"scheduler-policy"}]'
+scheduler.config.openshift.io/cluster patched
+```
+
+This causes schedulers to be restarted with a new configuration:
+
+``` console
+$ oc get events -n openshift-kube-scheduler-operator
+...
+14m         Normal    ConfigMapCreated                    deployment/openshift-kube-scheduler-operator               Created ConfigMap/policy-configmap -n openshift-kube-scheduler because it was missing
+14m         Normal    RevisionTriggered                   deployment/openshift-kube-scheduler-operator               new revision 7 triggered by "configmap/policy-configmap has changed"
+14m         Normal    ConfigMapCreated                    deployment/openshift-kube-scheduler-operator               Created ConfigMap/revision-status-7 -n openshift-kube-scheduler because it was missing
+14m         Normal    ConfigMapCreated                    deployment/openshift-kube-scheduler-operator               Created ConfigMap/kube-scheduler-pod-7 -n openshift-kube-scheduler because it was missing
+...
+13m         Normal    OperatorStatusChanged               deployment/openshift-kube-scheduler-operator               Status for clusteroperator/kube-scheduler changed: Progressing changed from True to False ("NodeInstallerProgressing: 1 nodes are at revision 8"),Available message changed from "StaticPodsAvailable: 1 nodes are active; 1 nodes are at revision 6; 0 nodes have achieved new revision 8" to "StaticPodsAvailable: 1 nodes are active; 1 nodes are at revision 8"
+13m         Normal    ConfigMapUpdated                    deployment/openshift-kube-scheduler-operator               Updated ConfigMap/revision-status-8 -n openshift-kube-scheduler:
+cause by changes in data.status
+13m         Normal    PodCreated                          deployment/openshift-kube-scheduler-operator               Created Pod/revision-pruner-8-tt-87fkd-master-0 -n openshift-kube-scheduler because it was missing
+
+$ oc get pods -n openshift-kube-scheduler -l app=openshift-kube-scheduler
+NAME                                         READY   STATUS    RESTARTS   AGE
+openshift-kube-scheduler-tt-87fkd-master-0   3/3     Running   0          11m
+
+$ oc exec -ti -n openshift-kube-scheduler openshift-kube-scheduler-tt-87fkd-master-0 -c kube-scheduler -- cat /etc/kubernetes/static-pod-resources/configmaps/policy-configmap/policy.cfg
+{
+  "kind" : "Policy",
+  "apiVersion" : "v1",
+  "extenders" : [
+    { "urlPrefix": "https://127.0.0.1:30674",
+      "filterVerb": "filter",
+      "prioritizeVerb": "prioritize",
+      "nodeCacheCapable": true,
+      "weight": 1,
+      "managedResources": [
+        { "name": "pmem-csi.intel.com/scheduler",
+          "ignoredByScheduler": true
+        }
+      ]
+    }
+  ]
+}
+```
+
 ### Storage capacity tracking
 
 [Kubernetes
@@ -1409,14 +1572,19 @@ The name is also used as prefix for the names of all objects created
 for the deployment and for the local `/var/lib/<name>` state directory
 on each node.
 
+Although the operator allows running multiple PMEM-CSI driver deployments, one
+has to take extreme care of such deployments by ensuring that not more than
+one driver ends up running on the same node(s). Nodes on which a PMEM-CSI
+driver could run can be configured by using the `nodeSelector` property of
+the `DeploymentSpec`.
+
 **NOTE**: Starting from release v0.9.0 reconciling of the `Deployment`
 CRD in `pmem-csi.intel.com/v1alpha1` API group is not supported by the
 PMEM-CSI operator anymore. Such resources in the cluster must be migrated
 manually to new the `PmemCSIDeployment` API.
 
-The current API for `PmemCSIDeployment` resources is:
 
-### PmemCSIDeployment
+The current API for `PmemCSIDeployment` resources is:
 
 |Field | Type | Description |
 |---|---|---|
@@ -1425,7 +1593,7 @@ The current API for `PmemCSIDeployment` resources is:
 | metadata | [ObjectMeta](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#metadata) | Object metadata, name used for CSI driver and as prefix for sub-objects |
 | spec | [DeploymentSpec](#deployment-spec) | Specification of the desired behavior of the deployment |
 
-#### DeploymentSpec
+### DeploymentSpec
 
 Below specification fields are valid in all API versions unless noted otherwise in the description.
 
@@ -1442,7 +1610,7 @@ of the API specification.
 | logLevel | integer | PMEM-CSI driver logging level | 3 |
 | logFormat | text | log output format | "text" or "json" <sup>3</sup> |
 | deviceMode | string | Device management mode to use. Supports one of `lvm` or `direct` | `lvm`
-| controllerTLSSecret | string | Name of an existing secret in the driver's namespace which contains ca.crt, tls.crt and tls.key data for the scheduler extender and pod mutation webhook. A controller is started if (and only if) this secret is specified. | empty
+| controllerTLSSecret | string | Name of an existing secret in the driver's namespace which contains ca.crt, tls.crt and tls.key data for the scheduler extender and pod mutation webhook. A controller is started if (and only if) this secret is specified. <br> Alternatively, the special string `-openshift-` can be used on OpenShift to let OpenShift create the necessary secrets. | empty
 | mutatePods | Always/Try/Never | Defines how a mutating pod webhook is configured if a controller is started. The field is ignored if the controller is not enabled. "Never" disables pod mutation. "Try" configured it so that pod creation is allowed to proceed even when the webhook fails. "Always" requires that the webhook gets invoked successfully before creating a pod. | Try
 | schedulerNodePort | If non-zero, the scheduler service is created as a NodeService with that fixed port number. Otherwise that service is created as a cluster service. The number must be from the range reserved by Kubernetes for node ports. This is useful if the kube-scheduler cannot reach the scheduler extender via a cluster service. | 0
 | controllerResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for controller pod. <br/><sup>4</sup>_Deprecated and only available in `v1alpha1`._ |
@@ -1487,7 +1655,7 @@ propagated to the deployed driver, not all changes are safe. In
 particular, changing the `deviceMode` will not work when there are
 active volumes.
 
-#### DeploymentStatus
+### DeploymentStatus
 
 A PMEM-CSI Deployment's `status` field is a `DeploymentStatus` object, which
 carries the detailed state of the driver deployment. It is comprised of [deployment
@@ -1505,7 +1673,7 @@ The possible `phase` values and their meaning are as below:
 
 <sup>1</sup> This check has not been implemented yet. Instead, the deployment goes straight to `Running` after creating sub-resources.
 
-#### Deployment Conditions
+### Deployment Conditions
 
 PMEM-CSI `DeploymentStatus` has an array of `conditions` through which the
 PMEM-CSI Deployment has or has not passed. Below are the possible condition
@@ -1517,7 +1685,7 @@ types and their meanings:
 | CertsVerified | Verified that the provided certificates are valid. |
 | DriverDeployed | All the componentes required for the PMEM-CSI deployment have been deployed. |
 
-#### Driver component status
+### Driver component status
 
 PMEM-CSI `DeploymentStatus` has an array of `components` of type `DriverStatus`
 in which the operator records the brief driver components status. This is
@@ -1531,22 +1699,13 @@ Below are the fields and their meanings of `DriverStatus`:
 | reason | A brief message that explains why the component is in this state. |
 | lastUpdateTime | Time at which the status updated. |
 
-#### Deployment Events
+### Deployment Events
 
 The PMEM-CSI operator posts events on the progress of a `PmemCSIDeployment`. If the
 deployment is in the `Failed` state, then one can look into the event(s) using
 `kubectl describe` on that deployment for the detailed failure reason.
 
-
-> **Note on multiple deployments**
->
-> Though the operator allows running multiple PMEM-CSI driver deployments, one
-> has to take extreme care of such deployments by ensuring that not more than
-> one driver ends up running on the same node(s). Nodes on which a PMEM-CSI
-> driver could run can be configured by using `nodeSelector` property of
-> [`DeploymentSpec`](#pmem-csi-deployment-crd).
-
-#### Operator metrics data
+### Operator metrics data
 
 PMEM-CSI operator exposes below metrics data about active PmemCSIDeployment
 custom resources and it's sub-object in addition to the

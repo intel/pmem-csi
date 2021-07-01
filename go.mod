@@ -28,7 +28,7 @@ require (
 	gopkg.in/freddierice/go-losetup.v1 v1.0.0-20170407175016-fc9adea44124
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.21.1
-	k8s.io/apiextensions-apiserver v0.21.1
+	k8s.io/apiextensions-apiserver v0.21.2
 	k8s.io/apimachinery v0.21.1
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/component-base v0.21.1

@@ -36,10 +36,13 @@ var _ = deploy.DescribeForSome("driver", func(d *deploy.Deployment) bool {
 	f.SkipNamespaceCreation = true
 
 	It("runs", func() {
+		c, err := deploy.NewCluster(f.ClientSet, f.DynamicClient, f.ClientConfig())
+		framework.ExpectNoError(err, "create cluster object")
+
 		// Delete existing driver and start a new driver
 		// so that this test results does not effected by the other
 		// tests run using the same driver deployment.
-		deployment := d.GetDriverDeployment()
+		deployment := d.GetDriverDeployment(c)
 		deploy.DeleteDeploymentCR(f, deployment.Name)
 		deploy.CreateDeploymentCR(f, deployment)
 
@@ -58,9 +61,6 @@ var _ = deploy.DescribeForSome("driver", func(d *deploy.Deployment) bool {
 		k8sver, err := k8sutil.GetKubernetesVersion(f.ClientConfig())
 		framework.ExpectNoError(err, "get Kubernetes version")
 
-		c, err := deploy.NewCluster(f.ClientSet, f.DynamicClient, f.ClientConfig())
-		framework.ExpectNoError(err, "new cluster")
-
 		metricsURL, err := deploy.GetOperatorMetricsURL(ctx, c, d)
 		Expect(err).ShouldNot(HaveOccurred(), "get operator metrics URL")
 
@@ -69,7 +69,7 @@ var _ = deploy.DescribeForSome("driver", func(d *deploy.Deployment) bool {
 	})
 
 	// Just very minimal testing at the moment.
-	csiTestDriver := driver.New(d.Name(), d.GetDriverDeployment().Name, []string{""} /* only the default fs type */, nil)
+	csiTestDriver := driver.New(d.Name(), d.DriverName, []string{""} /* only the default fs type */, nil)
 	var csiTestSuites = []func() storageframework.TestSuite{
 		dax.InitDaxTestSuite,
 	}

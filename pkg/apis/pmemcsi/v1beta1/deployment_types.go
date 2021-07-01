@@ -74,6 +74,14 @@ const (
 	MutatePodsNever MutatePods = "Never"
 )
 
+const (
+	// ControllerTLSSecretOpenshift is a special string which
+	// enables the usage of
+	// https://docs.openshift.com/container-platform/4.6/security/certificates/service-serving-certificate.html
+	// to create certificates.
+	ControllerTLSSecretOpenshift = "-openshift-"
+)
+
 // +k8s:deepcopy-gen=true
 // DeploymentSpec defines the desired state of Deployment
 type DeploymentSpec struct {
@@ -97,7 +105,9 @@ type DeploymentSpec struct {
 	ControllerDriverResources *corev1.ResourceRequirements `json:"controllerDriverResources,omitempty"`
 	// ControllerTLSSecret is the name of a secret which contains ca.crt, tls.crt and tls.key data
 	// for the scheduler extender and pod mutation webhook. A controller is started if (and only if)
-	// this secret is specified.
+	// this secret is specified. The special string "-openshift-" enables the usage of
+	// https://docs.openshift.com/container-platform/4.6/security/certificates/service-serving-certificate.html
+	// to create certificates.
 	ControllerTLSSecret string `json:"controllerTLSSecret,omitempty"`
 	// MutatePod defines how a mutating pod webhook is configured if a controller
 	// is started. The field is ignored if the controller is not enabled.
@@ -468,6 +478,12 @@ func (d *PmemCSIDeployment) GetHyphenedName() string {
 	return strings.ReplaceAll(d.GetName(), ".", "-")
 }
 
+// ControllerTLSSecretOpenshiftName returns the name of the secret that
+// we want OpenShift to create for the controller service.
+func (d *PmemCSIDeployment) ControllerTLSSecretOpenshiftName() string {
+	return d.GetHyphenedName() + "-openshift-controller-tls"
+}
+
 // RegistrySecretName returns the name of the registry
 // Secret object used by the deployment
 func (d *PmemCSIDeployment) RegistrySecretName() string {
@@ -492,10 +508,16 @@ func (d *PmemCSIDeployment) MetricsServiceName() string {
 	return d.GetHyphenedName() + "-metrics"
 }
 
-// SchedulerServiceName returns the name of the controller's scheduler
-// Service object
+// SchedulerServiceName returns the name of the controller's
+// Service object for the scheduler extender.
 func (d *PmemCSIDeployment) SchedulerServiceName() string {
 	return d.GetHyphenedName() + "-scheduler"
+}
+
+// SchedulerServiceName returns the name of the controller's
+// Service object for the webhooks.
+func (d *PmemCSIDeployment) WebhooksServiceName() string {
+	return d.GetHyphenedName() + "-webhook"
 }
 
 // WebhooksServiceAccountName returns the name of the service account

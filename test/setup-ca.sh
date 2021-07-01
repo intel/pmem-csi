@@ -51,6 +51,10 @@ for name in ${CNS}; do
              # the version starting with 0.9.0 for the sake of consistency with
              # the pmem-csi.intel.com driver name.
              echo '"127.0.0.1",'
+             # mutating pod webhook
+             echo '"pmem-csi-webhook", "pmem-csi-webhook.'$NS'", "pmem-csi-webhook.'$NS'.svc",'
+             echo '"'$PREFIX'-webhook", "'$PREFIX'-webhook.'$NS'", "'$PREFIX'-webhook.'$NS'.svc",'
+             # scheduler extender
              echo '"pmem-csi-scheduler", "pmem-csi-scheduler.'$NS'", "pmem-csi-scheduler.'$NS'.svc",'
              echo '"'$PREFIX'-scheduler", "'$PREFIX'-scheduler.'$NS'", "'$PREFIX'-scheduler.'$NS'.svc",'
              # And for metrics server.

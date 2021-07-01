@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	pmemlog "github.com/intel/pmem-csi/pkg/logger"
@@ -38,6 +39,7 @@ const (
 	nodeMetricsPort        = 10010
 	provisionerMetricsPort = 10011
 	schedulerPort          = 8000
+	insecureSchedulerPort  = 8001
 )
 
 func typeMeta(gv schema.GroupVersion, kind string) metav1.TypeMeta {
@@ -93,6 +95,15 @@ func cloneObject(from client.Object) (client.Object, error) {
 		return t.DeepCopyObject().(*admissionregistrationv1.MutatingWebhookConfiguration), nil
 	default:
 		return nil, fmt.Errorf("cannot clone client.Object of type %T", from)
+	}
+}
+
+func isNamespaced(kind string) bool {
+	switch kind {
+	case "ClusterRole", "ClusterRoleBinding", "CSIDriver", "MutatingWebhookConfiguration":
+		return false
+	default:
+		return true
 	}
 }
 
@@ -482,6 +493,20 @@ var subObjectHandlers = map[string]redeployObject{
 			return nil
 		},
 	},
+	"webhooks service": {
+		objType: reflect.TypeOf(&corev1.Service{}),
+		enabled: mutatingWebhookEnabled,
+		object: func(d *pmemCSIDeployment) client.Object {
+			return &corev1.Service{
+				TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+				ObjectMeta: d.getObjectMeta(d.WebhooksServiceName(), false),
+			}
+		},
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
+			d.getWebhooksService(o.(*corev1.Service))
+			return nil
+		},
+	},
 	"mutating webhook configuration": {
 		objType: reflect.TypeOf(&admissionregistrationv1.MutatingWebhookConfiguration{}),
 		enabled: mutatingWebhookEnabled,
@@ -711,8 +736,11 @@ func (d *pmemCSIDeployment) deleteObsoleteObjects(ctx context.Context, r *Reconc
 	}
 
 	for _, list := range AllObjectLists() {
-		opts := &client.ListOptions{
-			Namespace: d.namespace,
+		opts := &client.ListOptions{}
+		// The namespace is ignored by the real API server, but the fake client
+		// fails to return cluster-scoped objects when the namespace is set.
+		if isNamespaced(strings.TrimSuffix(list.GroupVersionKind().Kind, "List")) {
+			opts.Namespace = d.namespace
 		}
 
 		l.V(5).Info("fetching objects", "gkv", list.GetObjectKind(), "options", opts.Namespace)
@@ -852,6 +880,21 @@ func (d *pmemCSIDeployment) getWebhooksClusterRoleBinding(crb *rbacv1.ClusterRol
 	}
 }
 
+func (d *pmemCSIDeployment) getWebhooksService(service *corev1.Service) {
+	d.getService(service, corev1.ServiceTypeClusterIP, 443)
+	service.Spec.Ports[0].TargetPort.IntVal = schedulerPort
+	if d.Spec.ControllerTLSSecret == api.ControllerTLSSecretOpenshift {
+		if service.Annotations == nil {
+			service.Annotations = map[string]string{}
+		}
+		service.Annotations["service.beta.openshift.io/serving-cert-secret-name"] = d.ControllerTLSSecretOpenshiftName()
+	} else {
+		if service.Annotations != nil {
+			delete(service.Annotations, "service.beta.openshift.io/serving-cert-secret-name")
+		}
+	}
+}
+
 func (d *pmemCSIDeployment) getMutatingWebhookConfig(hook *admissionregistrationv1.MutatingWebhookConfiguration) {
 	servicePort := int32(443) // default webhook service port
 	selector := &metav1.LabelSelector{
@@ -869,26 +912,42 @@ func (d *pmemCSIDeployment) getMutatingWebhookConfig(hook *admissionregistration
 	}
 	path := "/pod/mutate"
 	none := admissionregistrationv1.SideEffectClassNone
-	if len(d.controllerCABundle) == 0 {
-		panic("controller CA bundle empty, should have been loaded")
+	controllerCABundle := d.controllerCABundle
+	// Preserve defaults when updating.
+	var scope *admissionregistrationv1.ScopeType
+	var timeoutSeconds *int32
+	var matchPolicy *admissionregistrationv1.MatchPolicyType
+	var reinvocationPolicy *admissionregistrationv1.ReinvocationPolicyType
+	if len(hook.Webhooks) > 0 {
+		if d.Spec.ControllerTLSSecret == api.ControllerTLSSecretOpenshift {
+			// Below we overwrite the entire hook.Webhooks. Before we do that, we must
+			// retrieve the CABundle that was generated for us by OpenShift.
+			controllerCABundle = hook.Webhooks[0].ClientConfig.CABundle
+		}
+		scope = hook.Webhooks[0].Rules[0].Scope
+		timeoutSeconds = hook.Webhooks[0].TimeoutSeconds
+		matchPolicy = hook.Webhooks[0].MatchPolicy
+		reinvocationPolicy = hook.Webhooks[0].ReinvocationPolicy
 	}
 	hook.Webhooks = []admissionregistrationv1.MutatingWebhook{
 		{
 			// Name must be "fully-qualified" (i.e. with domain) but not unique, so
 			// here "pmem-csi.intel.com" is not the default driver name.
 			// https://pkg.go.dev/k8s.io/api/admissionregistration/v1#MutatingWebhook
-			Name:              "pod-hook.pmem-csi.intel.com",
-			NamespaceSelector: selector,
-			ObjectSelector:    selector,
-			FailurePolicy:     &failurePolicy,
+			Name:               "pod-hook.pmem-csi.intel.com",
+			NamespaceSelector:  selector,
+			ObjectSelector:     selector,
+			FailurePolicy:      &failurePolicy,
+			MatchPolicy:        matchPolicy,
+			ReinvocationPolicy: reinvocationPolicy,
 			ClientConfig: admissionregistrationv1.WebhookClientConfig{
 				Service: &admissionregistrationv1.ServiceReference{
-					Name:      d.SchedulerServiceName(),
+					Name:      d.WebhooksServiceName(),
 					Namespace: d.namespace,
 					Path:      &path,
 					Port:      &servicePort,
 				},
-				CABundle: d.controllerCABundle, // loaded earlier in reconcile()
+				// CABundle set below.
 			},
 			Rules: []admissionregistrationv1.RuleWithOperations{
 				{
@@ -897,18 +956,44 @@ func (d *pmemCSIDeployment) getMutatingWebhookConfig(hook *admissionregistration
 						APIGroups:   []string{""},
 						APIVersions: []string{"v1"},
 						Resources:   []string{"pods"},
+						Scope:       scope,
 					},
 				},
 			},
 			SideEffects:             &none,
 			AdmissionReviewVersions: []string{"v1"},
+			TimeoutSeconds:          timeoutSeconds,
 		},
 	}
+
+	switch {
+	case d.Spec.ControllerTLSSecret == api.ControllerTLSSecretOpenshift:
+		if hook.Annotations == nil {
+			hook.Annotations = map[string]string{}
+		}
+		hook.Annotations["service.beta.openshift.io/inject-cabundle"] = "true"
+	case len(controllerCABundle) == 0:
+		panic("controller CA bundle empty, should have been loaded")
+	default:
+		if hook.Annotations != nil {
+			delete(hook.Annotations, "service.beta.openshift.io/inject-cabundle")
+		}
+	}
+	// Set or preserve the CABundle.
+	hook.Webhooks[0].ClientConfig.CABundle = controllerCABundle
 }
 
 func (d *pmemCSIDeployment) getSchedulerService(service *corev1.Service) {
-	d.getService(service, corev1.ServiceTypeClusterIP, 443)
-	service.Spec.Ports[0].TargetPort.IntVal = schedulerPort
+	targetPort := schedulerPort
+	port := 443
+	if d.Spec.ControllerTLSSecret == api.ControllerTLSSecretOpenshift {
+		targetPort = insecureSchedulerPort
+		port = 80
+	}
+	d.getService(service, corev1.ServiceTypeClusterIP, int32(port))
+	service.Spec.Ports[0].TargetPort = intstr.IntOrString{
+		IntVal: int32(targetPort),
+	}
 	service.Spec.Ports[0].NodePort = d.Spec.SchedulerNodePort
 	if d.Spec.SchedulerNodePort != 0 {
 		service.Spec.Type = corev1.ServiceTypeNodePort
@@ -1116,11 +1201,15 @@ func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 	ss.Spec.Template.Spec.Volumes = []corev1.Volume{}
 	if d.Spec.ControllerTLSSecret != "" {
 		mode := corev1.SecretVolumeSourceDefaultMode
+		name := d.Spec.ControllerTLSSecret
+		if name == api.ControllerTLSSecretOpenshift {
+			name = d.ControllerTLSSecretOpenshiftName()
+		}
 		ss.Spec.Template.Spec.Volumes = append(ss.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: "webhook-cert",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName:  d.Spec.ControllerTLSSecret,
+					SecretName:  name,
 					DefaultMode: &mode,
 				},
 			},
@@ -1270,13 +1359,17 @@ func (d *pmemCSIDeployment) getControllerCommand() []string {
 
 	if d.Spec.ControllerTLSSecret != "" {
 		args = append(args,
-			"-caFile=/certs/ca.crt",
+			"-caFile=",
 			"-certFile=/certs/tls.crt",
 			"-keyFile=/certs/tls.key",
 			fmt.Sprintf("-schedulerListen=:%d", schedulerPort),
 		)
+		if d.Spec.ControllerTLSSecret == api.ControllerTLSSecretOpenshift {
+			args = append(args,
+				fmt.Sprintf("-insecureSchedulerListen=:%d", insecureSchedulerPort),
+			)
+		}
 	}
-
 	args = append(args, fmt.Sprintf("-metricsListen=:%d", controllerMetricsPort))
 
 	return args

@@ -40,10 +40,26 @@ echo "INFO: deploying from ${DEPLOYMENT_DIRECTORY}/${TEST_DEVICEMODE}${deploymen
 # Set up TLS secrets in the TEST_DRIVER_NAMESPACE.
 PATH="${REPO_DIRECTORY}/_work/bin:$PATH" KUBECTL="${KUBECTL}" ${TEST_DIRECTORY}/setup-ca-kubernetes.sh
 
+OPENSHIFT_SCHEDULER=false
 case "$KUBERNETES_VERSION" in
     1.19|1.20)
         # Enable scheduler extensions. Not needed on >= 1.21.
         DEPLOY+=(scheduler webhook)
+        if ${KUBECTL} get crd | grep -q schedulers.config.openshift.io; then
+            # Only the service gets deployed anew, with TEST_SCHEDULER_EXTENDER_NODE_PORT as
+            # well-known, fixed node port. Config map and scheduler config must be
+            # set up manually once before running tests.
+            OPENSHIFT_SCHEDULER=true
+
+            # Do some sanity checkig...
+            policy=$(${KUBECTL} get scheduler/cluster -o jsonpath={.spec.policy.name})
+            if [ ! "$policy" ]; then
+                echo >&2 "The scheduler config in scheduler/cluster must be set up manually. Currently there is no policy."
+            fi
+            if ! ${KUBECTL} get -n openshift-config configmap/$policy >/dev/null; then
+                echo >&2 "The scheduler policy configmap must be set up manually."
+            fi
+        fi
         ;;
 esac
 
@@ -116,6 +132,17 @@ EOF
   path: /spec/template/spec/containers/0/command/-
   value: -nodeSelector={$(echo ${TEST_PMEM_NODE_LABEL} | sed -e 's/\([^=]*\)=\(.*\)/"\1":"\2"/')}
 EOF
+                if $OPENSHIFT_SCHEDULER; then
+                    ${SSH} "cat >'$tmpdir/my-deployment/scheduler-patch.yaml'" <<EOF
+- op: add
+  path: /spec/template/spec/containers/0/command/-
+  value: "--insecureSchedulerListen=:8001"
+- op: replace
+  # We get this from OpenShift (see service.beta.openshift.io/serving-cert-secret-name below).
+  path: /spec/template/spec/volumes/0/secret/secretName
+  value: pmem-csi-openshift-controller-tls
+EOF
+                fi
                 if [ "${TEST_DEVICEMODE}" = "lvm" ]; then
                     # Test these options and kustomization by injecting some non-default values.
                     # This could be made optional to test both default and non-default values,
@@ -185,6 +212,13 @@ EOF
   path: /spec/type
   value: NodePort
 EOF
+                if $OPENSHIFT_SCHEDULER; then
+                    ${SSH} "cat >>'$tmpdir/my-deployment/scheduler-patch.yaml'" <<EOF
+- op: add
+  path: /spec/ports/0/targetPort
+  value: 8001 # need to use the insecure port
+EOF
+                fi
                 ;;
             webhook)
                 ${SSH} "cat >>'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
@@ -198,7 +232,31 @@ patchesJson6902:
       name: pmem-csi-intel-com-hook
     path: webhook-patch.yaml
 EOF
-                ${SSH} "cat >'$tmpdir/my-deployment/webhook-patch.yaml'" <<EOF
+                if $OPENSHIFT_SCHEDULER; then
+                    ${SSH} "cat >'$tmpdir/my-deployment/webhook-patch.yaml'" <<EOF
+- op: replace
+  path: /webhooks/0/clientConfig/service/namespace
+  value: ${TEST_DRIVER_NAMESPACE}
+- op: replace
+  path: /metadata/annotations
+  value:
+    service.beta.openshift.io/inject-cabundle: "true"
+EOF
+                    ${SSH} "cat >>'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
+  - target:
+      version: v1
+      kind: Service
+      name: pmem-csi-intel-com-webhook
+    path: webhook-service-patch.yaml
+EOF
+                    ${SSH} "cat >'$tmpdir/my-deployment/webhook-service-patch.yaml'" <<EOF
+- op: replace
+  path: /metadata/annotations
+  value:
+    service.beta.openshift.io/serving-cert-secret-name: pmem-csi-openshift-controller-tls
+EOF
+                else
+                    ${SSH} "cat >'$tmpdir/my-deployment/webhook-patch.yaml'" <<EOF
 - op: replace
   path: /webhooks/0/clientConfig/caBundle
   value: $(base64 -w 0 ${TEST_CA}.pem)
@@ -206,6 +264,7 @@ EOF
   path: /webhooks/0/clientConfig/service/namespace
   value: ${TEST_DRIVER_NAMESPACE}
 EOF
+                fi
                 ;;
         esac
 
