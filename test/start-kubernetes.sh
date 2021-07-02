@@ -470,19 +470,21 @@ function init_pmem_regions() {
 }
 
 function check_status() { # intentionally a composite command, so "exit" will exit the main script
-    if ${INIT_CLUSTER} ; then
-        deployments=$(govm list -f '{{select (filterRegexp . "Name" "^'${DEPLOYMENT_ID}'-master$") "Name"}}')
-        if [ ! -z "$deployments" ]; then
-            echo "Kubernetes cluster ${CLUSTER} is already running, using it unchanged."
-            kubernetes_usage
-            exit 0
+    if [ -e "${CLUSTER_DIRECTORY}/ssh.0" ]; then
+        # Directory and thus (presumably) the cluster exists.
+        if ${INIT_CLUSTER}; then
+            # Run some sanity checks.
+            local nodes
+            if ! nodes=$(${CLUSTER_DIRECTORY}/ssh.0 kubectl get nodes); then
+                die "'${CLUSTER_DIRECTORY}/ssh.0 kubectl get nodes' failed"
+            fi
+            num_nodes=$(( $(echo "$nodes" | wc -l) - 1 ))
+            num_ssh=$( ls -1 ${CLUSTER_DIRECTORY}/ssh.* | grep '/ssh.[0-9][0-9]*$' | wc -l )
+            if [ $num_ssh -ne $num_nodes ]; then
+                die "expected number of nodes $num_nodes to match number of ssh scripts $num_ssh"
+            fi
         fi
-    else 
-        vm_count=$(govm list -f '{{select (filterRegexp . "Name" "^'$(node_filter ${NODES[@]})'$") "Name"}}' | wc -l)
-        if [ $vm_count == ${#NODES[@]} ]; then
-            echo "All needed nodes are already running, using them unchanged."
-            exit 0
-        fi
+        exit 0
     fi
 
     if ${TEST_CHECK_KVM} && [ ! -e /dev/kvm ]; then
