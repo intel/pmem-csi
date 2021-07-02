@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -o errexit
-
 TEST_DIRECTORY=${TEST_DIRECTORY:-$(dirname $(readlink -f $0))}
 source ${TEST_CONFIG:-${TEST_DIRECTORY}/test-config.sh}
 
@@ -29,6 +27,9 @@ kinds="
       services
       storageclasses
 "
+for dep in $(${KUBECTL} get pmemcsideployments -o 'jsonpath={.items[*].metadata.name}'); do
+    ${KUBECTL} delete pmemcsideployments/$dep
+done
 for kind in $kinds; do
     echo -n "$kind: "
     ${KUBECTL} delete --all-namespaces -l pmem-csi.intel.com/deployment $kind
