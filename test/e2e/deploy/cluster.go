@@ -71,6 +71,10 @@ func (c *Cluster) ClientSet() kubernetes.Interface {
 	return c.cs
 }
 
+func (c *Cluster) Config() *rest.Config {
+	return c.cfg
+}
+
 // NumNodes returns the total number of nodes in the cluster.
 // Node #0 is the master node, the rest are workers.
 func (c *Cluster) NumNodes() int {

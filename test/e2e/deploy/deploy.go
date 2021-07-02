@@ -11,7 +11,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -21,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	cm "github.com/prometheus/client_model/go"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
@@ -172,7 +172,7 @@ func WaitForPMEMDriver(c *Cluster, d *Deployment) (metricsURL string) {
 	check := func() error {
 		// Do not linger too long here, we rather want to
 		// abort and print the error instead of getting stuck.
-		const timeout = time.Second
+		const timeout = 10 * time.Second
 		deadline, cancel := context.WithTimeout(deadline, timeout)
 		defer cancel()
 
@@ -329,16 +329,21 @@ func WaitForPMEMDriver(c *Cluster, d *Deployment) (metricsURL string) {
 		}
 
 		// For testing deployments, also ensure that the CSI endpoints can be reached.
-		nodeAddress, controllerAddress, err := LookupCSIAddresses(c, d.Namespace)
+		nodeAddress, controllerAddress, err := LookupCSIAddresses(deadline, c, d.Namespace)
 		if err != nil {
 			return fmt.Errorf("look up CSI addresses: %v", err)
 		}
 		tryConnect := func(address string) error {
-			prefix := "dns:///" // triple slash is used by gRPC, which makes the address unparsable with net/url
-			if !strings.HasPrefix(address, prefix) {
-				return fmt.Errorf("unexpected non-DNS URL: %s", address)
+			addr, err := pod.ParseAddr(address)
+			if err != nil {
+				return err
 			}
-			conn, err := net.Dial("tcp", address[len(prefix):])
+			dialer := pod.NewDialer(c.ClientSet(), c.Config())
+			// Here we discard error messages because those are expected while
+			// the driver starts up. Once we update to logr 1.0.0, we could redirect
+			// the output into a string buffer via the sink mechanism and include
+			// it in the error message.
+			conn, err := dialer.DialContainerPort(deadline, logr.Discard(), *addr)
 			if err != nil {
 				return fmt.Errorf("dial %s: %v", address, err)
 			}
@@ -1277,18 +1282,37 @@ func (d Deployment) DeleteAllPods(c *Cluster) error {
 	return nil
 }
 
-// LookupCSIAddresses returns controller and node addresses for gRPC dial.
+// LookupCSIAddresses returns controller and node addresses for pod/dial.go (<namespace>.<pod>:<port>).
 // Only works for testing deployments.
-func LookupCSIAddresses(c *Cluster, namespace string) (nodeAddress, controllerAddress string, err error) {
+func LookupCSIAddresses(ctx context.Context, c *Cluster, namespace string) (nodeAddress, controllerAddress string, err error) {
 	// Node #1 is expected to have a PMEM-CSI node driver
 	// instance. If it doesn't, connecting to the PMEM-CSI
-	// node service will fail.
-	nodeAddress = c.NodeServiceAddress(1, SocatPort)
+	// node service will fail. If we only have one node,
+	// then we use that one.
+	node := 1
+	if node >= c.NumNodes() {
+		node = 0
+	}
+	ip := c.NodeIP(node)
+	pod, err := c.GetAppInstance(ctx, labels.Set{"app.kubernetes.io/component": "node-testing"}, ip, namespace)
+	if err != nil {
+		return "", "", fmt.Errorf("find socat pod on node #%d = %s: %v", node, ip, err)
+	}
 
-	// Also use that same node as controller.
+	for _, port := range pod.Spec.Containers[0].Ports {
+		if port.Name == "csi-socket" {
+			nodeAddress = fmt.Sprintf("%s.%s:%d", namespace, pod.Name, port.ContainerPort)
+			// Also use that same node as controller.
+			controllerAddress = nodeAddress
+			return
+
+		}
+	}
+	// Fallback for PMEM-CSI 0.9. Can be removed once we stop testing against it.
+	nodeAddress = fmt.Sprintf("%s.%s:9735", namespace, pod.Name)
 	controllerAddress = nodeAddress
-
 	return
+	// return "", "", fmt.Errorf("container port 'csi-socket' not found in pod %+v", pod)
 }
 
 // DescribeForAll registers tests like gomega.Describe does, except that

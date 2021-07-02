@@ -44,8 +44,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/clock"
+	"k8s.io/client-go/kubernetes"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	clientexec "k8s.io/client-go/util/exec"
+	"k8s.io/klog/v2/klogr"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
@@ -54,6 +57,7 @@ import (
 	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
+	"github.com/intel/pmem-csi/test/e2e/pod"
 	pmeme2epod "github.com/intel/pmem-csi/test/e2e/pod"
 
 	. "github.com/onsi/ginkgo"
@@ -74,6 +78,35 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 	// This is not the case when deployed in production mode.
 	return d.Testing
 }, func(d *deploy.Deployment) {
+	// This must be set before the grpcDialer gets used for the first time.
+	var cfg *rest.Config
+	var cs kubernetes.Interface
+	grpcDialer := func(ctx context.Context, address string) (net.Conn, error) {
+		addr, err := pod.ParseAddr(address)
+		if err != nil {
+			return nil, err
+		}
+		cs, err := kubernetes.NewForConfig(cfg)
+		if err != nil {
+			return nil, err
+		}
+		dialer := pod.NewDialer(cs, cfg)
+		return dialer.DialContainerPort(ctx, klogr.New().WithName("gRPC socat"), *addr)
+	}
+	dialOptions := []grpc.DialOption{
+		// For our restart tests.
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			PermitWithoutStream: true,
+			// This is the minimum. Specifying it explicitly
+			// avoids some log output from gRPC.
+			Time: 10 * time.Second,
+		}),
+		// For plain HTTP.
+		grpc.WithInsecure(),
+		// Connect to socat pods through port-forwarding.
+		grpc.WithContextDialer(grpcDialer),
+	}
+
 	config := sanity.NewTestConfig()
 	// The size has to be large enough that even after rounding up to
 	// the next alignment boundary, the final volume size is still about
@@ -90,17 +123,8 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 	// and deletes all extra entries that it does not know about.
 	config.TargetPath = "/var/lib/kubelet/plugins/kubernetes.io/csi/pv/pmem-sanity-target.XXXXXX"
 	config.StagingPath = "/var/lib/kubelet/plugins/kubernetes.io/csi/pv/pmem-sanity-staging.XXXXXX"
-	config.ControllerDialOptions = []grpc.DialOption{
-		// For our restart tests.
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			PermitWithoutStream: true,
-			// This is the minimum. Specifying it explicitly
-			// avoids some log output from gRPC.
-			Time: 10 * time.Second,
-		}),
-		// For plain HTTP.
-		grpc.WithInsecure(),
-	}
+	config.DialOptions = dialOptions
+	config.ControllerDialOptions = dialOptions
 
 	f := framework.NewDefaultFramework("pmem")
 	f.SkipNamespaceCreation = true // We don't need a per-test namespace and skipping it makes the tests run faster.
@@ -112,13 +136,16 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 	const testNode = 1
 
 	BeforeEach(func() {
-		cs := f.ClientSet
+		// Store them for grpcDialer above. We cannot let it reference f itself because
+		// f.ClientSet gets unset at some point.
+		cs = f.ClientSet
+		cfg = f.ClientConfig()
 
 		var err error
 		cluster, err = deploy.NewCluster(cs, f.DynamicClient, f.ClientConfig())
 		framework.ExpectNoError(err, "query cluster")
 
-		config.Address, config.ControllerAddress, err = deploy.LookupCSIAddresses(cluster, d.Namespace)
+		config.Address, config.ControllerAddress, err = deploy.LookupCSIAddresses(context.Background(), cluster, d.Namespace)
 		framework.ExpectNoError(err, "find CSI addresses")
 
 		framework.Logf("sanity: using controller %s and node %s", config.ControllerAddress, config.Address)

@@ -763,6 +763,9 @@ spec:
         - unix-connect:/csi/csi.sock
         image: alpine/socat:1.0.3
         name: socat
+        ports:
+        - containerPort: 9735
+          name: csi-socket
         securityContext:
           privileged: true
         volumeMounts:
@@ -774,7 +777,6 @@ spec:
         - mountPath: /var/lib/kubelet/plugins/kubernetes.io/csi/pv
           mountPropagation: Bidirectional
           name: staging-dir
-      hostNetwork: true
       volumes:
       - hostPath:
           path: /var/lib/kubelet/plugins/pmem-csi.intel.com
