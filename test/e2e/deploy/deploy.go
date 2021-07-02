@@ -962,8 +962,6 @@ func Parse(deploymentName string) (*Deployment, error) {
 		if deployment.HasDriver && !deployment.Testing {
 			if deployment.Mode == api.DeviceModeDirect { // operator-direct-production
 				deployment.Namespace = "kube-system"
-				// No secret available in that namespace.
-				deployment.HasController = false
 			} else { // operator-lvm-production
 				deployment.DriverName = "second.pmem-csi.intel.com"
 			}
