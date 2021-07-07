@@ -777,6 +777,14 @@ spec:
         - mountPath: /var/lib/kubelet/plugins/kubernetes.io/csi/pv
           mountPropagation: Bidirectional
           name: staging-dir
+      nodeSelector:
+        storage: pmem
+      priorityClassName: system-node-critical
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
       volumes:
       - hostPath:
           path: /var/lib/kubelet/plugins/pmem-csi.intel.com

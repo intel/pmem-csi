@@ -22,6 +22,15 @@ spec:
         app.kubernetes.io/instance: pmem-csi.intel.com
         pmem-csi.intel.com/webhook: ignore
     spec:
+      # Same settings as for PMEM-CSI driver.
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
+      priorityClassName: system-node-critical
+      nodeSelector:
+        storage: pmem
       containers:
       - name: socat
         image: alpine/socat:1.0.3

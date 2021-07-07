@@ -851,9 +851,8 @@ fi
 						}),
 					})
 				framework.ExpectNoError(err, "list socat pods")
-				expectedPodNum := cluster.NumNodes() - 1
-				if len(pods.Items) != expectedPodNum {
-					framework.Failf("expected %d socat pods, only found %d:\n%v", expectedPodNum, len(pods.Items), pods.Items)
+				if len(pods.Items) == 0 {
+					framework.Failf("expected some socat pods, found none")
 				}
 
 				for _, pod := range pods.Items {

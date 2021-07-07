@@ -185,6 +185,18 @@ EOF
       name: pmem-csi-intel-com-node
     path: node-label-patch.yaml
 EOF
+                case $deploy in
+                    *-testing)
+                        ${SSH} "cat >>'$tmpdir/my-deployment/kustomization.yaml'" <<EOF
+  - target:
+      group: apps
+      version: v1
+      kind: DaemonSet
+      name: pmem-csi-intel-com-node-testing
+    path: node-label-patch.yaml
+EOF
+                        ;;
+                esac
                 ${SSH} "cat >>'$tmpdir/my-deployment/node-label-patch.yaml'" <<EOF
 - op: add
   path: /spec/template/spec/nodeSelector
