@@ -25,8 +25,7 @@ import (
 )
 
 // We are using direct mode here because it needs to do less work
-// during startup than LVM and the pod is more privileged (writable
-// /sys).
+// during startup.
 var _ = deploy.Describe("direct-testing", "direct-testing-gotests", "", func(d *deploy.Deployment) {
 	f := framework.NewDefaultFramework("gotests")
 	f.SkipNamespaceCreation = true
