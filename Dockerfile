@@ -1,3 +1,7 @@
+# Copyright 2021 Intel Coporation.
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Image builds are not reproducible because the base layer is changing over time.
 ARG LINUX_BASE=debian:buster-slim
 
