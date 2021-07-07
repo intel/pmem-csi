@@ -667,11 +667,11 @@ fi
 					Segments: map[string]string{},
 				},
 			}
-			for i := 0; i < 100000; i++ {
+			for i := 0; i < 1000000; i++ {
 				req.AccessibleTopology.Segments[fmt.Sprintf("pmem-csi.intel.com/node%d", i)] = nodeID
 			}
-			_, err := cc.GetCapacity(context.Background(), req)
-			Expect(err).ShouldNot(BeNil(), "unexpected success for too large request")
+			resp, err := cc.GetCapacity(context.Background(), req)
+			Expect(err).ShouldNot(BeNil(), "unexpected success for too large request, got response: %+v", resp)
 			status, ok := status.FromError(err)
 			Expect(ok).Should(BeTrue(), "expected status in error, got: %v", err)
 			Expect(status.Message()).Should(ContainSubstring("grpc: received message larger than max"))
