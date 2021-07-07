@@ -22,7 +22,7 @@ RUN echo 'deb-src http://ftp.debian.org/debian buster-backports main' >> /etc/ap
 # tools and recommended packages. But this image gets pushed to a registry by the CI as a cache,
 # so it still makes sense to keep this layer small by removing /var/cache.
 RUN ${APT_GET} update && \
-    ${APT_GET} install -y gcc libndctl-dev/buster-backports make git curl iproute2 pkg-config xfsprogs e2fsprogs parted openssh-client python3 python3-venv equivs && \
+    ${APT_GET} install -y gcc libndctl-dev/buster-backports make git curl iproute2 pkg-config xfsprogs e2fsprogs parted openssh-client python3 python3-venv equivs debhelper cmake python asciidoctor pkg-config && \
     rm -rf /var/cache/*
 RUN curl -L https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz | tar -zxf - -C / && \
     mkdir -p /usr/local/bin/ && \
@@ -32,6 +32,20 @@ ADD hack/python3-fake-debian-package .
 
 # Creates python3_100.0_all.deb
 RUN equivs-build python3-fake-debian-package
+
+# Build ipmctl from source.
+# We use the latest official release and determine that via
+# the HTML redirect page.
+RUN set -x && \
+    git clone https://github.com/intel/ipmctl.git && \
+    cd ipmctl && \
+    tag=$(curl --silent https://github.com/intel/ipmctl/releases/latest | sed -e 's;.*tag/\([^"]*\).*;\1;') && \
+    git checkout $tag && \
+    mkdir build && \
+    cd build && \
+    cmake -DRELEASE=ON -DCMAKE_INSTALL_PREFIX=/usr/local .. && \
+    make -j all && \
+    make install
 
 # Clean image for deploying PMEM-CSI.
 FROM ${LINUX_BASE} as runtime
@@ -162,13 +176,20 @@ RUN set -x && \
     ls -l /usr/local/share/package-sources; \
     du -h /usr/local/share/package-sources
 
+COPY --from=build /ipmctl/LICENSE /usr/local/share/package-licenses/ipmctl.LICENSE
+
 # The actual pmem-csi-driver image.
 FROM runtime as pmem
 
 # Move required binaries and libraries to clean container.
-COPY --from=binaries /usr/local/bin/pmem-* /usr/local/bin/
+COPY --from=binaries /usr/local/bin/pmem-* /usr/local/bin/ipmctl /usr/local/bin/
+COPY --from=binaries /usr/local/lib/libipmctl*.so.* /usr/local/lib/
+COPY --from=binaries /usr/local/man /usr/local/man
 COPY --from=binaries /usr/local/share/package-licenses /usr/local/share/package-licenses
 COPY --from=binaries /usr/local/share/package-sources /usr/local/share/package-sources
+
+# /usr/local/lib is not in the default library search path.
+RUN for i in /usr/local/lib/*.so.*; do ln -s $i /usr/lib; done
 
 # Don't rely on udevd, it isn't available (https://unix.stackexchange.com/questions/591724/how-to-add-a-block-to-udev-database-that-works-after-reboot).
 # Same with D-Bus.

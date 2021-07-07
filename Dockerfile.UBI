@@ -46,10 +46,26 @@ ARG GO_VERSION="1.16.1"
 # run instead of just using some older, cached result.
 ARG CACHEBUST
 
-RUN dnf install -y gcc ndctl-devel make git pkg-config curl tar findutils xz
+RUN dnf install -y gcc ndctl-devel make git pkg-config curl tar findutils xz cmake pkg-config gcc-c++ python36
 RUN curl -L https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz | tar -zxf - -C / && \
     mkdir -p /usr/local/bin/ && \
     for i in /go/bin/*; do ln -s $i /usr/local/bin/; done
+
+# Build ipmctl from source.
+# We use the latest official release and determine that via
+# the HTML redirect page.
+RUN set -x && \
+    git clone https://github.com/intel/ipmctl.git && \
+    mkdir -p /usr/local/share/package-licenses && \
+    cp LICENSE /usr/local/share/package-licenses/ipmctl.LICENSE && \
+    cd ipmctl && \
+    tag=$(curl --silent https://github.com/intel/ipmctl/releases/latest | sed -e 's;.*tag/\([^"]*\).*;\1;') && \
+    git checkout $tag && \
+    mkdir build && \
+    cd build && \
+    cmake -DRELEASE=ON -DCMAKE_INSTALL_PREFIX=/usr/local .. && \
+    make -j all && \
+    make install
 
 # build pmem-csi-driver
 ARG VERSION="unknown"
@@ -64,7 +80,6 @@ RUN set -x && \
     mkdir -p /usr/local/bin && \
     mv _output/pmem-csi-driver /usr/local/bin/pmem-csi-driver && \
     mv _output/pmem-csi-operator /usr/local/bin/pmem-csi-operator && \
-    mkdir -p /usr/local/share/package-licenses && \
     go mod vendor && \
     hack/copy-modules-license.sh /usr/local/share/package-licenses ./cmd/pmem-csi-driver ./cmd/pmem-csi-operator && \
     cp /go/LICENSE /usr/local/share/package-licenses/go.LICENSE && \
@@ -91,7 +106,7 @@ LABEL vendor="Intel"
 LABEL version="v0.9.1"
 # Needs to be set by Red Hat build service.
 # LABEL release="1"
-LABEL summary="A CSI driver for manager PMEM."
+LABEL summary="A CSI driver for managing PMEM."
 LABEL description="Intel(R) PMEM-CSI is a Container Storage Interface (CSI) driver for container orchestrators like Kubernetes. It makes local persistent memory (PMEM) available as a filesystem volume to container applications."
 
 # Update and install the minimal amount of additional packages that
@@ -105,9 +120,13 @@ RUN dnf install -y file xfsprogs e2fsprogs lvm2 ndctl && \
     rm -rf /var/cache /var/log/dnf*
 
 # Move required binaries and libraries to clean container.
-COPY --from=0 /usr/local/bin/pmem-* /usr/local/bin/
+COPY --from=0 /usr/local/bin/pmem-* /usr/local/bin/ipmctl /usr/local/bin/
+COPY --from=0 /usr/local/lib64/libipmctl*.so.* /usr/local/lib64
 COPY --from=0 /usr/local/share/package-licenses /licenses
 COPY --from=0 /usr/local/share/package-sources /sources
+
+# /usr/local/lib is not in the default library search path.
+RUN for i in /usr/local/lib64/*.so.*; do ln -s $i /usr/lib64; done
 
 # Download source RPMs for those packages that were installed by us above.
 RUN echo "Extra packages installed as separate layer:" && grep Installed: /usr/local/share/package-install.log

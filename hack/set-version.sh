@@ -19,6 +19,7 @@ new_version=$2
 set -x
 
 sed -i -e "s;\(IMAGE_VERSION?*=\|intel/pmem-[^ ]*:\)[^ ^;/]*;\1${new_version};g" $(git grep -l 'IMAGE_VERSION?*=\|intel/pmem-[^ ]*:' Makefile test/*.sh deploy)
-sed -i -e "s;/pmem-csi-driver\([^ ]*\):[^ {}]*;/pmem-csi-driver\1:${new_version};g" -e "s;\(TEST_PMEM_IMAGE_TAG:=\)canary;\1${new_version};g" test/test-config.sh
+sed -i -e "s;/pmem-csi-driver\([^ ]*\):[^ {}]*;/pmem-csi-driver\1:${new_version};g" test/test-config.sh docs/*/.md
+sed -i -e "s;\(TEST_PMEM_IMAGE_TAG:=\)canary;\1${new_version};g" test/test-config.sh
 sed -i -e "s;github.com/intel/pmem-csi/raw/[^/]*/;github.com/intel/pmem-csi/raw/${new_version}/;g" docs/*.md
 sed -i -e "s;LABEL version=\".*\";LABEL version=\"${new_version}\";" Dockerfile.UBI

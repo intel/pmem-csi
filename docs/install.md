@@ -141,6 +141,17 @@ Example of creating regions in interleaved mode, using all NVDIMMs:
 $ ipmctl create -goal PersistentMemoryType=AppDirect
 ```
 
+If the operating system on the nodes does not provide `ipmctl`, then
+it can also be run inside a container, using the PMEM-CSI image. The same
+invocation works with `podman` instead of `docker`.
+``` console
+$ sudo docker run --privileged --rm -u 0:0 docker.io/intel/pmem-csi-driver:canary ipmctl help
+Intel(R) Optane(TM) Persistent Memory Command Line Interface
+
+    Usage: ipmctl <verb>[<options>][<targets>][<properties>]
+...
+```
+
 When running inside virtual machines, each virtual machine typically
 already gets access to one region and `ipmctl` is not needed inside
 the virtual machine. Instead, that region must be made available for
