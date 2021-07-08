@@ -613,6 +613,7 @@ fi
 			if nodeCapacity%4 != 0 {
 				framework.Failf("total capacity %s not a multiple of 4", pmemlog.CapacityRef(nodeCapacity))
 			}
+			isFragmented := nodeCapacity > resp.MaximumVolumeSize.GetValue()
 			volumeSize := nodeCapacity / 4
 
 			// Round down to a 4Mi alignment for LVM mode.
@@ -651,7 +652,11 @@ fi
 			Expect(pmemlog.CapacityRef(resp.AvailableCapacity).String()).To(Equal(pmemlog.CapacityRef(nodeCapacity-volumeSize).String()), "available capacity while one volume exists")
 			Expect(resp.MaximumVolumeSize).NotTo(BeNil(), "have MaximumVolumeSize")
 			if d.Mode == api.DeviceModeLVM {
-				Expect(resp.MaximumVolumeSize.Value).To(BeNumerically(">=", 3*volumeSize), "MaximVolumeSize includes space of all three deleted volumes when using LVM")
+				if !isFragmented {
+					// When there are, for example, two regions, then we have fragmentation also for LVM.
+					// This assumption only applies when we have a single volume group.
+					Expect(resp.MaximumVolumeSize.Value).To(BeNumerically(">=", 3*volumeSize), "MaximVolumeSize includes space of all three deleted volumes when using LVM")
+				}
 			} else {
 				Expect(pmemlog.CapacityRef(resp.MaximumVolumeSize.Value).String()).To(Equal(pmemlog.CapacityRef(2*volumeSize).String()), "MaximVolumeSize includes space of the last two deleted volumes when using direct mode")
 			}
