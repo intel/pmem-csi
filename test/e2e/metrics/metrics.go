@@ -34,7 +34,7 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 	var (
 		metricsURL string
 		client     *http.Client
-		timeout    = 5 * time.Second
+		timeout    = 10 * time.Second
 	)
 
 	BeforeEach(func() {
