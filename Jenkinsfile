@@ -426,6 +426,7 @@ void RestoreEnv() {
 
 void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
     if (worker) {
+        echo "Restore environment"
         RestoreEnv()
     }
     try {
@@ -454,7 +455,7 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
         with "illegal string body character after dollar sign" and a reference
         to "${5}" although there was no "5". Concatenating strings with + is a workaround.
         */
-        sh '''#!/bin/bash
+        echo '''#!/bin/bash
            set -o pipefail
 
            # All output of the following sub-shell is going to be filtered.
