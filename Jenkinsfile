@@ -449,55 +449,80 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
         `qemu-system-x86_64: error: failed to set MSR 0x48b to 0x1582e00000000`,
         https://www.mail-archive.com/qemu-devel@nongnu.org/msg665051.html,
         so for now we disable VMX with -vmx.
+
+        Embedding ${env.<something>} directly in triple-quoted strings failed
+        with "illegal string body character after dollar sign" and a reference
+        to "${5}" although there was no "5". Concatenating strings with + is a workaround.
         */
-        sh " \
-           loggers=; \
-           atexit () { set -x; kill \$loggers ||true; killall sleep ||true; }; \
-           trap atexit EXIT; \
-           mkdir -p build/reports && \
-           if ${env.LOGGING_JOURNALCTL}; then sudo journalctl -f; fi & \
-           ( set +x; while sleep ${env.LOGGING_SAMPLING_DELAY}; do top -i -b -n 1 -w 120; df -h; done ) & \
-           loggers=\"\$loggers \$!\" && \
-           ${RunInBuilder()} \
-                  -e CLUSTER=${env.CLUSTER} \
-                  -e TEST_LOCAL_REGISTRY=\$(ip addr show dev docker0 | grep ' inet ' | sed -e 's/.* inet //' -e 's;/.*;;'):5000 \
-                  -e TEST_CHECK_SIGNED_FILES=false \
-                  -e TEST_CHECK_KVM=false \
-                  -e TEST_QEMU_CPU=host,-vmx \
-                  -e TEST_DISTRO=${distro} \
-                  -e TEST_DISTRO_VERSION=${distroVersion} \
-                  -e TEST_KUBERNETES_VERSION=${kubernetesVersion} \
-                  -e TEST_ETCD_VOLUME=${env.TEST_ETCD_VOLUME} \
-                  ${env.BUILD_CONTAINER} \
-                  bash -c 'set -x; \
-                           loggers=; \
-                           atexit () { set -x; kill \$loggers ||true; }; \
-                           trap atexit EXIT; \
-                           make stop && \
-                           make start && \
-                           _work/${env.CLUSTER}/ssh.0 kubectl get pods --all-namespaces -o wide && \
-                           for pod in ${env.LOGGING_PODS}; do \
-                               _work/${env.CLUSTER}/ssh.0 kubectl logs -f -n kube-system \$pod-pmem-csi-${env.CLUSTER}-master | sed -e \"s/^/\$pod: /\" & \
-                               loggers=\"\$loggers \$!\"; \
-                           done && \
-                           _work/${env.CLUSTER}/ssh.0 tar -C / -cf - usr/bin/kubectl | tar -C /usr/local/bin --strip-components=2 -xf - && \
-                           for ssh in \$(ls _work/${env.CLUSTER}/ssh.[0-9]); do \
-                               hostname=\$(\$ssh hostname) && \
-                               if ${env.LOGGING_JOURNALCTL}; then \
-                                   ( set +x; while true; do \$ssh journalctl -f; done ) & \
-                                   loggers=\"\$loggers \$!\"; \
-                               fi; \
-                               ( set +x; \
-                                 while sleep ${env.LOGGING_SAMPLING_DELAY}; do \
-                                     \$ssh top -i -b -n 1 -w 120 2>&1; \
-                                 done | sed -e \"s/^/\$hostname: /\" ) & \
-                               loggers=\"\$loggers \$!\"; \
-                           done && \
-                           testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}' | sed -e s/--*/-/g | tr . _ ) && \
-                           make test_e2e TEST_E2E_REPORT_DIR=${WORKSPACE}/build/reports.tmp/\$testrun \
-                                         TEST_E2E_SKIP=\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]@${skipIfPR}; fi) \
-                           ' |tee joblog-${BUILD_TAG}-test-${kubernetesVersion}.log |egrep 'Passed|FAIL:|^ERROR' 2>&1\
-           "
+        sh '''#!/bin/bash
+           set -o pipefail
+
+           # All output of the following sub-shell is going to be filtered.
+           # The full output goes to an artifact, only important messages to
+           # the Jenkins log.
+           (
+              loggers=
+              atexit () { set -x; kill $loggers || true; killall sleep || true }
+              trap atexit EXIT
+
+              mkdir -p build/reports
+              if ''' + "${env.LOGGING_JOURNALCTL}" + '''; then
+                   sudo journalctl -f &
+                   loggers="$loggers $!"
+              fi
+              ( set +x; while sleep ''' + "${env.LOGGING_SAMPLING_DELAY}" + '''; do top -i -b -n 1 -w 120; df -h; done ) &
+              loggers="$loggers$!"
+
+              ${RunInBuilder()}
+                  -e CLUSTER=''' + "${env.CLUSTER}" + '''
+                  -e TEST_LOCAL_REGISTRY=$(ip addr show dev docker0 | grep ' inet ' | sed -e 's/.* inet //' -e 's;/.*;;'):5000
+                  -e TEST_CHECK_SIGNED_FILES=false
+                  -e TEST_CHECK_KVM=false
+                  -e TEST_QEMU_CPU=host,-vmx
+                  -e TEST_DISTRO=''' + distro + '''
+                  -e TEST_DISTRO_VERSION=''' + distroVersion + '''
+                  -e TEST_KUBERNETES_VERSION=''' + kubernetesVersion + '''
+                  -e TEST_ETCD_VOLUME=''' + "${env.TEST_ETCD_VOLUME}" + '''
+                  ''' + "${env.BUILD_CONTAINER}" + '''
+                  bash -c 'set -x
+                           loggers=
+                           atexit () { set -x; kill$loggers ||true; }
+                           trap atexit EXIT
+                           set -e
+
+                           make stop
+                           make start
+
+                           # Copy kubectl from worker.
+                           # Might not be needed anymore?
+                           _work/''' + "${env.CLUSTER}" + '''/ssh.0 tar -C / -cf - usr/bin/kubectl | tar -C /usr/local/bin --strip-components=2 -xf -
+
+                           # Collect some information.
+                           _work/''' + "${env.CLUSTER}" + '''/ssh.0 kubectl get pods --all-namespaces -o wide
+                           for pod in ''' + "${env.LOGGING_PODS}" + ''' ; do
+                               _work/''' + "${env.CLUSTER}/ssh.0 kubectl logs -f -n kube-system $pod-pmem-csi-${env.CLUSTER}" + '''-master | sed -e "s/^/$pod: /" &
+                               loggers="$loggers $!"
+                           done
+                           for ssh in $(ls _work/''' + "${env.CLUSTER}" + '''/ssh.[0-9]); do
+                               hostname=$($ssh hostname) &&
+                               if ''' + "${env.LOGGING_JOURNALCTL}" + ''' ; then
+                                   ( set +x; while true; do $ssh journalctl -f; done ) &
+                                   loggers="$loggers $!"
+                               fi
+                               ( set +x
+                                 while sleep ''' + "${env.LOGGING_SAMPLING_DELAY}" + '''; do
+                                     $ssh top -i -b -n 1 -w 120 2>&1
+                                 done | sed -e "s/^/$hostname: /" ) &
+                               loggers="$loggers $!"
+                           done
+
+                           testrun=$(echo '${distro}-${distroVersion}-${kubernetesVersion}' | sed -e s/--*/-/g | tr . _ )
+                           make test_e2e TEST_E2E_REPORT_DIR=${WORKSPACE}/build/reports.tmp/$testrun \
+                                         TEST_E2E_SKIP=$(if [ "''' + "${env.CHANGE_ID}" + '''" ] && [ "''' + "${env.CHANGE_ID}" + '''" != null ]; then echo \\[Slow\\]@''' + skipIfPR + '''; fi) \
+
+                  '
+           ) 2>&1 | tee joblog-${BUILD_TAG}-test-${kubernetesVersion}.log | egrep 'Passed|FAIL:|^ERROR'
+           '''
     } finally {
         echo "Writing cluster state and kubelet logs into files."
         sh "_work/${env.CLUSTER}/ssh.0 kubectl get nodes -o wide > joblog-${BUILD_TAG}-nodestate-${kubernetesVersion}.log"
