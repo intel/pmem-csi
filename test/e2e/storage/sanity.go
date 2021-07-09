@@ -380,6 +380,9 @@ fi
 				framework.Failf("Did not find node driver with nodeID %q in %+v", nodeID, pods)
 			}
 
+			capacityBefore, err := cc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
+			framework.ExpectNoError(err, "get capacity before restart")
+
 			// delete driver on node
 			By(fmt.Sprintf("Deleting pod %s", restartPod))
 			err = e2epod.DeletePodWithWaitByName(f.ClientSet, restartPod, d.Namespace)
@@ -392,6 +395,9 @@ fi
 				return err
 			}, "3m", "5s").ShouldNot(HaveOccurred(), "Failed to list volumes after restart of node driver")
 
+			capacityAfter, err := cc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
+			framework.ExpectNoError(err, "get capacity after restart")
+			Expect(capacityAfter).To(Equal(capacityBefore), "capacity changed because node driver was restarted")
 
 			// Try republish
 			v.publish(name, vol)

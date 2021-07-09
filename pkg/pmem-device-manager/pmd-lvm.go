@@ -335,15 +335,21 @@ func setupNS(ctx context.Context, r ndctl.Region, percentage uint) error {
 	// Subtract sizes of existing active namespaces with currently handled mode and owned by pmem-csi
 	for _, ns := range r.ActiveNamespaces() {
 		logger.V(3).Info("Existing namespace",
-			"size", pmemlog.CapacityRef(int64(ns.Size())),
+			"usable-size", pmemlog.CapacityRef(int64(ns.Size())),
+			"raw-size", pmemlog.CapacityRef(int64(ns.RawSize())),
 			"mode", ns.Mode(),
 			"device", ns.DeviceName(),
 			"name", ns.Name())
 		if ns.Name() != pmemCSINamespaceName {
 			continue
 		}
-		logger.V(3).Info("Found owned-by-self namespace, stop processing this region")
-		return nil
+		used := ns.RawSize()
+		if used >= canUse {
+			logger.V(3).Info("All allowed space already in use by PMEM-CSI.")
+			canUse = 0
+			break
+		}
+		canUse -= used
 	}
 	// Because of overhead by alignment and extra space for page mapping, calculated available may show more than actual
 	if r.AvailableSize() < canUse {
