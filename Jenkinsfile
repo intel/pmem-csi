@@ -221,6 +221,15 @@ pipeline {
             }
         }
 
+        // This doesn't do anything. It's just serves as a reminder that "unstable"
+        // test steps are not the same as "successful". We had those for a while when
+        // accidentally ignoring the "make test_e2e" return code.
+        stage('Testing succeeded') {
+            steps {
+                echo "Testing succeeded."
+            }
+        }
+
         stage('Push new release') {
             when {
                 environment name: 'JOB_BASE_NAME', value: 'pmem-csi-release'
@@ -450,7 +459,10 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
         https://www.mail-archive.com/qemu-devel@nongnu.org/msg665051.html,
         so for now we disable VMX with -vmx.
         */
-        sh " \
+        sh "#!/bin/bash\n \
+           echo Note: job output is filtered, see joblog-${BUILD_TAG}-test-${kubernetesVersion}.log artifact for full output. && \
+           set -o pipefail && \
+           ( \
            loggers=; \
            atexit () { set -x; kill \$loggers ||true; killall sleep ||true; }; \
            trap atexit EXIT; \
@@ -496,7 +508,7 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
                            testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}' | sed -e s/--*/-/g | tr . _ ) && \
                            make test_e2e TEST_E2E_REPORT_DIR=${WORKSPACE}/build/reports.tmp/\$testrun \
                                          TEST_E2E_SKIP=\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]@${skipIfPR}; fi) \
-                           ' |tee joblog-${BUILD_TAG}-test-${kubernetesVersion}.log |egrep 'Passed|FAIL:|^ERROR' 2>&1\
+                           ') 2>&1 | tee joblog-${BUILD_TAG}-test-${kubernetesVersion}.log | grep --line-buffered -E -e 'checking for test|Passed|FAIL:|^ERROR' \
            "
     } finally {
         echo "Writing cluster state and kubelet logs into files."
