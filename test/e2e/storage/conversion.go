@@ -79,25 +79,8 @@ func testRawNamespaceConversion(f *framework.Framework, driverName, namespace st
 	// labels which might have cause the PMEM-CSI driver to run
 	// on the master node. None of the other tests expect that.
 	defer func() {
-		By("destroying volume groups again")
-		vgs := exec.Command(sshcmd, "sudo vgs --noheadings --options name")
-		out, err := vgs.Output() // ignore stderr, it may contain warnings
-		if err != nil {
-			framework.Logf("listing volume groups with %+v failed: %s", vgs, string(out))
-		}
-		for _, vg := range strings.Split(string(out), "\n") {
-			vgremove := exec.Command(sshcmd, "sudo vgremove "+vg)
-			out, err := vgremove.CombinedOutput()
-			if err != nil {
-				framework.Logf("removing volume group with %+v failed: %s", vgremove, string(out))
-			}
-		}
-
-		By("destroying namespace again")
-		cmd := exec.Command(sshcmd, "sudo ndctl destroy-namespace --force all")
-		if out, err := cmd.CombinedOutput(); err != nil {
-			framework.Logf("erasing namespaces with %+v failed: %s", cmd, string(out))
-		}
+		By("destroying volume groups and namespaces again")
+		deploy.ResetPMEM(ctx, "0")
 
 		By("reverting labels")
 		labels := []string{

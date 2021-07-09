@@ -50,6 +50,7 @@ import (
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
 
+	pmemexec "github.com/intel/pmem-csi/pkg/exec"
 	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
@@ -107,6 +108,9 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 	var cleanup func()
 	var cluster *deploy.Cluster
 
+	// Always test on the second node. We assume it has PMEM.
+	const testNode = 1
+
 	BeforeEach(func() {
 		cs := f.ClientSet
 
@@ -142,7 +146,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 				"app.kubernetes.io/component": "node-testing",
 				"app.kubernetes.io/part-of":   "pmem-csi",
 			},
-				cluster.NodeIP(1), d.Namespace)
+				cluster.NodeIP(testNode), d.Namespace)
 			return socat
 		}
 
@@ -302,6 +306,19 @@ fi
 			}
 		})
 
+		deleteTestNodeDriver := func() error {
+			nodeDriverPod, err := cluster.GetAppInstance(context.Background(), labels.Set{
+				"app.kubernetes.io/name": "pmem-csi-node",
+			}, cluster.NodeIP(testNode), d.Namespace)
+			if err != nil {
+				return fmt.Errorf("node driver pod not found on node %d: %v", testNode, err)
+			}
+			if err := e2epod.DeletePodWithWaitByName(f.ClientSet, nodeDriverPod.Name, nodeDriverPod.Namespace); err != nil {
+				return fmt.Errorf("delete driver pod on node %d: %v", testNode, err)
+			}
+			return nil
+		}
+
 		It("stores state across reboots for single volume", func() {
 			canRestartNode(nodeID)
 
@@ -358,12 +375,8 @@ fi
 		})
 
 		It("can publish volume after a node driver restart", func() {
-			restartPod := ""
+			var err error
 			v.namePrefix = "mount-volume"
-
-			pods, err := e2epod.WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,
-				labels.Set{"app.kubernetes.io/name": "pmem-csi-node"}.AsSelector(), cluster.NumNodes()-1, time.Minute)
-			framework.ExpectNoError(err, "All node drivers are not ready")
 
 			name, vol := v.create(22*1024*1024, nodeID)
 			defer v.remove(vol, name)
@@ -371,22 +384,12 @@ fi
 			nodeID := v.publish(name, vol)
 			defer v.unpublish(vol, nodeID)
 
-			for _, p := range pods.Items {
-				if p.Spec.NodeName == nodeID {
-					restartPod = p.Name
-				}
-			}
-			if restartPod == "" {
-				framework.Failf("Did not find node driver with nodeID %q in %+v", nodeID, pods)
-			}
-
 			capacityBefore, err := cc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
 			framework.ExpectNoError(err, "get capacity before restart")
 
 			// delete driver on node
-			By(fmt.Sprintf("Deleting pod %s", restartPod))
-			err = e2epod.DeletePodWithWaitByName(f.ClientSet, restartPod, d.Namespace)
-			Expect(err).ShouldNot(HaveOccurred(), "Failed to stop driver pod %s", restartPod)
+			err = deleteTestNodeDriver()
+			framework.ExpectNoError(err)
 
 			// Eventually a different pod will be created and listing volumes will
 			// work again through the same socat pod as before.
@@ -401,6 +404,83 @@ fi
 
 			// Try republish
 			v.publish(name, vol)
+		})
+
+		It("LVM volume group expands during restart", func() {
+			// We cannot reconfigure the driver. But we can destroy the volume group and namespace,
+			// create a smaller namespace, then restart the driver. The result should be a volume
+			// group containing two namespaces.
+
+			if d.Mode != api.DeviceModeLVM {
+				skipper.Skipf("test only works in LVM mode")
+			}
+
+			capacityBefore, err := cc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
+			framework.ExpectNoError(err, "get capacity before restart")
+
+			defer func() {
+				// Always clean up.
+				By("destroying volume groups and namespaces again")
+				if err := deploy.ResetPMEM(context.Background(), fmt.Sprintf("%d", testNode)); err != nil {
+					framework.Logf("resetting PMEM during cleanup failed: %v", err)
+				}
+
+				// We need to delete the pod to ensure that it detects those changes.
+				if err := deleteTestNodeDriver(); err != nil {
+					framework.Logf("deleting test node driver during cleanup failed: %v", err)
+				}
+			}()
+
+			sshcmd := fmt.Sprintf("%s/_work/%s/ssh.%d", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"), testNode)
+			mustRun := func(cmd string) {
+				_, err := pmemexec.RunCommand(context.Background(), sshcmd, cmd)
+				framework.ExpectNoError(err)
+			}
+			dump := func() {
+				mustRun("sudo vgs")
+				mustRun("sudo pvs")
+				mustRun("sudo ndctl list -NRu")
+			}
+
+			// This runs twice, because it was observed that it worked once on a clean
+			// node and then failed when run again. The reason where some lingering LVM
+			// labels in the namespace device, presumably from a previous run. Now PMEM-CSI
+			// wipes created namespaces, which avoids this issue.
+			for i := 0; i < 2; i++ {
+				By(fmt.Sprintf("Test iteration #%d", i))
+
+				err = deploy.ResetPMEM(context.Background(), fmt.Sprintf("%d", testNode))
+				framework.ExpectNoError(err, "reset during iteration #%d", i)
+
+				// Create a small namespace and the corresponding volume group, as if the driver
+				// had been started before with a small percentage.
+				mustRun("sudo ndctl create-namespace -s 96M --name pmem-csi")
+				mustRun("sudo wipefs -a -f /dev/pmem0")
+				mustRun("sudo vgcreate -f ndbus0region0fsdax /dev/pmem0")
+				dump()
+
+				// Force it to restart.
+				err = deleteTestNodeDriver()
+				framework.ExpectNoError(err, "delete node driver during iteration #%d", i)
+
+				// Once the driver restarts, it should extend that existing volume group
+				// before responding to gRPC requests.
+				var capacityAfter *csi.GetCapacityResponse
+				Eventually(func() error {
+					resp, err := cc.GetCapacity(context.Background(), &csi.GetCapacityRequest{})
+					if err != nil {
+						return err
+					}
+					capacityAfter = resp
+					return nil
+				}, "3m", "5s").ShouldNot(HaveOccurred(), "get capacity after restart #%d", i)
+				dump()
+
+				// Capacity is going to be a bit lower due to some additional overhead for
+				// managing two PVs instead of one.
+				Expect(capacityAfter.AvailableCapacity).To(BeNumerically("<", capacityBefore.AvailableCapacity), "capacity not less than before during iteration #%d", i)
+				Expect(capacityAfter.AvailableCapacity).To(BeNumerically(">=", capacityBefore.AvailableCapacity*95/100), "less capacity than expected during iteration #%d", i)
+			}
 		})
 
 		It("capacity is restored after controller restart", func() {
