@@ -376,17 +376,22 @@ fi
 					restartPod = p.Name
 				}
 			}
+			if restartPod == "" {
+				framework.Failf("Did not find node driver with nodeID %q in %+v", nodeID, pods)
+			}
 
 			// delete driver on node
-			err = e2epod.DeletePodWithWaitByName(f.ClientSet, d.Namespace, restartPod)
+			By(fmt.Sprintf("Deleting pod %s", restartPod))
+			err = e2epod.DeletePodWithWaitByName(f.ClientSet, restartPod, d.Namespace)
 			Expect(err).ShouldNot(HaveOccurred(), "Failed to stop driver pod %s", restartPod)
 
-			// Wait till the driver pod get restarted
-			err = e2epod.WaitForPodsReady(f.ClientSet, d.Namespace, restartPod, time.Now().Minute())
-			framework.ExpectNoError(err, "Node driver '%s' pod is not ready", restartPod)
+			// Eventually a different pod will be created and listing volumes will
+			// work again through the same socat pod as before.
+			Eventually(func() error {
+				_, err = ncc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+				return err
+			}, "3m", "5s").ShouldNot(HaveOccurred(), "Failed to list volumes after restart of node driver")
 
-			_, err = ncc.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
-			framework.ExpectNoError(err, "Failed to list volumes after reboot")
 
 			// Try republish
 			v.publish(name, vol)
