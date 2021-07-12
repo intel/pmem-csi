@@ -54,6 +54,7 @@ type pmemDeployment struct {
 	logFormat                                           string
 	image, pullPolicy, provisionerImage, registrarImage string
 	controllerCPU, controllerMemory                     string
+	controllerReplicas                                  int
 	nodeCPU, nodeMemory                                 string
 	provisionerCPU, provisionerMemory                   string
 	nodeRegistarCPU, nodeRegistrarMemory                string
@@ -96,6 +97,7 @@ func getDeployment(d *pmemDeployment) *api.PmemCSIDeployment {
 		SchedulerNodePort:   d.schedulerNodePort,
 	}
 	spec := &dep.Spec
+	spec.ControllerReplicas = d.controllerReplicas
 	if d.controllerCPU != "" || d.controllerMemory != "" {
 		spec.ControllerDriverResources = &corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
@@ -369,18 +371,19 @@ func TestDeploymentController(t *testing.T) {
 				name: "test-deployment",
 			},
 			"deployment with explicit values": {
-				name:             "test-deployment",
-				image:            "test-driver:v0.0.0",
-				provisionerImage: "test-provisioner-image:v0.0.0",
-				registrarImage:   "test-driver-registrar-image:v.0.0.0",
-				pullPolicy:       "Never",
-				logLevel:         10,
-				logFormat:        "json",
-				controllerCPU:    "1500m",
-				controllerMemory: "300Mi",
-				nodeCPU:          "1000m",
-				nodeMemory:       "500Mi",
-				kubeletDir:       "/some/directory",
+				name:               "test-deployment",
+				image:              "test-driver:v0.0.0",
+				provisionerImage:   "test-provisioner-image:v0.0.0",
+				registrarImage:     "test-driver-registrar-image:v.0.0.0",
+				pullPolicy:         "Never",
+				logLevel:           10,
+				logFormat:          "json",
+				controllerCPU:      "1500m",
+				controllerMemory:   "300Mi",
+				controllerReplicas: 4,
+				nodeCPU:            "1000m",
+				nodeMemory:         "500Mi",
+				kubeletDir:         "/some/directory",
 			},
 			"invalid device mode": {
 				name:          "test-driver-modes",

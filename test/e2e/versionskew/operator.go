@@ -201,17 +201,27 @@ var _ = deploy.DescribeForSome("versionskew", func(d *deploy.Deployment) bool {
 		// Ensure the deployments reconciled with changed operator
 		ensureDeploymentReady(uids, fmt.Sprintf("after version %s", what))
 
-		ss, err := f.ClientSet.AppsV1().StatefulSets(d.Namespace).Get(context.TODO(), driverCR1.ControllerDriverName(), metav1.GetOptions{})
-		Expect(err).ShouldNot(HaveOccurred(), "%s: get driver satefuleset", what)
-		Expect(pmemImage(ss.Spec.Template.Spec.Containers)).To(HavePrefix(defaultDriverImage), "controller uses %sed driver image", what)
+		if toVer != "" {
+			ss, err := f.ClientSet.AppsV1().StatefulSets(d.Namespace).Get(context.TODO(), driverCR1.ControllerDriverName(), metav1.GetOptions{})
+			Expect(err).ShouldNot(HaveOccurred(), "%s: get driver statefulset", what)
+			Expect(pmemImage(ss.Spec.Template.Spec.Containers)).To(HavePrefix(defaultDriverImage), "controller uses %sed driver image", what)
+
+			ss, err = f.ClientSet.AppsV1().StatefulSets(d.Namespace).Get(context.TODO(), driverCR2.ControllerDriverName(), metav1.GetOptions{})
+			Expect(err).ShouldNot(HaveOccurred(), "%s: get driver statefulset", what)
+			Expect(pmemImage(ss.Spec.Template.Spec.Containers)).To(BeEquivalentTo(customImage), "controller uses custom driver image")
+		} else {
+			ss, err := f.ClientSet.AppsV1().Deployments(d.Namespace).Get(context.TODO(), driverCR1.ControllerDriverName(), metav1.GetOptions{})
+			Expect(err).ShouldNot(HaveOccurred(), "%s: get driver deployment", what)
+			Expect(pmemImage(ss.Spec.Template.Spec.Containers)).To(HavePrefix(defaultDriverImage), "controller uses %sed driver image", what)
+
+			ss, err = f.ClientSet.AppsV1().Deployments(d.Namespace).Get(context.TODO(), driverCR2.ControllerDriverName(), metav1.GetOptions{})
+			Expect(err).ShouldNot(HaveOccurred(), "%s: get driver deployment", what)
+			Expect(pmemImage(ss.Spec.Template.Spec.Containers)).To(BeEquivalentTo(customImage), "controller uses custom driver image")
+		}
 
 		ds, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(context.TODO(), driverCR1.NodeDriverName(), metav1.GetOptions{})
 		Expect(err).ShouldNot(HaveOccurred(), "%s: get driver daemonset", what)
 		Expect(pmemImage(ds.Spec.Template.Spec.Containers)).To(HavePrefix(defaultDriverImage), "node driver uses %sed driver image", what)
-
-		ss, err = f.ClientSet.AppsV1().StatefulSets(d.Namespace).Get(context.TODO(), driverCR2.ControllerDriverName(), metav1.GetOptions{})
-		Expect(err).ShouldNot(HaveOccurred(), "%s: get driver satefuleset", what)
-		Expect(pmemImage(ss.Spec.Template.Spec.Containers)).To(BeEquivalentTo(customImage), "controller uses custom driver image")
 
 		ds, err = f.ClientSet.AppsV1().DaemonSets(d.Namespace).Get(context.TODO(), driverCR2.NodeDriverName(), metav1.GetOptions{})
 		Expect(err).ShouldNot(HaveOccurred(), "%s: get driver daemonset", what)

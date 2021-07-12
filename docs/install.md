@@ -397,12 +397,12 @@ Events:
   Normal  Running        39s   pmem-csi-operator  Driver deployment successful
 
 $ kubectl get pod -n pmem-csi
-NAME                               READY   STATUS    RESTARTS   AGE
-pmem-csi-intel-com-controller-0    2/2     Running   0          51s
-pmem-csi-intel-com-node-4x7cv      2/2     Running   0          50s
-pmem-csi-intel-com-node-6grt6      2/2     Running   0          50s
-pmem-csi-intel-com-node-msgds      2/2     Running   0          51s
-pmem-csi-operator-749c7c7c69-k5k8n 1/1     Running   0          3m
+NAME                                             READY   STATUS    RESTARTS   AGE
+pmem-csi-intel-com-controller-79cd9f799d-rt54d   2/2     Running   0          51s
+pmem-csi-intel-com-node-4x7cv                    2/2     Running   0          50s
+pmem-csi-intel-com-node-6grt6                    2/2     Running   0          50s
+pmem-csi-intel-com-node-msgds                    2/2     Running   0          51s
+pmem-csi-operator-749c7c7c69-k5k8n               1/1     Running   0          3m
 ```
 
 #### Install via YAML files
@@ -437,8 +437,8 @@ running the PMEM-CSI [scheduler extender](design.md#scheduler-extender) and
 [webhook](design.md#pod-admission-webhook). If those are not used, then certificate
 creation can be skipped. However, the YAML deployment files always create the PMEM-CSI
 controller StatefulSet which needs the certificates. Without them, the
-`pmem-csi-intel-com-controller-0` pod cannot start, so it is recommended to create
-certificates or customize the deployment so that this StatefulSet is not created.
+`pmem-csi-intel-com-controller` pod cannot start, so it is recommended to create
+certificates or customize the deployment so that this Deployment is not created.
 
 On OpenShift, certificates can be created automatically as described
 in https://docs.openshift.com/container-platform/4.6/security/certificates/service-serving-certificate.html.
@@ -535,11 +535,11 @@ for `kubectl kustomize`. For example:
 
 ``` console
 $ kubectl get pods -n pmem-csi
-NAME                    READY   STATUS    RESTARTS   AGE
-pmem-csi-intel-com-node-8kmxf     2/2     Running   0          3m15s
-pmem-csi-intel-com-node-bvx7m     2/2     Running   0          3m15s
-pmem-csi-intel-com-controller-0   2/2     Running   0          3m15s
-pmem-csi-intel-com-node-fbmpg     2/2     Running   0          3m15s
+NAME                                             READY   STATUS    RESTARTS   AGE
+pmem-csi-intel-com-controller-79cd9f799d-rt54d   2/2     Running   0          3m15s
+pmem-csi-intel-com-node-8kmxf                    2/2     Running   0          3m15s
+pmem-csi-intel-com-node-bvx7m                    2/2     Running   0          3m15s
+pmem-csi-intel-com-node-fbmpg                    2/2     Running   0          3m15s
 ```
 
 ### Volume parameters
@@ -1441,7 +1441,7 @@ containers provide different data. For example, the controller
 provides:
 
 ``` ShellSession
-$ kubectl port-forward pmem-csi-intel-com-controller-0 10010
+$ kubectl port-forward -n pmem-csi $(kubectl get pods -n pmem-csi -o name -l app.kubernetes.io/name=pmem-csi-controller) 10010
 Forwarding from 127.0.0.1:10010 -> 10010
 Forwarding from [::1]:10010 -> 10010
 ```
@@ -1611,6 +1611,7 @@ of the API specification.
 | logFormat | text | log output format | "text" or "json" <sup>3</sup> |
 | deviceMode | string | Device management mode to use. Supports one of `lvm` or `direct` | `lvm`
 | controllerTLSSecret | string | Name of an existing secret in the driver's namespace which contains ca.crt, tls.crt and tls.key data for the scheduler extender and pod mutation webhook. A controller is started if (and only if) this secret is specified. <br> Alternatively, the special string `-openshift-` can be used on OpenShift to let OpenShift create the necessary secrets. | empty
+| controllerReplicas | int | Number of concurrently running controller pods. | 1
 | mutatePods | Always/Try/Never | Defines how a mutating pod webhook is configured if a controller is started. The field is ignored if the controller is not enabled. "Never" disables pod mutation. "Try" configured it so that pod creation is allowed to proceed even when the webhook fails. "Always" requires that the webhook gets invoked successfully before creating a pod. | Try
 | schedulerNodePort | int or string | If non-zero, the scheduler service is created as a NodeService with that fixed port number. Otherwise that service is created as a cluster service. The number must be from the range reserved by Kubernetes for node ports. This is useful if the kube-scheduler cannot reach the scheduler extender via a cluster service. | 0
 | controllerResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for controller pod. <br/><sup>4</sup>_Deprecated and only available in `v1alpha1`._ |

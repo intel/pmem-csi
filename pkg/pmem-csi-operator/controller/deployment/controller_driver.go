@@ -65,7 +65,7 @@ var currentObjects = []client.Object{
 	&corev1.Secret{TypeMeta: typeMeta(corev1.SchemeGroupVersion, "Secret")},
 	&corev1.Service{TypeMeta: typeMeta(corev1.SchemeGroupVersion, "Service")},
 	&corev1.ServiceAccount{TypeMeta: typeMeta(corev1.SchemeGroupVersion, "ServiceAccount")},
-	&appsv1.StatefulSet{TypeMeta: typeMeta(appsv1.SchemeGroupVersion, "StatefulSet")},
+	&appsv1.Deployment{TypeMeta: typeMeta(appsv1.SchemeGroupVersion, "Deployment")},
 	&admissionregistrationv1.MutatingWebhookConfiguration{TypeMeta: typeMeta(admissionregistrationv1.SchemeGroupVersion, "MutatingWebhookConfiguration")},
 }
 
@@ -89,6 +89,8 @@ func cloneObject(from client.Object) (client.Object, error) {
 		return t.DeepCopyObject().(*corev1.Service), nil
 	case *corev1.ServiceAccount:
 		return t.DeepCopyObject().(*corev1.ServiceAccount), nil
+	case *appsv1.Deployment:
+		return t.DeepCopyObject().(*appsv1.Deployment), nil
 	case *appsv1.StatefulSet:
 		return t.DeepCopyObject().(*appsv1.StatefulSet), nil
 	case *admissionregistrationv1.MutatingWebhookConfiguration:
@@ -122,6 +124,7 @@ func CurrentObjects() []client.Object {
 // allow listing and removing of these objects.
 var obsoleteObjects = []client.Object{
 	&corev1.ConfigMap{TypeMeta: typeMeta(corev1.SchemeGroupVersion, "ConfigMap")}, // included only for testing purposes
+	&appsv1.StatefulSet{TypeMeta: typeMeta(appsv1.SchemeGroupVersion, "StatefulSet")},
 }
 
 // A list of all object types potentially created by the operator,
@@ -385,24 +388,24 @@ var subObjectHandlers = map[string]redeployObject{
 		},
 	},
 	"controller driver": {
-		objType: reflect.TypeOf(&appsv1.StatefulSet{}),
+		objType: reflect.TypeOf(&appsv1.Deployment{}),
 		object: func(d *pmemCSIDeployment) client.Object {
-			return &appsv1.StatefulSet{
-				TypeMeta:   metav1.TypeMeta{Kind: "StatefulSet", APIVersion: "apps/v1"},
+			return &appsv1.Deployment{
+				TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 				ObjectMeta: d.getObjectMeta(d.ControllerDriverName(), false),
 			}
 		},
 		modify: func(d *pmemCSIDeployment, o client.Object) error {
-			d.getControllerStatefulSet(o.(*appsv1.StatefulSet))
+			d.getControllerDeployment(o.(*appsv1.Deployment))
 			return nil
 		},
 		postUpdate: func(d *pmemCSIDeployment, o client.Object) error {
-			ss := o.(*appsv1.StatefulSet)
+			ss := o.(*appsv1.Deployment)
 			// Update controller status is status object
 			status := "NotReady"
 			reason := "Unknown"
 			if ss.Status.Replicas == 0 {
-				reason = "Controller stateful set has not started yet."
+				reason = "Controller deployment has not started yet."
 			} else if ss.Status.ReadyReplicas == ss.Status.Replicas {
 				status = "Ready"
 				reason = fmt.Sprintf("%d instance(s) of controller driver is running successfully", ss.Status.ReadyReplicas)
@@ -1149,8 +1152,11 @@ func (d *pmemCSIDeployment) getControllerProvisionerClusterRoleBinding(crb *rbac
 	}
 }
 
-func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
-	replicas := int32(1)
+func (d *pmemCSIDeployment) getControllerDeployment(ss *appsv1.Deployment) {
+	replicas := int32(d.Spec.ControllerReplicas)
+	if replicas <= 0 {
+		replicas = 1
+	}
 
 	// To make sure that the default values set by the API server
 	// are not unset by the operator we choose to update only specific
@@ -1178,7 +1184,6 @@ func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 			"app.kubernetes.io/instance": d.Name,
 		},
 	}
-	ss.Spec.ServiceName = "unused"
 	ss.Spec.Template.ObjectMeta.Labels = joinMaps(
 		d.Spec.Labels,
 		map[string]string{

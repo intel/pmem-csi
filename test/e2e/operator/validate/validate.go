@@ -380,6 +380,9 @@ ServiceAccount:
   imagePullSecrets: ignore # injected on OpenShift
 DaemonSet:` + defaultsApps + `
     updateStrategy: ignore
+Deployment:` + defaultsApps + `
+    progressDeadlineSeconds: ignore
+    strategy: ignore
 StatefulSet:` + defaultsApps + `
     updateStrategy: ignore
 CSIDriver:

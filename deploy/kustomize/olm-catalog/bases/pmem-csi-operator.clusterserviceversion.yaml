@@ -53,6 +53,9 @@ spec:
       - kind: StatefulSet
         name: ""
         version: apps/v1
+      - kind: Deployment
+        name: ""
+        version: apps/v1
       - kind: DaemonSet
         name: ""
         version: apps/v1

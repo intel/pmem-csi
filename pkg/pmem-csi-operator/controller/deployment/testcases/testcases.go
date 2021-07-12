@@ -48,6 +48,9 @@ func UpdateTests() []UpdateTest {
 				},
 			}
 		},
+		"controllerReplicas": func(d *api.PmemCSIDeployment) {
+			d.Spec.ControllerReplicas = 5
+		},
 		"nodeDriverResources": func(d *api.PmemCSIDeployment) {
 			d.Spec.NodeDriverResources = &corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{

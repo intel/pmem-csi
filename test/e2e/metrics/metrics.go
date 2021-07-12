@@ -40,7 +40,11 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 	BeforeEach(func() {
 		cluster, err := deploy.NewCluster(f.ClientSet, f.DynamicClient, f.ClientConfig())
 		framework.ExpectNoError(err, "get cluster information")
-		metricsURL = deploy.WaitForPMEMDriver(cluster, d)
+		metricsURLs := deploy.WaitForPMEMDriver(cluster, d, 1 /* controller replicas */)
+		if len(metricsURLs) != 1 {
+			framework.Failf("expected one controller, got multiple metrics URLs: %v", metricsURLs)
+		}
+		metricsURL = metricsURLs[0]
 		client = &http.Client{
 			Transport: pod.NewTransport(klogr.New().WithName("port forwarding"), f.ClientSet, f.ClientConfig()),
 			Timeout:   timeout,

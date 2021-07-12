@@ -25,16 +25,58 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	e2epv "k8s.io/kubernetes/test/e2e/framework/pv"
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
+
+	testconfig "github.com/intel/pmem-csi/test/test-config"
 )
+
+func CreateClaim(namespace, scName string) v1.PersistentVolumeClaim {
+	return v1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "pvc-",
+			Namespace:    namespace,
+		},
+		Spec: v1.PersistentVolumeClaimSpec{
+			AccessModes: []v1.PersistentVolumeAccessMode{
+				v1.ReadWriteOnce,
+			},
+			Resources: v1.ResourceRequirements{
+				Requests: v1.ResourceList{
+					v1.ResourceName(v1.ResourceStorage): resource.MustParse("1Mi"),
+				},
+			},
+			StorageClassName: &scName,
+		},
+	}
+}
+
+func TestReschedule(client clientset.Interface, timeouts *framework.TimeoutContext, claim *v1.PersistentVolumeClaim, driverName, id string) {
+	nodes, err := client.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+	framework.ExpectNoError(err, "list nodes")
+	selectedNode := ""
+	nodeLabelName, nodeLabelValue := testconfig.GetNodeLabelOrFail()
+	for _, node := range nodes.Items {
+		if node.Labels[nodeLabelName] != nodeLabelValue {
+			selectedNode = node.Name
+			break
+		}
+	}
+	Expect(selectedNode).NotTo(BeEmpty(), "have a node without PMEM-CSI")
+	claim.Annotations = map[string]string{
+		"volume.kubernetes.io/selected-node":            selectedNode,
+		"volume.beta.kubernetes.io/storage-provisioner": driverName,
+	}
+	TestDynamicProvisioning(client, timeouts, claim, storagev1.VolumeBindingWaitForFirstConsumer, id)
+}
 
 // TestDynamicLateBindingProvisioning is a variant of k8s.io/kubernetes/test/e2e/storage/testsuites/provisioning.go
 // which works with late and immediate binding and can be invoked in parallel with different IDs.
