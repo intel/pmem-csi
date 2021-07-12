@@ -30,7 +30,7 @@ versions:
 
 | Kubernetes version | Required alpha feature gates   | Support status
 |--------------------|--------------------------------|----------------
-| 1.13               | CSINodeInfo, CSIDriverRegistry,<br>CSIBlockVolume</br>| unsupported <sup>1</sup>
+| 1.13               | CSINodeInfo, CSIDriverRegistry, CSIBlockVolume | unsupported <sup>1</sup>
 | 1.14               |                                | unsupported <sup>2</sup>
 | 1.15               | CSIInlineVolume                | unsupported <sup>3</sup>
 | 1.16               |                                | unsupported <sup>4</sup>
