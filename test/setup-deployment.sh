@@ -120,7 +120,7 @@ patchesJson6902:
   - target:
       group: apps
       version: v1
-      kind: StatefulSet
+      kind: Deployment
       name: pmem-csi-intel-com-controller
     path: scheduler-patch.yaml
 EOF

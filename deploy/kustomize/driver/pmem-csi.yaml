@@ -118,7 +118,7 @@ subjects:
   namespace: default
 ---
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: pmem-csi-intel-com-controller
   namespace: default
@@ -133,9 +133,6 @@ spec:
     matchLabels:
       app.kubernetes.io/name: pmem-csi-controller
       app.kubernetes.io/instance: pmem-csi.intel.com
-  # Has to be set even when the service itself does not
-  # exist and is not needed (https://github.com/kubernetes/kubernetes/issues/69608).
-  serviceName: unused
   template:
     metadata:
       labels:

@@ -8,6 +8,7 @@ package deploy
 
 import (
 	"context"
+	"fmt"
 
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -175,10 +176,17 @@ func LogError(err error, format string, args ...interface{}) {
 }
 
 func GetOperatorMetricsURL(ctx context.Context, cluster *Cluster, d *Deployment) (string, error) {
-	return GetMetricsURL(ctx, cluster, d.Namespace, labels.Set{
+	urls, err := GetMetricsURLs(ctx, cluster, d.Namespace, labels.Set{
 		"pmem-csi.intel.com/deployment": d.Label(),
 		"app":                           "pmem-csi-operator",
 	})
+	if err != nil {
+		return "", err
+	}
+	if len(urls) != 1 {
+		return "", fmt.Errorf("expected one metrics URL for operator, got: %v", urls)
+	}
+	return urls[0], nil
 }
 
 func GetOperatorMetrics(ctx context.Context, cluster *Cluster, d *Deployment) (map[string]*cm.MetricFamily, error) {

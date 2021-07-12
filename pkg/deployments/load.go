@@ -108,7 +108,7 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 		}
 
 		switch obj.GetKind() {
-		case "StatefulSet":
+		case "Deployment":
 			resources := map[string]*corev1.ResourceRequirements{
 				"pmem-driver": deployment.Spec.ControllerDriverResources,
 			}
@@ -116,6 +116,12 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 				// TODO: avoid panic
 				panic(fmt.Errorf("set controller resources: %v", err))
 			}
+			outerSpec := obj.Object["spec"].(map[string]interface{})
+			replicas := int64(deployment.Spec.ControllerReplicas)
+			if replicas == 0 {
+				replicas = 1
+			}
+			outerSpec["replicas"] = replicas
 		case "DaemonSet":
 			switch obj.GetName() {
 			case deployment.NodeSetupName():

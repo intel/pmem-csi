@@ -220,6 +220,16 @@ func (csid *csiDriver) Run(ctx context.Context) error {
 
 			// Create rescheduler. This has to be done before starting the factory
 			// because it will indirectly add a new index.
+			//
+			// We don't use leader election. The shared factories are running
+			// anyway, so we don't avoid traffic when hot spares are idle. Quite
+			// the opposite, the leader election itself causes additional traffic.
+			//
+			// There's also no downside to running the deschedule check multiple
+			// times. In the worst case, multiple instances will determine at exactly
+			// the same time that it's time to reschedule and try to unset the annotation.
+			// One of them will succeed, the others will get a conflict error and then
+			// notice that nothing is left to do on their retry.
 			pcp = newRescheduler(ctx,
 				csid.cfg.DriverName,
 				client, pvcInformer, scInformer, pvInformer, csiNodeLister,

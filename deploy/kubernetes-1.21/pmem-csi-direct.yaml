@@ -326,7 +326,7 @@ subjects:
   namespace: pmem-csi
 ---
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   labels:
     app.kubernetes.io/component: controller
@@ -343,7 +343,6 @@ spec:
       app.kubernetes.io/instance: pmem-csi.intel.com
       app.kubernetes.io/name: pmem-csi-controller
       pmem-csi.intel.com/deployment: direct-production
-  serviceName: unused
   template:
     metadata:
       annotations:

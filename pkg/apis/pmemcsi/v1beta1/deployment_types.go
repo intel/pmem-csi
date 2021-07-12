@@ -109,6 +109,10 @@ type DeploymentSpec struct {
 	// https://docs.openshift.com/container-platform/4.6/security/certificates/service-serving-certificate.html
 	// to create certificates.
 	ControllerTLSSecret string `json:"controllerTLSSecret,omitempty"`
+	// ControllerReplicas determines how many copys of the controller Pod run concurrently.
+	// Zero (= unset) selects the builtin default, which is currently 1.
+	// +kubebuilder:validation:Minimum=0
+	ControllerReplicas int `json:"controllReplicas,omitempty"`
 	// MutatePod defines how a mutating pod webhook is configured if a controller
 	// is started. The field is ignored if the controller is not enabled.
 	// The default is "Try".
@@ -641,4 +645,12 @@ func (d *PmemCSIDeployment) GetOwnerReference() metav1.OwnerReference {
 		BlockOwnerDeletion: &blockOwnerDeletion,
 		Controller:         &isController,
 	}
+}
+
+// GetControllerReplicas returns a non-zero replica number for the controller.
+func (d *PmemCSIDeployment) GetControllerReplicas() int {
+	if d.Spec.ControllerReplicas <= 0 {
+		return 1
+	}
+	return d.Spec.ControllerReplicas
 }

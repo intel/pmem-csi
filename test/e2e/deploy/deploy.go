@@ -89,33 +89,34 @@ func WaitForOperator(c *Cluster, namespace string) *v1.Pod {
 	return operator
 }
 
-// GetMetricsURL retrieves the metrics URL provided by a pod that
-// matches with the label set passed in podLabelSet.
-func GetMetricsURL(ctx context.Context, c *Cluster, namespace string, podLabels labels.Set) (string, error) {
+// GetMetricsURLs retrieves the metrics URLs provided by all pods that
+// match with the label set passed in podLabelSet.
+func GetMetricsURLs(ctx context.Context, c *Cluster, namespace string, podLabels labels.Set) ([]string, error) {
+	var urls []string
 	list, err := c.cs.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: podLabels.String()})
 	if err != nil {
-		return "", err
+		return nil, err
+	}
+	if len(list.Items) == 0 {
+		return nil, fmt.Errorf("no pod(s) found for given labels(%v) in '%s' namespace", podLabels, namespace)
 	}
 
-	var pod *v1.Pod
-	for i, p := range list.Items {
-		if p.GetDeletionTimestamp() == nil {
-			pod = &list.Items[i]
-		}
-	}
-
-	if pod == nil {
-		return "", fmt.Errorf("no pod(s) found for given labels(%v) in '%s' namespace", podLabels, namespace)
-	}
-	for _, container := range pod.Spec.Containers {
-		for _, port := range container.Ports {
-			if port.Name == "metrics" {
-				return fmt.Sprintf("http://%s.%s:%d/metrics", pod.Namespace, pod.Name, port.ContainerPort), nil
+	for _, pod := range list.Items {
+		if pod.GetDeletionTimestamp() == nil {
+			for _, container := range pod.Spec.Containers {
+				for _, port := range container.Ports {
+					if port.Name == "metrics" {
+						urls = append(urls, fmt.Sprintf("http://%s.%s:%d/metrics", pod.Namespace, pod.Name, port.ContainerPort))
+					}
+				}
 			}
 		}
 	}
+	if len(urls) == 0 {
+		return nil, fmt.Errorf("no metrics ports found (pods: %+v)", list)
+	}
 
-	return "", fmt.Errorf("no metrics port found (pod: %s)", pod.Name)
+	return urls, nil
 }
 
 // GetMetricsPortForward retrieves metrics from given metricsURL
@@ -152,7 +153,7 @@ func GetMetrics(ctx context.Context, c *Cluster, url string) (map[string]*cm.Met
 // - controller service is up and running
 // - all nodes have registered
 // - for testing deployments: TCP CSI endpoints are ready
-func WaitForPMEMDriver(c *Cluster, d *Deployment) (metricsURL string) {
+func WaitForPMEMDriver(c *Cluster, d *Deployment, controllerReplicas int32) (metricsURLs []string) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	info := time.NewTicker(time.Minute)
@@ -178,67 +179,78 @@ func WaitForPMEMDriver(c *Cluster, d *Deployment) (metricsURL string) {
 
 		if d.HasController {
 			var err error
-			metricsURL, err = GetMetricsURL(deadline, c, d.Namespace, labels.Set{
+			metricsURLs, err = GetMetricsURLs(deadline, c, d.Namespace, labels.Set{
 				"pmem-csi.intel.com/deployment": d.Label(),
 				"app.kubernetes.io/name":        "pmem-csi-controller",
 			})
 			if err != nil {
 				return err
 			}
-
-			metrics, err := GetMetrics(deadline, c, metricsURL)
-			if err != nil {
-				return fmt.Errorf("parse metrics response: %v", err)
-			}
-			buildInfo, ok := metrics["build_info"]
-			if !ok {
-				return fmt.Errorf("expected build_info not found in metrics: %v", metrics)
-			}
-			if len(buildInfo.Metric) != 1 {
-				return fmt.Errorf("expected build_info to have one metric, got: %v", buildInfo.Metric)
-			}
-			buildMetric := buildInfo.Metric[0]
-			if len(buildMetric.Label) != 1 {
-				return fmt.Errorf("expected build_info to have one label, got: %v", buildMetric.Label)
-			}
-			label := buildMetric.Label[0]
-			if *label.Name != "version" {
-				return fmt.Errorf("expected build_info to contain a version label, got: %s", *label.Name)
-			}
-			version = *label.Value
-
-			switch {
-			case d.Version == "0.7" || d.Version == "0.8":
-				// With the older, centralized provisioning we
-				// can also check that the controller knows
-				// about all nodes.
-				pmemNodes, ok := metrics["pmem_nodes"]
-				if !ok {
-					return fmt.Errorf("expected pmem_nodes not found in metrics: %v", metrics)
-				}
-
-				if len(pmemNodes.Metric) != 1 {
-					return fmt.Errorf("expected pmem_nodes to have one metric, got: %v", pmemNodes.Metric)
-				}
-				nodesMetric := pmemNodes.Metric[0]
-				actualNodes := int(*nodesMetric.Gauge.Value)
-				if actualNodes != c.NumNodes()-1 {
-					return fmt.Errorf("only %d of %d nodes have registered", actualNodes, c.NumNodes()-1)
-				}
-			case d.Version == "0.9" || !c.StorageCapacitySupported():
-				// It is possible that we just
-				// (re)configured the mutating pod
-				// webhook. We must be sure that
-				// apiserver has adapted to that
-				// change. We test that by submitting
-				// a pod and checking that the webhook
-				// was called, which is visible in its
-				// metrics data since PMEM-CSI 0.9.0.
-				oldCount, err := findHistogramCount(metrics, "scheduler_request_duration_seconds", map[string]string{"handler": "mutate"})
+			var oldCount uint64
+			checkCount := false
+			for _, url := range metricsURLs {
+				metrics, err := GetMetrics(deadline, c, url)
 				if err != nil {
-					return nil
+					return fmt.Errorf("parse metrics response: %v", err)
 				}
+				buildInfo, ok := metrics["build_info"]
+				if !ok {
+					return fmt.Errorf("expected build_info not found in metrics: %v", metrics)
+				}
+				if len(buildInfo.Metric) != 1 {
+					return fmt.Errorf("expected build_info to have one metric, got: %v", buildInfo.Metric)
+				}
+				buildMetric := buildInfo.Metric[0]
+				if len(buildMetric.Label) != 1 {
+					return fmt.Errorf("expected build_info to have one label, got: %v", buildMetric.Label)
+				}
+				label := buildMetric.Label[0]
+				if *label.Name != "version" {
+					return fmt.Errorf("expected build_info to contain a version label, got: %s", *label.Name)
+				}
+				version = *label.Value
 
+				switch {
+				case d.Version == "0.7" || d.Version == "0.8":
+					// With the older, centralized provisioning we
+					// can also check that the controller knows
+					// about all nodes.
+					pmemNodes, ok := metrics["pmem_nodes"]
+					if !ok {
+						return fmt.Errorf("expected pmem_nodes not found in metrics: %v", metrics)
+					}
+
+					if len(pmemNodes.Metric) != 1 {
+						return fmt.Errorf("expected pmem_nodes to have one metric, got: %v", pmemNodes.Metric)
+					}
+					nodesMetric := pmemNodes.Metric[0]
+					actualNodes := int(*nodesMetric.Gauge.Value)
+					if actualNodes != c.NumNodes()-1 {
+						return fmt.Errorf("only %d of %d nodes have registered", actualNodes, c.NumNodes()-1)
+					}
+				case !c.StorageCapacitySupported():
+					// It is possible that we just
+					// (re)configured the mutating pod
+					// webhook. We must be sure that
+					// apiserver has adapted to that
+					// change. We test that by submitting
+					// a pod and checking that the webhook
+					// was called, which is visible in its
+					// metrics data since PMEM-CSI 0.9.0.
+					count, err := findHistogramCount(metrics, "scheduler_request_duration_seconds", map[string]string{"handler": "mutate"})
+					if err != nil {
+						return nil
+					}
+					oldCount += count
+					checkCount = true
+				default:
+					// Nothing to wait for. We could check for CSIStorageCapacity objects, but those
+					// are not needed yet when starting a test. The scheduler will wait for them by
+					// itself.
+				}
+			}
+
+			if checkCount {
 				// Pods get validated after
 				// mutation. We can therefore submit
 				// an invalid pod that will be sent to
@@ -263,22 +275,22 @@ func WaitForPMEMDriver(c *Cluster, d *Deployment) (metricsURL string) {
 				}
 
 				// Now check that the webhook was called.
-				metrics, err := GetMetrics(deadline, c, metricsURL)
-				if err != nil {
-					return fmt.Errorf("parse metrics response: %v", err)
-				}
+				var newCount uint64
+				for _, url := range metricsURLs {
+					metrics, err := GetMetrics(deadline, c, url)
+					if err != nil {
+						return fmt.Errorf("parse metrics response: %v", err)
+					}
 
-				newCount, err := findHistogramCount(metrics, "scheduler_request_duration_seconds", map[string]string{"handler": "mutate"})
-				if err != nil {
-					return fmt.Errorf("parse metrics response: %v", err)
+					count, err := findHistogramCount(metrics, "scheduler_request_duration_seconds", map[string]string{"handler": "mutate"})
+					if err != nil {
+						return fmt.Errorf("parse metrics response: %v", err)
+					}
+					newCount += count
 				}
 				if newCount == oldCount {
-					return fmt.Errorf("mutating webhook was not called for pod %q, request count still %d", pod.Name, oldCount)
+					return fmt.Errorf("mutating webhook was not called, total request count still %d", oldCount)
 				}
-			default:
-				// Nothing to wait for. We could check for CSIStorageCapacity objects, but those
-				// are not needed yet when starting a test. The scheduler will wait for them by
-				// itself.
 			}
 		}
 
@@ -320,6 +332,39 @@ func WaitForPMEMDriver(c *Cluster, d *Deployment) (metricsURL string) {
 				// It would be nice to check the metrics endpoint here, but reaching it from outside
 				// the cluster relies on port forwarding (tricky to set up) or some way to run curl
 				// inside the cluster (expensive because we would need to start a pod for it).
+			}
+		}
+
+		// Check controller pods.
+		switch d.Version {
+		case "0.7", "0.8", "0.9":
+			// No need to test and doesn't have the necessary labels.
+		default:
+			deployments, err := c.cs.AppsV1().Deployments(d.Namespace).List(context.Background(),
+				metav1.ListOptions{
+					LabelSelector: labels.Set{
+						"app.kubernetes.io/instance":  d.DriverName,
+						"app.kubernetes.io/component": "controller",
+					}.String(),
+				},
+			)
+			if err != nil {
+				return fmt.Errorf("list controller deployments: %v", err)
+			}
+			if len(deployments.Items) != 1 {
+				return fmt.Errorf("need one deployment, have %d", len(deployments.Items))
+			}
+			dep := deployments.Items[0]
+			if *dep.Spec.Replicas != controllerReplicas ||
+				dep.Status.Replicas != controllerReplicas ||
+				dep.Status.AvailableReplicas != controllerReplicas ||
+				dep.Status.ReadyReplicas != controllerReplicas {
+				return fmt.Errorf("expect controller deployment with %d replicas, have spec.Replicas=%d, status.Replicas=%d, status.AvailableReplicase=%d, status.ReadyReplicas=%d",
+					controllerReplicas,
+					*dep.Spec.Replicas,
+					dep.Status.Replicas,
+					dep.Status.AvailableReplicas,
+					dep.Status.ReadyReplicas)
 			}
 		}
 
@@ -548,7 +593,7 @@ func RemoveObjects(c *Cluster, deployment *Deployment) error {
 			}
 		}
 
-		// We intentionally delete statefulset last because
+		// We intentionally delete deployment and stateful sets last because
 		// findDriver checks for it. Here we just scale it down
 		// to trigger pod deletion.
 		if list, err := c.cs.AppsV1().StatefulSets("").List(context.Background(), filter); !failure(err) {
@@ -560,8 +605,6 @@ func RemoveObjects(c *Cluster, deployment *Deployment) error {
 				}
 			}
 		}
-
-		// Same for the operator's deployment.
 		if list, err := c.cs.AppsV1().Deployments("").List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				if *object.Spec.Replicas != 0 {
@@ -842,11 +885,15 @@ func findDriver(c *Cluster) (*Deployment, error) {
 	}
 	deployment.DriverName = drivers.Items[0].Name
 
-	controllers, err := c.cs.AppsV1().StatefulSets("").List(context.Background(), metav1.ListOptions{LabelSelector: deploymentLabel})
+	controllerSS, err := c.cs.AppsV1().StatefulSets("").List(context.Background(), metav1.ListOptions{LabelSelector: deploymentLabel})
 	if err != nil {
 		return nil, fmt.Errorf("checking for StatefulSet: %v", err)
 	}
-	deployment.HasController = len(controllers.Items) > 0
+	controllerD, err := c.cs.AppsV1().Deployments("").List(context.Background(), metav1.ListOptions{LabelSelector: deploymentLabel})
+	if err != nil {
+		return nil, fmt.Errorf("checking for Deployment: %v", err)
+	}
+	deployment.HasController = len(controllerSS.Items) > 0 || len(controllerD.Items) > 0
 
 	// Derive the version from the image tag. The annotation doesn't include it.
 	for _, container := range list.Items[0].Spec.Template.Spec.Containers {
@@ -1044,7 +1091,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 			framework.Logf("reusing existing %s PMEM-CSI components", deployment.Name())
 			// Do some sanity checks on the running deployment before the test.
 			if deployment.HasDriver {
-				WaitForPMEMDriver(c, deployment)
+				WaitForPMEMDriver(c, deployment, 1 /* controller replicas */)
 				CheckPMEMDriver(c, deployment)
 			}
 			if deployment.HasOperator {
@@ -1175,7 +1222,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 		// We check for a running driver the same way at the moment, by directly
 		// looking at the driver state. Long-term we want the operator to do that
 		// checking itself.
-		WaitForPMEMDriver(c, deployment)
+		WaitForPMEMDriver(c, deployment, 1 /* controller replicas */)
 		CheckPMEMDriver(c, deployment)
 	}
 }
