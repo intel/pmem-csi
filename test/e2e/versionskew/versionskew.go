@@ -137,6 +137,15 @@ func (p *skewTestSuite) GetTestSuiteInfo() storageframework.TestSuiteInfo {
 }
 
 func (p *skewTestSuite) SkipUnsupportedTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) {
+	// We rely here on the driver being named after a deployment
+	// (see csi_volumes.go).
+	d := deploy.MustParse(driver.GetDriverInfo().Name)
+
+	if d.Testing {
+		// For example, replacing the controller image in a 0.9 testing deployment fails
+		// because the 1.0 test image doesn't support the -coverprofile options.
+		skipper.Skipf("version skew testing only needs to work for production deployments")
+	}
 }
 
 type local struct {
