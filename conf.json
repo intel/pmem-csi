@@ -19,6 +19,9 @@
         "sphinx_md",
         "sphinx_copybutton"
     ],
+    "linkcheck_ignore": [
+        ".*cloudnative-k8sci.southcentralus.cloudapp.azure.com.*"
+    ],
     "linkcheck_anchors_ignore": [
         "^!",
         "^L[0-9]+-L[0-9]+$",
