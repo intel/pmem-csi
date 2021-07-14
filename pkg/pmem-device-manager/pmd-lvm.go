@@ -335,15 +335,21 @@ func setupNS(ctx context.Context, r ndctl.Region, percentage uint) error {
 	// Subtract sizes of existing active namespaces with currently handled mode and owned by pmem-csi
 	for _, ns := range r.ActiveNamespaces() {
 		logger.V(3).Info("Existing namespace",
-			"size", pmemlog.CapacityRef(int64(ns.Size())),
+			"usable-size", pmemlog.CapacityRef(int64(ns.Size())),
+			"raw-size", pmemlog.CapacityRef(int64(ns.RawSize())),
 			"mode", ns.Mode(),
 			"device", ns.DeviceName(),
 			"name", ns.Name())
 		if ns.Name() != pmemCSINamespaceName {
 			continue
 		}
-		logger.V(3).Info("Found owned-by-self namespace, stop processing this region")
-		return nil
+		used := ns.RawSize()
+		if used >= canUse {
+			logger.V(3).Info("All allowed space already in use by PMEM-CSI.")
+			canUse = 0
+			break
+		}
+		canUse -= used
 	}
 	// Because of overhead by alignment and extra space for page mapping, calculated available may show more than actual
 	if r.AvailableSize() < canUse {
@@ -359,13 +365,20 @@ func setupNS(ctx context.Context, r ndctl.Region, percentage uint) error {
 	}
 	if canUse > 0 {
 		logger.V(3).Info("Create fsdax namespace", "size", pmemlog.CapacityRef(int64(canUse)))
-		_, err := r.CreateNamespace(ctx, ndctl.CreateNamespaceOpts{
+		ns, err := r.CreateNamespace(ctx, ndctl.CreateNamespaceOpts{
 			Name: "pmem-csi",
 			Mode: "fsdax",
 			Size: canUse,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create PMEM namespace with size '%d' in region '%s': %v", canUse, r.DeviceName(), err)
+		}
+		// Wipe out any old filesystem or LVM signatures. Without this we might get
+		// duplicate volume groups when accidentally restoring a namespace that existed
+		// before and was used in a volume group. This is not idempotent, but hopefully
+		// it'll never fail or if it does, can be skipped when the driver tries again.
+		if _, err := pmemexec.RunCommand(ctx, "wipefs", "--all", "--force", "/dev/"+ns.BlockDeviceName()); err != nil {
+			return fmt.Errorf("failed to wipe new namespace: %v", err)
 		}
 	}
 
