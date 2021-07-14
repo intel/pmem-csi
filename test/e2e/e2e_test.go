@@ -50,8 +50,6 @@ func TestMain(m *testing.M) {
 	config.CopyFlags(config.Flags, flag.CommandLine)
 	framework.RegisterCommonFlags(flag.CommandLine)
 	framework.RegisterClusterFlags(flag.CommandLine)
-	// Skip slow or distruptive tests by default.
-	flag.Set("ginkgo.skip", `\[Slow|Disruptive\]`)
 	flag.Parse()
 
 	// Register framework flags, then handle flags.
