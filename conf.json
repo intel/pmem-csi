@@ -27,6 +27,7 @@
         "^L[0-9]+-L[0-9]+$",
         "^discussion_r[0-9]+$"
     ],
+    "tls_verify": false,
     "copybutton_prompt_text": "$ ",
     "html_theme": "sphinx_rtd_theme",
     "project": "PMEM-CSI",
