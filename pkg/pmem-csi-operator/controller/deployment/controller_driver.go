@@ -218,6 +218,7 @@ func (d *pmemCSIDeployment) getSubObject(ctx context.Context, r *ReconcileDeploy
 
 type redeployObject struct {
 	objType    reflect.Type
+	immutable  bool
 	enabled    func(*pmemCSIDeployment) bool
 	object     func(*pmemCSIDeployment) client.Object
 	modify     func(*pmemCSIDeployment, client.Object) error
@@ -279,8 +280,8 @@ func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment
 	// Now create or patch the object. If we have a resource
 	// version, then the object was retrieved from the apiserver
 	// and can be patched.
-	if o.GetResourceVersion() != "" {
-		// Patch.
+	doPatch := o.GetResourceVersion() != ""
+	if doPatch {
 		data, err := patch.Data(o)
 		if err != nil {
 			return nil, fmt.Errorf("generate patch: %v", err)
@@ -288,23 +289,35 @@ func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment
 		// Check whether we really need to patch.
 		if string(data) != "{}" && len(data) >= 0 {
 			l.V(5).Info("patch", "diff", string(data))
-			// Patch() will modify the object, which is an object that was
-			// generated from our PmemCSIDeployment object and shares some
-			// data structure with it. We don't want those to be modified,
-			// so here we have to do a deep copy first.
-			copy, err := cloneObject(o)
-			if err != nil {
-				return nil, fmt.Errorf("internal error: %v", err)
-			}
-			l.V(3).Info("update", "patch", string(data))
-			if err := r.client.Patch(ctx, copy, patch); err != nil {
-				return nil, fmt.Errorf("patch object: %v", err)
-			}
-			if err := metrics.SetSubResourceUpdateMetric(o); err != nil {
-				l.V(3).Error(err, "failed to set sub-resource metrics", "object", o)
+			if ro.immutable {
+				// Delete and re-create below.
+				doPatch = false
+				o.SetResourceVersion("")
+				l.V(5).Info("immutable -> delete and re-create")
+				if err := r.client.Delete(ctx, o); err != nil {
+					return nil, fmt.Errorf("delete object: %v", err)
+				}
+			} else {
+				// Patch() will modify the object, which is an object that was
+				// generated from our PmemCSIDeployment object and shares some
+				// data structure with it. We don't want those to be modified,
+				// so here we have to do a deep copy first.
+				copy, err := cloneObject(o)
+				if err != nil {
+					return nil, fmt.Errorf("internal error: %v", err)
+				}
+				l.V(3).Info("update", "patch", string(data))
+				if err := r.client.Patch(ctx, copy, patch); err != nil {
+					return nil, fmt.Errorf("patch object: %v", err)
+				}
+				if err := metrics.SetSubResourceUpdateMetric(o); err != nil {
+					l.V(3).Error(err, "failed to set sub-resource metrics", "object", o)
+				}
 			}
 		}
-	} else {
+	}
+
+	if !doPatch {
 		// For unknown reason client.Create() clearing off the
 		// GVK on obj, so restore it manually.
 		gvk := o.GetObjectKind().GroupVersionKind()
@@ -405,7 +418,8 @@ var subObjectHandlers = map[string]redeployObject{
 		},
 	},
 	"CSIDriver": {
-		objType: reflect.TypeOf(&storagev1.CSIDriver{}),
+		objType:   reflect.TypeOf(&storagev1.CSIDriver{}),
+		immutable: true, // not yet, will be added in https://github.com/kubernetes/kubernetes/pull/101789
 		object: func(d *pmemCSIDeployment) client.Object {
 			return &storagev1.CSIDriver{
 				TypeMeta:   metav1.TypeMeta{Kind: "CSIDriver", APIVersion: "storage.k8s.io/v1"},

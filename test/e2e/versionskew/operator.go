@@ -23,6 +23,8 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/kubernetes/test/e2e/framework"
 
+	"github.com/intel/pmem-csi/pkg/k8sutil"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -219,6 +221,13 @@ var _ = deploy.DescribeForSome("versionskew", func(d *deploy.Deployment) bool {
 	It("downgrade [Slow]", func() {
 		if d.HasOLM {
 			Skip("OLM does not support operator downgrade yet.")
+		}
+		if base == "0.9" {
+			ver, err := k8sutil.GetKubernetesVersion(f.ClientConfig())
+			framework.ExpectNoError(err, "get Kubernetes version")
+			if ver.Compare(1,21) >= 0 {
+				Skip("PMEM-CSI operator v0.9.x does not know how to unset CSIDriver.Spec.StorageCapacity")
+			}
 		}
 		testVersion(base, "downgrade")
 	})
