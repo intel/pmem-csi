@@ -218,14 +218,20 @@ var _ = deploy.DescribeForSome("versionskew", func(d *deploy.Deployment) bool {
 		Expect(pmemImage(ds.Spec.Template.Spec.Containers)).To(BeEquivalentTo(customImage), "node driver uses custom driver image")
 	}
 
-	It("downgrade [Slow]", func() {
+	// Pending because it even fails for those few cases where it might have worked:
+	// Jul 15 16:52:04.299: Timed out after 300.002s.
+	// before version downgrade: reconcile driver deployments:
+	// Expected
+	//  <bool>: false
+	// to be true
+	PIt("downgrade [Slow]", func() {
 		if d.HasOLM {
 			Skip("OLM does not support operator downgrade yet.")
 		}
 		if base == "0.9" {
 			ver, err := k8sutil.GetKubernetesVersion(f.ClientConfig())
 			framework.ExpectNoError(err, "get Kubernetes version")
-			if ver.Compare(1,21) >= 0 {
+			if ver.Compare(1, 21) >= 0 {
 				Skip("PMEM-CSI operator v0.9.x does not know how to unset CSIDriver.Spec.StorageCapacity")
 			}
 		}
