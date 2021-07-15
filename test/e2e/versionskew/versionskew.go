@@ -45,8 +45,9 @@ const (
 )
 
 func baseSupportsKubernetes(ver version.Version) bool {
-	// 0.9 supports the same version as "devel".
 	switch ver {
+	case version.NewVersion(1, 21):
+		return false
 	default:
 		return true
 	}
