@@ -35,9 +35,9 @@ func init() {
 	flag.StringVar(&config.NodeID, "nodeid", "nodeid", "node id")
 	flag.StringVar(&config.Endpoint, "endpoint", "unix:///tmp/pmem-csi.sock", "PMEM CSI endpoint")
 	flag.Var(&config.Mode, "mode", "driver run mode")
-	flag.StringVar(&config.CAFile, "caFile", "ca.pem", "Root CA certificate file to use for verifying connections")
-	flag.StringVar(&config.CertFile, "certFile", "pmem-controller.pem", "SSL certificate file to used by the PMEM-CSI controller for authenticating client connections")
-	flag.StringVar(&config.KeyFile, "keyFile", "pmem-controller-key.pem", "Private key file associated to certificate")
+	flag.StringVar(&config.CAFile, "caFile", "ca.pem", "Root CA certificate file to use for verifying clients (optional, can be empty)")
+	flag.StringVar(&config.CertFile, "certFile", "pmem-controller.pem", "SSL certificate file to be used by the PMEM-CSI controller")
+	flag.StringVar(&config.KeyFile, "keyFile", "pmem-controller-key.pem", "Private key file associated with the certificate")
 
 	flag.Float64Var(&config.KubeAPIQPS, "kube-api-qps", 5, "QPS to use while communicating with the Kubernetes apiserver. Defaults to 5.0.")
 	flag.IntVar(&config.KubeAPIBurst, "kube-api-burst", 10, "Burst to use while communicating with the Kubernetes apiserver. Defaults to 10.")
@@ -47,7 +47,8 @@ func init() {
 	flag.StringVar(&config.metricsPath, "metricsPath", "/metrics", "The HTTP path where prometheus metrics will be exposed. Default is `/metrics`.")
 
 	/* Controller mode options */
-	flag.StringVar(&config.schedulerListen, "schedulerListen", "", "controller: listen address (like :8000) for scheduler extender and mutating webhook, disabled by default")
+	flag.StringVar(&config.schedulerListen, "schedulerListen", "", "controller: HTTPS listen address (like :8000) for scheduler extender and mutating webhook, disabled by default (needs caFile, certFile, keyFile)")
+	flag.StringVar(&config.insecureSchedulerListen, "insecureSchedulerListen", "", "controller: HTTP listen address (like :8001) for scheduler extender and mutating webhook, disabled by default (does not use TLS config)")
 	flag.Var(&config.nodeSelector, "nodeSelector", "controller: reschedule PVCs with a selected node where PMEM-CSI is not meant to run because the node does not have these labels (represented as JSON map)")
 
 	/* Node mode options */

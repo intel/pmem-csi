@@ -48,6 +48,9 @@ func UpdateTests() []UpdateTest {
 				},
 			}
 		},
+		"controllerReplicas": func(d *api.PmemCSIDeployment) {
+			d.Spec.ControllerReplicas = 5
+		},
 		"nodeDriverResources": func(d *api.PmemCSIDeployment) {
 			d.Spec.NodeDriverResources = &corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{
@@ -98,6 +101,9 @@ func UpdateTests() []UpdateTest {
 		},
 		"kubeletDir": func(d *api.PmemCSIDeployment) {
 			d.Spec.KubeletDir = "/foo/bar"
+		},
+		"openshift": func(d *api.PmemCSIDeployment) {
+			d.Spec.ControllerTLSSecret = "-openshift-"
 		},
 	}
 
@@ -194,6 +200,23 @@ func UpdateTests() []UpdateTest {
 			Mutate:     updateAll,
 		})
 	}
+
+	// Special case: remove -openshift-
+	openshiftDep := api.PmemCSIDeployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "pmem-csi-for-openshift",
+		},
+		Spec: api.DeploymentSpec{
+			ControllerTLSSecret: "-openshift-",
+		},
+	}
+	tests = append(tests, UpdateTest{
+		Name:       "remove-openshift",
+		Deployment: openshiftDep,
+		Mutate: func(d *api.PmemCSIDeployment) {
+			d.Spec.ControllerTLSSecret = ""
+		},
+	})
 
 	return tests
 }

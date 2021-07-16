@@ -325,24 +325,8 @@ subjects:
   name: pmem-csi-intel-com-webhooks
   namespace: pmem-csi
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    pmem-csi.intel.com/deployment: direct-testing
-  name: pmem-csi-intel-com-controller
-  namespace: pmem-csi
-spec:
-  ports:
-  - port: 10000
-    targetPort: 10000
-  selector:
-    app.kubernetes.io/instance: pmem-csi.intel.com
-    app.kubernetes.io/name: pmem-csi-controller
-    pmem-csi.intel.com/deployment: direct-testing
----
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   labels:
     app.kubernetes.io/component: controller
@@ -359,7 +343,6 @@ spec:
       app.kubernetes.io/instance: pmem-csi.intel.com
       app.kubernetes.io/name: pmem-csi-controller
       pmem-csi.intel.com/deployment: direct-testing
-  serviceName: pmem-csi-intel-com-controller
   template:
     metadata:
       annotations:
@@ -380,7 +363,7 @@ spec:
         - -mode=webhooks
         - -drivername=$(PMEM_CSI_DRIVER_NAME)
         - -nodeSelector={"storage":"pmem"}
-        - -caFile=/certs/ca.crt
+        - -caFile=
         - -certFile=/certs/tls.crt
         - -keyFile=/certs/tls.key
         - -schedulerListen=:8000
@@ -770,6 +753,9 @@ spec:
         - unix-connect:/csi/csi.sock
         image: alpine/socat:1.0.3
         name: socat
+        ports:
+        - containerPort: 9735
+          name: csi-socket
         securityContext:
           privileged: true
         volumeMounts:
@@ -781,7 +767,14 @@ spec:
         - mountPath: /var/lib/kubelet/plugins/kubernetes.io/csi/pv
           mountPropagation: Bidirectional
           name: staging-dir
-      hostNetwork: true
+      nodeSelector:
+        storage: pmem
+      priorityClassName: system-node-critical
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
       volumes:
       - hostPath:
           path: /var/lib/kubelet/plugins/pmem-csi.intel.com

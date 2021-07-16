@@ -127,7 +127,8 @@ type Config struct {
 	KubeAPIBurst int
 
 	// parameters for Kubernetes scheduler extender
-	schedulerListen string
+	schedulerListen         string
+	insecureSchedulerListen string
 
 	// parameters for rescheduler and raw namespace conversion
 	nodeSelector types.NodeSelector
@@ -219,6 +220,16 @@ func (csid *csiDriver) Run(ctx context.Context) error {
 
 			// Create rescheduler. This has to be done before starting the factory
 			// because it will indirectly add a new index.
+			//
+			// We don't use leader election. The shared factories are running
+			// anyway, so we don't avoid traffic when hot spares are idle. Quite
+			// the opposite, the leader election itself causes additional traffic.
+			//
+			// There's also no downside to running the deschedule check multiple
+			// times. In the worst case, multiple instances will determine at exactly
+			// the same time that it's time to reschedule and try to unset the annotation.
+			// One of them will succeed, the others will get a conflict error and then
+			// notice that nothing is left to do on their retry.
 			pcp = newRescheduler(ctx,
 				csid.cfg.DriverName,
 				client, pvcInformer, scInformer, pvInformer, csiNodeLister,
@@ -236,7 +247,7 @@ func (csid *csiDriver) Run(ctx context.Context) error {
 			}
 		}
 
-		if csid.cfg.schedulerListen != "" {
+		if csid.cfg.schedulerListen != "" || csid.cfg.insecureSchedulerListen != "" {
 			// Factory for the driver's namespace.
 			namespace := os.Getenv("POD_NAMESPACE")
 			if namespace == "" {
@@ -259,8 +270,15 @@ func (csid *csiDriver) Run(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("create scheduler: %v", err)
 			}
-			if _, err := csid.startHTTPSServer(ctx, cancel, csid.cfg.schedulerListen, sched, true /* TLS */); err != nil {
-				return err
+			if csid.cfg.schedulerListen != "" {
+				if _, err := csid.startHTTPSServer(ctx, cancel, csid.cfg.schedulerListen, sched, true /* TLS */); err != nil {
+					return err
+				}
+			}
+			if csid.cfg.insecureSchedulerListen != "" {
+				if _, err := csid.startHTTPSServer(ctx, cancel, csid.cfg.insecureSchedulerListen, sched, false /* not TLS */); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -385,7 +403,7 @@ func (csid *csiDriver) startHTTPSServer(ctx context.Context, cancel func(), list
 	logger := pmemlog.Get(ctx).WithName(name).WithValues("listen", listen)
 	var config *tls.Config
 	if useTLS {
-		c, err := pmemgrpc.LoadServerTLS(ctx, csid.cfg.CAFile, csid.cfg.CertFile, csid.cfg.KeyFile, "")
+		c, err := pmemgrpc.LoadServerTLS(ctx, csid.cfg.CAFile, csid.cfg.CertFile, csid.cfg.KeyFile, "" /* any peer can connect */)
 		if err != nil {
 			return "", fmt.Errorf("initialize HTTPS config: %v", err)
 		}

@@ -22,13 +22,21 @@ spec:
         app.kubernetes.io/instance: pmem-csi.intel.com
         pmem-csi.intel.com/webhook: ignore
     spec:
-      hostNetwork: true
+      # Same settings as for PMEM-CSI driver.
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
+      priorityClassName: system-node-critical
+      nodeSelector:
+        storage: pmem
       containers:
       - name: socat
         image: alpine/socat:1.0.3
         args:
         - -s
-        - tcp-listen:9735,fork,reuseaddr # port 9735 *on the host*
+        - tcp-listen:9735,fork,reuseaddr
         - unix-connect:/csi/csi.sock
         securityContext:
           privileged: true
@@ -42,6 +50,9 @@ spec:
         - name: staging-dir
           mountPath: /var/lib/kubelet/plugins/kubernetes.io/csi/pv # preliminary (?), https://github.com/kubernetes-csi/docs/issues/130
           mountPropagation: Bidirectional
+        ports:
+        - name: csi-socket
+          containerPort: 9735
       volumes:
       - hostPath:
           path: /var/lib/kubelet/plugins/pmem-csi.intel.com

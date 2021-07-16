@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scheduler-policy
+  namespace: openshift-config
+data:
+  policy.cfg: |
+    {
+        "kind" : "Policy",
+        "apiVersion" : "v1",
+        "extenders" : [
+          {"urlPrefix": "https://127.0.0.1:30674",
+           "filterVerb": "filter",
+           "prioritizeVerb": "prioritize",
+           "nodeCacheCapable": true,
+           "weight": 1,
+           "managedResources": [ {
+             "name": "pmem-csi.intel.com/scheduler",
+             "ignoredByScheduler": true
+           } ]
+          }
+        ]
+    }

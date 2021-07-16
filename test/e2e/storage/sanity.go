@@ -44,8 +44,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/clock"
+	"k8s.io/client-go/kubernetes"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	clientexec "k8s.io/client-go/util/exec"
+	"k8s.io/klog/v2/klogr"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
@@ -54,6 +57,7 @@ import (
 	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
+	"github.com/intel/pmem-csi/test/e2e/pod"
 	pmeme2epod "github.com/intel/pmem-csi/test/e2e/pod"
 
 	. "github.com/onsi/ginkgo"
@@ -74,6 +78,35 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 	// This is not the case when deployed in production mode.
 	return d.Testing
 }, func(d *deploy.Deployment) {
+	// This must be set before the grpcDialer gets used for the first time.
+	var cfg *rest.Config
+	var cs kubernetes.Interface
+	grpcDialer := func(ctx context.Context, address string) (net.Conn, error) {
+		addr, err := pod.ParseAddr(address)
+		if err != nil {
+			return nil, err
+		}
+		cs, err := kubernetes.NewForConfig(cfg)
+		if err != nil {
+			return nil, err
+		}
+		dialer := pod.NewDialer(cs, cfg)
+		return dialer.DialContainerPort(ctx, klogr.New().WithName("gRPC socat"), *addr)
+	}
+	dialOptions := []grpc.DialOption{
+		// For our restart tests.
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			PermitWithoutStream: true,
+			// This is the minimum. Specifying it explicitly
+			// avoids some log output from gRPC.
+			Time: 10 * time.Second,
+		}),
+		// For plain HTTP.
+		grpc.WithInsecure(),
+		// Connect to socat pods through port-forwarding.
+		grpc.WithContextDialer(grpcDialer),
+	}
+
 	config := sanity.NewTestConfig()
 	// The size has to be large enough that even after rounding up to
 	// the next alignment boundary, the final volume size is still about
@@ -90,17 +123,8 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 	// and deletes all extra entries that it does not know about.
 	config.TargetPath = "/var/lib/kubelet/plugins/kubernetes.io/csi/pv/pmem-sanity-target.XXXXXX"
 	config.StagingPath = "/var/lib/kubelet/plugins/kubernetes.io/csi/pv/pmem-sanity-staging.XXXXXX"
-	config.ControllerDialOptions = []grpc.DialOption{
-		// For our restart tests.
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			PermitWithoutStream: true,
-			// This is the minimum. Specifying it explicitly
-			// avoids some log output from gRPC.
-			Time: 10 * time.Second,
-		}),
-		// For plain HTTP.
-		grpc.WithInsecure(),
-	}
+	config.DialOptions = dialOptions
+	config.ControllerDialOptions = dialOptions
 
 	f := framework.NewDefaultFramework("pmem")
 	f.SkipNamespaceCreation = true // We don't need a per-test namespace and skipping it makes the tests run faster.
@@ -112,13 +136,16 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 	const testNode = 1
 
 	BeforeEach(func() {
-		cs := f.ClientSet
+		// Store them for grpcDialer above. We cannot let it reference f itself because
+		// f.ClientSet gets unset at some point.
+		cs = f.ClientSet
+		cfg = f.ClientConfig()
 
 		var err error
 		cluster, err = deploy.NewCluster(cs, f.DynamicClient, f.ClientConfig())
 		framework.ExpectNoError(err, "query cluster")
 
-		config.Address, config.ControllerAddress, err = deploy.LookupCSIAddresses(cluster, d.Namespace)
+		config.Address, config.ControllerAddress, err = deploy.LookupCSIAddresses(context.Background(), cluster, d.Namespace)
 		framework.ExpectNoError(err, "find CSI addresses")
 
 		framework.Logf("sanity: using controller %s and node %s", config.ControllerAddress, config.Address)
@@ -586,6 +613,7 @@ fi
 			if nodeCapacity%4 != 0 {
 				framework.Failf("total capacity %s not a multiple of 4", pmemlog.CapacityRef(nodeCapacity))
 			}
+			isFragmented := nodeCapacity > resp.MaximumVolumeSize.GetValue()
 			volumeSize := nodeCapacity / 4
 
 			// Round down to a 4Mi alignment for LVM mode.
@@ -624,7 +652,11 @@ fi
 			Expect(pmemlog.CapacityRef(resp.AvailableCapacity).String()).To(Equal(pmemlog.CapacityRef(nodeCapacity-volumeSize).String()), "available capacity while one volume exists")
 			Expect(resp.MaximumVolumeSize).NotTo(BeNil(), "have MaximumVolumeSize")
 			if d.Mode == api.DeviceModeLVM {
-				Expect(resp.MaximumVolumeSize.Value).To(BeNumerically(">=", 3*volumeSize), "MaximVolumeSize includes space of all three deleted volumes when using LVM")
+				if !isFragmented {
+					// When there are, for example, two regions, then we have fragmentation also for LVM.
+					// This assumption only applies when we have a single volume group.
+					Expect(resp.MaximumVolumeSize.Value).To(BeNumerically(">=", 3*volumeSize), "MaximVolumeSize includes space of all three deleted volumes when using LVM")
+				}
 			} else {
 				Expect(pmemlog.CapacityRef(resp.MaximumVolumeSize.Value).String()).To(Equal(pmemlog.CapacityRef(2*volumeSize).String()), "MaximVolumeSize includes space of the last two deleted volumes when using direct mode")
 			}
@@ -640,11 +672,11 @@ fi
 					Segments: map[string]string{},
 				},
 			}
-			for i := 0; i < 100000; i++ {
+			for i := 0; i < 1000000; i++ {
 				req.AccessibleTopology.Segments[fmt.Sprintf("pmem-csi.intel.com/node%d", i)] = nodeID
 			}
-			_, err := cc.GetCapacity(context.Background(), req)
-			Expect(err).ShouldNot(BeNil(), "unexpected success for too large request")
+			resp, err := cc.GetCapacity(context.Background(), req)
+			Expect(err).ShouldNot(BeNil(), "unexpected success for too large request, got response: %+v", resp)
 			status, ok := status.FromError(err)
 			Expect(ok).Should(BeTrue(), "expected status in error, got: %v", err)
 			Expect(status.Message()).Should(ContainSubstring("grpc: received message larger than max"))
@@ -824,9 +856,8 @@ fi
 						}),
 					})
 				framework.ExpectNoError(err, "list socat pods")
-				expectedPodNum := cluster.NumNodes() - 1
-				if len(pods.Items) != expectedPodNum {
-					framework.Failf("expected %d socat pods, only found %d:\n%v", expectedPodNum, len(pods.Items), pods.Items)
+				if len(pods.Items) == 0 {
+					framework.Failf("expected some socat pods, found none")
 				}
 
 				for _, pod := range pods.Items {
@@ -918,9 +949,7 @@ fi
 
 				v.publish(volName, vol)
 
-				i := strings.Split(nodeID, "worker")[1]
-
-				sshcmd := fmt.Sprintf("%s/_work/%s/ssh.%s", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"), i)
+				sshcmd := fmt.Sprintf("%s/_work/%s/ssh.%s", os.Getenv("REPO_ROOT"), os.Getenv("CLUSTER"), nodeID)
 				// write some data to mounted volume
 				cmd := "sudo sh -c 'echo -n hello > " + v.getTargetPath() + "/target/test-file'"
 				ssh := exec.Command(sshcmd, cmd)

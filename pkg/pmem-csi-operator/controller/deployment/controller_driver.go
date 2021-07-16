@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	pmemlog "github.com/intel/pmem-csi/pkg/logger"
@@ -33,12 +34,12 @@ import (
 )
 
 const (
-	controllerServicePort  = 10000
 	controllerMetricsPort  = 10010
 	nodeControllerPort     = 10001
 	nodeMetricsPort        = 10010
 	provisionerMetricsPort = 10011
 	schedulerPort          = 8000
+	insecureSchedulerPort  = 8001
 )
 
 func typeMeta(gv schema.GroupVersion, kind string) metav1.TypeMeta {
@@ -64,7 +65,7 @@ var currentObjects = []client.Object{
 	&corev1.Secret{TypeMeta: typeMeta(corev1.SchemeGroupVersion, "Secret")},
 	&corev1.Service{TypeMeta: typeMeta(corev1.SchemeGroupVersion, "Service")},
 	&corev1.ServiceAccount{TypeMeta: typeMeta(corev1.SchemeGroupVersion, "ServiceAccount")},
-	&appsv1.StatefulSet{TypeMeta: typeMeta(appsv1.SchemeGroupVersion, "StatefulSet")},
+	&appsv1.Deployment{TypeMeta: typeMeta(appsv1.SchemeGroupVersion, "Deployment")},
 	&admissionregistrationv1.MutatingWebhookConfiguration{TypeMeta: typeMeta(admissionregistrationv1.SchemeGroupVersion, "MutatingWebhookConfiguration")},
 }
 
@@ -88,12 +89,23 @@ func cloneObject(from client.Object) (client.Object, error) {
 		return t.DeepCopyObject().(*corev1.Service), nil
 	case *corev1.ServiceAccount:
 		return t.DeepCopyObject().(*corev1.ServiceAccount), nil
+	case *appsv1.Deployment:
+		return t.DeepCopyObject().(*appsv1.Deployment), nil
 	case *appsv1.StatefulSet:
 		return t.DeepCopyObject().(*appsv1.StatefulSet), nil
 	case *admissionregistrationv1.MutatingWebhookConfiguration:
 		return t.DeepCopyObject().(*admissionregistrationv1.MutatingWebhookConfiguration), nil
 	default:
 		return nil, fmt.Errorf("cannot clone client.Object of type %T", from)
+	}
+}
+
+func isNamespaced(kind string) bool {
+	switch kind {
+	case "ClusterRole", "ClusterRoleBinding", "CSIDriver", "MutatingWebhookConfiguration":
+		return false
+	default:
+		return true
 	}
 }
 
@@ -112,6 +124,7 @@ func CurrentObjects() []client.Object {
 // allow listing and removing of these objects.
 var obsoleteObjects = []client.Object{
 	&corev1.ConfigMap{TypeMeta: typeMeta(corev1.SchemeGroupVersion, "ConfigMap")}, // included only for testing purposes
+	&appsv1.StatefulSet{TypeMeta: typeMeta(appsv1.SchemeGroupVersion, "StatefulSet")},
 }
 
 // A list of all object types potentially created by the operator,
@@ -218,6 +231,7 @@ func (d *pmemCSIDeployment) getSubObject(ctx context.Context, r *ReconcileDeploy
 
 type redeployObject struct {
 	objType    reflect.Type
+	immutable  bool
 	enabled    func(*pmemCSIDeployment) bool
 	object     func(*pmemCSIDeployment) client.Object
 	modify     func(*pmemCSIDeployment, client.Object) error
@@ -279,8 +293,8 @@ func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment
 	// Now create or patch the object. If we have a resource
 	// version, then the object was retrieved from the apiserver
 	// and can be patched.
-	if o.GetResourceVersion() != "" {
-		// Patch.
+	doPatch := o.GetResourceVersion() != ""
+	if doPatch {
 		data, err := patch.Data(o)
 		if err != nil {
 			return nil, fmt.Errorf("generate patch: %v", err)
@@ -288,23 +302,35 @@ func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment
 		// Check whether we really need to patch.
 		if string(data) != "{}" && len(data) >= 0 {
 			l.V(5).Info("patch", "diff", string(data))
-			// Patch() will modify the object, which is an object that was
-			// generated from our PmemCSIDeployment object and shares some
-			// data structure with it. We don't want those to be modified,
-			// so here we have to do a deep copy first.
-			copy, err := cloneObject(o)
-			if err != nil {
-				return nil, fmt.Errorf("internal error: %v", err)
-			}
-			l.V(3).Info("update", "patch", string(data))
-			if err := r.client.Patch(ctx, copy, patch); err != nil {
-				return nil, fmt.Errorf("patch object: %v", err)
-			}
-			if err := metrics.SetSubResourceUpdateMetric(o); err != nil {
-				l.V(3).Error(err, "failed to set sub-resource metrics", "object", o)
+			if ro.immutable {
+				// Delete and re-create below.
+				doPatch = false
+				o.SetResourceVersion("")
+				l.V(5).Info("immutable -> delete and re-create")
+				if err := r.client.Delete(ctx, o); err != nil {
+					return nil, fmt.Errorf("delete object: %v", err)
+				}
+			} else {
+				// Patch() will modify the object, which is an object that was
+				// generated from our PmemCSIDeployment object and shares some
+				// data structure with it. We don't want those to be modified,
+				// so here we have to do a deep copy first.
+				copy, err := cloneObject(o)
+				if err != nil {
+					return nil, fmt.Errorf("internal error: %v", err)
+				}
+				l.V(3).Info("update", "patch", string(data))
+				if err := r.client.Patch(ctx, copy, patch); err != nil {
+					return nil, fmt.Errorf("patch object: %v", err)
+				}
+				if err := metrics.SetSubResourceUpdateMetric(o); err != nil {
+					l.V(3).Error(err, "failed to set sub-resource metrics", "object", o)
+				}
 			}
 		}
-	} else {
+	}
+
+	if !doPatch {
 		// For unknown reason client.Create() clearing off the
 		// GVK on obj, so restore it manually.
 		gvk := o.GetObjectKind().GroupVersionKind()
@@ -362,24 +388,24 @@ var subObjectHandlers = map[string]redeployObject{
 		},
 	},
 	"controller driver": {
-		objType: reflect.TypeOf(&appsv1.StatefulSet{}),
+		objType: reflect.TypeOf(&appsv1.Deployment{}),
 		object: func(d *pmemCSIDeployment) client.Object {
-			return &appsv1.StatefulSet{
-				TypeMeta:   metav1.TypeMeta{Kind: "StatefulSet", APIVersion: "apps/v1"},
+			return &appsv1.Deployment{
+				TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 				ObjectMeta: d.getObjectMeta(d.ControllerDriverName(), false),
 			}
 		},
 		modify: func(d *pmemCSIDeployment, o client.Object) error {
-			d.getControllerStatefulSet(o.(*appsv1.StatefulSet))
+			d.getControllerDeployment(o.(*appsv1.Deployment))
 			return nil
 		},
 		postUpdate: func(d *pmemCSIDeployment, o client.Object) error {
-			ss := o.(*appsv1.StatefulSet)
+			ss := o.(*appsv1.Deployment)
 			// Update controller status is status object
 			status := "NotReady"
 			reason := "Unknown"
 			if ss.Status.Replicas == 0 {
-				reason = "Controller stateful set has not started yet."
+				reason = "Controller deployment has not started yet."
 			} else if ss.Status.ReadyReplicas == ss.Status.Replicas {
 				status = "Ready"
 				reason = fmt.Sprintf("%d instance(s) of controller driver is running successfully", ss.Status.ReadyReplicas)
@@ -391,21 +417,9 @@ var subObjectHandlers = map[string]redeployObject{
 			return nil
 		},
 	},
-	"controller service": {
-		objType: reflect.TypeOf(&corev1.Service{}),
-		object: func(d *pmemCSIDeployment) client.Object {
-			return &corev1.Service{
-				TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-				ObjectMeta: d.getObjectMeta(d.ControllerServiceName(), false),
-			}
-		},
-		modify: func(d *pmemCSIDeployment, o client.Object) error {
-			d.getControllerService(o.(*corev1.Service))
-			return nil
-		},
-	},
 	"CSIDriver": {
-		objType: reflect.TypeOf(&storagev1.CSIDriver{}),
+		objType:   reflect.TypeOf(&storagev1.CSIDriver{}),
+		immutable: true, // not yet, will be added in https://github.com/kubernetes/kubernetes/pull/101789
 		object: func(d *pmemCSIDeployment) client.Object {
 			return &storagev1.CSIDriver{
 				TypeMeta:   metav1.TypeMeta{Kind: "CSIDriver", APIVersion: "storage.k8s.io/v1"},
@@ -479,6 +493,20 @@ var subObjectHandlers = map[string]redeployObject{
 		},
 		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			// nothing to customize for service account
+			return nil
+		},
+	},
+	"webhooks service": {
+		objType: reflect.TypeOf(&corev1.Service{}),
+		enabled: mutatingWebhookEnabled,
+		object: func(d *pmemCSIDeployment) client.Object {
+			return &corev1.Service{
+				TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+				ObjectMeta: d.getObjectMeta(d.WebhooksServiceName(), false),
+			}
+		},
+		modify: func(d *pmemCSIDeployment, o client.Object) error {
+			d.getWebhooksService(o.(*corev1.Service))
 			return nil
 		},
 	},
@@ -711,8 +739,11 @@ func (d *pmemCSIDeployment) deleteObsoleteObjects(ctx context.Context, r *Reconc
 	}
 
 	for _, list := range AllObjectLists() {
-		opts := &client.ListOptions{
-			Namespace: d.namespace,
+		opts := &client.ListOptions{}
+		// The namespace is ignored by the real API server, but the fake client
+		// fails to return cluster-scoped objects when the namespace is set.
+		if isNamespaced(strings.TrimSuffix(list.GroupVersionKind().Kind, "List")) {
+			opts.Namespace = d.namespace
 		}
 
 		l.V(5).Info("fetching objects", "gkv", list.GetObjectKind(), "options", opts.Namespace)
@@ -775,10 +806,6 @@ func (d *pmemCSIDeployment) getService(service *corev1.Service, t corev1.Service
 		"app.kubernetes.io/name":     "pmem-csi-controller",
 		"app.kubernetes.io/instance": d.Name,
 	}
-}
-
-func (d *pmemCSIDeployment) getControllerService(service *corev1.Service) {
-	d.getService(service, corev1.ServiceTypeClusterIP, controllerServicePort)
 }
 
 func (d *pmemCSIDeployment) getWebhooksRole(role *rbacv1.Role) {
@@ -856,6 +883,21 @@ func (d *pmemCSIDeployment) getWebhooksClusterRoleBinding(crb *rbacv1.ClusterRol
 	}
 }
 
+func (d *pmemCSIDeployment) getWebhooksService(service *corev1.Service) {
+	d.getService(service, corev1.ServiceTypeClusterIP, 443)
+	service.Spec.Ports[0].TargetPort.IntVal = schedulerPort
+	if d.Spec.ControllerTLSSecret == api.ControllerTLSSecretOpenshift {
+		if service.Annotations == nil {
+			service.Annotations = map[string]string{}
+		}
+		service.Annotations["service.beta.openshift.io/serving-cert-secret-name"] = d.ControllerTLSSecretOpenshiftName()
+	} else {
+		if service.Annotations != nil {
+			delete(service.Annotations, "service.beta.openshift.io/serving-cert-secret-name")
+		}
+	}
+}
+
 func (d *pmemCSIDeployment) getMutatingWebhookConfig(hook *admissionregistrationv1.MutatingWebhookConfiguration) {
 	servicePort := int32(443) // default webhook service port
 	selector := &metav1.LabelSelector{
@@ -873,26 +915,42 @@ func (d *pmemCSIDeployment) getMutatingWebhookConfig(hook *admissionregistration
 	}
 	path := "/pod/mutate"
 	none := admissionregistrationv1.SideEffectClassNone
-	if len(d.controllerCABundle) == 0 {
-		panic("controller CA bundle empty, should have been loaded")
+	controllerCABundle := d.controllerCABundle
+	// Preserve defaults when updating.
+	var scope *admissionregistrationv1.ScopeType
+	var timeoutSeconds *int32
+	var matchPolicy *admissionregistrationv1.MatchPolicyType
+	var reinvocationPolicy *admissionregistrationv1.ReinvocationPolicyType
+	if len(hook.Webhooks) > 0 {
+		if d.Spec.ControllerTLSSecret == api.ControllerTLSSecretOpenshift {
+			// Below we overwrite the entire hook.Webhooks. Before we do that, we must
+			// retrieve the CABundle that was generated for us by OpenShift.
+			controllerCABundle = hook.Webhooks[0].ClientConfig.CABundle
+		}
+		scope = hook.Webhooks[0].Rules[0].Scope
+		timeoutSeconds = hook.Webhooks[0].TimeoutSeconds
+		matchPolicy = hook.Webhooks[0].MatchPolicy
+		reinvocationPolicy = hook.Webhooks[0].ReinvocationPolicy
 	}
 	hook.Webhooks = []admissionregistrationv1.MutatingWebhook{
 		{
 			// Name must be "fully-qualified" (i.e. with domain) but not unique, so
 			// here "pmem-csi.intel.com" is not the default driver name.
 			// https://pkg.go.dev/k8s.io/api/admissionregistration/v1#MutatingWebhook
-			Name:              "pod-hook.pmem-csi.intel.com",
-			NamespaceSelector: selector,
-			ObjectSelector:    selector,
-			FailurePolicy:     &failurePolicy,
+			Name:               "pod-hook.pmem-csi.intel.com",
+			NamespaceSelector:  selector,
+			ObjectSelector:     selector,
+			FailurePolicy:      &failurePolicy,
+			MatchPolicy:        matchPolicy,
+			ReinvocationPolicy: reinvocationPolicy,
 			ClientConfig: admissionregistrationv1.WebhookClientConfig{
 				Service: &admissionregistrationv1.ServiceReference{
-					Name:      d.SchedulerServiceName(),
+					Name:      d.WebhooksServiceName(),
 					Namespace: d.namespace,
 					Path:      &path,
 					Port:      &servicePort,
 				},
-				CABundle: d.controllerCABundle, // loaded earlier in reconcile()
+				// CABundle set below.
 			},
 			Rules: []admissionregistrationv1.RuleWithOperations{
 				{
@@ -901,18 +959,44 @@ func (d *pmemCSIDeployment) getMutatingWebhookConfig(hook *admissionregistration
 						APIGroups:   []string{""},
 						APIVersions: []string{"v1"},
 						Resources:   []string{"pods"},
+						Scope:       scope,
 					},
 				},
 			},
 			SideEffects:             &none,
 			AdmissionReviewVersions: []string{"v1"},
+			TimeoutSeconds:          timeoutSeconds,
 		},
 	}
+
+	switch {
+	case d.Spec.ControllerTLSSecret == api.ControllerTLSSecretOpenshift:
+		if hook.Annotations == nil {
+			hook.Annotations = map[string]string{}
+		}
+		hook.Annotations["service.beta.openshift.io/inject-cabundle"] = "true"
+	case len(controllerCABundle) == 0:
+		panic("controller CA bundle empty, should have been loaded")
+	default:
+		if hook.Annotations != nil {
+			delete(hook.Annotations, "service.beta.openshift.io/inject-cabundle")
+		}
+	}
+	// Set or preserve the CABundle.
+	hook.Webhooks[0].ClientConfig.CABundle = controllerCABundle
 }
 
 func (d *pmemCSIDeployment) getSchedulerService(service *corev1.Service) {
-	d.getService(service, corev1.ServiceTypeClusterIP, 443)
-	service.Spec.Ports[0].TargetPort.IntVal = schedulerPort
+	targetPort := schedulerPort
+	port := 443
+	if d.Spec.ControllerTLSSecret == api.ControllerTLSSecretOpenshift {
+		targetPort = insecureSchedulerPort
+		port = 80
+	}
+	d.getService(service, corev1.ServiceTypeClusterIP, int32(port))
+	service.Spec.Ports[0].TargetPort = intstr.IntOrString{
+		IntVal: int32(targetPort),
+	}
 	service.Spec.Ports[0].NodePort = d.Spec.SchedulerNodePort
 	if d.Spec.SchedulerNodePort != 0 {
 		service.Spec.Type = corev1.ServiceTypeNodePort
@@ -1068,8 +1152,11 @@ func (d *pmemCSIDeployment) getControllerProvisionerClusterRoleBinding(crb *rbac
 	}
 }
 
-func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
-	replicas := int32(1)
+func (d *pmemCSIDeployment) getControllerDeployment(ss *appsv1.Deployment) {
+	replicas := int32(d.Spec.ControllerReplicas)
+	if replicas <= 0 {
+		replicas = 1
+	}
 
 	// To make sure that the default values set by the API server
 	// are not unset by the operator we choose to update only specific
@@ -1097,7 +1184,6 @@ func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 			"app.kubernetes.io/instance": d.Name,
 		},
 	}
-	ss.Spec.ServiceName = d.ControllerServiceName()
 	ss.Spec.Template.ObjectMeta.Labels = joinMaps(
 		d.Spec.Labels,
 		map[string]string{
@@ -1120,11 +1206,15 @@ func (d *pmemCSIDeployment) getControllerStatefulSet(ss *appsv1.StatefulSet) {
 	ss.Spec.Template.Spec.Volumes = []corev1.Volume{}
 	if d.Spec.ControllerTLSSecret != "" {
 		mode := corev1.SecretVolumeSourceDefaultMode
+		name := d.Spec.ControllerTLSSecret
+		if name == api.ControllerTLSSecretOpenshift {
+			name = d.ControllerTLSSecretOpenshiftName()
+		}
 		ss.Spec.Template.Spec.Volumes = append(ss.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: "webhook-cert",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName:  d.Spec.ControllerTLSSecret,
+					SecretName:  name,
 					DefaultMode: &mode,
 				},
 			},
@@ -1274,13 +1364,17 @@ func (d *pmemCSIDeployment) getControllerCommand() []string {
 
 	if d.Spec.ControllerTLSSecret != "" {
 		args = append(args,
-			"-caFile=/certs/ca.crt",
+			"-caFile=",
 			"-certFile=/certs/tls.crt",
 			"-keyFile=/certs/tls.key",
 			fmt.Sprintf("-schedulerListen=:%d", schedulerPort),
 		)
+		if d.Spec.ControllerTLSSecret == api.ControllerTLSSecretOpenshift {
+			args = append(args,
+				fmt.Sprintf("-insecureSchedulerListen=:%d", insecureSchedulerPort),
+			)
+		}
 	}
-
 	args = append(args, fmt.Sprintf("-metricsListen=:%d", controllerMetricsPort))
 
 	return args

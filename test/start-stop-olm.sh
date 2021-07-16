@@ -38,6 +38,11 @@ case $1 in
         exit 1
 esac
 
+# Nothing to do for install or uninstall if the cluster has its own OLM.
+if ${TEST_HAVE_OLM}; then
+    exit 0
+fi
+
 # It's expected that `olm status` returns non-zero if no OLM running
 set +e
 echo "Checking if OLM is already running..."
@@ -68,6 +73,9 @@ if [ $cmd == install ]; then
     echo "OLM installation sucessful!!!"
     ## Show olm-operator pod status
     ${KUBECTL} get po -n olm -l app=olm-operator
+
+    # Wait for it to be running.
+    ${KUBECTL} wait --for=condition=Ready -n olm pod -l app=olm-operator
 elif [ $status -ne 0 ]; then
     echo "No running OLM found."
 else

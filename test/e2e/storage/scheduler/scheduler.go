@@ -92,9 +92,7 @@ func (p *schedulerTestSuite) DefineTests(driver storageframework.TestDriver, pat
 
 		c, err := deploy.NewCluster(f.ClientSet, f.DynamicClient, f.ClientConfig())
 		framework.ExpectNoError(err, "create cluster object")
-		d, err := deploy.FindDeployment(c)
-		framework.ExpectNoError(err, "find PMEM-CSI deployment")
-		if d.StorageCapacitySupported(f.ClientConfig()) {
+		if c.StorageCapacitySupported() {
 			e2eskipper.Skipf("storage capacity tracking is enabled, not using scheduler extensions")
 		}
 

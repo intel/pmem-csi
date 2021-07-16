@@ -7,63 +7,70 @@ SPDX-License-Identifier: Apache-2.0
 package pod
 
 import (
+	"bytes"
 	"fmt"
-	"io"
-	"os/exec"
+	"io/ioutil"
+	"os"
+	"path"
+	"strings"
 
 	"k8s.io/kubernetes/test/e2e/framework"
 
 	. "github.com/onsi/ginkgo"
 )
 
-// RunInPod optionally tars up some files or directories, unpacks them in a container,
-// and executes a shell command. Any error is treated as test failure.
-func RunInPod(f *framework.Framework, rootdir string, items []string, command string, namespace, pod, container string) (string, string) {
-	var input io.ReadCloser
-	cmdPrefix := "cd /tmp && "
-	if len(items) > 0 {
-		args := []string{"-cf", "-"}
-		args = append(args, items...)
-		tar := exec.Command("tar", args...)
-		tar.Stderr = GinkgoWriter
-		tar.Dir = rootdir
-		pipe, err := tar.StdoutPipe()
-		framework.ExpectNoError(err, "create pipe for tar")
-		err = tar.Start()
-		framework.ExpectNoError(err, "run tar")
-		defer func() {
-			err = tar.Wait()
-			framework.ExpectNoError(err, "tar runtime error")
-		}()
-
-		input = pipe
-		cmdPrefix += "tar -xf - && "
+// RunInPod optionally transfers some files into /tmp (source file
+// relative to root dir, with same base file name, without path, with
+// same x bit) and executes a shell command. Any error is treated as
+// test failure.
+//
+// Relies on dd in the target container.
+func RunInPod(f *framework.Framework, rootdir string, files []string, command string, namespace, pod, container string) (string, string) {
+	parts := []string{"cd /tmp"}
+	var input hiddenContent
+	for _, file := range files {
+		base := path.Base(file)
+		full := path.Join(rootdir, file)
+		data, err := ioutil.ReadFile(full)
+		framework.ExpectNoError(err, "read input file %q", full)
+		input.Write(data)
+		// Somehow count=1 bs=<total size> resulted in truncated data transfers.
+		// This works, but has higher overhead.
+		parts = append(parts, fmt.Sprintf("dd of=%s count=%d bs=1 status=none", base, len(data)))
+		stat, err := os.Stat(full)
+		framework.ExpectNoError(err)
+		if stat.Mode().Perm()&0111 != 0 {
+			parts = append(parts, fmt.Sprintf("chmod a+x %s", base))
+		}
 	}
-
+	parts = append(parts, command)
 	options := framework.ExecOptions{
 		Command: []string{
 			"/bin/sh",
 			"-c",
-			cmdPrefix + command,
+			strings.Join(parts, " && "),
 		},
 		Namespace:     namespace,
 		PodName:       pod,
 		ContainerName: container,
-		Stdin:         input,
+		Stdin:         &input,
 		CaptureStdout: true,
 		CaptureStderr: true,
 	}
 	stdout, stderr, err := f.ExecWithOptions(options)
-	if input != nil {
-		// Tell tar that it can stop writing. Necessary if ExecWithOptions did not consume
-		// all output of tar, because otherwise tar is stuck and tar.Wait() above will
-		// block.
-		input.Close()
-	}
 	framework.ExpectNoError(err, "command failed in namespace %s, pod/container %s/%s:\nstderr:\n%s\nstdout:%s\n",
 		namespace, pod, container, stderr, stdout)
 	fmt.Fprintf(GinkgoWriter, "stderr:\n%s\nstdout:\n%s\n",
 		stderr, stdout)
 
 	return stdout, stderr
+}
+
+// hiddentContent is the same as bytes.Buffer, but doesn't print its entire content in String().
+type hiddenContent struct {
+	bytes.Buffer
+}
+
+func (h *hiddenContent) String() string {
+	return fmt.Sprintf("<%d bytes>", h.Len())
 }

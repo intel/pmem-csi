@@ -196,14 +196,7 @@ func (r *region) CreateNamespace(ctx gocontext.Context, opts CreateNamespaceOpts
 		}
 	}
 
-	align := mib2
-	namespacealign := align * r.InterleaveWays()
-	regionalign := r.GetAlign()
-	if regionalign == 0 {
-		regionalign = 1
-	}
-	// Size has to be aligned both by namespace alignment times interleave_ways, and also by region alignment
-	lcmalign := math.LCM(namespacealign, regionalign)
+	align, alignInfo := CalculateAlignment(r)
 	size := opts.Size
 	available := r.MaxAvailableExtent()
 	if available == uint64(C.ULLONG_MAX) {
@@ -211,14 +204,12 @@ func (r *region) CreateNamespace(ctx gocontext.Context, opts CreateNamespaceOpts
 	}
 	logger = logger.WithValues(
 		"region", r.DeviceName(),
-		"region-align", pmemlog.CapacityRef(int64(regionalign)),
-		"namespace-align", pmemlog.CapacityRef(int64(namespacealign)),
-		"common-align", pmemlog.CapacityRef(int64(lcmalign)),
+	).WithValues(alignInfo...).WithValues(
 		"available", pmemlog.CapacityRef(int64(available)),
 	)
-	if size == 0 || size%lcmalign != 0 {
+	if size == 0 || size%align != 0 {
 		// Align up to least-common-multiple alignment boundary.
-		size = (size/lcmalign + 1) * lcmalign
+		size = (size/align + 1) * align
 		logger.V(3).Info("Namespace size must be rounded up to alignment boundaries",
 			"old-size", pmemlog.CapacityRef(int64(opts.Size)),
 			"new-size", pmemlog.CapacityRef(int64(size)),
@@ -266,10 +257,10 @@ func (r *region) CreateNamespace(ctx gocontext.Context, opts CreateNamespaceOpts
 		switch opts.Mode {
 		case FsdaxMode:
 			logger.V(5).Info("Setting pfn")
-			err = ndns.SetPfnSeed(opts.Location, align)
+			err = ndns.SetPfnSeed(opts.Location, mib2)
 		case DaxMode:
 			logger.V(5).Info("Setting dax")
-			err = ndns.setDaxSeed(opts.Location, align)
+			err = ndns.setDaxSeed(opts.Location, mib2)
 		case SectorMode:
 			logger.V(5).Info("Setting btt")
 			err = ndns.setBttSeed(opts.SectorSize)
@@ -383,4 +374,31 @@ func (r *region) namespaces(onlyActive bool) []Namespace {
 	}
 
 	return namespaces
+}
+
+// CalculateAlignment considers region and namespace alignment.
+// It returns the final alignment value and key/value pairs for logging.
+func CalculateAlignment(r Region) (uint64, []interface{}) {
+	interleave := r.InterleaveWays()
+	fsdaxalign := r.FsdaxAlignment()
+	namespacealign := fsdaxalign * interleave
+	rawRegionAlign := r.GetAlign()
+	regionalign := rawRegionAlign
+	if regionalign <= 1 {
+		// This fallback turned out to be necessary when emulating PMEM in
+		// libvirt (OpenShift 4.8 beta): both PMEM-CSI and ndctl failed
+		// to create a namespace of size 100MiB, whereas 96MiB worked.
+		regionalign = 96 * 1024 * 1024
+	}
+	// Size has to be aligned both by namespace alignment times interleave_ways, and also by region alignment
+	align := math.LCM(namespacealign, regionalign)
+
+	return align, []interface{}{
+		"fsdaxalign", pmemlog.CapacityRef(int64(fsdaxalign)),
+		"interleave", interleave,
+		"namespace-align", pmemlog.CapacityRef(int64(namespacealign)),
+		"region-align", pmemlog.CapacityRef(int64(rawRegionAlign)),
+		"final-region-align", pmemlog.CapacityRef(int64(regionalign)),
+		"common-align", pmemlog.CapacityRef(int64(align)),
+	}
 }

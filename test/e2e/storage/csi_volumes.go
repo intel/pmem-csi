@@ -29,20 +29,18 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/storage/dax"
 	"github.com/intel/pmem-csi/test/e2e/storage/scheduler"
 	"github.com/intel/pmem-csi/test/e2e/versionskew"
-	testconfig "github.com/intel/pmem-csi/test/test-config"
 
 	v1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/test/e2e/framework"
+	"k8s.io/kubernetes/test/e2e/framework/skipper"
 	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
 	"k8s.io/kubernetes/test/e2e/storage/podlogs"
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
 
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 )
 
 var (
@@ -107,24 +105,7 @@ func DefineLateBindingTests(d *deploy.Deployment) {
 			}
 			_, err = f.ClientSet.StorageV1().StorageClasses().Create(context.Background(), sc, metav1.CreateOptions{})
 			framework.ExpectNoError(err, "create storage class %s", sc.Name)
-
-			claim = v1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					GenerateName: "pvc-",
-					Namespace:    f.Namespace.Name,
-				},
-				Spec: v1.PersistentVolumeClaimSpec{
-					AccessModes: []v1.PersistentVolumeAccessMode{
-						v1.ReadWriteOnce,
-					},
-					Resources: v1.ResourceRequirements{
-						Requests: v1.ResourceList{
-							v1.ResourceName(v1.ResourceStorage): resource.MustParse("1Mi"),
-						},
-					},
-					StorageClassName: &sc.Name,
-				},
-			}
+			claim = CreateClaim(f.Namespace.Name, sc.Name)
 		})
 
 		AfterEach(func() {
@@ -139,23 +120,39 @@ func DefineLateBindingTests(d *deploy.Deployment) {
 			TestDynamicProvisioning(f.ClientSet, f.Timeouts, &claim, *sc.VolumeBindingMode, "latebinding")
 		})
 
-		It("unsets unsuitable selected node", func() {
-			nodes, err := f.ClientSet.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
-			framework.ExpectNoError(err, "list nodes")
-			selectedNode := ""
-			nodeLabelName, nodeLabelValue := testconfig.GetNodeLabelOrFail()
-			for _, node := range nodes.Items {
-				if node.Labels[nodeLabelName] != nodeLabelValue {
-					selectedNode = node.Name
-					break
+		Context("unsets unsuitable selected node", func() {
+			It("with defaults", func() {
+				TestReschedule(f.ClientSet, f.Timeouts, &claim, d.DriverName, "latebinding")
+			})
+
+			It("with three replicas", func() {
+				if !d.HasOperator {
+					skipper.Skipf("need PMEM-CSI operator to reconfigure driver")
 				}
-			}
-			Expect(selectedNode).NotTo(BeEmpty(), "have a node without PMEM-CSI")
-			claim.Annotations = map[string]string{
-				"volume.kubernetes.io/selected-node":            selectedNode,
-				"volume.beta.kubernetes.io/storage-provisioner": d.DriverName,
-			}
-			TestDynamicProvisioning(f.ClientSet, f.Timeouts, &claim, *sc.VolumeBindingMode, "latebinding")
+
+				c, err := deploy.NewCluster(f.ClientSet, f.DynamicClient, f.ClientConfig())
+				framework.ExpectNoError(err, "create cluster")
+
+				By("increase replicas")
+				deployment := deploy.GetDeploymentCR(f, d.DriverName)
+				oldReplicas := deployment.Spec.ControllerReplicas
+				newReplicas := 3
+				deployment.Spec.ControllerReplicas = newReplicas
+				deploy.UpdateDeploymentCR(f, deployment)
+				deploy.WaitForPMEMDriver(c, d, int32(newReplicas))
+
+				defer func() {
+					By("reset replicas")
+					deployment.Spec.ControllerReplicas = oldReplicas
+					deploy.UpdateDeploymentCR(f, deployment)
+					if oldReplicas == 0 {
+						oldReplicas = 1
+					}
+					deploy.WaitForPMEMDriver(c, d, int32(oldReplicas))
+				}()
+
+				TestReschedule(f.ClientSet, f.Timeouts, &claim, d.DriverName, "latebinding")
+			})
 		})
 
 		It("stress test [Slow]", func() {

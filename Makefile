@@ -38,9 +38,9 @@ MAJOR_MINOR_VERSION:=$(shell echo $(MAJOR_MINOR_PATCH_VERSION) | sed -e 's/\([0-
 # case) and add local machine to no_proxy because some tests may use a
 # local Docker registry. Also exclude 0.0.0.0 because otherwise Go
 # tests using that address try to go through the proxy.
-HTTP_PROXY=$(shell echo "$${HTTP_PROXY:-$${http_proxy}}")
-HTTPS_PROXY=$(shell echo "$${HTTPS_PROXY:-$${https_proxy}}")
-NO_PROXY=$(shell echo "$${NO_PROXY:-$${no_proxy}},$$(ip addr | grep inet6 | grep /64 | sed -e 's;.*inet6 \(.*\)/64 .*;\1;' | tr '\n' ','; ip addr | grep -w inet | grep -e '/\(24\|16\|8\)' | sed -e 's;.*inet \(.*\)/\(24\|16\|8\) .*;\1;' | tr '\n' ',')",0.0.0.0)
+HTTP_PROXY:=$(shell echo "$${HTTP_PROXY:-$${http_proxy}}")
+HTTPS_PROXY:=$(shell echo "$${HTTPS_PROXY:-$${https_proxy}}")
+NO_PROXY:=$(shell echo "$${NO_PROXY:-$${no_proxy}},$$(if command -v ip &>/dev/null; then ip addr | grep inet6 | grep /64 | sed -e 's;.*inet6 \(.*\)/64 .*;\1;' | tr '\n' ','; ip addr | grep -w inet | grep -e '/\(24\|16\|8\)' | sed -e 's;.*inet \(.*\)/\(24\|16\|8\) .*;\1;' | tr '\n' ','; fi)",0.0.0.0)
 export HTTP_PROXY HTTPS_PROXY NO_PROXY
 
 REGISTRY_NAME?=$(shell . test/test-config.sh && echo $${TEST_BUILD_PMEM_REGISTRY})

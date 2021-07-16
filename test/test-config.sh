@@ -35,6 +35,9 @@ fi
 # on. Here we default to the IP address of the docker0 interface.
 : ${TEST_LOCAL_REGISTRY:=$(ip addr show dev docker0 2>/dev/null | (grep " inet " || echo localhost) | sed -e 's/.* inet //' -e 's;/.*;;'):5000}
 
+# Set to true if TEST_LOCAL_REGISTRY only supports access without TLS.
+: ${TEST_LOCAL_REGISTRY_SKIP_TLS:=true}
+
 # The registry used for PMEM-CSI image(s). Must be reachable from
 # inside the cluster.
 : ${TEST_PMEM_REGISTRY:=${TEST_LOCAL_REGISTRY}}
@@ -166,6 +169,9 @@ fi
 # The default is the label set by NFD.
 : ${TEST_PMEM_NODE_LABEL:=feature.node.kubernetes.io/memory-nv.dax=true}
 
+# Set to true if the cluster already has a running olm.
+: ${TEST_HAVE_OLM:=false}
+
 # Kubernetes feature gates to enable/disable.
 # EndpointSlice is disabled because of https://github.com/kubernetes/kubernetes/issues/91287 (Kubernetes
 # < 1.19) and because there were random connection failures to node ports during sanity
@@ -188,3 +194,20 @@ $(case ${TEST_KUBERNETES_VERSION} in 1.19 | 1.20) echo 'GenericEphemeralVolume=t
 # that is going to be used by kube-scheduler to reach the scheduler
 # extender service (see test/setup-kubernetes.sh)
 : ${TEST_SCHEDULER_EXTENDER_NODE_PORT:=32000}
+
+# The OpenShift baremetal installer binary.
+: ${TEST_OPENSHIFT_INSTALLER:=openshift-baremetal-install}
+
+# The cluster and domain name for machines. With NetworkManager configured
+# as described in test/start-openshift.sh, machines will have a DNS entry
+# as <machine>.<cluster>.<domain>.
+: ${TEST_VIRT_CLUSTER_NAME:=tt}
+: ${TEST_VIRT_CLUSTER_DOMAIN:=testing}
+
+# The OpenShift pull secret from https://cloud.redhat.com/openshift/install/metal
+: ${TEST_OPENSHIFT_PULL_SECRET:=}
+
+# The OpenShift machines need different settings than the GoVM machines.
+: ${TEST_OPENSHIFT_NORMAL_MEM_SIZE:=$((16 * 1024))} # 16GiB
+: ${TEST_OPENSHIFT_PMEM_MEM_SIZE:=$((1 * 1024))} # 1GiB
+: ${TEST_OPENSHIFT_PMEM_LABEL_SIZE:=$((2 * 1024 * 1024))} # 2MiB

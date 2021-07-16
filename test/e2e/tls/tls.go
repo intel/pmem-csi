@@ -49,7 +49,14 @@ var _ = deploy.DescribeForAll("TLS", func(d *deploy.Deployment) {
 			if !d.HasController {
 				skipper.Skipf("has no controller")
 			}
-			checkTLS(f, "pmem-csi-intel-com-controller-0.pmem-csi-intel-com-controller."+d.Namespace)
+			// Resolving pmem-csi-intel-com-controller-0.pmem-csi-intel-com-controller stopped
+			// working when removing the service for the StatefulSet. We look up the Pod IP
+			// ourselves.
+			cluster, err := deploy.NewCluster(f.ClientSet, f.DynamicClient, f.ClientConfig())
+			framework.ExpectNoError(err, "create cluster")
+			controller, err := cluster.GetAppInstance(context.Background(), labels.Set{"app.kubernetes.io/name": "pmem-csi-controller"}, "", d.Namespace)
+			framework.ExpectNoError(err, "find controller")
+			checkTLS(f, controller.Status.PodIP)
 		})
 	})
 	Context("node", func() {

@@ -55,6 +55,12 @@ spec:
           spec:
             description: DeploymentSpec defines the desired state of Deployment
             properties:
+              controllReplicas:
+                description: ControllerReplicas determines how many copys of the controller
+                  Pod run concurrently. Zero (= unset) selects the builtin default,
+                  which is currently 1.
+                minimum: 0
+                type: integer
               controllerDriverResources:
                 description: ControllerDriverResources Compute resources required
                   by central driver container
@@ -86,7 +92,9 @@ spec:
                 description: ControllerTLSSecret is the name of a secret which contains
                   ca.crt, tls.crt and tls.key data for the scheduler extender and
                   pod mutation webhook. A controller is started if (and only if) this
-                  secret is specified.
+                  secret is specified. The special string "-openshift-" enables the
+                  usage of https://docs.openshift.com/container-platform/4.6/security/certificates/service-serving-certificate.html
+                  to create certificates.
                 type: string
               deviceMode:
                 description: DeviceMode to use to manage PMEM devices.

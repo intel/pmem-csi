@@ -11,7 +11,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -21,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	cm "github.com/prometheus/client_model/go"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
@@ -31,14 +31,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2/klogr"
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
-	"github.com/intel/pmem-csi/pkg/k8sutil"
 	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	"github.com/intel/pmem-csi/test/e2e/pod"
 	testconfig "github.com/intel/pmem-csi/test/test-config"
@@ -91,42 +89,34 @@ func WaitForOperator(c *Cluster, namespace string) *v1.Pod {
 	return operator
 }
 
-// WaitForOLM watis till the "olm-operator" Pod in given namspace
-// is ready else fails with exception.
-func WaitForOLM(c *Cluster, namespace string) *v1.Pod {
-	ginkgo.By("Waiting if the OLM deployment is ready...")
-	olm := c.WaitForAppInstance(labels.Set{"app": "olm-operator"}, "", namespace)
-	ginkgo.By("OLM is ready!")
-	return olm
-}
-
-// GetMetricsURL retrieves the metrics URL provided by a pod that
-// matches with the label set passed in podLabelSet.
-func GetMetricsURL(ctx context.Context, c *Cluster, namespace string, podLabels labels.Set) (string, error) {
+// GetMetricsURLs retrieves the metrics URLs provided by all pods that
+// match with the label set passed in podLabelSet.
+func GetMetricsURLs(ctx context.Context, c *Cluster, namespace string, podLabels labels.Set) ([]string, error) {
+	var urls []string
 	list, err := c.cs.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{LabelSelector: podLabels.String()})
 	if err != nil {
-		return "", err
+		return nil, err
+	}
+	if len(list.Items) == 0 {
+		return nil, fmt.Errorf("no pod(s) found for given labels(%v) in '%s' namespace", podLabels, namespace)
 	}
 
-	var pod *v1.Pod
-	for i, p := range list.Items {
-		if p.GetDeletionTimestamp() == nil {
-			pod = &list.Items[i]
-		}
-	}
-
-	if pod == nil {
-		return "", fmt.Errorf("no pod(s) found for given labels(%v) in '%s' namespace", podLabels, namespace)
-	}
-	for _, container := range pod.Spec.Containers {
-		for _, port := range container.Ports {
-			if port.Name == "metrics" {
-				return fmt.Sprintf("http://%s.%s:%d/metrics", pod.Namespace, pod.Name, port.ContainerPort), nil
+	for _, pod := range list.Items {
+		if pod.GetDeletionTimestamp() == nil {
+			for _, container := range pod.Spec.Containers {
+				for _, port := range container.Ports {
+					if port.Name == "metrics" {
+						urls = append(urls, fmt.Sprintf("http://%s.%s:%d/metrics", pod.Namespace, pod.Name, port.ContainerPort))
+					}
+				}
 			}
 		}
 	}
+	if len(urls) == 0 {
+		return nil, fmt.Errorf("no metrics ports found (pods: %+v)", list)
+	}
 
-	return "", fmt.Errorf("no metrics port found (pod: %s)", pod.Name)
+	return urls, nil
 }
 
 // GetMetricsPortForward retrieves metrics from given metricsURL
@@ -163,7 +153,7 @@ func GetMetrics(ctx context.Context, c *Cluster, url string) (map[string]*cm.Met
 // - controller service is up and running
 // - all nodes have registered
 // - for testing deployments: TCP CSI endpoints are ready
-func WaitForPMEMDriver(c *Cluster, d *Deployment) (metricsURL string) {
+func WaitForPMEMDriver(c *Cluster, d *Deployment, controllerReplicas int32) (metricsURLs []string) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	info := time.NewTicker(time.Minute)
@@ -183,73 +173,84 @@ func WaitForPMEMDriver(c *Cluster, d *Deployment) (metricsURL string) {
 	check := func() error {
 		// Do not linger too long here, we rather want to
 		// abort and print the error instead of getting stuck.
-		const timeout = time.Second
+		const timeout = 10 * time.Second
 		deadline, cancel := context.WithTimeout(deadline, timeout)
 		defer cancel()
 
 		if d.HasController {
 			var err error
-			metricsURL, err = GetMetricsURL(deadline, c, d.Namespace, labels.Set{
+			metricsURLs, err = GetMetricsURLs(deadline, c, d.Namespace, labels.Set{
 				"pmem-csi.intel.com/deployment": d.Label(),
 				"app.kubernetes.io/name":        "pmem-csi-controller",
 			})
 			if err != nil {
 				return err
 			}
-
-			metrics, err := GetMetrics(deadline, c, metricsURL)
-			if err != nil {
-				return fmt.Errorf("parse metrics response: %v", err)
-			}
-			buildInfo, ok := metrics["build_info"]
-			if !ok {
-				return fmt.Errorf("expected build_info not found in metrics: %v", metrics)
-			}
-			if len(buildInfo.Metric) != 1 {
-				return fmt.Errorf("expected build_info to have one metric, got: %v", buildInfo.Metric)
-			}
-			buildMetric := buildInfo.Metric[0]
-			if len(buildMetric.Label) != 1 {
-				return fmt.Errorf("expected build_info to have one label, got: %v", buildMetric.Label)
-			}
-			label := buildMetric.Label[0]
-			if *label.Name != "version" {
-				return fmt.Errorf("expected build_info to contain a version label, got: %s", *label.Name)
-			}
-			version = *label.Value
-
-			switch {
-			case d.Version == "0.7" || d.Version == "0.8":
-				// With the older, centralized provisioning we
-				// can also check that the controller knows
-				// about all nodes.
-				pmemNodes, ok := metrics["pmem_nodes"]
-				if !ok {
-					return fmt.Errorf("expected pmem_nodes not found in metrics: %v", metrics)
-				}
-
-				if len(pmemNodes.Metric) != 1 {
-					return fmt.Errorf("expected pmem_nodes to have one metric, got: %v", pmemNodes.Metric)
-				}
-				nodesMetric := pmemNodes.Metric[0]
-				actualNodes := int(*nodesMetric.Gauge.Value)
-				if actualNodes != c.NumNodes()-1 {
-					return fmt.Errorf("only %d of %d nodes have registered", actualNodes, c.NumNodes()-1)
-				}
-			case d.Version == "0.9" || !d.StorageCapacitySupported(c.cfg):
-				// It is possible that we just
-				// (re)configured the mutating pod
-				// webhook. We must be sure that
-				// apiserver has adapted to that
-				// change. We test that by submitting
-				// a pod and checking that the webhook
-				// was called, which is visible in its
-				// metrics data since PMEM-CSI 0.9.0.
-				oldCount, err := findHistogramCount(metrics, "scheduler_request_duration_seconds", map[string]string{"handler": "mutate"})
+			var oldCount uint64
+			checkCount := false
+			for _, url := range metricsURLs {
+				metrics, err := GetMetrics(deadline, c, url)
 				if err != nil {
-					return nil
+					return fmt.Errorf("parse metrics response: %v", err)
 				}
+				buildInfo, ok := metrics["build_info"]
+				if !ok {
+					return fmt.Errorf("expected build_info not found in metrics: %v", metrics)
+				}
+				if len(buildInfo.Metric) != 1 {
+					return fmt.Errorf("expected build_info to have one metric, got: %v", buildInfo.Metric)
+				}
+				buildMetric := buildInfo.Metric[0]
+				if len(buildMetric.Label) != 1 {
+					return fmt.Errorf("expected build_info to have one label, got: %v", buildMetric.Label)
+				}
+				label := buildMetric.Label[0]
+				if *label.Name != "version" {
+					return fmt.Errorf("expected build_info to contain a version label, got: %s", *label.Name)
+				}
+				version = *label.Value
 
+				switch {
+				case d.Version == "0.7" || d.Version == "0.8":
+					// With the older, centralized provisioning we
+					// can also check that the controller knows
+					// about all nodes.
+					pmemNodes, ok := metrics["pmem_nodes"]
+					if !ok {
+						return fmt.Errorf("expected pmem_nodes not found in metrics: %v", metrics)
+					}
+
+					if len(pmemNodes.Metric) != 1 {
+						return fmt.Errorf("expected pmem_nodes to have one metric, got: %v", pmemNodes.Metric)
+					}
+					nodesMetric := pmemNodes.Metric[0]
+					actualNodes := int(*nodesMetric.Gauge.Value)
+					if actualNodes != c.NumNodes()-1 {
+						return fmt.Errorf("only %d of %d nodes have registered", actualNodes, c.NumNodes()-1)
+					}
+				case !c.StorageCapacitySupported():
+					// It is possible that we just
+					// (re)configured the mutating pod
+					// webhook. We must be sure that
+					// apiserver has adapted to that
+					// change. We test that by submitting
+					// a pod and checking that the webhook
+					// was called, which is visible in its
+					// metrics data since PMEM-CSI 0.9.0.
+					count, err := findHistogramCount(metrics, "scheduler_request_duration_seconds", map[string]string{"handler": "mutate"})
+					if err != nil {
+						return nil
+					}
+					oldCount += count
+					checkCount = true
+				default:
+					// Nothing to wait for. We could check for CSIStorageCapacity objects, but those
+					// are not needed yet when starting a test. The scheduler will wait for them by
+					// itself.
+				}
+			}
+
+			if checkCount {
 				// Pods get validated after
 				// mutation. We can therefore submit
 				// an invalid pod that will be sent to
@@ -274,22 +275,22 @@ func WaitForPMEMDriver(c *Cluster, d *Deployment) (metricsURL string) {
 				}
 
 				// Now check that the webhook was called.
-				metrics, err := GetMetrics(deadline, c, metricsURL)
-				if err != nil {
-					return fmt.Errorf("parse metrics response: %v", err)
-				}
+				var newCount uint64
+				for _, url := range metricsURLs {
+					metrics, err := GetMetrics(deadline, c, url)
+					if err != nil {
+						return fmt.Errorf("parse metrics response: %v", err)
+					}
 
-				newCount, err := findHistogramCount(metrics, "scheduler_request_duration_seconds", map[string]string{"handler": "mutate"})
-				if err != nil {
-					return fmt.Errorf("parse metrics response: %v", err)
+					count, err := findHistogramCount(metrics, "scheduler_request_duration_seconds", map[string]string{"handler": "mutate"})
+					if err != nil {
+						return fmt.Errorf("parse metrics response: %v", err)
+					}
+					newCount += count
 				}
 				if newCount == oldCount {
-					return fmt.Errorf("mutating webhook was not called for pod %q, request count still %d", pod.Name, oldCount)
+					return fmt.Errorf("mutating webhook was not called, total request count still %d", oldCount)
 				}
-			default:
-				// Nothing to wait for. We could check for CSIStorageCapacity objects, but those
-				// are not needed yet when starting a test. The scheduler will wait for them by
-				// itself.
 			}
 		}
 
@@ -334,22 +335,60 @@ func WaitForPMEMDriver(c *Cluster, d *Deployment) (metricsURL string) {
 			}
 		}
 
+		// Check controller pods.
+		switch d.Version {
+		case "0.7", "0.8", "0.9":
+			// No need to test and doesn't have the necessary labels.
+		default:
+			deployments, err := c.cs.AppsV1().Deployments(d.Namespace).List(context.Background(),
+				metav1.ListOptions{
+					LabelSelector: labels.Set{
+						"app.kubernetes.io/instance":  d.DriverName,
+						"app.kubernetes.io/component": "controller",
+					}.String(),
+				},
+			)
+			if err != nil {
+				return fmt.Errorf("list controller deployments: %v", err)
+			}
+			if len(deployments.Items) != 1 {
+				return fmt.Errorf("need one deployment, have %d", len(deployments.Items))
+			}
+			dep := deployments.Items[0]
+			if *dep.Spec.Replicas != controllerReplicas ||
+				dep.Status.Replicas != controllerReplicas ||
+				dep.Status.AvailableReplicas != controllerReplicas ||
+				dep.Status.ReadyReplicas != controllerReplicas {
+				return fmt.Errorf("expect controller deployment with %d replicas, have spec.Replicas=%d, status.Replicas=%d, status.AvailableReplicase=%d, status.ReadyReplicas=%d",
+					controllerReplicas,
+					*dep.Spec.Replicas,
+					dep.Status.Replicas,
+					dep.Status.AvailableReplicas,
+					dep.Status.ReadyReplicas)
+			}
+		}
+
 		// Done for normal deployments.
 		if !d.Testing {
 			return nil
 		}
 
 		// For testing deployments, also ensure that the CSI endpoints can be reached.
-		nodeAddress, controllerAddress, err := LookupCSIAddresses(c, d.Namespace)
+		nodeAddress, controllerAddress, err := LookupCSIAddresses(deadline, c, d.Namespace)
 		if err != nil {
 			return fmt.Errorf("look up CSI addresses: %v", err)
 		}
 		tryConnect := func(address string) error {
-			prefix := "dns:///" // triple slash is used by gRPC, which makes the address unparsable with net/url
-			if !strings.HasPrefix(address, prefix) {
-				return fmt.Errorf("unexpected non-DNS URL: %s", address)
+			addr, err := pod.ParseAddr(address)
+			if err != nil {
+				return err
 			}
-			conn, err := net.Dial("tcp", address[len(prefix):])
+			dialer := pod.NewDialer(c.ClientSet(), c.Config())
+			// Here we discard error messages because those are expected while
+			// the driver starts up. Once we update to logr 1.0.0, we could redirect
+			// the output into a string buffer via the sink mechanism and include
+			// it in the error message.
+			conn, err := dialer.DialContainerPort(deadline, logr.Discard(), *addr)
 			if err != nil {
 				return fmt.Errorf("dial %s: %v", address, err)
 			}
@@ -554,7 +593,7 @@ func RemoveObjects(c *Cluster, deployment *Deployment) error {
 			}
 		}
 
-		// We intentionally delete statefulset last because
+		// We intentionally delete deployment and stateful sets last because
 		// findDriver checks for it. Here we just scale it down
 		// to trigger pod deletion.
 		if list, err := c.cs.AppsV1().StatefulSets("").List(context.Background(), filter); !failure(err) {
@@ -566,8 +605,6 @@ func RemoveObjects(c *Cluster, deployment *Deployment) error {
 				}
 			}
 		}
-
-		// Same for the operator's deployment.
 		if list, err := c.cs.AppsV1().Deployments("").List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				if *object.Spec.Replicas != 0 {
@@ -777,14 +814,6 @@ func (d Deployment) Label() string {
 	return d.Name()
 }
 
-// StorageCapacitySupported checks that the v1beta1 CSIStorageCapacity API is supported.
-// It only checks the Kubernetes version.
-func (d *Deployment) StorageCapacitySupported(cfg *rest.Config) bool {
-	ver, err := k8sutil.GetKubernetesVersion(cfg)
-	framework.ExpectNoError(err, "check Kubernetes version")
-	return ver.Compare(1, 21) >= 0
-}
-
 // FindDeployment checks whether there is a PMEM-CSI driver and/or
 // operator deployment in the cluster. A deployment is found via its
 // deployment resp. statefulset object, which must have a
@@ -856,11 +885,15 @@ func findDriver(c *Cluster) (*Deployment, error) {
 	}
 	deployment.DriverName = drivers.Items[0].Name
 
-	controllers, err := c.cs.AppsV1().StatefulSets("").List(context.Background(), metav1.ListOptions{LabelSelector: deploymentLabel})
+	controllerSS, err := c.cs.AppsV1().StatefulSets("").List(context.Background(), metav1.ListOptions{LabelSelector: deploymentLabel})
 	if err != nil {
 		return nil, fmt.Errorf("checking for StatefulSet: %v", err)
 	}
-	deployment.HasController = len(controllers.Items) > 0
+	controllerD, err := c.cs.AppsV1().Deployments("").List(context.Background(), metav1.ListOptions{LabelSelector: deploymentLabel})
+	if err != nil {
+		return nil, fmt.Errorf("checking for Deployment: %v", err)
+	}
+	deployment.HasController = len(controllerSS.Items) > 0 || len(controllerD.Items) > 0
 
 	// Derive the version from the image tag. The annotation doesn't include it.
 	for _, container := range list.Items[0].Spec.Template.Spec.Containers {
@@ -976,8 +1009,6 @@ func Parse(deploymentName string) (*Deployment, error) {
 		if deployment.HasDriver && !deployment.Testing {
 			if deployment.Mode == api.DeviceModeDirect { // operator-direct-production
 				deployment.Namespace = "kube-system"
-				// No secret available in that namespace.
-				deployment.HasController = false
 			} else { // operator-lvm-production
 				deployment.DriverName = "second.pmem-csi.intel.com"
 			}
@@ -1060,14 +1091,11 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 			framework.Logf("reusing existing %s PMEM-CSI components", deployment.Name())
 			// Do some sanity checks on the running deployment before the test.
 			if deployment.HasDriver {
-				WaitForPMEMDriver(c, deployment)
+				WaitForPMEMDriver(c, deployment, 1 /* controller replicas */)
 				CheckPMEMDriver(c, deployment)
 			}
 			if deployment.HasOperator {
 				WaitForOperator(c, deployment.Namespace)
-			}
-			if deployment.HasOLM {
-				WaitForOLM(c, "olm")
 			}
 			return
 		}
@@ -1101,7 +1129,6 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 		cmd.Env = env
 		_, err := pmemexec.Run(ctx, cmd)
 		framework.ExpectNoError(err, "create operator deployment: %q", deployment.Name())
-		WaitForOLM(c, "olm")
 	}
 
 	if deployment.Version != "" {
@@ -1177,7 +1204,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 	if deployment.HasDriver {
 		if deployment.HasOperator {
 			// Deploy driver through operator.
-			dep := deployment.GetDriverDeployment()
+			dep := deployment.GetDriverDeployment(c)
 			EnsureDeploymentCR(f, dep)
 		} else {
 			// Deploy with script.
@@ -1195,7 +1222,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 		// We check for a running driver the same way at the moment, by directly
 		// looking at the driver state. Long-term we want the operator to do that
 		// checking itself.
-		WaitForPMEMDriver(c, deployment)
+		WaitForPMEMDriver(c, deployment, 1 /* controller replicas */)
 		CheckPMEMDriver(c, deployment)
 	}
 }
@@ -1222,7 +1249,7 @@ func StopOperator(d *Deployment) error {
 
 // GetDriverDeployment returns the spec for the driver deployment that is used
 // for deployments like operator-lvm-production.
-func (d *Deployment) GetDriverDeployment() api.PmemCSIDeployment {
+func (d *Deployment) GetDriverDeployment(c *Cluster) api.PmemCSIDeployment {
 	dep := api.PmemCSIDeployment{
 		// TypeMeta is needed because
 		// DefaultUnstructuredConverter does not add it for us. Is there a better way?
@@ -1252,11 +1279,18 @@ func (d *Deployment) GetDriverDeployment() api.PmemCSIDeployment {
 		},
 	}
 
-	if d.HasController {
-		// The controller is enabled, using a secret that must have
-		// been prepared beforehand.
-		dep.Spec.ControllerTLSSecret = strings.ReplaceAll(d.DriverName, ".", "-") + "-controller-secret"
+	if d.HasController && !c.StorageCapacitySupported() {
 		dep.Spec.MutatePods = api.MutatePodsAlways
+		if c.isOpenShift {
+			// Use certificates prepared by OpenShift.
+			dep.Spec.ControllerTLSSecret = api.ControllerTLSSecretOpenshift
+		} else {
+			// Use a secret that must have been prepared beforehand.
+			dep.Spec.ControllerTLSSecret = strings.ReplaceAll(d.DriverName, ".", "-") + "-controller-secret"
+		}
+		// The scheduler must have been configured manually. We just
+		// create the corresponding service in the namespace where the
+		// driver is going to run.
 		portStr := testconfig.GetOrFail("TEST_SCHEDULER_EXTENDER_NODE_PORT")
 		port, err := strconv.ParseInt(portStr, 10, 32)
 		if err != nil {
@@ -1293,18 +1327,37 @@ func (d Deployment) DeleteAllPods(c *Cluster) error {
 	return nil
 }
 
-// LookupCSIAddresses returns controller and node addresses for gRPC dial.
+// LookupCSIAddresses returns controller and node addresses for pod/dial.go (<namespace>.<pod>:<port>).
 // Only works for testing deployments.
-func LookupCSIAddresses(c *Cluster, namespace string) (nodeAddress, controllerAddress string, err error) {
+func LookupCSIAddresses(ctx context.Context, c *Cluster, namespace string) (nodeAddress, controllerAddress string, err error) {
 	// Node #1 is expected to have a PMEM-CSI node driver
 	// instance. If it doesn't, connecting to the PMEM-CSI
-	// node service will fail.
-	nodeAddress = c.NodeServiceAddress(1, SocatPort)
+	// node service will fail. If we only have one node,
+	// then we use that one.
+	node := 1
+	if node >= c.NumNodes() {
+		node = 0
+	}
+	ip := c.NodeIP(node)
+	pod, err := c.GetAppInstance(ctx, labels.Set{"app.kubernetes.io/component": "node-testing"}, ip, namespace)
+	if err != nil {
+		return "", "", fmt.Errorf("find socat pod on node #%d = %s: %v", node, ip, err)
+	}
 
-	// Also use that same node as controller.
+	for _, port := range pod.Spec.Containers[0].Ports {
+		if port.Name == "csi-socket" {
+			nodeAddress = fmt.Sprintf("%s.%s:%d", namespace, pod.Name, port.ContainerPort)
+			// Also use that same node as controller.
+			controllerAddress = nodeAddress
+			return
+
+		}
+	}
+	// Fallback for PMEM-CSI 0.9. Can be removed once we stop testing against it.
+	nodeAddress = fmt.Sprintf("%s.%s:9735", namespace, pod.Name)
 	controllerAddress = nodeAddress
-
 	return
+	// return "", "", fmt.Errorf("container port 'csi-socket' not found in pod %+v", pod)
 }
 
 // DescribeForAll registers tests like gomega.Describe does, except that

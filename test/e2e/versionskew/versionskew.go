@@ -45,8 +45,9 @@ const (
 )
 
 func baseSupportsKubernetes(ver version.Version) bool {
-	// 0.9 supports the same version as "devel".
 	switch ver {
+	case version.NewVersion(1, 21):
+		return false
 	default:
 		return true
 	}
@@ -137,6 +138,15 @@ func (p *skewTestSuite) GetTestSuiteInfo() storageframework.TestSuiteInfo {
 }
 
 func (p *skewTestSuite) SkipUnsupportedTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) {
+	// We rely here on the driver being named after a deployment
+	// (see csi_volumes.go).
+	d := deploy.MustParse(driver.GetDriverInfo().Name)
+
+	if d.Testing {
+		// For example, replacing the controller image in a 0.9 testing deployment fails
+		// because the 1.0 test image doesn't support the -coverprofile options.
+		skipper.Skipf("version skew testing only needs to work for production deployments")
+	}
 }
 
 type local struct {
@@ -273,7 +283,7 @@ func (p *skewTestSuite) DefineTests(driver storageframework.TestDriver, pattern 
 		listOptions := metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s in (%s)", "pmem-csi.intel.com/deployment", d.Label()),
 		}
-		items, err := f.ClientSet.AppsV1().StatefulSets(d.Namespace).List(context.Background(), listOptions)
+		items, err := f.ClientSet.AppsV1().Deployments(d.Namespace).List(context.Background(), listOptions)
 		framework.ExpectNoError(err, "get controller")
 		controllerSet := items.Items[0]
 		currentImage := controllerSet.Spec.Template.Spec.Containers[0].Image
@@ -318,7 +328,7 @@ func (p *skewTestSuite) DefineTests(driver storageframework.TestDriver, pattern 
 
 		// Check that PMEM-CSI is up again.
 		framework.ExpectNoError(err, "get cluster information")
-		deploy.WaitForPMEMDriver(c, deployment)
+		deploy.WaitForPMEMDriver(c, deployment, 1 /* controller replicas */)
 
 		ssList, err := f.ClientSet.AppsV1().StatefulSets(d.Namespace).List(context.Background(), listOptions)
 		framework.ExpectNoError(err, "get controller")

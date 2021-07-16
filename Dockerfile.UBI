@@ -1,0 +1,170 @@
+# Copyright 2021 Intel Coporation.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Image for building PMEM-CSI for OpenShift.
+#
+# This need a subscription for the RHEL package feed.
+#
+# On a suitable host, run
+#   subscription-manager register --username <username> --auto-attach
+# to subscribe. Then build with
+#   buildah bud -f Dockerfile.UBI
+#
+# If such a host is not available, then the same can be done in a container.
+# The host then only needs buildah but doesn't need to be RHEL. In the following
+# example, /nvme is where the GOPATH and the current directory are located.
+#
+#   docker run --detach --privileged -v /var/lib/containers/:/var/lib/containers/:Z -v /nvme:/nvme --name rhel registry.access.redhat.com/rhel7:latest sleep infinity
+#   docker exec -ti rhel subscription-manager register --username <username> --auto-attach
+#   docker exec rhel subscription-manager repos --enable=rhel-7-server-rpms
+#   docker exec rhel subscription-manager repos --enable=rhel-7-server-extras-rpms
+#   docker exec rhel yum -y install buildah
+#   docker exec rhel buildah bud -f `pwd`/Dockerfile.UBI `pwd`
+#
+# Because /var/lib/containers/ is shared with the host, buildah on the host will
+# have access to the resulting image:
+#
+# $ sudo buildah images
+# REPOSITORY                                                                                 TAG      IMAGE ID       CREATED         SIZE
+# <none>                                                                                     <none>   d1767ba7457c   1 minutes ago   361 MB
+# $ container=$(sudo buildah from d1767ba7457c)
+# $ sudo buildah $container ls /licenses
+# PMEM-CSI.LICENSE  github.com  go-fibmap  go.LICENSE  go.uber.org  golang.org  gomodules.xyz  google.golang.org gopkg.in  ipmctl.LICENSE  k8s.io  sigs.k8s.io
+#
+# It can be tagged either as part of "buildah bud" with "-t <tag>" or later.
+
+# Image #0 as build
+FROM registry.access.redhat.com/ubi8
+
+WORKDIR /pmem-csi
+COPY . .
+
+ARG GO_VERSION="1.16.1"
+
+# CACHEBUST is set by the CI when building releases to ensure that apt-get really gets
+# run instead of just using some older, cached result.
+ARG CACHEBUST
+
+RUN dnf install -y gcc ndctl-devel make git pkg-config curl tar findutils xz cmake pkg-config gcc-c++ python36
+RUN curl -L https://dl.google.com/go/go${GO_VERSION}.linux-amd64.tar.gz | tar -zxf - -C / && \
+    mkdir -p /usr/local/bin/ && \
+    for i in /go/bin/*; do ln -s $i /usr/local/bin/; done
+
+# Build ipmctl from source.
+# We use the latest official release and determine that via
+# the HTML redirect page.
+RUN set -x && \
+    git clone https://github.com/intel/ipmctl.git && \
+    mkdir -p /usr/local/share/package-licenses && \
+    cp LICENSE /usr/local/share/package-licenses/ipmctl.LICENSE && \
+    cd ipmctl && \
+    tag=$(curl --silent https://github.com/intel/ipmctl/releases/latest | sed -e 's;.*tag/\([^"]*\).*;\1;') && \
+    git checkout $tag && \
+    mkdir build && \
+    cd build && \
+    cmake -DRELEASE=ON -DCMAKE_INSTALL_PREFIX=/usr/local .. && \
+    make -j all && \
+    make install
+
+# build pmem-csi-driver
+ARG VERSION="unknown"
+ENV PKG_CONFIG_PATH=/usr/lib/pkgconfig/
+
+# Here we choose explicitly which binaries we want in the image and in
+# which flavor (production or testing). The actual binary name in the
+# image is going to be the same, to avoid unnecessary deployment
+# differences.
+RUN set -x && \
+    make VERSION=${VERSION} pmem-csi-driver pmem-csi-operator && \
+    mkdir -p /usr/local/bin && \
+    mv _output/pmem-csi-driver /usr/local/bin/pmem-csi-driver && \
+    mv _output/pmem-csi-operator /usr/local/bin/pmem-csi-operator && \
+    go mod vendor && \
+    hack/copy-modules-license.sh /usr/local/share/package-licenses ./cmd/pmem-csi-driver ./cmd/pmem-csi-operator && \
+    cp /go/LICENSE /usr/local/share/package-licenses/go.LICENSE && \
+    cp LICENSE /usr/local/share/package-licenses/PMEM-CSI.LICENSE
+
+# Now also copy copyleft source code that was used during the build of our binaries.
+RUN set -x && \
+    mkdir -p /usr/local/share/package-sources && \
+    for license in $(grep -l -r -w -e MPL -e GPL -e LGPL /usr/local/share/package-licenses | sed -e 's;^/usr/local/share/package-licenses/;;'); do \
+        if ! (dir=$(dirname $license) && \
+              tar -Jvcf /usr/local/share/package-sources/$(echo $dir | tr / _).tar.xz vendor/$dir ); then \
+              exit 1; \
+        fi; \
+    done; \
+    ls -l /usr/local/share/package-sources; \
+    du -h /usr/local/share/package-sources
+
+# The actual pmem-csi-driver image.
+# Image #1 as runtime
+FROM registry.access.redhat.com/ubi8
+LABEL name="pmem-csi-driver"
+LABEL vendor="Intel"
+# updated by hack/set-version.sh when preparing a release
+LABEL version="v0.9.1"
+# Needs to be set by Red Hat build service.
+# LABEL release="1"
+LABEL summary="A CSI driver for managing PMEM."
+LABEL description="Intel(R) PMEM-CSI is a Container Storage Interface (CSI) driver for container orchestrators like Kubernetes. It makes local persistent memory (PMEM) available as a filesystem volume to container applications."
+
+# Update and install the minimal amount of additional packages that
+# are needed at runtime:
+# file - driver uses file utility to determine filesystem type
+# xfsprogs, e2fsprogs - formating filesystems
+# lvm2 - volume management
+# ndctl - pulls in the necessary library, useful by itself
+RUN dnf install -y file xfsprogs e2fsprogs lvm2 ndctl && \
+    mv /var/log/dnf.rpm.log /usr/local/share/package-install.log && \
+    rm -rf /var/cache /var/log/dnf*
+
+# Move required binaries and libraries to clean container.
+COPY --from=0 /usr/local/bin/pmem-* /usr/local/bin/ipmctl /usr/local/bin/
+COPY --from=0 /usr/local/lib64/libipmctl*.so.* /usr/local/lib64
+COPY --from=0 /usr/local/share/package-licenses /licenses
+COPY --from=0 /usr/local/share/package-sources /sources
+
+# /usr/local/lib is not in the default library search path.
+RUN for i in /usr/local/lib64/*.so.*; do ln -s $i /usr/lib64; done
+
+# Download source RPMs for those packages that were installed by us above.
+RUN echo "Extra packages installed as separate layer:" && grep Installed: /usr/local/share/package-install.log
+RUN set -xe && \
+    cd /sources && \
+    for package in $(grep Installed: /usr/local/share/package-install.log | sed -e 's/.*Installed: //' | sort -u); do \
+       base=${package%-*-*} && \
+       case $base in \
+           *) \
+               license=$(rpm -q --qf %{license} "$base") && \
+               case $license in \
+                   *MPL*|*GPL*) \
+                       echo "INFO: downloading source of $base because of the $license" && \
+                       dnf download --source $base \
+                       ;; \
+                   *) \
+                       echo "INFO: not shipping source of $base because not required by $license" \
+                       ;; \
+               esac \
+               ;; \
+       esac; \
+    done && \
+    rm -rf /var/cache /var/log/dnf*
+
+RUN ls -l /sources
+RUN du -h /sources
+
+# Don't rely on udevd, it isn't available (https://unix.stackexchange.com/questions/591724/how-to-add-a-block-to-udev-database-that-works-after-reboot).
+# Same with D-Bus.
+# Backup and archival of metadata inside the container is useless.
+RUN sed -i \
+        -e 's/udev_sync = 1/udev_sync = 0/' \
+        -e 's/udev_rules = 1/udev_rules = 0/' \
+        -e 's/obtain_device_list_from_udev = 1/obtain_device_list_from_udev = 0/' \
+        -e 's/multipath_component_detection = 1/multipath_component_detection = 0/' \
+        -e 's/md_component_detection = 1/md_component_detection = 0/' \
+        -e 's/notify_dbus = 1/notify_dbus = 0/' \
+        -e 's/backup = 1/backup = 0/' \
+        -e 's/archive = 1/archive = 0/' \
+        /etc/lvm/lvm.conf
+

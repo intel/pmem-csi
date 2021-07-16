@@ -306,13 +306,14 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 					validateDriver(deployment, nil)
 
-					controllerPodName := deployment.Name + "-controller-0"
-					controllerContainerName := "pmem-driver"
+					controllerPod := c.WaitForAppInstance(labels.Set{
+						"app.kubernetes.io/component": "controller",
+					}, "" /* any instance */, d.Namespace)
 
 					deadline, cancel := context.WithTimeout(ctx, 5*time.Minute)
 					defer cancel()
-					output, err := pod.Logs(deadline, f.ClientSet, d.Namespace, controllerPodName, controllerContainerName)
-					framework.ExpectNoError(err, "get pod logs for running controller-0")
+					output, err := pod.Logs(deadline, f.ClientSet, d.Namespace, controllerPod.Name, controllerPod.Spec.Containers[0].Name)
+					framework.ExpectNoError(err, "get controller pod logs for %s", controllerPod.Name)
 
 					if format == api.LogFormatJSON {
 						Expect(output).To(MatchRegexp(`\{"ts":\d+.\d+,"msg":.*"version":`), "PMEM-CSI driver output in JSON")
@@ -383,15 +384,15 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			framework.ExpectNoError(err, "get node driver deemonset")
 			nodeDS.TypeMeta = metav1.TypeMeta{APIVersion: "apps/v1", Kind: "DaemonSet"}
 
-			controllerSS := appsv1.StatefulSet{}
+			controller := appsv1.Deployment{}
 			err = client.Get(ctx, runtime.ObjectKey{
 				Name:      deployment.ControllerDriverName(),
 				Namespace: d.Namespace,
-			}, &controllerSS)
-			framework.ExpectNoError(err, "get controller driver daemonset")
-			controllerSS.TypeMeta = metav1.TypeMeta{APIVersion: "apps/v1", Kind: "StatefulSet"}
+			}, &controller)
+			framework.ExpectNoError(err, "get controller deployment")
+			controller.TypeMeta = metav1.TypeMeta{APIVersion: "apps/v1", Kind: "Deployment"}
 			deployment = deploy.UpdateDeploymentCR(f, deployment)
-			validateDriver(deployment, []runtime.Object{&nodeSetupDS, &nodeDS, &controllerSS}, "validate driver after editing")
+			validateDriver(deployment, []runtime.Object{&nodeSetupDS, &nodeDS, &controller}, "validate driver after editing")
 		})
 
 		It("shall allow multiple deployments", func() {
@@ -803,11 +804,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						ObjectMeta: metav1.ObjectMeta{Name: dep.SchedulerServiceName(), Namespace: d.Namespace},
 					}
 				},
-				"controller service": func(dep *api.PmemCSIDeployment) runtime.Object {
-					return &corev1.Service{
-						ObjectMeta: metav1.ObjectMeta{Name: dep.ControllerServiceName(), Namespace: d.Namespace},
-					}
-				},
 				"webhooks role": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &rbacv1.Role{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksRoleName(), Namespace: d.Namespace},
@@ -859,7 +855,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					}
 				},
 				"controller driver": func(dep *api.PmemCSIDeployment) runtime.Object {
-					return &appsv1.StatefulSet{
+					return &appsv1.Deployment{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.ControllerDriverName(), Namespace: d.Namespace},
 					}
 				},
@@ -903,11 +899,11 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		Context("conflicting update", func() {
 			tests := map[string]func(dep *api.PmemCSIDeployment) runtime.Object{
 				"controller": func(dep *api.PmemCSIDeployment) runtime.Object {
-					obj := &appsv1.StatefulSet{}
+					obj := &appsv1.Deployment{}
 					key := runtime.ObjectKey{Name: dep.ControllerDriverName(), Namespace: d.Namespace}
 					EventuallyWithOffset(1, func() error {
 						return client.Get(context.TODO(), key, obj)
-					}, "2m", "1s").ShouldNot(HaveOccurred(), "get stateful set")
+					}, "2m", "1s").ShouldNot(HaveOccurred(), "get deployment")
 
 					for i, container := range obj.Spec.Template.Spec.Containers {
 						if container.Name == "pmem-driver" {
@@ -929,23 +925,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 							obj.Spec.Template.Spec.Containers[i].Command = []string{"malformed", "options"}
 							break
 						}
-					}
-					return obj
-				},
-				"controller service": func(dep *api.PmemCSIDeployment) runtime.Object {
-					obj := &corev1.Service{}
-					key := runtime.ObjectKey{Name: dep.ControllerServiceName(), Namespace: d.Namespace}
-					EventuallyWithOffset(1, func() error {
-						return client.Get(context.TODO(), key, obj)
-					}, "2m", "1s").ShouldNot(HaveOccurred(), "get metrics service set")
-
-					obj.Spec.Ports = []corev1.ServicePort{
-						{
-							Port: 1111,
-							TargetPort: intstr.IntOrString{
-								IntVal: 1111,
-							},
-						},
 					}
 					return obj
 				},
@@ -1183,7 +1162,9 @@ func switchDeploymentMode(c *deploy.Cluster, f *framework.Framework, depName, ns
 		&deploy.Deployment{
 			Namespace:  ns,
 			DriverName: depName,
-		})
+		},
+		1, /* controller replicas */
+	)
 
 	return deployment
 }
@@ -1244,7 +1225,7 @@ func createPVC(f *framework.Framework, namespace, name, storageClassName string)
 			},
 			Resources: corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse("2Gi"),
+					corev1.ResourceStorage: resource.MustParse("100Mi"),
 				},
 			},
 		},

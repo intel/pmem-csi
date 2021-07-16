@@ -117,22 +117,8 @@ subjects:
   name: pmem-csi-intel-com-webhooks
   namespace: default
 ---
-# TODO: is this service still needed?
-apiVersion: v1
-kind: Service
-metadata:
-  name: pmem-csi-intel-com-controller
-  namespace: default
-spec:
-  selector:
-    app.kubernetes.io/name: pmem-csi-controller
-    app.kubernetes.io/instance: pmem-csi.intel.com
-  ports:
-  - port: 10000
-    targetPort: 10000
----
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: pmem-csi-intel-com-controller
   namespace: default
@@ -147,7 +133,6 @@ spec:
     matchLabels:
       app.kubernetes.io/name: pmem-csi-controller
       app.kubernetes.io/instance: pmem-csi.intel.com
-  serviceName: pmem-csi-intel-com-controller
   template:
     metadata:
       labels:
@@ -177,7 +162,9 @@ spec:
         - -mode=webhooks
         - -drivername=$(PMEM_CSI_DRIVER_NAME)
         - -nodeSelector={"storage":"pmem"}
-        - -caFile=/certs/ca.crt
+        # ca.crt is present in pmem-csi-intel-com-controller-secret but not required for anything at
+        # the moment.
+        - -caFile=
         - -certFile=/certs/tls.crt
         - -keyFile=/certs/tls.key
         - -schedulerListen=:8000
