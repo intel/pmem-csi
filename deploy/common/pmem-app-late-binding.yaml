@@ -5,7 +5,7 @@ metadata:
 spec:
   containers:
     - name: my-frontend
-      image: intel/pmem-csi-driver-test:canary
+      image: intel/pmem-csi-driver-test:v1.0.0
       command: [ "sleep", "100000" ]
       volumeMounts:
       - mountPath: "/data"

@@ -62,9 +62,9 @@ function deploy_using_olm() {
   CSV_FILE="${TMP_BUNDLE_DIR}/manifests/pmem-csi-operator.clusterserviceversion.yaml"
 
   # Update docker registry
-  # Generated CSV's containerImage is 'intel/pmem-csi-driver:v${BUNDLE_VERSION}'
+  # Generated CSV's containerImage is 'intel/pmem-csi-driver:v1.0.0
   if [ "${TEST_PMEM_REGISTRY}" != "intel" ]; then
-    sed -i -e "s^intel/pmem-csi-driver:^${TEST_PMEM_REGISTRY}/pmem-csi-driver:^g" ${CSV_FILE}
+    sed -i -e "s^intel/pmem-csi-driver:^${TEST_PMEM_REGISTRY}/pmem-csi-driver:v1.0.0^g" ${CSV_FILE}
   fi
   if [ "${TEST_PMEM_IMAGE_TAG}" != "" ]; then
     sed -i -e "s^\(/pmem-csi-driver:\).*^\1${TEST_PMEM_IMAGE_TAG}^g" ${CSV_FILE}

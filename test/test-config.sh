@@ -48,7 +48,7 @@ fi
 
 # The PMEM-CSI driver/operator container image tag to use.
 # This is used by version skew tests to set the driver/operator version.
-: ${TEST_PMEM_IMAGE_TAG:=canary}
+: ${TEST_PMEM_IMAGE_TAG:=v1.0.0}
 
 # Additional insecure registries (for example, my-registry:5000),
 # separated by spaces. The default local registry above is always
