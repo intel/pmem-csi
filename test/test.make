@@ -110,6 +110,9 @@ TEST_E2E_SKIP_ALL += volumeIO.*should.write.files.of.various.sizes.*verify.size.
 # The reason is shredding the ndctl device is consuming most of the time.
 TEST_E2E_SKIP_ALL += direct.*binding.stress.test
 
+# The test breaks other OLM tests (https://github.com/intel/pmem-csi/issues/1029).
+TEST_E2E_SKIP_ALL += olm.*upgrade
+
 # Add all Kubernetes version-specific suppressions.
 TEST_E2E_SKIP_ALL += $(TEST_E2E_SKIP_$(shell cat _work/$(CLUSTER)/kubernetes.version))
 
