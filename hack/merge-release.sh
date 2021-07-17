@@ -17,7 +17,7 @@
 # release branch.
 
 git fetch origin
-head_tree=$(git show --pretty=format:%T HEAD)
+head_tree=$(git show --no-patch --pretty=format:%T HEAD)
 head_commit=$(git rev-parse HEAD)
 latest_release=$(git branch -r | grep 'origin/release-[0-9]*\.[0-9]*' | sort -n | tail -n 1)
 release_commit=$(git rev-parse ${latest_release})
