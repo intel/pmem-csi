@@ -36,9 +36,10 @@ versions:
 | 1.15               | CSIInlineVolume                | unsupported <sup>3</sup>
 | 1.16               |                                | unsupported <sup>4</sup>
 | 1.17               |                                | unsupported <sup>5</sup>
-| 1.18               |                                | supported
+| 1.18               |                                | untested
 | 1.19               |                                | supported
 | 1.20               |                                | supported
+| 1.21               |                                | supported
 
 <sup>1</sup> Several relevant features are only available in alpha
 quality in Kubernetes 1.13 and the combination of skip attach and
