@@ -10,12 +10,13 @@ library](https://github.com/pmem/ndctl). In this readme, we use
 *persistent memory* to refer to a non-volatile dual in-line memory
 module (NVDIMM).
 
-The [v0.9 release](https://github.com/intel/pmem-csi/releases/latest)
+The [v1.0 release](https://github.com/intel/pmem-csi/releases/latest)
 is the latest feature release and is [regularly updated](docs/DEVELOPMENT.md#release-management) with newer base images
-and bug fixes. Older releases are no longer supported.
+and bug fixes. 0.9 is still supported.
 
 Documentation is part of the source code for each release and also
 available in rendered form for easier reading:
+- [latest 1.0.x release](https://intel.github.io/pmem-csi/1.0/)
 - [latest 0.9.x release](https://intel.github.io/pmem-csi/0.9/)
 - [latest 0.8.x release](https://intel.github.io/pmem-csi/0.8/)
 - [latest 0.7.x release](https://intel.github.io/pmem-csi/0.7/)
@@ -35,9 +36,10 @@ versions:
 | 1.15               | CSIInlineVolume                | unsupported <sup>3</sup>
 | 1.16               |                                | unsupported <sup>4</sup>
 | 1.17               |                                | unsupported <sup>5</sup>
-| 1.18               |                                | supported
+| 1.18               |                                | untested
 | 1.19               |                                | supported
 | 1.20               |                                | supported
+| 1.21               |                                | supported
 
 <sup>1</sup> Several relevant features are only available in alpha
 quality in Kubernetes 1.13 and the combination of skip attach and
@@ -80,12 +82,13 @@ The following table lists the features that are stable:
 
 Feature | Introduced in
 --------|--------------
-[LVM mode](docs/design.html#lvm-device-mode) | [v0.5.0](https://github.com/intel/pmem-csi/releases/tag/v0.5.0)
-[Direct mode](https://intel.github.io/pmem-csi/latest/docs/design.html#direct-device-mode) | [v0.5.0](https://github.com/intel/pmem-csi/releases/tag/v0.5.0)
-[Persistent volumes](https://intel.github.io/pmem-csi/latest/docs/design.html#volume-persistency) | [v0.5.0](https://github.com/intel/pmem-csi/releases/tag/v0.5.0)
-[CSI Ephemeral volumes](https://intel.github.io/pmem-csi/latest/docs/design.html#volume-persistency) | [v0.6.0](https://github.com/intel/pmem-csi/releases/tag/v0.6.0)
-[Raw block volumes](https://intel.github.io/pmem-csi/latest/docs/install.html#raw-block-volumes) | [v0.6.0](https://github.com/intel/pmem-csi/releases/tag/v0.6.0)
-[Capacity-aware pod scheduling](https://intel.github.io/pmem-csi/latest/docs/design.html#capacity-aware-pod-scheduling) | [v0.7.0](https://github.com/intel/pmem-csi/releases/tag/v0.7.0)
+[LVM mode](docs/design.md#lvm-device-mode) | [v0.5.0](https://github.com/intel/pmem-csi/releases/tag/v0.5.0)
+[Direct mode](docs/design.md#direct-device-mode) | [v0.5.0](https://github.com/intel/pmem-csi/releases/tag/v0.5.0)
+[Persistent volumes](docs/design.md#volume-persistency) | [v0.5.0](https://github.com/intel/pmem-csi/releases/tag/v0.5.0)
+[CSI Ephemeral volumes](docs/design.md#volume-persistency) | [v0.6.0](https://github.com/intel/pmem-csi/releases/tag/v0.6.0)
+[Raw block volumes](docs/install.md#raw-block-volumes) | [v0.6.0](https://github.com/intel/pmem-csi/releases/tag/v0.6.0)
+[Capacity-aware pod scheduling](docs/design.md#capacity-aware-pod-scheduling) | [v0.7.0](https://github.com/intel/pmem-csi/releases/tag/v0.7.0)
+[Operator API](docs/install.md#pmem-csi-deployment-crd) | [v0.9.0](https://github.com/intel/pmem-csi/releases/tag/v0.9.0)
 
 Release notes are prepared only for major new releases (such as v0.6.0)
 but not for automatic updates (such as v0.6.1). For more information on

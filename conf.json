@@ -20,6 +20,7 @@
         "sphinx_copybutton"
     ],
     "linkcheck_ignore": [
+        "https://intel.github.io/pmem-csi/1.0/",
         ".*cloudnative-k8sci.southcentralus.cloudapp.azure.com.*"
     ],
     "linkcheck_anchors_ignore": [

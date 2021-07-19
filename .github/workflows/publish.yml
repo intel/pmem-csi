@@ -7,6 +7,7 @@ on:
         - release-0.7
         - release-0.8
         - release-0.9
+        - release-1.0
 
 jobs:
   build:
@@ -29,7 +30,7 @@ jobs:
         echo "<meta http-equiv=\"refresh\" content=\"0; URL='0.9/index.html'\" />" >"$HOME/output/index.html"
         # "latest" used to be what "devel" is now, i.e. the documentation for the "devel"
         # branch. Now it points to the latest stable release.
-        ln -s 0.9 "$HOME/output/latest"
+        ln -s 1.0 "$HOME/output/latest"
     - name: Build latest
       run: |
         GITHUB_SHA=$(git rev-parse HEAD)
@@ -67,6 +68,16 @@ jobs:
         rm -rf _work/venv
         make vhtml
         mv _output/html $HOME/output/0.9
+    - uses: actions/checkout@v2
+      with:
+        ref: release-1.0
+    - name: Build release-1.0
+      run: |
+        GITHUB_SHA=$(git rev-parse HEAD)
+        export GITHUB_SHA
+        rm -rf _work/venv
+        make vhtml
+        mv _output/html $HOME/output/1.0
     - name: Deploy the docs
       run: |
         cd $HOME/output
