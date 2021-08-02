@@ -78,7 +78,8 @@ var _ = deploy.DescribeForSome("versionskew", func(d *deploy.Deployment) bool {
 			newDeploymentName = d.Name() + "---" + version
 		} else if d.HasOLM {
 			root := os.Getenv("REPO_ROOT")
-			semver := current + ".0"
+			// A future version number. Must be higher than the current one.
+			semver := "100.0.0"
 			defer func() {
 				// Remove generated bundle
 				_, err := pmemexec.RunCommand(ctx, "rm", "-rf", root+"/deploy/olm-bundle/"+semver)

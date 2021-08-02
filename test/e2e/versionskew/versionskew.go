@@ -38,10 +38,6 @@ import (
 const (
 	// base is the release branch used for version skew testing. Empty if none.
 	base = "0.9"
-	// Expected future release version.
-	// The version number used by the operator upgrade test for generating
-	// the OLM bundle for current devel code.
-	current = "1.0"
 )
 
 func baseSupportsKubernetes(ver version.Version) bool {
