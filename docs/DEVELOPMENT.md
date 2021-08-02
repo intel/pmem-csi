@@ -144,16 +144,16 @@ Running the above command generates the OLM package bundle files under `deploy/o
 
 * Clone `operator-framework/community-operators` repository
 ``` console
-$ git clone https://github.com/operator-framework/community-operators.git
+$ git clone https://github.com/k8s-operatorhub/community-operators.git
 ```
 
 * Copy the generated catalog files. Commit the changes and submit a pull
   request to
- [community-operators](https://github.com/operator-framework/community-operators) repository.
+ [community-operators](https://github.com/k8s-operatorhub/community-operators) repository.
 ```console
-$ cp -r <PMEM-CSI_ROOT>/deploy/olm-bundle/* <COMMUNITY-OPERATORS_ROOT>/upstream-community-operators/pmem-csi-operator/
+$ cp -r <PMEM-CSI_ROOT>/deploy/olm-bundle/* <COMMUNITY-OPERATORS_ROOT>/operators/pmem-csi-operator/
 $ cd <COMMUNITY-OPERATORS_ROOT>
-$ git add upstream-community-operators/pmem-csi-operator/
+$ git add operators/pmem-csi-operator/
 $ git commit -s -m "Updating PMEM-CSI Operator to version <X.Y.Z>"
 ```
 
