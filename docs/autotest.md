@@ -4,7 +4,7 @@
 
 Use the `make test` command.
 
-## QEMU and Kubernetes
+## QEMU and Kubernetes\*
 
 E2E testing relies on a cluster running inside multiple QEMU virtual
 machines deployed by [GoVM](https://github.com/govm-project/govm). The
@@ -12,7 +12,7 @@ same cluster can also be used interactively when real hardware is not
 available.
 
 E2E testing is known to work on a Linux development host system. The user
-must be allowed to use Docker.
+must be allowed to use Docker\*.
 
 KVM must be enabled. Usually this is the case when `/dev/kvm` exists.
 The current user does not need the privileges to use KVM and QEMU
@@ -23,7 +23,7 @@ Note that cloud providers often don't offer KVM support on their
 regular machines. Search for "nested virtualization" for your provider
 to determine whether and how it supports KVM.
 
-Nested virtualization is also needed when using Kata Containers inside
+Nested virtualization is also needed when using Kata Containers\* inside
 the cluster. On Intel-based machines it can be enabled by loading the
 `kvm_intel` module with `nested=1` (see
 https://wiki.archlinux.org/index.php/KVM#Nested_virtualization). At
@@ -99,7 +99,7 @@ the default `pmem-govm` cluster name via the `CLUSTER` env variable.
 For example, this invocation sets up a cluster using an older release
 of Kubernetes:
 
-``` 
+```
 TEST_KUBERNETES_VERSION=1.18 CLUSTER=kubernetes-1.18 make start
 ```
 
