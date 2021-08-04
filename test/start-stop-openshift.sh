@@ -29,7 +29,7 @@
 # download, so you need to grab the client and then use that to fetch the 
 # installer. Intuitive design, right? :-)
 #
-# https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp-dev-preview/4.8.0-0.nightly-2021-05-26-071911/openshift-client-linux.tar.gz
+# https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/4.8.3/openshift-client-linux-4.8.3.tar.gz
 #
 # That one definitely works. All the nightlies after that date 
 # theoretically should too, but I don't yet have a CI that explicitly 
@@ -57,16 +57,16 @@
 # Look at the release.txt for the installer nightly (in this case the same 
 # nightly as the client) and grab the 'pull from' line:
 #
-# http://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp-dev-preview/4.8.0-0.nightly-2021-05-26-071911/release.txt
+# https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/4.8.3/release.txt
 #
 # "Pull From: 
-# quay.io/openshift-release-dev/ocp-release-nightly@sha256:ab62a4104ff3d2a287f4167962241352c392a007d675ecdbc6f195da01d18f08"
+# quay.io/openshift-release-dev/ocp-release@sha256:9232aeea4bf938571fdfad7085428bcac4ffdaffa5559209ad8bca20fa37a2f6"
 #
 # then feed that url to the client:
 #
 # ./oc adm release -a /path/to/pull_secret.json extract 
-# quay.io/openshift-release-dev/ocp-release-nightly@sha256:ab62a4104ff3d2a287f4167962241352c392a007d675ecdbc6f195da01d18f08 
-# --command=openshift-baremetal-install -to /path/openshift-baremetal-install
+# quay.io/openshift-release-dev/ocp-release@sha256:9232aeea4bf938571fdfad7085428bcac4ffdaffa5559209ad8bca20fa37a2f6
+# --command=openshift-baremetal-install --to /path/openshift-baremetal-install
 #
 # Patrick:
 # The libvirt libs on Debian Buster are too old for that binary.
@@ -238,9 +238,9 @@ EOF
         while true; do
             if $VIRSH net-list --all | grep -q "^ $TEST_VIRT_CLUSTER_NAME-.* active"; then
                 # This accesses the "oauth-openshift" service through the Ingress service
-                # on the first node.
+                # on the first node. Same for console-openshift-console (added in 4.8 GA).
                 run $VIRSH net-update $($VIRSH net-list --name | grep "^$TEST_VIRT_CLUSTER_NAME-") \
-                    add dns-host "<host ip='192.168.126.51'><hostname>oauth-openshift.apps.$TEST_VIRT_CLUSTER_NAME.$TEST_VIRT_CLUSTER_DOMAIN</hostname></host>"
+                    add dns-host "<host ip='192.168.126.51'><hostname>oauth-openshift.apps.$TEST_VIRT_CLUSTER_NAME.$TEST_VIRT_CLUSTER_DOMAIN</hostname><hostname>console-openshift-console.apps.$TEST_VIRT_CLUSTER_NAME.$TEST_VIRT_CLUSTER_DOMAIN</hostname></host>"
                 exit 0
             fi
             sleep 1
