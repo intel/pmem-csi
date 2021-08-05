@@ -38,7 +38,7 @@ import (
 // objects for a certain deployment spec. deploymentSpec should only have those fields
 // set which are not the defaults. This call will wait for the expected objects until
 // the context times out.
-func DriverDeploymentEventually(ctx context.Context, c *deploy.Cluster, client client.Client, k8sver version.Version, metricsURL, namespace string, deployment api.PmemCSIDeployment, expectedUpdates []client.Object, lastCount float64) (float64, error) {
+func DriverDeploymentEventually(ctx context.Context, c *deploy.Cluster, client client.Client, k8sver version.Version, metricsURL, namespace string, deployment api.PmemCSIDeployment, lastCount float64) (float64, error) {
 	if deployment.GetUID() == "" {
 		return 0, errors.New("deployment not an object that was stored in the API server, no UID")
 	}
@@ -49,11 +49,6 @@ func DriverDeploymentEventually(ctx context.Context, c *deploy.Cluster, client c
 
 	// As the reconcile is done, check if the deployed driver is valid ...
 	if err := DriverDeployment(ctx, client, k8sver, namespace, deployment); err != nil {
-		return 0, err
-	}
-	// Now wait a bit longer to see whether the objects other than expected change again - they shouldn't.
-	// The longer we wait, the more certainty we have that we have reached a stable state.
-	if err := CheckForObjectUpdates(ctx, c, metricsURL, expectedUpdates, &deployment); err != nil {
 		return 0, err
 	}
 	return endCount, nil
@@ -124,11 +119,15 @@ func WaitForDeploymentReconciled(ctx context.Context, c *deploy.Cluster, metrics
 // expected object updates passed in expectedUpdates have occurred.
 // It uses the 'pmem_csi_deployment_sub_resource_updated_at' metric.
 //
+// Beware that this check only works if a test calling it uses a new
+// deployment with a unique UID. Otherwise object updates from a
+// previous test may get picked up.
+//
 // When the CR just got created, the operator should
 // immediately create objects with the right content and then
 // not update them again unless it is an expected update from the
 // caller.
-func CheckForObjectUpdates(ctx context.Context, c *deploy.Cluster, metricsURL string, expectedUpdates []client.Object, deployment *api.PmemCSIDeployment) error {
+func CheckForObjectUpdates(ctx context.Context, c *deploy.Cluster, metricsURL string, expectedUpdates []client.Object, deployment api.PmemCSIDeployment) error {
 	type updateInfo struct {
 		expectedObjectLabels []map[string]string
 		isFound              []bool
@@ -194,7 +193,7 @@ func CheckForObjectUpdates(ctx context.Context, c *deploy.Cluster, metricsURL st
 				}
 			}
 			if len(strList) != 0 {
-				return fmt.Errorf("expected sub-object are not update by the operator: %s", strings.Join(strList, "\n"))
+				return fmt.Errorf("expected sub-object were not updated by the operator: %s", strings.Join(strList, "\n"))
 			}
 			return nil
 		}

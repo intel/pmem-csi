@@ -36,9 +36,7 @@ import (
 	. "github.com/onsi/ginkgo"
 )
 
-func DefineImmediateBindingTests(d *deploy.Deployment) {
-	f := framework.NewDefaultFramework("immediatebinding")
-
+func DefineImmediateBindingTests(d *deploy.Deployment, f *framework.Framework) {
 	Context("immediate binding", func() {
 		var (
 			cleanup func()

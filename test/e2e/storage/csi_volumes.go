@@ -27,8 +27,6 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/driver"
 	"github.com/intel/pmem-csi/test/e2e/ephemeral"
 	"github.com/intel/pmem-csi/test/e2e/storage/dax"
-	"github.com/intel/pmem-csi/test/e2e/storage/scheduler"
-	"github.com/intel/pmem-csi/test/e2e/versionskew"
 
 	v1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -48,7 +46,10 @@ var (
 	numVolumes = flag.Int("pmem.binding.volumes", 100, "number of total volumes to create")
 )
 
-var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
+// This is for testing the driver itself and does not run tests with a driver deployed
+// with the operator. For tests that really should run for all deployment methods see
+// "Deployment" in pmem_csi.go.
+var _ = deploy.DescribeForSome("Driver", deploy.RunAllTests, func(d *deploy.Deployment) {
 	csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil)
 
 	// List of testSuites to be added below.
@@ -62,27 +63,39 @@ var _ = deploy.DescribeForAll("E2E", func(d *deploy.Deployment) {
 		testsuites.InitVolumeModeTestSuite,
 		testsuites.InitVolumesTestSuite,
 		dax.InitDaxTestSuite,
-		scheduler.InitSchedulerTestSuite,
-		versionskew.InitSkewTestSuite,
 	}
-
-	It("deployment works", func() {
-		// If we get here, the deployment is up and running.
-	})
 
 	if ephemeral.Supported {
 		csiTestSuites = append(csiTestSuites, testsuites.InitEphemeralTestSuite)
 	}
 
 	storageframework.DefineTestSuites(csiTestDriver, csiTestSuites)
-	DefineLateBindingTests(d)
-	DefineImmediateBindingTests(d)
-	DefineKataTests(d)
 })
 
-func DefineLateBindingTests(d *deploy.Deployment) {
-	f := framework.NewDefaultFramework("latebinding")
+var _ = deploy.DescribeForSome("E2E", deploy.RunAllTests, func(d *deploy.Deployment) {
+	csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil)
 
+	// List of testSuites to be added below.
+	var csiTestSuites = []func() storageframework.TestSuite{
+		// TODO: investigate how useful these tests are and enable them.
+		// testsuites.InitMultiVolumeTestSuite,
+		testsuites.InitProvisioningTestSuite,
+		// testsuites.InitSnapshottableTestSuite,
+		// testsuites.InitSubPathTestSuite,
+		testsuites.InitVolumeIOTestSuite,
+		testsuites.InitVolumeModeTestSuite,
+		testsuites.InitVolumesTestSuite,
+		dax.InitDaxTestSuite,
+	}
+
+	if ephemeral.Supported {
+		csiTestSuites = append(csiTestSuites, testsuites.InitEphemeralTestSuite)
+	}
+
+	storageframework.DefineTestSuites(csiTestDriver, csiTestSuites)
+})
+
+func DefineLateBindingTests(d *deploy.Deployment, f *framework.Framework) {
 	Context("late binding", func() {
 		var (
 			cleanup func()
@@ -205,7 +218,7 @@ func DefineLateBindingTests(d *deploy.Deployment) {
 func DefineKataTests(d *deploy.Deployment) {
 	// Also run some limited tests with Kata Containers, using different
 	// storage classes than usual.
-	kataDriver := driver.New(d.Name()+"-pmem-csi-kata", "pmem-csi.intel.com",
+	kataDriver := driver.New(d.Name()+"-pmem-csi-kata", d.DriverName,
 		[]string{"xfs", "ext4"},
 		map[string]string{
 			"ext4": "deploy/common/pmem-storageclass-ext4-kata.yaml",

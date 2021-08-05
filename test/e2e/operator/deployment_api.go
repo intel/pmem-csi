@@ -142,7 +142,9 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			what = []interface{}{"validate driver"}
 		}
 		var err error
-		lastReconcileCount, err = validate.DriverDeploymentEventually(ctx, c, client, k8sver, metricsURL, d.Namespace, deployment, expectUpdates, lastReconcileCount)
+		lastReconcileCount, err = validate.DriverDeploymentEventually(ctx, c, client, k8sver, metricsURL, d.Namespace, deployment, lastReconcileCount)
+		framework.ExpectNoErrorWithOffset(1, err, what...)
+		err = validate.CheckForObjectUpdates(ctx, c, metricsURL, expectUpdates, deployment)
 		framework.ExpectNoErrorWithOffset(1, err, what...)
 		framework.Logf("got expected driver deployment %s", deployment.Name)
 	}
