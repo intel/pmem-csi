@@ -441,7 +441,7 @@ var _ = deploy.DescribeForSome("dax", func(d *deploy.Deployment) bool {
 	fstype := ""
 	vsource := v1.VolumeSource{
 		CSI: &v1.CSIVolumeSource{
-			Driver: "pmem-csi.intel.com",
+			Driver: d.DriverName,
 			FSType: &fstype,
 			VolumeAttributes: map[string]string{
 				"size": "110Mi",

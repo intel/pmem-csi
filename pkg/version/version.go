@@ -72,3 +72,8 @@ func (v Version) Compare(major, minor uint) int {
 
 	return d
 }
+
+// CompareVersion is the same as Compare with a Version as argument.
+func (v Version) CompareVersion(other Version) int {
+	return v.Compare(other.major, other.minor)
+}

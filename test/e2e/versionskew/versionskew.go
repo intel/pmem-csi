@@ -15,6 +15,7 @@ package versionskew
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
@@ -28,7 +29,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	e2estatefulset "k8s.io/kubernetes/test/e2e/framework/statefulset"
+	e2edeployment "k8s.io/kubernetes/test/e2e/framework/deployment"
 	e2evolume "k8s.io/kubernetes/test/e2e/framework/volume"
 
 	. "github.com/onsi/ginkgo"
@@ -37,13 +38,15 @@ import (
 
 const (
 	// base is the release branch used for version skew testing. Empty if none.
-	base = "0.9"
+	base = "1.0"
+
+	// revisionAnnotation is the revision annotation of a deployment's replica sets which records its rollout sequence
+	revisionAnnotation = "deployment.kubernetes.io/revision"
 )
 
 func baseSupportsKubernetes(ver version.Version) bool {
 	switch ver {
-	case version.NewVersion(1, 21):
-		return false
+	// No exceptions at the moment.
 	default:
 		return true
 	}
@@ -266,6 +269,10 @@ func (p *skewTestSuite) DefineTests(driver storageframework.TestDriver, pattern 
 	// and if there compatibility issues, then hopefully the direction
 	// of the skew won't matter.
 	It("controller [Slow]", func() {
+		if d.HasOperator {
+			skipper.Skipf("cannot change image of the PMEM-CSI controller because it is managed by the operator")
+		}
+
 		withKataContainers := false
 		c, err := deploy.NewCluster(f.ClientSet, f.DynamicClient, f.ClientConfig())
 		framework.ExpectNoError(err, "new cluster")
@@ -281,8 +288,8 @@ func (p *skewTestSuite) DefineTests(driver storageframework.TestDriver, pattern 
 		}
 		items, err := f.ClientSet.AppsV1().Deployments(d.Namespace).List(context.Background(), listOptions)
 		framework.ExpectNoError(err, "get controller")
-		controllerSet := items.Items[0]
-		currentImage := controllerSet.Spec.Template.Spec.Containers[0].Image
+		controller := items.Items[0]
+		currentImage := controller.Spec.Template.Spec.Containers[0].Image
 		Expect(currentImage).To(ContainSubstring("pmem-csi"))
 		By(fmt.Sprintf("Current controller driver image: %s", currentImage))
 
@@ -301,19 +308,28 @@ func (p *skewTestSuite) DefineTests(driver storageframework.TestDriver, pattern 
 
 		// Update the controller image.
 		setImage := func(newImage string) string {
-			items, err := f.ClientSet.AppsV1().StatefulSets(d.Namespace).List(context.Background(), listOptions)
-			framework.ExpectNoError(err, "get controller")
-			controllerSet := &items.Items[0]
-			oldImage := controllerSet.Spec.Template.Spec.Containers[0].Image
-			controllerSet.Spec.Template.Spec.Containers[0].Image = newImage
+			deployments, err := f.ClientSet.AppsV1().Deployments(d.Namespace).List(context.Background(), listOptions)
+			framework.ExpectNoError(err, "get controller Deployment")
+			if len(deployments.Items) == 0 {
+				framework.Failf("found neither controller StatefulSet nor Deployment")
+			}
+			controller := &deployments.Items[0]
+			oldImage := controller.Spec.Template.Spec.Containers[0].Image
+			Expect(oldImage).NotTo(Equal(newImage), "old image is not different from new one")
+			controller.Spec.Template.Spec.Containers[0].Image = newImage
+			revision, err := strconv.Atoi(controller.Annotations[revisionAnnotation])
+			framework.ExpectNoError(err, "parse controller Deployment annotation %s", revisionAnnotation)
 
-			By(fmt.Sprintf("changing controller image: %s ==> %s", oldImage, newImage))
-			controllerSet, err = f.ClientSet.AppsV1().StatefulSets(d.Namespace).Update(context.Background(), controllerSet, metav1.UpdateOptions{})
-			framework.ExpectNoError(err, "update controller")
+			newRevision := fmt.Sprintf("%d", revision+1)
+			By(fmt.Sprintf("changing controller image: %s ==> %s with revision %s", oldImage, newImage, newRevision))
+			controller, err = f.ClientSet.AppsV1().Deployments(d.Namespace).Update(context.Background(), controller, metav1.UpdateOptions{})
+			framework.ExpectNoError(err, "update controller Deployment")
 
 			// Ensure that the stateful set runs the modified image.
-			e2estatefulset.Restart(f.ClientSet, controllerSet)
-
+			framework.ExpectNoError(e2edeployment.WaitForDeploymentRevisionAndImage(f.ClientSet, controller.Namespace, controller.Name,
+				newRevision, newImage),
+				"wait for controller Deployment with revision %s and image %s",
+				newRevision, newImage)
 			return oldImage
 		}
 		oldImage := setImage(currentImage)
@@ -326,9 +342,9 @@ func (p *skewTestSuite) DefineTests(driver storageframework.TestDriver, pattern 
 		framework.ExpectNoError(err, "get cluster information")
 		deploy.WaitForPMEMDriver(c, deployment, 1 /* controller replicas */)
 
-		ssList, err := f.ClientSet.AppsV1().StatefulSets(d.Namespace).List(context.Background(), listOptions)
+		deployments, err := f.ClientSet.AppsV1().Deployments(d.Namespace).List(context.Background(), listOptions)
 		framework.ExpectNoError(err, "get controller")
-		Expect(ssList.Items[0].Spec.Template.Spec.Containers[0].Image).Should(BeEquivalentTo(currentImage), "controller is using upgraded image")
+		Expect(deployments.Items[0].Spec.Template.Spec.Containers[0].Image).Should(BeEquivalentTo(currentImage), "controller is using upgraded image")
 
 		dsList, err := f.ClientSet.AppsV1().DaemonSets(d.Namespace).List(context.Background(), listOptions)
 		framework.ExpectNoError(err, "get node daemonset")
