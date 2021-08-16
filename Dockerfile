@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Image builds are not reproducible because the base layer is changing over time.
-ARG LINUX_BASE=debian:buster-slim
+ARG LINUX_BASE=public.ecr.aws/debian/debian:buster-slim
 
 # Common base image for building PMEM-CSI and running CI tests.
 FROM ${LINUX_BASE} AS build
