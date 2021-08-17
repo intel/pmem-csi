@@ -181,9 +181,6 @@ pipeline {
         stage('Testing') {
             parallel {
                 stage('1.21') {
-                    options {
-                        timeout(time: 12, unit: "HOURS")
-                    }
                     steps {
                         // Skip production, i.e. run testing.
                         TestInVM("", "fedora", "", "1.21", "Top.Level..[[:alpha:]]*-production[[:space:]]")
@@ -196,9 +193,6 @@ pipeline {
 		        beforeAgent true
 		        not { changeRequest() }
                     }
-                    options {
-                        timeout(time: 12, unit: "HOURS")
-                    }
                     agent {
                         label "pmem-csi"
                     }
@@ -207,9 +201,6 @@ pipeline {
                     }
                 }
                 stage('1.19') {
-                    options {
-                        timeout(time: 12, unit: "HOURS")
-                    }
                     agent {
                         label "pmem-csi"
                     }
@@ -437,7 +428,7 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
     if (worker) {
         RestoreEnv()
     }
-    try {
+    try { timeout(unit: "HOURS", time: TestTimeoutHours()) {
         /*
         We have to run "make start" in the current directory
         because the QEMU instances that it starts under Docker
@@ -510,7 +501,7 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
                                          TEST_E2E_SKIP=\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]@${skipIfPR}; fi) \
                            ') 2>&1 | tee joblog-${BUILD_TAG}-test-${kubernetesVersion}.log | grep --line-buffered -E -e 'checking for test|Passed|FAIL:|^ERROR' \
            "
-    } finally {
+    } } finally {
         echo "Writing cluster state and kubelet logs into files."
         sh "_work/${env.CLUSTER}/ssh.0 kubectl get nodes -o wide > joblog-${BUILD_TAG}-nodestate-${kubernetesVersion}.log"
         sh "_work/${env.CLUSTER}/ssh.0 kubectl get pods --all-namespaces -o wide > joblog-${BUILD_TAG}-podstate-${kubernetesVersion}.log"
@@ -542,5 +533,14 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
            done'''
         archiveArtifacts('**/joblog-*')
         junit 'build/reports/**/*.xml'
+    }
+}
+
+int TestTimeoutHours() {
+    if ( env.CHANGE_ID && env.CHANGE_ID != "null" ) {
+       // Timeout for PRs is lower.
+       return 10;
+    } else {
+       return 20;
     }
 }
