@@ -1013,9 +1013,7 @@ func findOperatorOnce(c *Cluster) (*Deployment, error) {
 }
 
 var allDeployments = []string{
-	"lvm-testing",
 	"lvm-production",
-	"direct-testing",
 	"direct-production",
 	"operator",
 	// Uses second.pmem-csi.intel.com as driver name.
