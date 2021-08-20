@@ -48,11 +48,6 @@ var (
 	immediateUnboundPVC    = makeTestPVC("immediate-unbound-pvc", "1Gi", "", pvcUnbound, "", "1", &immediateClass)
 	boundPVC               = makeTestPVC("bound-pvc", "1Gi", "", pvcBound, "pv-bound", "1", &waitClass)
 
-	preboundPVC       = makeTestPVC("prebound-pvc", "1Gi", "", pvcPrebound, "pv-node1a", "1", &waitClass)
-	preboundPVCNode1a = makeTestPVC("unbound-pvc", "1Gi", "", pvcPrebound, "pv-node1a", "1", &waitClass)
-	boundPVCNode1a    = makeTestPVC("unbound-pvc", "1Gi", "", pvcBound, "pv-node1a", "1", &waitClass)
-	immediateBoundPVC = makeTestPVC("immediate-bound-pvc", "1Gi", "", pvcBound, "pv-bound-immediate", "1", &immediateClass)
-
 	// storage class names
 	waitClass                 = "waitClass"
 	immediateClass            = "immediateClass"
@@ -70,7 +65,6 @@ const (
 	// Our nodes.
 	nodeA = "node-A"
 	nodeB = "node-B"
-	nodeC = "node-C"
 )
 
 // Done indirectly by k8s.io/component-base/logs
@@ -185,7 +179,6 @@ const (
 	pvcUnbound = iota
 	pvcPrebound
 	pvcBound
-	pvcSelectedNode
 )
 
 func makeTestPVC(name, size, node string, pvcBoundState int, pvName, resourceVersion string, className *string) *v1.PersistentVolumeClaim {
@@ -266,25 +259,6 @@ func makePod(pvcs []*v1.PersistentVolumeClaim, inline []inlineVolume) *v1.Pod {
 	}
 	pod.Spec.Volumes = volumes
 	pod.Spec.NodeName = "node1"
-	return pod
-}
-
-func makePodWithoutPVC() *v1.Pod {
-	pod := &v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-pod",
-			Namespace: "testns",
-		},
-		Spec: v1.PodSpec{
-			Volumes: []v1.Volume{
-				{
-					VolumeSource: v1.VolumeSource{
-						EmptyDir: &v1.EmptyDirVolumeSource{},
-					},
-				},
-			},
-		},
-	}
 	return pod
 }
 

@@ -35,7 +35,6 @@ import (
 
 const (
 	controllerMetricsPort  = 10010
-	nodeControllerPort     = 10001
 	nodeMetricsPort        = 10010
 	provisionerMetricsPort = 10011
 	schedulerPort          = 8000
@@ -669,8 +668,6 @@ var subObjectHandlers = map[string]redeployObject{
 		},
 	},
 }
-
-var v1SecretPtr = reflect.TypeOf(&corev1.Secret{})
 
 // HandleEvent handles the delete/update events received on sub-objects. It ensures that any undesirable change
 // is reverted.

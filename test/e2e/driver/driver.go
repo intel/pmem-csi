@@ -95,7 +95,6 @@ type manifestDriver struct {
 	patchOptions  utils.PatchCSIOptions
 	manifests     []string
 	scManifest    map[string]string
-	cleanup       func()
 	scSuffix      string
 	parameters    map[string]string
 }

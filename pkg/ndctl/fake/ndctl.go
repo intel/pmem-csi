@@ -15,8 +15,6 @@ const (
 	kib4 uint64 = kib * 4
 	mib  uint64 = kib * 1024
 	mib2 uint64 = mib * 2
-	gib  uint64 = mib * 1024
-	tib  uint64 = gib * 1024
 )
 
 type Context struct {

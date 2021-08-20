@@ -210,20 +210,3 @@ func (r *Region) DestroyNamespace(ns ndctl.Namespace, force bool) error {
 func (r *Region) FsdaxAlignment() uint64 {
 	return mib2
 }
-
-func (r *Region) namespaces(onlyActive bool) []ndctl.Namespace {
-	var namespaces []ndctl.Namespace
-	for _, ns := range r.Namespaces_ {
-		// If asked for only active namespaces return it regardless of it size
-		// if not, return only valid namespaces, i.e, non-zero sized.
-		if onlyActive {
-			if ns.Active() {
-				namespaces = append(namespaces, ns)
-			}
-		} else if ns.Size() > 0 {
-			namespaces = append(namespaces, ns)
-		}
-	}
-
-	return namespaces
-}
