@@ -29,7 +29,6 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/operator/validate"
 
 	corev1 "k8s.io/api/core/v1"
-	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -143,7 +142,7 @@ func (tc *testContext) testDeploymentPhase(name string, expectedPhase api.Deploy
 			Name: name,
 		},
 	}
-	err := tc.c.Get(tc.ctx, tc.namespacedNameWithOffset(3, depObject), depObject)
+	err := tc.c.Get(tc.ctx, tc.namespacedName(depObject), depObject)
 	require.NoError(tc.t, err, "failed to retrive deployment object")
 	require.Equal(tc.t, expectedPhase, depObject.Status.Phase, "Unexpected status phase")
 }
@@ -168,49 +167,11 @@ func (tc *testContext) testReconcilePhase(name string, expectErr bool, expectedR
 	tc.testDeploymentPhase(name, expectedPhase)
 }
 
-func (tc *testContext) namespacedName(t *testing.T, obj runtime.Object) types.NamespacedName {
-	return tc.namespacedNameWithOffset(2, obj)
-}
-
-func (tc *testContext) namespacedNameWithOffset(offset int, obj runtime.Object) types.NamespacedName {
+func (tc *testContext) namespacedName(obj runtime.Object) types.NamespacedName {
 	metaObj, err := meta.Accessor(obj)
 	require.NoError(tc.t, err, "failed to get accessor")
 
 	return types.NamespacedName{Name: metaObj.GetName(), Namespace: metaObj.GetNamespace()}
-}
-
-// objectKey creates the lookup key for an object with a name and optionally with a namespace.
-func objectKey(name string, namespace ...string) client.ObjectKey {
-	key := types.NamespacedName{
-		Name: name,
-	}
-	if len(namespace) > 0 {
-		key.Namespace = namespace[0]
-	}
-	return key
-}
-
-func deleteDeployment(c client.Client, name, ns string) error {
-	dep := &api.PmemCSIDeployment{}
-	key := objectKey(name)
-	if err := c.Get(context.TODO(), key, dep); err != nil {
-		return err
-	}
-
-	if err := c.Delete(context.TODO(), dep); err != nil {
-		return err
-	}
-	// Delete sub-objects created by this deployment which
-	// are possible might conflicts(CSIDriver) with later part of test
-	// This is supposed to handle by Kubernetes grabage collector
-	// but couldn't provided by fake client the tets are using
-	//
-	driver := &storagev1.CSIDriver{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: dep.Name,
-		},
-	}
-	return c.Delete(context.TODO(), driver)
 }
 
 const (

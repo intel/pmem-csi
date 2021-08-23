@@ -398,12 +398,6 @@ func (r *ReconcileDeployment) saveDeployment(d *api.PmemCSIDeployment) {
 	r.deployments[d.Name] = d
 }
 
-func (r *ReconcileDeployment) getDeployment(name string) *api.PmemCSIDeployment {
-	r.deploymentsMutex.Lock()
-	defer r.deploymentsMutex.Unlock()
-	return r.deployments[name]
-}
-
 func (r *ReconcileDeployment) deleteDeployment(name string) {
 	r.deploymentsMutex.Lock()
 	defer r.deploymentsMutex.Unlock()

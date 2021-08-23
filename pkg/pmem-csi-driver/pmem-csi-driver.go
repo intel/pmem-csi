@@ -37,10 +37,6 @@ import (
 )
 
 const (
-	connectionTimeout time.Duration = 10 * time.Second
-	retryTimeout      time.Duration = 10 * time.Second
-	requestTimeout    time.Duration = 10 * time.Second
-
 	// Resyncing should never be needed for correct operation,
 	// so this is so high that it shouldn't matter in practice.
 	resyncPeriod = 10000 * time.Hour

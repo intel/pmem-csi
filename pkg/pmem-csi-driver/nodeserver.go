@@ -43,9 +43,6 @@ const (
 	// needs to make available inside the VM.
 	kataContainersImageFilename = "kata-containers-pmem-csi-vm.img"
 
-	// Mount point inside the target directory for the original volume.
-	kataContainersMount = "kata-containers-host-volume"
-
 	// "-o dax" is said to be deprecated (https://www.kernel.org/doc/Documentation/filesystems/dax.txt)
 	// but in practice works across a wider range of kernel versions whereas
 	// "-o dax=always", the recommended alternative, fails on old kernels.
@@ -53,12 +50,6 @@ const (
 	// support for it really gets removed, therefore we continue to use it.
 	daxMountFlag = "dax"
 )
-
-type volumeInfo struct {
-	readOnly   bool
-	targetPath string
-	mountFlags string // used mount flags, sorted and joined to single string
-}
 
 type nodeServer struct {
 	nodeCaps []*csi.NodeServiceCapability
@@ -838,23 +829,6 @@ func determineFilesystemType(ctx context.Context, devicePath string) (string, er
 		}
 	}
 	return "", fmt.Errorf("no filesystem type detected for %s", devicePath)
-}
-
-// ensureDirectory checks if the given directory is existing, if not attempts to create it.
-// retruns true, if directory pre-exists, otherwise false.
-func ensureDirectory(mounter mount.Interface, dir string) (bool, error) {
-	if _, err := os.Stat(dir); err != nil {
-		if os.IsNotExist(err) {
-			return true, nil
-		}
-		return false, status.Errorf(codes.Internal, "Failed to check existence of directory %q: %s", dir, err.Error())
-	}
-
-	if err := os.MkdirAll(dir, os.FileMode(0755)); err != nil && !os.IsExist(err) {
-		return false, status.Errorf(codes.Internal, "Could not create dir %q: %v", dir, err)
-	}
-
-	return false, nil
 }
 
 // findMountFlags finds existence of all flags in findIn array

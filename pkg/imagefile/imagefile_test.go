@@ -23,12 +23,6 @@ import (
 )
 
 func TestNsdax(t *testing.T) {
-	type testcase struct {
-		dataOffset uint
-		alignment  uint
-		odDump     string
-	}
-
 	// Expected output comes from:
 	// - curl -O https://github.com/kata-containers/osbuilder/raw/726f798ff795ef4a8300201cab8d83e83c1496a5/image-builder/nsdax.gpl.c
 	// - gcc -o nsdax.gpl nsdax.gpl.c

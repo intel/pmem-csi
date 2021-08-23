@@ -33,7 +33,6 @@ import (
 
 const (
 	losetupPath           = "losetup"
-	statPath              = "stat"
 	ErrDeviceNotFound     = "device not found"
 	ErrDeviceNotSupported = "device not supported"
 )

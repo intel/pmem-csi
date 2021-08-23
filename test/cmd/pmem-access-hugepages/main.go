@@ -20,7 +20,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"syscall"
 	"unsafe"
 )
@@ -30,13 +29,6 @@ func handleError(err error) {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-}
-
-func runCommand(cmd string, args ...string) (string, error) {
-	output, err := exec.Command(cmd, args...).CombinedOutput()
-	handleError(err)
-	strOutput := string(output)
-	return strOutput, err
 }
 
 func main() {
