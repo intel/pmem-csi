@@ -82,8 +82,8 @@ function deploy_using_olm() {
   fi
 
   # Build and push bundle image
-  cd $TMP_BUNDLE_DIR && docker build -f bundle.Dockerfile -t ${TEST_BUILD_PMEM_REGISTRY}/pmem-csi-bundle:v${BUNDLE_VERSION} . && \
-     docker push ${TEST_BUILD_PMEM_REGISTRY}/pmem-csi-bundle:v${BUNDLE_VERSION}
+  ( cd $TMP_BUNDLE_DIR && docker build -f bundle.Dockerfile -t ${TEST_BUILD_PMEM_REGISTRY}/pmem-csi-bundle:v${BUNDLE_VERSION} . && \
+     docker push ${TEST_BUILD_PMEM_REGISTRY}/pmem-csi-bundle:v${BUNDLE_VERSION} )
 
   NAMESPACE=""
   if [ "${TEST_OPERATOR_NAMESPACE}" != "" ]; then

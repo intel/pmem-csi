@@ -177,8 +177,9 @@ func LogError(err error, format string, args ...interface{}) {
 
 func GetOperatorMetricsURL(ctx context.Context, cluster *Cluster, d *Deployment) (string, error) {
 	urls, err := GetMetricsURLs(ctx, cluster, d.Namespace, labels.Set{
-		"pmem-csi.intel.com/deployment": d.Label(),
-		"app":                           "pmem-csi-operator",
+		// There is just one operator in a cluster and it manages
+		// many different deployments.
+		"app": "pmem-csi-operator",
 	})
 	if err != nil {
 		return "", err

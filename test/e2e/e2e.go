@@ -108,21 +108,24 @@ var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 		framework.Failf("Error waiting for all pods to be running and ready: %v", err)
 	}
 
-	// PMEM-CSI needs to be installed already in the cluster, running in the default
-	// namespace. We want to see what the pods are doing while the test runs. This
-	// isn't perfect because we will get a dump also of log output from before the
-	// E2E test run, but better than nothing.
+	// PMEM-CSI is going to be installed in one of several
+	// different namespaces, depending on the test. We want to see
+	// what the pods are doing while the test runs. This isn't
+	// perfect because we will get a dump also of log output from
+	// before the E2E test run, but better than nothing.
 	ctx := context.Background()
 	to := podlogs.LogOutput{
 		StatusWriter: ginkgo.GinkgoWriter,
 		LogWriter:    ginkgo.GinkgoWriter,
 	}
-	podlogs.CopyAllLogs(ctx, c, "default", to)
-	podlogs.WatchPods(ctx, c, "default", ginkgo.GinkgoWriter)
-	// capture operator logs, they are supposed to run in operator-test namespace
-	// as defined in deploy/deploy.go
-	podlogs.CopyAllLogs(ctx, c, "operator-test", to)
-	podlogs.WatchPods(ctx, c, "operator-test", ginkgo.GinkgoWriter)
+	for _, namespace := range []string{"default", "operator-test", "olm"} {
+		if err := podlogs.CopyAllLogs(ctx, c, namespace, to); err != nil {
+			framework.Failf("copying logs from namespace %s: %v", namespace, err)
+		}
+		if err := podlogs.WatchPods(ctx, c, namespace, ginkgo.GinkgoWriter); err != nil {
+			framework.Failf("watching pods in namespace %s: %v", namespace, err)
+		}
+	}
 
 	dc := c.DiscoveryClient
 

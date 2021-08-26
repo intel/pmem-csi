@@ -34,6 +34,8 @@ if ! [ -f ${CA_CRT} -a -f ${CA_KEY} ]; then
 }
 EOF
 )
+else
+    echo "Using CA certificates ${CA_CRT} and ${CA_KEY}"
 fi
 
 # Generate server and client certificates.

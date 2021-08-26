@@ -24,6 +24,7 @@ import (
 	cm "github.com/prometheus/client_model/go"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -38,6 +39,7 @@ import (
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
 	pmemlog "github.com/intel/pmem-csi/pkg/logger"
+	"github.com/intel/pmem-csi/pkg/version"
 	"github.com/intel/pmem-csi/test/e2e/pod"
 	testconfig "github.com/intel/pmem-csi/test/test-config"
 
@@ -778,6 +780,21 @@ type Deployment struct {
 	Version string
 }
 
+func (d Deployment) ParseVersion() version.Version {
+	if d.Version == "" {
+		// Not specified explicitly, i.e. the current version.
+		// We assume that this is more recent than any explicitly
+		// specified version and return a fake version number
+		// that is higher than anything we expect PMEM-CSI to reach.
+		return version.NewVersion(100, 0)
+	}
+	ver, err := version.Parse(d.Version)
+	if err != nil {
+		panic(err)
+	}
+	return ver
+}
+
 func (d Deployment) DeploymentMode() string {
 	if d.Testing {
 		return "testing"
@@ -827,8 +844,8 @@ func FindDeployment(c *Cluster) (*Deployment, error) {
 	if err != nil {
 		return nil, err
 	}
-	if operator != nil && driver != nil && operator.Name() != driver.Name() {
-		return nil, fmt.Errorf("found two different deployments: %s and %s", operator.Name(), driver.Name())
+	if operator != nil && driver != nil && operator.Name() != driver.Name() && !strings.HasPrefix(driver.Name(), operator.Name()) {
+		return nil, fmt.Errorf("found two different deployments: operator %s and driver %s", operator.Name(), driver.Name())
 	}
 	// findDriver is able to discover some additional information, so return that result
 	// if we have both.
@@ -915,6 +932,23 @@ func findDriver(c *Cluster) (*Deployment, error) {
 }
 
 func findOperator(c *Cluster) (*Deployment, error) {
+	// We have to try multiple times because the Deployment
+	// controller might still be working on the ReplicaSets that
+	// findOperatorOnce is based on.
+	for i := 0; ; i++ {
+		deployment, err := findOperatorOnce(c)
+		if err == nil {
+			return deployment, nil
+		}
+		if i > 60 {
+			return nil, err
+		}
+		framework.Logf("finding operator failed during attempt #%d, will retry: %v", err)
+		time.Sleep(time.Second)
+	}
+}
+
+func findOperatorOnce(c *Cluster) (*Deployment, error) {
 	// In case of operator deployed by OLM the labels on the Deployment object
 	// get overwritten by OLM reconcile loop.
 	// But the ReplicaSet underneath holds the labels we set on Deployment.
@@ -924,20 +958,40 @@ func findOperator(c *Cluster) (*Deployment, error) {
 		return nil, err
 	}
 
-	if len(list.Items) == 0 {
+	isValid := func(replicaset appsv1.ReplicaSet) bool {
+		// We can ignore the ReplicaSets of the driver.
+		if replicaset.Labels["app"] != "pmem-csi-operator" {
+			return false
+		}
+		// We can ignore replicasets which don't have any pods. Those
+		// continue to exist with the new (?) apps.Deployment as owner.
+		if *replicaset.Spec.Replicas == 0 && replicaset.Status.Replicas == 0 {
+			return false
+		}
+		return true
+	}
+
+	// Find one ReplicaSet that actually belongs to an active PMEM-CSI operator.
+	var activeReplicaSet *appsv1.ReplicaSet
+	for _, item := range list.Items {
+		if isValid(item) {
+			activeReplicaSet = &item
+			break
+		}
+	}
+	if activeReplicaSet == nil {
 		return nil, nil
 	}
-	name := list.Items[0].Labels[deploymentLabel]
-	deployment, err := Parse(name)
+	deployment, err := Parse(activeReplicaSet.Labels[deploymentLabel])
 	if err != nil {
-		return nil, fmt.Errorf("parse label of deployment %s: %v", list.Items[0].Name, err)
+		return nil, fmt.Errorf("parse label of deployment %s: %v", activeReplicaSet.Name, err)
 	}
-	deployment.Namespace = list.Items[0].Namespace
+	deployment.Namespace = activeReplicaSet.Namespace
 
 	// Derive the version from the image tag. The annotation doesn't include it.
 	// If the version matches what we are currently testing, then we skip
 	// the version (i.e. "current version" == "no explicit version").
-	for _, container := range list.Items[0].Spec.Template.Spec.Containers {
+	for _, container := range activeReplicaSet.Spec.Template.Spec.Containers {
 		if v, found := versionFromContainerImage(container.Image); found {
 			deployment.Version = v
 			break
@@ -947,8 +1001,11 @@ func findOperator(c *Cluster) (*Deployment, error) {
 	// Currently we don't support parallel installations, so all
 	// objects must belong to each other.
 	for _, item := range list.Items {
-		if item.Labels[deploymentLabel] != name {
-			return nil, fmt.Errorf("found at least two different deployments: %s and %s", item.Labels[deploymentLabel], name)
+		if isValid(item) && item.Labels[deploymentLabel] != activeReplicaSet.Labels[deploymentLabel] {
+			return nil, fmt.Errorf("found at least two different deployments: %s and %s\n%+v\n%+v",
+				item.Labels[deploymentLabel], activeReplicaSet.Labels[deploymentLabel],
+				item, activeReplicaSet,
+			)
 		}
 	}
 
@@ -956,9 +1013,7 @@ func findOperator(c *Cluster) (*Deployment, error) {
 }
 
 var allDeployments = []string{
-	"lvm-testing",
 	"lvm-production",
-	"direct-testing",
 	"direct-production",
 	"operator",
 	// Uses second.pmem-csi.intel.com as driver name.
@@ -967,6 +1022,8 @@ var allDeployments = []string{
 	// and *no* controller.
 	"operator-direct-production",
 	"olm", // operator installed by OLM
+	"olm-lvm-production",
+	"olm-direct-production",
 }
 var deploymentRE = regexp.MustCompile(`^(operator|olm)?-?(\w*)?-?(testing|production)?-?([0-9\.]*)$`)
 
@@ -1000,19 +1057,14 @@ func Parse(deploymentName string) (*Deployment, error) {
 	}
 	deployment.Version = matches[4]
 
-	if deployment.HasOperator {
-		if !deployment.HasDriver && !deployment.HasOLM { // "operator"
-			// Run the operator tests in a dedicated namespace
-			// to cover the non-default namespace usecase
-			deployment.Namespace = "operator-test"
-		}
-		if deployment.HasDriver && !deployment.Testing {
-			if deployment.Mode == api.DeviceModeDirect { // operator-direct-production
-				deployment.Namespace = "kube-system"
-			} else { // operator-lvm-production
-				deployment.DriverName = "second.pmem-csi.intel.com"
-			}
-		}
+	// Introduce some variation in how we deploy.
+	switch {
+	case deploymentName == "operator":
+		deployment.Namespace = "operator-test"
+	case strings.HasPrefix(deploymentName, "operator-direct-production"):
+		deployment.Namespace = "kube-system"
+	case strings.HasPrefix(deploymentName, "operator-lvm-production"):
+		deployment.DriverName = "second.pmem-csi.intel.com"
 	}
 
 	return deployment, nil
@@ -1082,6 +1134,9 @@ func EnsureDeployment(deploymentName string) *Deployment {
 func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 	ctx, _ := pmemlog.WithName(context.Background(), "EnsureDeployment")
 	c, err := NewCluster(f.ClientSet, f.DynamicClient, f.ClientConfig())
+	root := os.Getenv("REPO_ROOT")
+	env := os.Environ()
+
 	framework.ExpectNoError(err, "get cluster information")
 	running, err := FindDeployment(c)
 	framework.ExpectNoError(err, "check for PMEM-CSI components")
@@ -1103,32 +1158,49 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 			running.Name(), running.Namespace,
 			deployment.Name(), deployment.Namespace)
 
-		// If both running and wanted operator deployments are managed by
-		// OLM, then we do nothing. The ./test/start-operato-sh -olm script
-		// supposed to handle the case, in other words the OLM should treat
-		// this as operator upgrade.
-		if !(running.HasOLM && deployment.HasOLM) {
-			if running.HasOperator {
+		if running.HasOperator {
+			// If both running and wanted operator deployments are managed by
+			// OLM, then we do nothing for upgrades.
+			// The ./test/start-operator.sh -olm script
+			// is supposed to handle the case, in other words the OLM should treat
+			// this as operator upgrade.
+			// Downgrades are not supported. We have to delete the operator first.
+			bothOLM := running.HasOLM && deployment.HasOLM
+			if !bothOLM || deployment.ParseVersion().CompareVersion(running.ParseVersion()) < 0 {
 				err := StopOperator(running)
-				framework.ExpectNoError(err, "delete operator deployment: %q", deployment.Name())
+				framework.ExpectNoError(err, "delete operator deployment: %s -> %s", running.Name(), deployment.Name())
 			}
 		}
 
-		if !running.HasOLM {
+		// Remove driver if not needed anymore or different.
+		if !running.HasOLM || running.HasDriver && !deployment.HasDriver || running.Mode != deployment.Mode {
+			if running.HasOLM {
+				// We have to delete the operator
+				// deployment first, otherwise OLM is
+				// going to recreate the operator pod
+				// each time RemoveObjects deletes it.
+				err := StopOperator(running)
+				framework.ExpectNoError(err, "remove PMEM-CSI operator: %s -> %s", running.Name(), deployment.Name())
+			}
 			err := RemoveObjects(c, running)
-			framework.ExpectNoError(err, "remove PMEM-CSI deployment")
+			framework.ExpectNoError(err, "remove PMEM-CSI deployment: %s -> %s", running.Name(), deployment.Name())
+		}
+
+		if running.HasOLM && !deployment.HasOLM {
+			cmd := exec.Command("test/start-stop-olm.sh", "stop")
+			cmd.Dir = root
+			cmd.Env = env
+			_, err := pmemexec.Run(ctx, cmd)
+			framework.ExpectNoError(err, "stop OLM: %s -> %s", running.Name(), deployment.Name())
 		}
 	}
-
-	root := os.Getenv("REPO_ROOT")
-	env := os.Environ()
 
 	if deployment.HasOLM {
 		cmd := exec.Command("test/start-stop-olm.sh", "start")
 		cmd.Dir = root
 		cmd.Env = env
 		_, err := pmemexec.Run(ctx, cmd)
-		framework.ExpectNoError(err, "create operator deployment: %q", deployment.Name())
+		framework.ExpectNoError(err, "start OLM: %q", deployment.Name())
 	}
 
 	if deployment.Version != "" {
@@ -1364,7 +1436,7 @@ func LookupCSIAddresses(ctx context.Context, c *Cluster, namespace string) (node
 // each test will then be invoked for each supported PMEM-CSI deployment
 // which has a functional PMEM-CSI driver.
 func DescribeForAll(what string, f func(d *Deployment)) bool {
-	DescribeForSome(what, RunAllTests, f)
+	DescribeForSome(what, HasDriver, f)
 	return true
 }
 

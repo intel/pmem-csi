@@ -28,8 +28,10 @@ VERSION:=$(shell git describe --long --dirty --tags --match='v*')
 endif
 
 # VERSION is of the format vX.Y.Z[-<number of commits>-<short hash>|<suffix>].
-# For the SDK we need just X.Y.Z.
-MAJOR_MINOR_PATCH_VERSION:=$(shell echo $(VERSION) | cut -f1 -d'-' | sed -e 's/^v//')
+# For the SDK we need just X.Y.Z. If we are dealing with a version that has additional
+# commits and/or is dirty, then we haven't tagged yet and need to use version
+# for the operator that is higher than any previous release.
+MAJOR_MINOR_PATCH_VERSION:=$(shell if echo $(VERSION) | grep -q -e '-[1-9][0-9]*-' -e dirty; then echo 100.0.0; else echo $(VERSION)  | cut -f1 -d'-' | sed -e 's/^v//'; fi)
 
 # Sometimes just X.Y is needed.
 MAJOR_MINOR_VERSION:=$(shell echo $(MAJOR_MINOR_PATCH_VERSION) | sed -e 's/\([0-9]*\.[0-9]*\)\..*/\1/')

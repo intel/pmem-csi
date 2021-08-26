@@ -38,7 +38,7 @@ var _ = deploy.DescribeForAll("TLS", func(d *deploy.Deployment) {
 	BeforeEach(func() {
 		// Find one node driver pod.
 		label := labels.SelectorFromSet(labels.Set(map[string]string{"app.kubernetes.io/name": "pmem-csi-node"}))
-		pods, err := f.ClientSet.CoreV1().Pods("default").List(context.Background(), metav1.ListOptions{LabelSelector: label.String()})
+		pods, err := f.ClientSet.CoreV1().Pods(d.Namespace).List(context.Background(), metav1.ListOptions{LabelSelector: label.String()})
 		framework.ExpectNoError(err, "list PMEM-CSI node pods")
 		Expect(pods.Items).NotTo(BeEmpty(), "have PMEM-CSI node pods")
 		nodePod = &pods.Items[0]
