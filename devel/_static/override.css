@@ -1,0 +1,19 @@
+.rst-content a.reference code.literal {
+    color: #2980b9;
+}
+
+/*
+* We want tables to fit the screen width by wrapping text, not via scrolling.
+* Solution from https://github.com/readthedocs/sphinx_rtd_theme/issues/117#issuecomment-41606147
+*/
+
+/* override table width restrictions */
+.wy-table-responsive table td, .wy-table-responsive table th {
+    /* !important prevents the common CSS stylesheets from
+       overriding this as on RTD they are loaded after this stylesheet */
+    white-space: normal !important;
+}
+
+.wy-table-responsive {
+    overflow: visible !important;
+}
