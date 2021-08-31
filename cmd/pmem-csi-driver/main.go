@@ -10,7 +10,7 @@ package main
 import (
 	"os"
 
-	"github.com/intel/pmem-csi/pkg/pmem-csi-driver"
+	pmemcsidriver "github.com/intel/pmem-csi/pkg/pmem-csi-driver"
 )
 
 func main() {

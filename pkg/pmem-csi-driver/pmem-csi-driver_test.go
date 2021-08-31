@@ -85,15 +85,13 @@ func checkResponse(t *testing.T, expected, actual *http.Response, err error, wha
 		defer actual.Body.Close()
 
 		assert.Equal(t, expected.StatusCode, actual.StatusCode, what)
-		body, err := ioutil.ReadAll(actual.Body)
+		actualBody, err := ioutil.ReadAll(actual.Body)
 		if assert.NoError(t, err, "read actual body") &&
 			expected.Body != nil {
-			body, err = ioutil.ReadAll(expected.Body)
+			expectedBody, err := ioutil.ReadAll(expected.Body)
 			if assert.NoError(t, err, "read expected body") {
-				expectedBody := string(body)
-				actualBody := string(body)
 				// Substring search because the full body contains a lot of additional metrics data.
-				assert.Contains(t, actualBody, expectedBody, "body")
+				assert.Contains(t, string(actualBody), string(expectedBody), "body")
 			}
 		}
 	}

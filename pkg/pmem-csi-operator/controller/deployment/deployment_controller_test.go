@@ -665,7 +665,9 @@ func TestDeploymentController(t *testing.T) {
 					validateDriver(tc, dep, []string{api.EventReasonNew, api.EventReasonRunning}, false)
 				}()
 
-				tc.rc.Reconcile(tc.ctx, req)
+				if _, err := tc.rc.Reconcile(tc.ctx, req); err != nil {
+					t.Fatalf("unexpected error from Reconcile: %v", err)
+				}
 			}
 		})
 	}
@@ -691,7 +693,7 @@ type testClient struct {
 }
 
 func newTestClient(initObjs ...runtime.Object) client.Client {
-	return &testClient{Client: fake.NewFakeClient(initObjs...)}
+	return &testClient{Client: fake.NewClientBuilder().WithRuntimeObjects(initObjs...).Build()}
 }
 
 func (t *testClient) InjectPanicOn(gvk *schema.GroupVersionKind) {

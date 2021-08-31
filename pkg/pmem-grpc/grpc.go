@@ -16,6 +16,7 @@ import (
 	"github.com/kubernetes-csi/csi-lib-utils/connection"
 	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/resolver"
@@ -28,8 +29,9 @@ import (
 // grpcRequestCounter is used to assign a unique ID to all incoming gRPC requests.
 var grpcRequestCounter uint64
 
-func unixDialer(addr string, timeout time.Duration) (net.Conn, error) {
-	return net.DialTimeout("unix", addr, timeout)
+func unixDialer(ctx context.Context, addr string) (net.Conn, error) {
+	dialer := net.Dialer{}
+	return dialer.DialContext(ctx, "unix", addr)
 }
 
 //Connect is a helper function to initiate a grpc client connection to server running at endpoint using tlsConfig
@@ -39,7 +41,11 @@ func Connect(endpoint string, tlsConfig *tls.Config, dialOptions ...grpc.DialOpt
 		return nil, err
 	}
 
-	dialOptions = append(dialOptions, grpc.WithBackoffMaxDelay(time.Second))
+	connectParams := grpc.ConnectParams{
+		Backoff: backoff.DefaultConfig,
+	}
+	connectParams.Backoff.MaxDelay = time.Second
+	dialOptions = append(dialOptions, grpc.WithConnectParams(connectParams))
 	if tlsConfig != nil {
 		dialOptions = append(dialOptions, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 	} else {
@@ -49,7 +55,7 @@ func Connect(endpoint string, tlsConfig *tls.Config, dialOptions ...grpc.DialOpt
 	if proto == "tcp" {
 		resolver.SetDefaultScheme("dns")
 	} else if proto == "unix" {
-		dialOptions = append(dialOptions, grpc.WithDialer(unixDialer))
+		dialOptions = append(dialOptions, grpc.WithContextDialer(unixDialer))
 	}
 	// This is necessary when connecting via TCP and does not hurt
 	// when using Unix domain sockets. It ensures that gRPC detects a dead connection

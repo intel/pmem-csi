@@ -80,7 +80,8 @@ func testRawNamespaceConversion(f *framework.Framework, driverName, namespace st
 	// on the master node. None of the other tests expect that.
 	defer func() {
 		By("destroying volume groups and namespaces again")
-		deploy.ResetPMEM(ctx, "0")
+		err := deploy.ResetPMEM(ctx, "0")
+		framework.ExpectNoError(err, "reset PMEM")
 
 		By("reverting labels")
 		labels := []string{

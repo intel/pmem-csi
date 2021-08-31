@@ -103,7 +103,7 @@ func (p *schedulerTestSuite) DefineTests(driver storageframework.TestDriver, pat
 
 	cleanup := func() {
 		if l.resource != nil {
-			l.resource.CleanupResource()
+			_ = l.resource.CleanupResource()
 			l.resource = nil
 		}
 

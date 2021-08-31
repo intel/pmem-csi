@@ -434,6 +434,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 		})
 
 		It("driver deployment shall be running even after operator exit", func() {
+			var err error
 			deployment := getDeployment("test-deployment-operator-exit")
 
 			deployment = deploy.CreateDeploymentCR(f, deployment)
@@ -445,7 +446,9 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			})
 
 			// Stop the operator
-			stopOperator(c, d)
+			err = stopOperator(c, d)
+			Expect(err).ShouldNot(HaveOccurred(), "stop operator")
+
 			// restore the deployment so that next test should  not effect
 			defer func() {
 				startOperator(c, d)
@@ -455,7 +458,7 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			}()
 
 			// Ensure that the driver is running consistently
-			err := validate.DriverDeployment(ctx, client, k8sver, d.Namespace, deployment)
+			err = validate.DriverDeployment(ctx, client, k8sver, d.Namespace, deployment)
 			Expect(err).ShouldNot(HaveOccurred(), "after operator restart")
 		})
 
@@ -751,7 +754,8 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					}
 					restored := false
 					if restart {
-						stopOperator(c, d)
+						err := stopOperator(c, d)
+						Expect(err).ShouldNot(HaveOccurred(), "stop operator")
 						defer func() {
 							if !restored {
 								startOperator(c, d)

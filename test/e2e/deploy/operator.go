@@ -142,6 +142,9 @@ func UpdateDeploymentCR(f *framework.Framework, dep api.PmemCSIDeployment) api.P
 	gomega.Eventually(func() error {
 		var err error
 		in, err := f.DynamicClient.Resource(DeploymentResource).Get(context.Background(), dep.Name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
 		d := DeploymentFromUnstructured(in)
 		d.Spec = dep.Spec
 		in = DeploymentToUnstructured(d)

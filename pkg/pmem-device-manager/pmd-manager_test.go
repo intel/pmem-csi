@@ -79,7 +79,7 @@ func runTests(mode string) {
 				continue
 			}
 			By("Cleaning up device: " + devName)
-			dm.DeleteDevice(ctx, devName, false)
+			_ = dm.DeleteDevice(ctx, devName, false)
 		}
 		if mode == ModeLVM {
 			err := vg.Clean()
@@ -209,7 +209,9 @@ func runTests(mode string) {
 		mountPath, err := mountDevice(dev)
 		Expect(err).Should(BeNil(), "Failed to create mount path: %s", mountPath)
 
-		defer unmount(mountPath)
+		defer func() {
+			_ = unmount(mountPath)
+		}()
 
 		// Delete should fail as the device is in use
 		err = dm.DeleteDevice(ctx, name, true)
@@ -318,7 +320,7 @@ func createTestVGS(vgname string, size uint64) (*testVGS, error) {
 	defer func() {
 		if err != nil {
 			By("Removing volume group due to failure")
-			pmemexec.RunCommand(ctx, "vgremove", "--force", vgname)
+			_, _ = pmemexec.RunCommand(ctx, "vgremove", "--force", vgname)
 		}
 	}()
 

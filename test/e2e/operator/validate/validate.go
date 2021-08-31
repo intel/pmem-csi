@@ -215,7 +215,9 @@ func DriverDeployment(ctx context.Context, c client.Client, k8sver version.Versi
 	// The operator currently always uses the production image. We
 	// can only find that indirectly.
 	driverImage := strings.Replace(os.Getenv("PMEM_CSI_IMAGE"), "-test", "", 1)
-	(&deployment).EnsureDefaults(driverImage)
+	if err := (&deployment).EnsureDefaults(driverImage); err != nil {
+		return err
+	}
 
 	// Validate sub-objects. A sub-object is anything that has the deployment object as owner.
 	objects, err := listAllDeployedObjects(ctx, c, deployment, namespace)

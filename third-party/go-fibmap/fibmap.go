@@ -6,6 +6,7 @@
 package fibmap
 
 import (
+	"io"
 	"os"
 	"syscall"
 	"unsafe"
@@ -134,7 +135,7 @@ func (f FibmapFile) FibmapExtents() ([]Extent, syscall.Errno) {
 			e.Length = uint64(length) * uint64(bsz)
 			result = append(result, e)
 		}
-		
+
 		// new extent
 		e = Extent{}
 		e.Logical = uint64(i) * uint64(bsz)
@@ -197,7 +198,8 @@ func (f FibmapFile) SeekDataHole() []int64 {
 		break
 	}
 
-	f.Seek(old, os.SEEK_SET)
+	// Not expected to fail...
+	_, _ = f.Seek(old, io.SeekStart)
 
 	return datahole
 }

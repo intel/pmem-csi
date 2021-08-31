@@ -53,11 +53,11 @@ func Run(ctx context.Context, cmd *exec.Cmd) (string, error) {
 
 	switch {
 	case err != nil && both.Len() > 0:
-		err = fmt.Errorf("%q: command failed: %v\nCombined stderr/stdout output: %s", cmd, err, string(both.Bytes()))
+		err = fmt.Errorf("%q: command failed: %v\nCombined stderr/stdout output: %s", cmd, err, both.String())
 	case err != nil:
 		err = fmt.Errorf("%q: command failed with no output: %v", cmd, err)
 	}
-	return string(stdout.Bytes()), err
+	return stdout.String(), err
 }
 
 func dumpOutput(ctx context.Context, wg *sync.WaitGroup, in io.Reader, out []io.Writer) {
@@ -66,8 +66,8 @@ func dumpOutput(ctx context.Context, wg *sync.WaitGroup, in io.Reader, out []io.
 	scanner := bufio.NewScanner(in)
 	for scanner.Scan() {
 		for _, o := range out {
-			o.Write(scanner.Bytes())
-			o.Write([]byte("\n"))
+			_, _ = o.Write(scanner.Bytes())
+			_, _ = o.Write([]byte("\n"))
 		}
 		logger.V(5).Info(scanner.Text())
 	}

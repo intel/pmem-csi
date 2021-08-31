@@ -113,7 +113,7 @@ func (p *daxTestSuite) DefineTests(driver storageframework.TestDriver, pattern s
 
 	cleanup := func() {
 		if l.resource != nil {
-			l.resource.CleanupResource()
+			_ = l.resource.CleanupResource()
 			l.resource = nil
 		}
 
