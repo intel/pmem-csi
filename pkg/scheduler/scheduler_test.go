@@ -171,7 +171,7 @@ func newTestEnv(t *testing.T, capacity Capacity, stopCh <-chan struct{}) *testEn
 
 func (env *testEnv) initClaims(pvcs []*v1.PersistentVolumeClaim) {
 	for _, pvc := range pvcs {
-		env.pvcInformer.Informer().GetIndexer().Add(pvc)
+		_ = env.pvcInformer.Informer().GetIndexer().Add(pvc)
 	}
 }
 

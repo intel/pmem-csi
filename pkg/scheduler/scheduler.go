@@ -17,7 +17,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -124,7 +124,9 @@ func NewScheduler(
 	}
 	s.decoder = decoder
 	webhook := webhook.Admission{Handler: s}
-	webhook.InjectLogger(s.log.WithName("webhook"))
+	if err := webhook.InjectLogger(s.log.WithName("webhook")); err != nil {
+		return nil, fmt.Errorf("inject logger: %v", err)
+	}
 
 	s.instrumentedFilter = wrapHTTPHandler("filter", s.filter)
 	s.instrumentedStatus = wrapHTTPHandler("status", s.status)
@@ -159,7 +161,7 @@ func (s *scheduler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *scheduler) status(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
+	_, _ = w.Write([]byte("ok"))
 }
 
 // filter handles the JSON decoding+encoding.
@@ -184,7 +186,7 @@ func (s *scheduler) filter(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(response)
+		_, _ = w.Write(response)
 	}
 }
 

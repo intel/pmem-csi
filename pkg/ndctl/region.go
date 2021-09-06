@@ -273,7 +273,7 @@ func (r *region) CreateNamespace(ctx gocontext.Context, opts CreateNamespaceOpts
 
 	if err != nil {
 		// reset seed on failure
-		ns.SetEnforceMode(RawMode)
+		_ = ns.SetEnforceMode(RawMode)
 		C.ndctl_namespace_delete(ndns)
 		return nil, err
 	}

@@ -179,7 +179,9 @@ func TestCapacityFromMetrics(t *testing.T) {
 				server := http.Server{
 					Handler: mux,
 				}
-				go server.Serve(listener)
+				go func() {
+					_ = server.Serve(listener)
+				}()
 				defer server.Close()
 
 				// Now fake a PMEM-CSI pod on that node.
@@ -189,7 +191,7 @@ func TestCapacityFromMetrics(t *testing.T) {
 				require.NoError(t, err, "parse listen port")
 				pod := node.createPMEMPod(port)
 				if pod != nil {
-					podIndexer.Add(pod)
+					_ = podIndexer.Add(pod)
 				}
 			}
 			podLister := corelistersv1.NewPodLister(podIndexer)

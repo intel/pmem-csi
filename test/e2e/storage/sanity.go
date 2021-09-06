@@ -329,7 +329,8 @@ fi
 				// containers shouldn't restart. To get around that,
 				// we delete all PMEM-CSI pods after a reboot test.
 				By("stopping all PMEM-CSI pods after rebooting some node(s)")
-				d.DeleteAllPods(cluster)
+				err := d.DeleteAllPods(cluster)
+				framework.ExpectNoError(err)
 			}
 		})
 
@@ -861,11 +862,11 @@ fi
 				}
 
 				for _, pod := range pods.Items {
-					dialer := grpc.WithDialer(
+					dialer := grpc.WithContextDialer(
 						// Dial timeout has to be ignored because the pod dialer does not support that
 						// because the underlying code doesn't support it.
 						// The address is already known.
-						func(_ string, _ time.Duration) (net.Conn, error) {
+						func(ctx context.Context, _ string) (net.Conn, error) {
 							return pmeme2epod.NewDialer(f.ClientSet, f.ClientConfig()).DialContainerPort(ctx, l, pmeme2epod.Addr{
 								Namespace: pod.Namespace,
 								PodName:   pod.Name,
@@ -1203,7 +1204,7 @@ func (v volume) publish(name string, vol *csi.Volume) string {
 	publish := fmt.Sprintf("%s: publishing the volume on a node", v.namePrefix)
 	By(publish)
 	var nodepubvol interface{}
-	v.retry(func() error {
+	err = v.retry(func() error {
 		nodepubvol, err = v.nc.NodePublishVolume(
 			v.ctx,
 			&csi.NodePublishVolumeRequest{
@@ -1347,7 +1348,8 @@ func restartNode(cs clientset.Interface, nodeID string, sc *sanity.TestContext) 
 	shutdown := exec.Command(ssh)
 	shutdown.Stdin = bytes.NewBufferString(`sudo sh -c 'echo 1 > /proc/sys/kernel/sysrq'
 sudo sh -c 'echo b > /proc/sysrq-trigger'`)
-	out, _ = shutdown.CombinedOutput()
+	// This always fails, ignore error.
+	_, _ = shutdown.CombinedOutput()
 
 	// Wait for node to reboot.
 	By("waiting for node to restart")

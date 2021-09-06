@@ -81,6 +81,5 @@ func main() {
 	volumeInformer.AddEventHandlerWithResyncPeriod(volumeHandler, time.Hour)
 
 	factory.Start(ctx.Done())
-	for {
-	}
+	<-ctx.Done()
 }

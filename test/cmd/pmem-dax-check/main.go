@@ -95,7 +95,7 @@ func run(filename string, size int, wait bool) (int, error) {
 
 	if wait {
 		fmt.Printf("map(MAP_SYNC) succeeded. Continue with CTRL-C.\n")
-		exitSignal := make(chan os.Signal)
+		exitSignal := make(chan os.Signal, 2)
 		signal.Notify(exitSignal, syscall.SIGINT, syscall.SIGTERM)
 		<-exitSignal
 	}

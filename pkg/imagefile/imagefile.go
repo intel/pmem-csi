@@ -165,12 +165,14 @@ import "C"
 import (
 	"errors"
 	"fmt"
-	"golang.org/x/sys/unix"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/intel/pmem-csi/third-party/go-fibmap"
 )
@@ -300,7 +302,7 @@ func Create(filename string, size Bytes, fs FsType) error {
 	if err := dd(mbr1, filename, true, 0); err != nil {
 		return err
 	}
-	if _, err := file.Seek(int64(daxHeaderOffset), os.SEEK_SET); err != nil {
+	if _, err := file.Seek(int64(daxHeaderOffset), io.SeekStart); err != nil {
 		return err
 	}
 	if _, err := file.Write(nsdax(uint(HeaderSize), uint(DaxAlignment))); err != nil {
@@ -477,10 +479,10 @@ const ioChunkSize = 256 * 1024 * 1024
 func copyRange(from, to *os.File, skip, seek, size int64) error {
 	buffer := make([]byte, ioChunkSize)
 
-	if _, err := from.Seek(skip, os.SEEK_SET); err != nil {
+	if _, err := from.Seek(skip, io.SeekStart); err != nil {
 		return err
 	}
-	if _, err := to.Seek(seek, os.SEEK_SET); err != nil {
+	if _, err := to.Seek(seek, io.SeekStart); err != nil {
 		return err
 	}
 	remaining := size

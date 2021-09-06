@@ -125,7 +125,9 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 
 	// Serialize by VolumeId
 	volumeMutex.LockKey(volumeID)
-	defer volumeMutex.UnlockKey(volumeID)
+	defer func() {
+		_ = volumeMutex.UnlockKey(volumeID)
+	}()
 
 	var ephemeral bool
 	var device *pmdmanager.PmemDeviceInfo
@@ -372,7 +374,9 @@ func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpu
 
 	// Serialize by VolumeId
 	volumeMutex.LockKey(volumeID)
-	defer volumeMutex.UnlockKey(volumeID)
+	defer func() {
+		_ = volumeMutex.UnlockKey(volumeID)
+	}()
 
 	var vol *nodeVolume
 	if vol = ns.cs.getVolumeByID(volumeID); vol == nil {
@@ -525,7 +529,9 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 
 	// Serialize by VolumeId
 	volumeMutex.LockKey(req.GetVolumeId())
-	defer volumeMutex.UnlockKey(req.GetVolumeId())
+	defer func() {
+		_ = volumeMutex.UnlockKey(req.GetVolumeId())
+	}()
 
 	mountOptions := req.GetVolumeCapability().GetMount().GetMountFlags()
 	logger.V(3).Info("Staging volume",
@@ -600,7 +606,9 @@ func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstag
 
 	// Serialize by VolumeId
 	volumeMutex.LockKey(volumeID)
-	defer volumeMutex.UnlockKey(volumeID)
+	defer func() {
+		_ = volumeMutex.UnlockKey(volumeID)
+	}()
 
 	logger.V(3).Info("Unstage volume")
 	dm, err := ns.getDeviceManagerForVolume(ctx, volumeID)

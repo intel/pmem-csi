@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -109,7 +110,7 @@ func TestExtents(t *testing.T) {
 	const numExtents = initialExtentSize
 	offset := int64(0)
 	for count := 1; count <= numExtents; count++ {
-		if _, err := file.Seek(offset, os.SEEK_SET); err != nil {
+		if _, err := file.Seek(offset, io.SeekStart); err != nil {
 			t.Fatalf("seek to %d: %v", offset, err)
 		}
 		if _, err := file.Write(make([]byte, count)); err != nil {

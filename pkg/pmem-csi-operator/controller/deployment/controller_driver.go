@@ -373,7 +373,7 @@ var subObjectHandlers = map[string]redeployObject{
 			ds := o.(*appsv1.DaemonSet)
 			// Update node driver status is status object
 			status := "NotReady"
-			reason := "Unknown"
+			reason := ""
 			if ds.Status.NumberAvailable == 0 {
 				reason = "Node daemon set has not started yet."
 			} else if ds.Status.NumberReady == ds.Status.NumberAvailable {
@@ -402,7 +402,7 @@ var subObjectHandlers = map[string]redeployObject{
 			ss := o.(*appsv1.Deployment)
 			// Update controller status is status object
 			status := "NotReady"
-			reason := "Unknown"
+			reason := ""
 			if ss.Status.Replicas == 0 {
 				reason = "Controller deployment has not started yet."
 			} else if ss.Status.ReadyReplicas == ss.Status.Replicas {

@@ -127,6 +127,7 @@ func (m *manifestDriver) GetDynamicProvisionStorageClass(config *storageframewor
 	err = utils.PatchItems(f, f.Namespace, items...)
 	Expect(err).NotTo(HaveOccurred())
 	err = utils.PatchCSIDeployment(f, m.finalPatchOptions(f), items[0])
+	Expect(err).NotTo(HaveOccurred())
 
 	sc, ok := items[0].(*storagev1.StorageClass)
 	Expect(ok).To(BeTrue(), "storage class from %s", scManifest)

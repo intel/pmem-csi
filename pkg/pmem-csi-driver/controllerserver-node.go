@@ -165,7 +165,9 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 	}
 
 	nodeVolumeMutex.LockKey(req.Name)
-	defer nodeVolumeMutex.UnlockKey(req.Name)
+	defer func() {
+		_ = nodeVolumeMutex.UnlockKey(req.Name)
+	}()
 
 	volumeID, size, err := cs.createVolumeInternal(ctx,
 		p,

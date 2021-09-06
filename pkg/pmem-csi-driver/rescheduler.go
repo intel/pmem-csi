@@ -175,7 +175,7 @@ func (pcp *pmemCSIProvisioner) shouldReschedule(ctx context.Context, pvc *v1.Per
 	// Only when the extensions are off, then Provision() may get
 	// called more often. Such a cluster setup should better be
 	// avoided.
-	driverIsRunning := true
+	driverIsRunning := false
 	csiNode, err := pcp.csiNodeLister.Get(selectedNode)
 	switch {
 	case err == nil:

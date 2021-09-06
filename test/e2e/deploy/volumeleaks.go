@@ -98,7 +98,6 @@ func listVolumes(sshcmd, prefix, cmd string) []string {
 			return lines
 		}
 	}
-	return nil
 }
 
 // CheckForLeftovers lists volumes again after test, diff means leftovers.
