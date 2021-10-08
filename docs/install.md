@@ -298,6 +298,12 @@ the instructions shown by the "Install" button. When using this
 approach, the operator itself always runs with default parameters, in
 particular log output in "text" format.
 
+##### Installing the operator on an OpenShift cluster using the RedHat catalog
+
+If you run an OpenShift cluster, then it is recommended to install the PMEM-CSI operator by
+following the instructions shown by "Deploy & use" on [RedhatCatalog](https://catalog.redhat.com/software/operators/detail/612cd31535f8020a3f8bd5f2). 
+The recommended approach is "Installing from OperatorHub using the web console".
+
 ##### Installing the operator from YAML
 
 Alternatively, the you can install the operator manually from YAML files.
