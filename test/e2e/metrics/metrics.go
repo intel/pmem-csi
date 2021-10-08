@@ -59,7 +59,7 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 		pods, err := f.ClientSet.CoreV1().Pods(d.Namespace).List(context.Background(), metav1.ListOptions{})
 		framework.ExpectNoError(err, "list pods")
 
-		test := func() {
+		test := func(g Gomega) {
 			numPods := 0
 			for _, pod := range pods.Items {
 				if pod.Annotations["pmem-csi.intel.com/scrape"] != "containers" {
@@ -75,47 +75,38 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 
 							ip := pod.Status.PodIP
 							portNum := port.ContainerPort
-							Expect(ip).ToNot(BeEmpty(), "have pod IP")
-							Expect(portNum).ToNot(Equal(0), "have container port")
+							g.Expect(ip).ToNot(BeEmpty(), "have pod IP")
+							g.Expect(portNum).ToNot(Equal(0), "have container port")
 
 							url := fmt.Sprintf("http://%s.%s:%d/metrics",
 								pod.Namespace, pod.Name, port.ContainerPort)
 							resp, err := client.Get(url)
-							framework.ExpectNoError(err, "GET failed")
-							// When wrapped with InterceptGomegaFailures, err == nil doesn't
-							// cause the function to abort. We have to do that ourselves before
-							// using resp to avoid a panic.
-							// https://github.com/onsi/gomega/issues/198#issuecomment-856630787
-							if err != nil {
-								return
-							}
+							g.Expect(err).NotTo(HaveOccurred(), "GET failed")
 							data, err := ioutil.ReadAll(resp.Body)
-							framework.ExpectNoError(err, "read GET response")
+							g.Expect(err).NotTo(HaveOccurred(), "read GET response")
 							name := pod.Name + "/" + container.Name
 							if strings.HasPrefix(container.Name, "pmem") {
-								Expect(data).To(ContainSubstring("go_threads "), name)
-								Expect(data).To(ContainSubstring("process_open_fds "), name)
+								g.Expect(data).To(ContainSubstring("go_threads "), name)
+								g.Expect(data).To(ContainSubstring("process_open_fds "), name)
 								if !strings.Contains(pod.Name, "controller") {
 									// Only the node driver implements CSI and manages volumes.
-									Expect(data).To(ContainSubstring("csi_plugin_operations_seconds "), name)
-									Expect(data).To(ContainSubstring("pmem_amount_available "), name)
-									Expect(data).To(ContainSubstring("pmem_amount_managed "), name)
-									Expect(data).To(ContainSubstring("pmem_amount_max_volume_size "), name)
-									Expect(data).To(ContainSubstring("pmem_amount_total "), name)
+									g.Expect(data).To(ContainSubstring("csi_plugin_operations_seconds "), name)
+									g.Expect(data).To(ContainSubstring("pmem_amount_available "), name)
+									g.Expect(data).To(ContainSubstring("pmem_amount_managed "), name)
+									g.Expect(data).To(ContainSubstring("pmem_amount_max_volume_size "), name)
+									g.Expect(data).To(ContainSubstring("pmem_amount_total "), name)
 								}
 							} else {
-								Expect(data).To(ContainSubstring("csi_sidecar_operations_seconds "), name)
+								g.Expect(data).To(ContainSubstring("csi_sidecar_operations_seconds "), name)
 							}
 						}
 					}
 				}
-				Expect(numPorts).NotTo(Equal(0), "at least one container should have a 'metrics' port")
+				g.Expect(numPorts).NotTo(Equal(0), "at least one container should have a 'metrics' port")
 			}
-			Expect(numPods).NotTo(Equal(0), "at least one container should have a 'metrics' port")
+			g.Expect(numPods).NotTo(Equal(0), "at least one container should have a 'metrics' port")
 		}
-		Eventually(func() string {
-			return strings.Join(InterceptGomegaFailures(test), "\n")
-		}, "10s", "1s").Should(BeEmpty())
+		Eventually(test, "10s", "1s").Should(Succeed())
 	})
 
 	It("rejects large headers", func() {
