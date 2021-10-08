@@ -7,36 +7,13 @@ This readme describes a complete example to deploy a Redis cluster through the [
 * [Docker registry](https://docs.docker.com/registry/deploying/).
 
 ## PMEM-CSI installation
-The steps below describe how to install PMEM-CSI within a Kubernetes cluster that contains one master and three worker nodes. We use a specific version of [Clear Linux OS](https://clearlinux.org/) for the nodes, so the following steps can be reproduced.
-1. Clone this project into `$GOPATH/src/github.com/intel`.
-2. Build PMEM-CSI:
-    ``` console
-     $ cd $GOPATH/src/github.com/intel/pmem-csi
-     $ make push-images
-    ```
-    **Note**: By default, the build images are pushed into a local [Docker registry](https://docs.docker.com/registry/deploying/).
 
-3. Start the Kubernetes cluster:
-    ``` console
-    $ TEST_CLEAR_LINUX_VERSION=29820 make start
-    ```
-    **WARNING**: You may run into an SSL problem when executing this command. You can avoid the SSL error by disabling test checks for signed files, however, be aware that this is not a secure step. Use this command to disable checking for signed files: `TEST_CLEAR_LINUX_VERSION=29820 TEST_CHECK_SIGNED_FILES=false make start`.
-
-4. Setup `KUBECONFIG` env variable to use `kubectl` binary:
-    ``` console
-    $ export KUBECONFIG=$(pwd)/_work/clear-govm/kube.config
-    ```
-5. Verify that all pods reach `Running` status:
-    ``` console
-    $ kubectl get po
-    NAME                          READY   STATUS    RESTARTS   AGE
-    pmem-csi-controller-0         3/3     Running   0          125ms
-    pmem-csi-node-c82p5           2/2     Running   0          124m
-    pmem-csi-node-dwws2           2/2     Running   0          125m
-    pmem-csi-node-kj7gs           2/2     Running   0          125m
-    ```
+[Install PMEM-CSI](/docs/install.md) using one of the supported install
+methods. The next steps assume that there is a `pmem-csi-sc-ext4` storage
+class.
 
 ## Redis operator installation and Redis cluster deployment
+
 The steps to install the Redis operator by Spotahome are listed below:
  1. Install the Redis operator and validate that the `CRD` was properly defined:
     ``` console
