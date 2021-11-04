@@ -383,7 +383,7 @@ spec:
         livenessProbe:
           failureThreshold: 6
           httpGet:
-            path: /metrics
+            path: /metrics/simple
             port: metrics
             scheme: HTTP
           periodSeconds: 10
@@ -402,7 +402,7 @@ spec:
         startupProbe:
           failureThreshold: 60
           httpGet:
-            path: /metrics
+            path: /metrics/simple
             port: metrics
             scheme: HTTP
           periodSeconds: 1
@@ -482,7 +482,7 @@ spec:
         livenessProbe:
           failureThreshold: 6
           httpGet:
-            path: /metrics
+            path: /metrics/simple
             port: metrics
             scheme: HTTP
           periodSeconds: 10
@@ -502,7 +502,7 @@ spec:
         startupProbe:
           failureThreshold: 300
           httpGet:
-            path: /metrics
+            path: /metrics/simple
             port: metrics
             scheme: HTTP
           periodSeconds: 1

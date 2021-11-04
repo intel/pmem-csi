@@ -18,11 +18,16 @@
   path: /spec/template/spec/containers/0/livenessProbe
   value:
     # If the PMEM-CSI driver is able to serve metrics,
-    # then it is alive. In particular this covers capacity
-    # checking.
+    # then it is alive, for some definition of "alive".
+    #
+    # In particular this does *not covers capacity
+    # checking, because that needs to take a lock
+    # which can take an unpredictable amount of time
+    # when there is an operation in progress like
+    # scrubbing a volume.
     httpGet:
       scheme: HTTP
-      path: /metrics
+      path: /metrics/simple
       port: metrics
     # Allow it to for a total duration of one minute.
     # This is conservative because the probe is new.
@@ -35,7 +40,7 @@
   value:
     httpGet:
       scheme: HTTP
-      path: /metrics
+      path: /metrics/simple
       port: metrics
     # Startup may be slower when LVM needs to be set up first.
     # Check more frequently to get it into a ready state quickly.

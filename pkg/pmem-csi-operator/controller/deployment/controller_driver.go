@@ -1430,8 +1430,8 @@ func (d *pmemCSIDeployment) getControllerContainer() corev1.Container {
 		SecurityContext: &corev1.SecurityContext{
 			ReadOnlyRootFilesystem: &true,
 		},
-		LivenessProbe: getMetricsProbe(6, 10),
-		StartupProbe:  getMetricsProbe(60, 1),
+		LivenessProbe: getMetricsProbe(6, 10, "/simple"),
+		StartupProbe:  getMetricsProbe(60, 1, "/simple"),
 	}
 
 	if d.Spec.ControllerTLSSecret != "" {
@@ -1515,8 +1515,8 @@ func (d *pmemCSIDeployment) getNodeDriverContainer() corev1.Container {
 		},
 		TerminationMessagePath:   "/tmp/termination-log",
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-		LivenessProbe:            getMetricsProbe(6, 10),
-		StartupProbe:             getMetricsProbe(300, 1),
+		LivenessProbe:            getMetricsProbe(6, 10, "/simple"),
+		StartupProbe:             getMetricsProbe(300, 1, "/simple"),
 	}
 
 	return c
@@ -1565,8 +1565,8 @@ func (d *pmemCSIDeployment) getProvisionerContainer() corev1.Container {
 		},
 		TerminationMessagePath:   corev1.TerminationMessagePathDefault,
 		TerminationMessagePolicy: corev1.TerminationMessageReadFile,
-		LivenessProbe:            getMetricsProbe(6, 10),
-		StartupProbe:             getMetricsProbe(300, 1),
+		LivenessProbe:            getMetricsProbe(6, 10, ""),
+		StartupProbe:             getMetricsProbe(300, 1, ""),
 	}
 
 	if d.withStorageCapacity() {
@@ -1802,12 +1802,12 @@ func (d *pmemCSIDeployment) getObjectMeta(name string, isClusterResource bool) m
 	return meta
 }
 
-func getMetricsProbe(failureThreshold int32, periodSeconds int32) *corev1.Probe {
+func getMetricsProbe(failureThreshold int32, periodSeconds int32, pathSuffix string) *corev1.Probe {
 	return &corev1.Probe{
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Scheme: "HTTP",
-				Path:   "/metrics",
+				Path:   "/metrics" + pathSuffix,
 				Port:   intstr.FromString("metrics"),
 			},
 		},
