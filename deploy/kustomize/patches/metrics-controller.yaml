@@ -21,7 +21,7 @@
     # then it is alive.
     httpGet:
       scheme: HTTP
-      path: /metrics
+      path: /metrics/simple
       port: metrics
     # Allow it to for a total duration of one minute.
     # This is conservative because the probe is new.
@@ -34,7 +34,7 @@
   value:
     httpGet:
       scheme: HTTP
-      path: /metrics
+      path: /metrics/simple
       port: metrics
     # Check more frequently while the container starts up
     # to get it into a ready state quickly.
