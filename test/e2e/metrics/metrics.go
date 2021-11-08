@@ -17,6 +17,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2/klogr"
 	"k8s.io/kubernetes/test/e2e/framework"
@@ -51,15 +52,8 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 		}
 	})
 
-	It("works", func() {
-		// WaitForPMEMDriver already verified that "version"
-		// is returned and that "pmem_nodes" is correct.
-		// Here we check metrics support of each pod (= annotations +
-		// metrics endpoint).
-		pods, err := f.ClientSet.CoreV1().Pods(d.Namespace).List(context.Background(), metav1.ListOptions{})
-		framework.ExpectNoError(err, "list pods")
-
-		test := func() {
+	Context("data", func() {
+		testData := func(simple bool, pods *corev1.PodList) {
 			numPods := 0
 			for _, pod := range pods.Items {
 				if pod.Annotations["pmem-csi.intel.com/scrape"] != "containers" {
@@ -69,6 +63,10 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 
 				numPorts := 0
 				for _, container := range pod.Spec.Containers {
+					isPmemCSI := strings.HasPrefix(container.Name, "pmem")
+					if simple && !isPmemCSI {
+						continue
+					}
 					for _, port := range container.Ports {
 						if port.Name == "metrics" {
 							numPorts++
@@ -80,6 +78,9 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 
 							url := fmt.Sprintf("http://%s.%s:%d/metrics",
 								pod.Namespace, pod.Name, port.ContainerPort)
+							if simple {
+								url += "/simple"
+							}
 							resp, err := client.Get(url)
 							framework.ExpectNoError(err, "GET failed")
 							// When wrapped with InterceptGomegaFailures, err == nil doesn't
@@ -92,16 +93,22 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 							data, err := ioutil.ReadAll(resp.Body)
 							framework.ExpectNoError(err, "read GET response")
 							name := pod.Name + "/" + container.Name
-							if strings.HasPrefix(container.Name, "pmem") {
-								Expect(data).To(ContainSubstring("go_threads "), name)
-								Expect(data).To(ContainSubstring("process_open_fds "), name)
+							if isPmemCSI {
+								Expect(data).To(ContainSubstring("build_info"), name)
+								expect := Expect(data).To
+								if simple {
+									// All other metrices are not part of metrics/simple.
+									expect = Expect(data).NotTo
+								}
+								expect(ContainSubstring("go_threads "), name)
+								expect(ContainSubstring("process_open_fds "), name)
 								if !strings.Contains(pod.Name, "controller") {
 									// Only the node driver implements CSI and manages volumes.
-									Expect(data).To(ContainSubstring("csi_plugin_operations_seconds "), name)
-									Expect(data).To(ContainSubstring("pmem_amount_available "), name)
-									Expect(data).To(ContainSubstring("pmem_amount_managed "), name)
-									Expect(data).To(ContainSubstring("pmem_amount_max_volume_size "), name)
-									Expect(data).To(ContainSubstring("pmem_amount_total "), name)
+									expect(ContainSubstring("csi_plugin_operations_seconds "), name)
+									expect(ContainSubstring("pmem_amount_available "), name)
+									expect(ContainSubstring("pmem_amount_managed "), name)
+									expect(ContainSubstring("pmem_amount_max_volume_size "), name)
+									expect(ContainSubstring("pmem_amount_total "), name)
 								}
 							} else {
 								Expect(data).To(ContainSubstring("csi_sidecar_operations_seconds "), name)
@@ -113,9 +120,29 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 			}
 			Expect(numPods).NotTo(Equal(0), "at least one container should have a 'metrics' port")
 		}
-		Eventually(func() string {
-			return strings.Join(InterceptGomegaFailures(test), "\n")
-		}, "10s", "1s").Should(BeEmpty())
+
+		test := func(simple bool) {
+			// WaitForPMEMDriver already verified that "version"
+			// is returned and that "pmem_nodes" is correct.
+			// Here we check metrics support of each pod (= annotations +
+			// metrics endpoint).
+			pods, err := f.ClientSet.CoreV1().Pods(d.Namespace).List(context.Background(), metav1.ListOptions{})
+			framework.ExpectNoError(err, "list pods")
+
+			Eventually(func() string {
+				return strings.Join(InterceptGomegaFailures(func() {
+					testData(simple, pods)
+				}), "\n")
+			}, "10s", "1s").Should(BeEmpty())
+		}
+
+		It("full", func() {
+			test(false)
+		})
+
+		It("simple", func() {
+			test(true)
+		})
 	})
 
 	It("rejects large headers", func() {

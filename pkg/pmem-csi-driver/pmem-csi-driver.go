@@ -83,10 +83,13 @@ var (
 		},
 		[]string{"version"},
 	)
+
+	simpleMetrics = prometheus.NewPedanticRegistry()
 )
 
 func init() {
 	prometheus.MustRegister(buildInfo)
+	simpleMetrics.MustRegister(buildInfo)
 }
 
 //Config type for driver configuration
@@ -384,6 +387,7 @@ func (csid *csiDriver) startMetrics(ctx context.Context, cancel func()) (string,
 			promhttp.HandlerFor(csid.gatherers, promhttp.HandlerOpts{}),
 		),
 	)
+	mux.Handle(csid.cfg.metricsPath+"/simple", promhttp.HandlerFor(simpleMetrics, promhttp.HandlerOpts{}))
 	return csid.startHTTPSServer(ctx, cancel, csid.cfg.metricsListen, mux, false /* no TLS */)
 }
 
