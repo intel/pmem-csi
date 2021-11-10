@@ -34,6 +34,7 @@ spec:
   - PMEM-CSI operator
   - Persistent Memory
   - PMEM
+  - Intel
   maintainers:
   - email: olev.kartau@intel.com
     name: Olev Kartau
