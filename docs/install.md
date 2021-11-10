@@ -145,7 +145,7 @@ If the operating system on the nodes does not provide `ipmctl`, then
 it can also be run inside a container, using the PMEM-CSI image. The same
 invocation works with `podman` instead of `docker`.
 ``` console
-$ sudo docker run --privileged --rm -u 0:0 docker.io/intel/pmem-csi-driver:v1.0.0 ipmctl help
+$ sudo docker run --privileged --rm -u 0:0 docker.io/intel/pmem-csi-driver:v1.1.0 ipmctl help
 Intel(R) Optane(TM) Persistent Memory Command Line Interface
 
     Usage: ipmctl <verb>[<options>][<targets>][<properties>]
@@ -310,13 +310,13 @@ Alternatively, the you can install the operator manually from YAML files.
 First install the PmemCSIDeployment CRD:
 
 ``` console
-$ kubectl create -f https://github.com/intel/pmem-csi/raw/v1.0.0/deploy/crd/pmem-csi.intel.com_pmemcsideployments.yaml
+$ kubectl create -f https://github.com/intel/pmem-csi/raw/v1.1.0/deploy/crd/pmem-csi.intel.com_pmemcsideployments.yaml
 ```
 
 Then install the PMEM-CSI operator itself:
 
 ``` console
-$ kubectl create -f https://github.com/intel/pmem-csi/raw/v1.0.0/deploy/operator/pmem-csi-operator.yaml
+$ kubectl create -f https://github.com/intel/pmem-csi/raw/v1.1.0/deploy/operator/pmem-csi-operator.yaml
 ```
 The operator gets deployed in a namespace called 'pmem-csi' which gets created by that YAML file.
 
@@ -585,13 +585,13 @@ It is not necessary to check out the repository to use them.
 
 Create a storage class with late binding, the recommended mode:
 ``` console
-$ kubectl apply -f https://github.com/intel/pmem-csi/raw/v1.0.0/deploy/common/pmem-storageclass-late-binding.yaml
+$ kubectl apply -f https://github.com/intel/pmem-csi/raw/v1.1.0/deploy/common/pmem-storageclass-late-binding.yaml
 storageclass.storage.k8s.io/pmem-csi-sc-late-binding created
 ```
 
 Then request a volume which uses that class:
 ``` console
-$ kubectl apply -f https://github.com/intel/pmem-csi/raw/v1.0.0/deploy/common/pmem-pvc-late-binding.yaml
+$ kubectl apply -f https://github.com/intel/pmem-csi/raw/v1.1.0/deploy/common/pmem-pvc-late-binding.yaml
 persistentvolumeclaim/pmem-csi-pvc-late-binding created
 ```
 
@@ -619,7 +619,7 @@ Events:
 
 The volume gets created once the first Pod starts to use it, on a node that is suitable for that Pod:
 ``` console
-$ kubectl apply -f https://github.com/intel/pmem-csi/raw/v1.0.0/deploy/common/pmem-app-late-binding.yaml
+$ kubectl apply -f https://github.com/intel/pmem-csi/raw/v1.1.0/deploy/common/pmem-app-late-binding.yaml
 pod/my-csi-app created
 ```
 
@@ -841,7 +841,7 @@ Pod Template:
   Service Account:  pmem-csi-intel-com-node-setup
   Containers:
    pmem-driver:
-    Image:      172.17.42.1:5001/pmem-csi-driver:v1.0.0
+    Image:      172.17.42.1:5001/pmem-csi-driver:v1.1.0
     Port:       <none>
     Host Port:  <none>
     Command:

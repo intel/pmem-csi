@@ -202,7 +202,7 @@ the following workaround is possible. Create a wrapper script:
 sudo tee /usr/local/bin/ndctl <<EOF
 #!/bin/sh
 
-podman run --privileged -u 0:0 --rm docker.io/intel/pmem-csi-driver:v1.0.0 ndctl "\$@"
+podman run --privileged -u 0:0 --rm docker.io/intel/pmem-csi-driver:v1.1.0 ndctl "\$@"
 EOF
 sudo chmod a+rx /usr/local/bin/ndctl
 ```
