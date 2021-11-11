@@ -376,6 +376,7 @@ Service:
       pmem-csi.intel.com/deployment: ignore # labels are tested separately
     sessionAffinity: None
     type: ClusterIP
+    internalTrafficPolicy: Cluster
 ServiceAccount:
   secrets: ignore
   imagePullSecrets: ignore # injected on OpenShift

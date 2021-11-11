@@ -18,9 +18,9 @@ function setup_kubernetes_master(){
 trap 'error_handler ${LINENO}' ERR
 kubeadm_args=
 kubeadm_args_init=
-kubeadm_config_init="apiVersion: kubeadm.k8s.io/v1beta1
+kubeadm_config_init="apiVersion: kubeadm.k8s.io/v1beta2
 kind: InitConfiguration"
-kubeadm_config_cluster="apiVersion: kubeadm.k8s.io/v1beta1
+kubeadm_config_cluster="apiVersion: kubeadm.k8s.io/v1beta2
 kind: ClusterConfiguration"
 kubeadm_config_kubelet="apiVersion: kubelet.config.k8s.io/v1beta1
 kind: KubeletConfiguration"
