@@ -180,17 +180,29 @@ pipeline {
         //   (more tests, runs longer, thus gets to use the existing worker)
         stage('Testing') {
             parallel {
-                stage('1.21') {
+                stage('1.22') {
                     options {
                         timeout(time: 12, unit: "HOURS")
                     }
                     steps {
                         // Skip production, i.e. run testing.
-                        TestInVM("", "fedora", "", "1.21", "Top.Level..[[:alpha:]]*-production[[:space:]]")
+                        TestInVM("", "fedora", "", "1.22", "Top.Level..[[:alpha:]]*-production[[:space:]]")
                     }
                 }
 
                 // All others set up their own worker.
+                stage('1.21') {
+                    when {
+		        beforeAgent true
+		        not { changeRequest() }
+                    }
+                    agent {
+                        label "pmem-csi"
+                    }
+                    steps {
+                        TestInVM("fedora-1.21", "fedora", "", "1.21", "")
+                    }
+                }
                 stage('1.20') {
                     when {
 		        beforeAgent true

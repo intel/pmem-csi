@@ -179,6 +179,7 @@ KUSTOMIZE += $(foreach version,$(KUSTOMIZE_KUBERNETES_VERSIONS),$(subst X.XX,$(v
 
 # Deployments that have storage capacity tracking enabled, using the v1beta1 API.
 KUSTOMIZE += $(subst kubernetes-base,kubernetes-1.21,$(subst X.XX,1.21,$(KUSTOMIZE_KUBERNETES_OUTPUT)))
+KUSTOMIZE += $(subst kubernetes-base,kubernetes-1.21,$(subst X.XX,1.22,$(KUSTOMIZE_KUBERNETES_OUTPUT)))
 
 KUSTOMIZE += deploy/common/pmem-storageclass-default.yaml=deploy/kustomize/storageclass
 KUSTOMIZE += deploy/common/pmem-storageclass-ext4.yaml=deploy/kustomize/storageclass-ext4

@@ -39,6 +39,8 @@ versions:
 | 1.18               |                                | supported
 | 1.19               |                                | supported
 | 1.20               |                                | supported
+| 1.21               |                                | supported
+| 1.22               |                                | supported
 
 <sup>1</sup> Several relevant features are only available in alpha
 quality in Kubernetes 1.13 and the combination of skip attach and
