@@ -3,13 +3,7 @@ OPERATOR_SDK_VERSION=1.6.1
 # download operator-sdk binary
 _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION):
 	mkdir -p _work/bin/ 2> /dev/null
-	# Building operator-sdk from sources as that needs fixes for:
-	# https://github.com/operator-framework/operator-sdk/pull/4816
-	tmpdir=`mktemp -d` && \
-	trap 'set -x; rm -rf $$tmpdir' EXIT && \
-	git clone --branch $(OPERATOR_SDK_VERSION)+fixes https://github.com/avalluri/operator-sdk.git $$tmpdir && \
-	cd $$tmpdir && $(MAKE) build/operator-sdk && \
-	cp $$tmpdir/build/operator-sdk $(abspath $@) && \
+	curl -L https://github.com/operator-framework/operator-sdk/releases/download/v$(OPERATOR_SDK_VERSION)/operator-sdk_linux_amd64 -o $(abspath $@)
 	chmod a+x $(abspath $@)
 	cd $(dir $@); ln -sf operator-sdk-$(OPERATOR_SDK_VERSION) operator-sdk
 
