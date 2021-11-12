@@ -1,4 +1,4 @@
-OPERATOR_SDK_VERSION=1.6.1
+OPERATOR_SDK_VERSION=1.14.0
 
 # download operator-sdk binary
 _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION):
