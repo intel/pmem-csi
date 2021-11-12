@@ -16,6 +16,7 @@ CLUSTER=${CLUSTER:-pmem-govm}
 CLUSTER_DIR="${CLUSTER_DIRECTORY:-${REPO_DIR}/_work/${CLUSTER}}"
 SSH="${CLUSTER_DIR}/ssh.0"
 KUBECTL="${SSH} kubectl" # Always use the kubectl installed in the cluster.
+OLM_VERSION=v0.18.3
 
 function usage() {
     echo "Usage:"
@@ -62,7 +63,7 @@ if [ $cmd == install ]; then
     # was successfull
     set +e
     echo "Installing OLM..."
-    if ! ${BIN_DIR}/operator-sdk olm install --verbose --timeout=5m 2>&1 ; then
+    if ! ${BIN_DIR}/operator-sdk olm install --version=${OLM_VERSION} --verbose --timeout=5m 2>&1 ; then
         if ! ${BIN_DIR}/operator-sdk olm status 2>&1 ; then
             echo "OLM installation failed!!!"
             ${KUBECTL} get all -n olm
