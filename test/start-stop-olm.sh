@@ -61,8 +61,9 @@ if [ $cmd == install ]; then
     # So, we depend on `olm status` instead to check if the installation
     # was successfull
     set +e
-    echo "Installing OLM..."
-    if ! ${BIN_DIR}/operator-sdk olm install --verbose --timeout=5m 2>&1 ; then
+    OLM_VERSION=0.18.3
+    echo "Installing OLM ($OLM_VERSION)..."
+    if ! ${BIN_DIR}/operator-sdk olm install --verbose --version=$OLM_VERSION --timeout=5m 2>&1 ; then
         if ! ${BIN_DIR}/operator-sdk olm status 2>&1 ; then
             echo "OLM installation failed!!!"
             ${KUBECTL} get all -n olm
