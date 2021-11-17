@@ -278,7 +278,7 @@ EOF
         # by creating a wrapper script around podman.
         run $ssh "cat >ndctl" <<EOF
 #!/bin/sh
-sudo podman run -u 0:0 -i --privileged --rm docker.io/intel/pmem-csi-driver:v1.1.0 ndctl "\$@"
+sudo podman run -u 0:0 -i --privileged --rm docker.io/intel/pmem-csi-driver:v1.0.1 ndctl "\$@"
 EOF
         run $ssh chmod a+rx ndctl
         run $ssh sudo mv ndctl /usr/local/bin/
@@ -423,7 +423,7 @@ restart () {
 init_pmem_regions() {
     for domain in $($VIRSH list --all --name | grep ^$TEST_VIRT_CLUSTER_NAME-.*worker); do
         run ssh $SSH_ARGS core@$domain.$TEST_VIRT_CLUSTER_NAME.$TEST_VIRT_CLUSTER_DOMAIN \
-            sudo podman run -u 0:0 -i --privileged --rm docker.io/intel/pmem-csi-driver:v1.1.0 /bin/sh <<EOF
+            sudo podman run -u 0:0 -i --privileged --rm docker.io/intel/pmem-csi-driver:v1.0.1 /bin/sh <<EOF
 set -xe
 ndctl disable-region region0
 ndctl init-labels nmem0

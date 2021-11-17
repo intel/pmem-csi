@@ -103,7 +103,7 @@ FROM registry.access.redhat.com/ubi8
 LABEL name="pmem-csi-driver"
 LABEL vendor="Intel"
 # updated by hack/set-version.sh when preparing a release
-LABEL version="v1.1.0"
+LABEL version="v1.0.1"
 # Needs to be set by Red Hat build service.
 # LABEL release="1"
 LABEL summary="A CSI driver for managing PMEM."
