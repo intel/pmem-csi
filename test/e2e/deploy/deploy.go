@@ -705,10 +705,10 @@ func RemoveObjects(c *Cluster, deployment *Deployment) error {
 			}
 		}
 
-		if list, err := c.cs.StorageV1beta1().CSIDrivers().List(context.Background(), filter); !failure(err) {
+		if list, err := c.cs.StorageV1().CSIDrivers().List(context.Background(), filter); !failure(err) {
 			for _, object := range list.Items {
 				del(object.ObjectMeta, object, func() error {
-					return c.cs.StorageV1beta1().CSIDrivers().Delete(context.Background(), object.Name, metav1.DeleteOptions{})
+					return c.cs.StorageV1().CSIDrivers().Delete(context.Background(), object.Name, metav1.DeleteOptions{})
 				})
 			}
 		}
@@ -893,7 +893,7 @@ func findDriver(c *Cluster) (*Deployment, error) {
 	}
 	deployment.Namespace = list.Items[0].Namespace
 
-	drivers, err := c.cs.StorageV1beta1().CSIDrivers().List(context.Background(), metav1.ListOptions{LabelSelector: deploymentLabel})
+	drivers, err := c.cs.StorageV1().CSIDrivers().List(context.Background(), metav1.ListOptions{LabelSelector: deploymentLabel})
 	if err != nil {
 		return nil, err
 	}

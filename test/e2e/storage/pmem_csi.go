@@ -89,7 +89,7 @@ var _ = deploy.DescribeForAll("Deployment", func(d *deploy.Deployment) {
 	// full test must include resetting the cluster and installing
 	// pmem-csi.
 	It("has CSIDriverInfo", func() {
-		_, err := f.ClientSet.StorageV1beta1().CSIDrivers().Get(context.Background(), d.DriverName, metav1.GetOptions{})
+		_, err := f.ClientSet.StorageV1().CSIDrivers().Get(context.Background(), d.DriverName, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred(), "get csidriver.storage.k8s.io for pmem-csi failed")
 	})
 

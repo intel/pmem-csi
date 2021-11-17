@@ -53,7 +53,7 @@ EOF
 
     # For the sake of reproducibility, use fixed versions.
     # List of latest packages can be generated on Fedora with:
-    # for v in 1.13 1.14 1.15 1.16 1.17 1.18 1.19 1.20 1.21; do echo -n "        $v) packages+=\""; for i in kubelet kubeadm kubectl; do ver=$(sudo dnf --showduplicates list kubelet | grep " $v" | tail -n 1 | sed -e 's/.* \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/'); echo -n " "; echo -n $i-$ver; done; echo '";;'; done
+    # for v in 1.13 1.14 1.15 1.16 1.17 1.18 1.19 1.20 1.21 1.22; do echo -n "        $v) packages+=\""; for i in kubelet kubeadm kubectl; do ver=$(sudo dnf --showduplicates list kubelet | grep " $v" | tail -n 1 | sed -e 's/.* \([0-9]*\.[0-9]*\.[0-9]*[^ ]*\).*/\1/'); echo -n " "; echo -n $i-$ver; done; echo '";;'; done
     case ${TEST_KUBERNETES_VERSION} in
         1.13) packages+=" kubelet-1.13.12-0 kubeadm-1.13.12-0 kubectl-1.13.12-0";;
         1.14) packages+=" kubelet-1.14.10-0 kubeadm-1.14.10-0 kubectl-1.14.10-0";;
@@ -64,6 +64,7 @@ EOF
         1.19) packages+=" kubelet-1.19.11-0 kubeadm-1.19.11-0 kubectl-1.19.11-0";;
         1.20) packages+=" kubelet-1.20.7-0 kubeadm-1.20.7-0 kubectl-1.20.7-0";;
         1.21) packages+=" kubelet-1.21.1-0 kubeadm-1.21.1-0 kubectl-1.21.1-0";;
+        1.22) packages+=" kubelet-1.22.3-0 kubeadm-1.22.3-0 kubectl-1.22.3-0";;
         *) echo >&2 "Kubernetes version ${TEST_KUBERNETES_VERSION} not supported, package list in $0 must be updated."; exit 1;;
     esac
     packages+=" --disableexcludes=kubernetes"
