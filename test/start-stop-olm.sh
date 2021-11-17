@@ -67,6 +67,7 @@ if [ $cmd == install ]; then
         if ! ${BIN_DIR}/operator-sdk olm status 2>&1 ; then
             echo "OLM installation failed!!!"
             ${KUBECTL} get all -n olm
+            ${KUBECTL} get crd
             exit 1
         fi
     fi
