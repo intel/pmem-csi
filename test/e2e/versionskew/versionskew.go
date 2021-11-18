@@ -46,7 +46,7 @@ const (
 
 func baseSupportsKubernetes(ver version.Version) bool {
 	switch ver {
-	case version.NewVersion(1, 21):
+	case version.NewVersion(1, 21), version.NewVersion(1, 22):
 		return false
 	default:
 		return true

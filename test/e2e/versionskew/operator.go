@@ -249,6 +249,14 @@ var _ = deploy.DescribeForSome("versionskew", func(d *deploy.Deployment) bool {
 	})
 
 	It("upgrade [Slow]", func() {
+		if base == "0.9" {
+			ver, err := k8sutil.GetKubernetesVersion(f.ClientConfig())
+			framework.ExpectNoError(err, "get Kubernetes version")
+			if ver.Compare(1, 22) >= 0 {
+				Skip("PMEM-CSI operator v0.9.x uses the v1beta1 CSIDriver API which is not enabled in Kubernetes >= 1.22")
+			}
+		}
+
 		// First remove existing operator deployment
 		// This is mandatory in case of OLM. Otherwise later downgrade
 		// step might results in operator upgrade by the OLM.
