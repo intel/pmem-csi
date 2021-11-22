@@ -142,7 +142,7 @@ $ make operator-generate-bundle VERSION=<X.Y.Z> REPLACES=<X.Y.Z> # semantic vers
 ```
 Running the above command generates the OLM package bundle files under `deploy/olm-bundle/<X.Y.Z>`
 
-* Clone `operator-framework/community-operators` repository
+* Clone `k8s-operatorhub/community-operators` repository
 ``` console
 $ git clone https://github.com/k8s-operatorhub/community-operators.git
 ```
