@@ -75,6 +75,7 @@ type pmemCSIProvisioner struct {
 
 var _ controller.Qualifier = &pmemCSIProvisioner{}
 var _ controller.DeletionGuard = &pmemCSIProvisioner{}
+var _ controller.BlockProvisioner = &pmemCSIProvisioner{}
 
 // startRescheduler logs errors and cancels the context when it runs
 // into a problem, either during the startup phase (blocking) or later
@@ -141,6 +142,10 @@ func (pcp *pmemCSIProvisioner) Delete(context.Context, *v1.PersistentVolume) err
 	return &controller.IgnoredError{
 		Reason: "deletion must be done on the node",
 	}
+}
+
+func (pcp *pmemCSIProvisioner) SupportsBlock(context.Context) bool {
+	return true
 }
 
 func (pcp *pmemCSIProvisioner) shouldReschedule(ctx context.Context, pvc *v1.PersistentVolumeClaim, node *v1.Node) (bool, error) {
