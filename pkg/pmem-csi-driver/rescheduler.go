@@ -8,7 +8,6 @@ package pmemcsidriver
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	pmemlog "github.com/intel/pmem-csi/pkg/logger"
@@ -74,6 +73,9 @@ type pmemCSIProvisioner struct {
 	provisionController *controller.ProvisionController
 }
 
+var _ controller.Qualifier = &pmemCSIProvisioner{}
+var _ controller.DeletionGuard = &pmemCSIProvisioner{}
+
 // startRescheduler logs errors and cancels the context when it runs
 // into a problem, either during the startup phase (blocking) or later
 // at runtime (in a go routine).
@@ -131,8 +133,14 @@ func (pcp *pmemCSIProvisioner) Provision(ctx context.Context, opts controller.Pr
 	return nil, controller.ProvisioningNoChange, err
 }
 
+func (pcp *pmemCSIProvisioner) ShouldDelete(context.Context, *v1.PersistentVolume) bool {
+	return false
+}
+
 func (pcp *pmemCSIProvisioner) Delete(context.Context, *v1.PersistentVolume) error {
-	return errors.New("not implemented")
+	return &controller.IgnoredError{
+		Reason: "deletion must be done on the node",
+	}
 }
 
 func (pcp *pmemCSIProvisioner) shouldReschedule(ctx context.Context, pvc *v1.PersistentVolumeClaim, node *v1.Node) (bool, error) {
