@@ -87,10 +87,6 @@ type local struct {
 	root     string
 }
 
-const (
-	daxCheckBinary = "_work/pmem-dax-check"
-)
-
 func (p *daxTestSuite) DefineTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) {
 	var l local
 
@@ -98,16 +94,6 @@ func (p *daxTestSuite) DefineTests(driver storageframework.TestDriver, pattern s
 
 	init := func() {
 		l = local{}
-
-		// Build pmem-dax-check helper binary.
-		l.root = os.Getenv("REPO_ROOT")
-		build := exec.Command("/bin/sh", "-c", os.Getenv("GO")+" build -o "+daxCheckBinary+" ./test/cmd/pmem-dax-check")
-		build.Stdout = GinkgoWriter
-		build.Stderr = GinkgoWriter
-		build.Dir = l.root
-		By("Compiling with: " + strings.Join(build.Args, " "))
-		err := build.Run()
-		framework.ExpectNoError(err, "compile ./test/cmd/pmem-dax-check")
 
 		// Now do the more expensive test initialization.
 		l.config, l.testCleanup = driver.PrepareTest(f)
@@ -360,14 +346,14 @@ func testDax(
 	}
 
 	By("checking that missing DAX support is detected")
-	pmempod.RunInPod(f, root, []string{daxCheckBinary}, "/tmp/"+path.Base(daxCheckBinary)+" /tmp/no-dax; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
+	pmempod.RunInPod(f, root, nil, "/usr/local/bin/pmem-dax-check /tmp/no-dax; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
 
 	if expectDax {
 		By("checking volume for DAX support")
-		pmempod.RunInPod(f, root, []string{daxCheckBinary}, "lsblk; mount | grep /mnt; /tmp/"+path.Base(daxCheckBinary)+" /mnt/daxtest", ns, pod.Name, containerName)
+		pmempod.RunInPod(f, root, nil, "lsblk; mount | grep /mnt; /usr/local/bin/pmem-dax-check /mnt/daxtest", ns, pod.Name, containerName)
 	} else {
 		By("checking volume for missing DAX support")
-		stdout, _ := pmempod.RunInPod(f, root, []string{daxCheckBinary}, "ndctl list -NR; lsblk; mount | grep /mnt; /tmp/"+path.Base(daxCheckBinary)+" /mnt/daxtest; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
+		stdout, _ := pmempod.RunInPod(f, root, nil, "ndctl list -NR; lsblk; mount | grep /mnt; /usr/local/bin/pmem-dax-check /mnt/daxtest; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
 
 		// Example output for LVM:
 		// {
