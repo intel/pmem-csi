@@ -6,6 +6,8 @@ import (
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 )
 
 const (
@@ -79,7 +81,7 @@ type PmemDeviceManager interface {
 	// CreateDevice creates a new block device with give name, size and namespace mode.
 	// It returns the actual volume size which will always be at least as large as requested.
 	// Possible errors: ErrNotEnoughSpace, ErrDeviceExists
-	CreateDevice(ctx context.Context, name string, size uint64) (uint64, error)
+	CreateDevice(ctx context.Context, name string, size uint64, usage parameters.Usage) (uint64, error)
 
 	// GetDevice returns the block device information for given name
 	// Possible errors: ErrDeviceNotFound

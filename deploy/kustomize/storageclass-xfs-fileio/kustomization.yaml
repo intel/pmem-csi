@@ -1,0 +1,7 @@
+nameSuffix: -fileio
+
+bases:
+- ../storageclass-xfs
+
+patchesStrategicMerge:
+- ../patches/usage-fileio.yaml

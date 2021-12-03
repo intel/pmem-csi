@@ -272,7 +272,7 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 			}
 		}()
 	}
-	actualSize, err := cs.dm.CreateDevice(ctx, volumeID, uint64(asked))
+	actualSize, err := cs.dm.CreateDevice(ctx, volumeID, uint64(asked), p.GetUsage())
 	if err != nil {
 		code := codes.Internal
 		if errors.Is(err, pmemerr.NotEnoughSpace) {

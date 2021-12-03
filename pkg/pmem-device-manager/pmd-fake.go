@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 
 	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 )
@@ -66,7 +67,7 @@ func (dm *fakeDM) getCapacity() Capacity {
 	}
 }
 
-func (dm *fakeDM) CreateDevice(ctx context.Context, volumeId string, size uint64) (uint64, error) {
+func (dm *fakeDM) CreateDevice(ctx context.Context, volumeId string, size uint64, usage parameters.Usage) (uint64, error) {
 	dm.mutex.Lock()
 	defer dm.mutex.Unlock()
 

@@ -1,0 +1,11 @@
+# Generated with "make kustomize", do not edit!
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: pmem-csi-sc-ext4-fileio
+parameters:
+  csi.storage.k8s.io/fstype: ext4
+  eraseafter: "true"
+  usage: FileIO
+provisioner: pmem-csi.intel.com

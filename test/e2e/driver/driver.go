@@ -52,7 +52,7 @@ type CSIDriver interface {
 	GetCSIDriverName(config *storageframework.PerTestConfig) string
 }
 
-func New(name, csiDriverName string, fsTypes []string, scManifests map[string]string) storageframework.TestDriver {
+func New(name, csiDriverName string, fsTypes []string, scManifests map[string]string, parameters map[string]string) storageframework.TestDriver {
 	if fsTypes == nil {
 		fsTypes = []string{"", "ext4", "xfs"}
 	}
@@ -86,6 +86,7 @@ func New(name, csiDriverName string, fsTypes []string, scManifests map[string]st
 		},
 		scManifest:    scManifests,
 		csiDriverName: csiDriverName,
+		parameters:    parameters,
 	}
 }
 

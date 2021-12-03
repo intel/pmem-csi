@@ -45,7 +45,7 @@ func DefineImmediateBindingTests(d *deploy.Deployment, f *framework.Framework) {
 		)
 
 		BeforeEach(func() {
-			csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil)
+			csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil, nil)
 			config, cl := csiTestDriver.PrepareTest(f)
 			cleanup = cl
 			sc = csiTestDriver.(storageframework.DynamicPVTestDriver).GetDynamicProvisionStorageClass(config, "ext4")

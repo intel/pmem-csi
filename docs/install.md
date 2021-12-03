@@ -576,7 +576,30 @@ following custom parameters in a storage class:
 |---|-------|--------|-------------|
 |`eraseAfter`|Clear all data by overwriting with zeroes after use and before deleting the volume|Yes|`true` (default), `false`|
 |`kataContainers`|Prepare volume for use with DAX in Kata Containers.|Yes|`false/0/f/FALSE` (default), `true/1/t/TRUE`|
+|`usage`|Determine how a volume is going to be used.|Yes|`AppDirect` (default), `FileIO`|
 
+By default, volumes are created for AppDirect enabled applications:
+- The [namespace
+  mode](https://docs.pmem.io/ndctl-user-guide/concepts/nvdimm-namespaces) is
+  `fsdax`.
+- Mount parameters include `-o dax` (= [`-o dax=always` on newer kernels](https://www.kernel.org/doc/Documentation/filesystems/dax.txt))
+  which ensures that all files are automatically opened in DAX mode, i.e.
+  reads and writes directly access the underlying PMEM.
+
+This might not be ideal for traditional file IO because the page cache is
+bypassed, which may affect performance, and because applications have to be
+prepared to deal with partially written data sectors in case of crashes. When
+the goal is to run traditional applications, then `usage=FileIO` may be better:
+- In direct mode, the [namespace
+  mode](https://docs.pmem.io/ndctl-user-guide/concepts/nvdimm-namespaces) is
+  `sector`.
+- In LVM mode, the namespace mode is `fsdax` because currently
+  PMEM-CSI doesn't support LVM on top of other namespaces.
+- Mount parameters do not include `-o dax`.
+
+`kataContainers` and `usage=FileIO` are mutually exclusive because the former
+is about making AppDirect available in Kata Containers. The normal volume
+passthrough can be used for `usage=FileIO`.
 
 ### Creating volumes
 

@@ -34,7 +34,7 @@ import (
 )
 
 var _ = deploy.DescribeForAll("Deployment", func(d *deploy.Deployment) {
-	csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil)
+	csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil, nil)
 
 	// List of testSuites to be added below.
 	var csiTestSuites = []func() storageframework.TestSuite{
