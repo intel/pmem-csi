@@ -98,5 +98,13 @@ if [ $cmd == install ]; then
 elif [ $status -ne 0 ]; then
     echo "No running OLM found."
 else
-    ${BIN_DIR}/operator-sdk olm uninstall
+    attempt=0
+    while ! ${BIN_DIR}/operator-sdk olm uninstall;  do
+        if [ "$attempt" -ge 5 ]; then
+            echo "Giving up. Current status is:"
+            ${KUBECTL} get all -n olm
+            exit 1
+        fi
+        attempt=$((attempt + 1))
+    done
 fi
