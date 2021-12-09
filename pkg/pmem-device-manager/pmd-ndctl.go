@@ -11,6 +11,7 @@ import (
 	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	"github.com/intel/pmem-csi/pkg/ndctl"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 
 	"k8s.io/utils/mount"
 )
@@ -143,7 +144,7 @@ func (pmem *pmemNdctl) GetCapacity(ctx context.Context) (capacity Capacity, err 
 	return capacity, nil
 }
 
-func (pmem *pmemNdctl) CreateDevice(ctx context.Context, volumeId string, size uint64) (uint64, error) {
+func (pmem *pmemNdctl) CreateDevice(ctx context.Context, volumeId string, size uint64, usage parameters.Usage) (uint64, error) {
 	ctx, _ = pmemlog.WithName(ctx, "ndctl-CreateDevice")
 	ndctlMutex.Lock()
 	defer ndctlMutex.Unlock()
@@ -163,11 +164,20 @@ func (pmem *pmemNdctl) CreateDevice(ctx context.Context, volumeId string, size u
 		return 0, pmemerr.DeviceExists
 	}
 
-	ns, err := ndctl.CreateNamespace(ctx, ndctx, ndctl.CreateNamespaceOpts{
+	opts := ndctl.CreateNamespaceOpts{
 		Name: volumeId,
 		Size: size,
-		Mode: "fsdax",
-	})
+	}
+	switch usage {
+	case parameters.UsageAppDirect:
+		opts.Mode = ndctl.FsdaxMode
+	case parameters.UsageFileIO:
+		opts.Mode = ndctl.SectorMode
+	default:
+		return 0, fmt.Errorf("unsupported usage %s for direct mode", usage)
+	}
+
+	ns, err := ndctl.CreateNamespace(ctx, ndctx, opts)
 	if err != nil {
 		return 0, err
 	}

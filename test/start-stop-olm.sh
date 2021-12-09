@@ -63,15 +63,33 @@ if [ $cmd == install ]; then
     # was successfull
     set +e
     echo "Installing OLM..."
-    if ! ${BIN_DIR}/operator-sdk olm install --version=${OLM_VERSION} --verbose --timeout=5m 2>&1 ; then
-        if ! ${BIN_DIR}/operator-sdk olm status 2>&1 ; then
-            echo "OLM installation failed!!!"
-            ${KUBECTL} get all -n olm
-            exit 1
+    attempt=0
+    while true; do
+        if ${BIN_DIR}/operator-sdk olm install --version=${OLM_VERSION} --verbose --timeout=5m 2>&1 &&
+               ${BIN_DIR}/operator-sdk olm status 2>&1 ; then
+            break
+        else
+            echo "OLM installation failed, attempt #$attempt!!!"
+            if [ "$attempt" -ge 5 ]; then
+                echo "Giving up. Current status is:"
+                ${KUBECTL} get all -n olm
+                exit 1
+            fi
+            echo "OLM installation will be retried after removing the incomplete installation."
+            attempt=$((attempt + 1))
+
+            # We try to uninstall "the official way" first, but that sometimes
+            # that doesn't work because "uninstall" seems to expect a complete
+            # installation. As fallback we delete all objects listed in the
+            # YAML file for the release, which seems to be what "install"
+            # checks for.
+            ${BIN_DIR}/operator-sdk olm uninstall
+            ${KUBECTL} delete -f https://github.com/operator-framework/operator-lifecycle-manager/releases/download/${OLM_VERSION}/olm.yaml
+            ${KUBECTL} delete ns olm
         fi
-    fi
+    done
     set -e
-    echo "OLM installation sucessful!!!"
+    echo "OLM installation sucessful after $attempt retries!!!"
     ## Show olm-operator pod status
     ${KUBECTL} get po -n olm -l app=olm-operator
 
@@ -80,5 +98,13 @@ if [ $cmd == install ]; then
 elif [ $status -ne 0 ]; then
     echo "No running OLM found."
 else
-    ${BIN_DIR}/operator-sdk olm uninstall
+    attempt=0
+    while ! ${BIN_DIR}/operator-sdk olm uninstall;  do
+        if [ "$attempt" -ge 5 ]; then
+            echo "Giving up. Current status is:"
+            ${KUBECTL} get all -n olm
+            exit 1
+        fi
+        attempt=$((attempt + 1))
+    done
 fi

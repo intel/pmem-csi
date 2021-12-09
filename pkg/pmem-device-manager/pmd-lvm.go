@@ -14,6 +14,7 @@ import (
 	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 )
 
 const (
@@ -132,7 +133,7 @@ func (lvm *pmemLvm) GetCapacity(ctx context.Context) (capacity Capacity, err err
 	return capacity, nil
 }
 
-func (lvm *pmemLvm) CreateDevice(ctx context.Context, volumeId string, size uint64) (uint64, error) {
+func (lvm *pmemLvm) CreateDevice(ctx context.Context, volumeId string, size uint64, usage parameters.Usage) (uint64, error) {
 	ctx, logger := pmemlog.WithName(ctx, "LVM-CreateDevice")
 
 	lvmMutex.Lock()

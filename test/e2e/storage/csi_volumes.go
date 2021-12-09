@@ -50,30 +50,50 @@ var (
 // with the operator. For tests that really should run for all deployment methods see
 // "Deployment" in pmem_csi.go.
 var _ = deploy.DescribeForSome("Driver", deploy.RunAllTests, func(d *deploy.Deployment) {
-	csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil)
+	csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil, nil)
 
-	// List of testSuites to be added below.
-	var csiTestSuites = []func() storageframework.TestSuite{
-		// TODO: investigate how useful these tests are and enable them.
-		// testsuites.InitMultiVolumeTestSuite,
-		testsuites.InitProvisioningTestSuite,
-		// testsuites.InitSnapshottableTestSuite,
-		// testsuites.InitSubPathTestSuite,
-		testsuites.InitVolumeIOTestSuite,
-		testsuites.InitVolumeModeTestSuite,
-		testsuites.InitVolumesTestSuite,
-		dax.InitDaxTestSuite,
-	}
+	Context("AppDirect", func() {
+		// List of testSuites to be added below.
+		var csiTestSuites = []func() storageframework.TestSuite{
+			// TODO: investigate how useful these tests are and enable them.
+			// testsuites.InitMultiVolumeTestSuite,
+			testsuites.InitProvisioningTestSuite,
+			// testsuites.InitSnapshottableTestSuite,
+			// testsuites.InitSubPathTestSuite,
+			testsuites.InitVolumeIOTestSuite,
+			testsuites.InitVolumeModeTestSuite,
+			testsuites.InitVolumesTestSuite,
+			func() storageframework.TestSuite {
+				return dax.InitDaxTestSuite(true)
+			},
+		}
 
-	if ephemeral.Supported {
-		csiTestSuites = append(csiTestSuites, testsuites.InitEphemeralTestSuite)
-	}
+		if ephemeral.Supported {
+			csiTestSuites = append(csiTestSuites, testsuites.InitEphemeralTestSuite)
+		}
 
-	storageframework.DefineTestSuites(csiTestDriver, csiTestSuites)
+		storageframework.DefineTestSuites(csiTestDriver, csiTestSuites)
+	})
+
+	Context("FileIO", func() {
+		// With FileIO as usage we only test DAX.
+		csiTestDriver := driver.New(d.Name(), d.DriverName, []string{"ext4", "xfs"}, map[string]string{
+			"ext4": "deploy/common/pmem-storageclass-ext4-fileio.yaml",
+			"xfs":  "deploy/common/pmem-storageclass-xfs-fileio.yaml",
+		}, map[string]string{
+			"usage": "FileIO",
+		})
+		csiTestSuites := []func() storageframework.TestSuite{
+			func() storageframework.TestSuite {
+				return dax.InitDaxTestSuite(false)
+			},
+		}
+		storageframework.DefineTestSuites(csiTestDriver, csiTestSuites)
+	})
 })
 
 var _ = deploy.DescribeForSome("E2E", deploy.RunAllTests, func(d *deploy.Deployment) {
-	csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil)
+	csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil, nil)
 
 	// List of testSuites to be added below.
 	var csiTestSuites = []func() storageframework.TestSuite{
@@ -85,7 +105,9 @@ var _ = deploy.DescribeForSome("E2E", deploy.RunAllTests, func(d *deploy.Deploym
 		testsuites.InitVolumeIOTestSuite,
 		testsuites.InitVolumeModeTestSuite,
 		testsuites.InitVolumesTestSuite,
-		dax.InitDaxTestSuite,
+		func() storageframework.TestSuite {
+			return dax.InitDaxTestSuite(true)
+		},
 	}
 
 	if ephemeral.Supported {
@@ -104,7 +126,7 @@ func DefineLateBindingTests(d *deploy.Deployment, f *framework.Framework) {
 		)
 
 		BeforeEach(func() {
-			csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil)
+			csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil, nil)
 			config, cl := csiTestDriver.PrepareTest(f)
 			cleanup = cl
 			sc = csiTestDriver.(storageframework.DynamicPVTestDriver).GetDynamicProvisionStorageClass(config, "ext4")
@@ -224,10 +246,13 @@ func DefineKataTests(d *deploy.Deployment) {
 			"ext4": "deploy/common/pmem-storageclass-ext4-kata.yaml",
 			"xfs":  "deploy/common/pmem-storageclass-xfs-kata.yaml",
 		},
+		nil,
 	)
 	Context("Kata Containers", func() {
 		storageframework.DefineTestSuites(kataDriver, []func() storageframework.TestSuite{
-			dax.InitDaxTestSuite,
+			func() storageframework.TestSuite {
+				return dax.InitDaxTestSuite(true)
+			},
 		})
 	})
 }

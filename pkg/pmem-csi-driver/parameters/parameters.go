@@ -17,6 +17,7 @@ import (
 
 type Persistency string
 type Origin int
+type Usage string
 
 // Beware of API and backwards-compatibility breaking when changing these string constants!
 const (
@@ -26,6 +27,11 @@ const (
 	PersistencyModel = "persistencyModel"
 	Size             = "size"
 	DeviceMode       = "deviceMode"
+
+	// Added in PMEM-CSI 1.1.0.
+	UsageModel           = "usage"
+	UsageAppDirect Usage = "AppDirect"
+	UsageFileIO    Usage = "FileIO"
 
 	// Kubernetes v1.16+ adds this key to NodePublishRequest.VolumeContext
 	// while provisioning ephemeral volume.
@@ -58,6 +64,7 @@ var valid = map[Origin][]string{
 	CreateVolumeOrigin: []string{
 		EraseAfter,
 		KataContainers,
+		UsageModel,
 		PersistencyModel,
 	},
 
@@ -65,6 +72,7 @@ var valid = map[Origin][]string{
 	EphemeralVolumeOrigin: []string{
 		EraseAfter,
 		KataContainers,
+		UsageModel,
 		PodInfoPrefix,
 		Size,
 	},
@@ -78,6 +86,7 @@ var valid = map[Origin][]string{
 		EraseAfter,
 		KataContainers,
 		PersistencyModel,
+		UsageModel,
 
 		Name,
 		PodInfoPrefix,
@@ -89,6 +98,7 @@ var valid = map[Origin][]string{
 	NodeVolumeOrigin: []string{
 		EraseAfter,
 		KataContainers,
+		UsageModel,
 		Name,
 		PersistencyModel,
 		Size,
@@ -107,6 +117,7 @@ type Volume struct {
 	Persistency    *Persistency
 	Size           *int64
 	DeviceMode     *api.DeviceMode
+	Usage          *Usage
 }
 
 // VolumeContext represents the same settings as a string map.
@@ -160,6 +171,15 @@ func Parse(origin Origin, stringmap map[string]string) (Volume, error) {
 				return result, fmt.Errorf("parameter %q: failed to parse %q as boolean: %v", key, value, err)
 			}
 			result.KataContainers = &b
+		case UsageModel:
+			u := Usage(value)
+			switch u {
+			case UsageAppDirect, UsageFileIO:
+				result.Usage = &u
+			case "":
+			default:
+				return result, fmt.Errorf("parameter %q: unknown value: %s", key, value)
+			}
 		case Size:
 			quantity, err := resource.ParseQuantity(value)
 			if err != nil {
@@ -201,6 +221,10 @@ func Parse(origin Origin, stringmap map[string]string) (Volume, error) {
 		return result, fmt.Errorf("required parameter %q not specified", Size)
 	}
 
+	if result.GetKataContainers() && result.GetUsage() != UsageAppDirect {
+		return result, fmt.Errorf("Kata Container support and usage %q are mutually exclusive", result.GetUsage())
+	}
+
 	return result, nil
 }
 
@@ -234,6 +258,9 @@ func (v Volume) ToContext() VolumeContext {
 	}
 	if v.DeviceMode != nil {
 		result[DeviceMode] = string(*v.DeviceMode)
+	}
+	if v.Usage != nil {
+		result[UsageModel] = string(*v.Usage)
 	}
 
 	return result
@@ -280,4 +307,11 @@ func (v Volume) GetDeviceMode() api.DeviceMode {
 	}
 
 	return ""
+}
+
+func (v Volume) GetUsage() Usage {
+	if v.Usage != nil {
+		return *v.Usage
+	}
+	return UsageAppDirect
 }

@@ -183,7 +183,9 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 			return nil, err
 		}
 		srcPath = device.Path
-		mountFlags = append(mountFlags, daxMountFlag)
+		if v.GetUsage() == parameters.UsageAppDirect {
+			mountFlags = append(mountFlags, daxMountFlag)
+		}
 	} else {
 		// Validate parameters.
 		v, err := parameters.Parse(parameters.PersistentVolumeOrigin, req.GetVolumeContext())
@@ -527,6 +529,11 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		requestedFsType = defaultFilesystem
 	}
 
+	v, err := parameters.Parse(parameters.PersistentVolumeOrigin, req.GetVolumeContext())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "persistent volume context: "+err.Error())
+	}
+
 	// Serialize by VolumeId
 	volumeMutex.LockKey(req.GetVolumeId())
 	defer func() {
@@ -572,7 +579,9 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		}
 	}
 
-	mountOptions = append(mountOptions, daxMountFlag)
+	if v.GetUsage() == parameters.UsageAppDirect {
+		mountOptions = append(mountOptions, daxMountFlag)
+	}
 
 	if err = ns.mount(ctx, device.Path, stagingtargetPath, mountOptions, false /* raw block */); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())

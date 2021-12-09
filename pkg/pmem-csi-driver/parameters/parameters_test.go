@@ -21,6 +21,8 @@ func TestParameters(t *testing.T) {
 	normal := PersistencyNormal
 	gig := "1Gi"
 	gigNum := int64(1 * 1024 * 1024 * 1024)
+	appDirect := UsageAppDirect
+	fileIO := UsageFileIO
 
 	tests := []struct {
 		name       string
@@ -67,6 +69,45 @@ func TestParameters(t *testing.T) {
 				"foo": "bar",
 			},
 			err: "parameter \"foo\" invalid in this context",
+		},
+
+		// Usage values.
+		{
+			name:   "invalid-usage",
+			origin: CreateVolumeOrigin,
+			stringmap: VolumeContext{
+				UsageModel: "Foo",
+			},
+			err: "parameter \"usage\": unknown value: Foo",
+		},
+		{
+			name:   "invalid-kata-containers",
+			origin: CreateVolumeOrigin,
+			stringmap: VolumeContext{
+				UsageModel:     "FileIO",
+				KataContainers: "true",
+			},
+			err: "Kata Container support and usage \"FileIO\" are mutually exclusive",
+		},
+		{
+			name:   "valid-usage-app-direct",
+			origin: CreateVolumeOrigin,
+			stringmap: VolumeContext{
+				UsageModel: "AppDirect",
+			},
+			parameters: Volume{
+				Usage: &appDirect,
+			},
+		},
+		{
+			name:   "valid-usage-file-io",
+			origin: CreateVolumeOrigin,
+			stringmap: VolumeContext{
+				UsageModel: "FileIO",
+			},
+			parameters: Volume{
+				Usage: &fileIO,
+			},
 		},
 
 		// Parse errors for size.

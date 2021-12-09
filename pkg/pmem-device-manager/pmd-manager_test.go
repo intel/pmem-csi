@@ -17,6 +17,7 @@ import (
 
 	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
+	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -90,7 +91,7 @@ func runTests(mode string) {
 	It("Should create a new device", func() {
 		name := "test-dev-new"
 		size := uint64(2) * 1024 * 1024 // 2Mb
-		actual, err := dm.CreateDevice(ctx, name, size)
+		actual, err := dm.CreateDevice(ctx, name, size, parameters.UsageAppDirect)
 		Expect(err).Should(BeNil(), "Failed to create new device")
 		Expect(actual).Should(BeNumerically(">=", size), "device at least as large as requested")
 
@@ -106,7 +107,7 @@ func runTests(mode string) {
 	It("Should support recreating a device", func() {
 		name := "test-dev"
 		size := uint64(2) * 1024 * 1024 // 2Mb
-		actual, err := dm.CreateDevice(ctx, name, size)
+		actual, err := dm.CreateDevice(ctx, name, size, parameters.UsageAppDirect)
 		Expect(err).Should(BeNil(), "Failed to create new device")
 		Expect(actual).Should(BeNumerically(">=", size), "device at least as large as requested")
 
@@ -122,7 +123,7 @@ func runTests(mode string) {
 		Expect(err).Should(BeNil(), "Failed to delete device")
 		cleanupList[name] = false
 
-		actual, err = dm.CreateDevice(ctx, name, size)
+		actual, err = dm.CreateDevice(ctx, name, size, parameters.UsageAppDirect)
 		Expect(err).Should(BeNil(), "Failed to recreate the same device")
 		Expect(actual).Should(BeNumerically(">=", size), "device at least as large as requested")
 		cleanupList[name] = true
@@ -151,7 +152,7 @@ func runTests(mode string) {
 		for i := 1; i <= max_devices; i++ {
 			name := fmt.Sprintf("list-dev-%d", i)
 			sizes[name] = uint64(rand.Intn(15)+1) * 1024 * 1024
-			actual, err := dm.CreateDevice(ctx, name, sizes[name])
+			actual, err := dm.CreateDevice(ctx, name, sizes[name], parameters.UsageAppDirect)
 			Expect(err).Should(BeNil(), "Failed to create new device")
 			Expect(actual).Should(BeNumerically(">=", sizes[name]), "device at least as large as requested")
 			cleanupList[name] = true
@@ -195,7 +196,7 @@ func runTests(mode string) {
 	It("Should delete devices", func() {
 		name := "delete-dev"
 		size := uint64(2) * 1024 * 1024 // 2Mb
-		actual, err := dm.CreateDevice(ctx, name, size)
+		actual, err := dm.CreateDevice(ctx, name, size, parameters.UsageAppDirect)
 		Expect(err).Should(BeNil(), "Failed to create new device")
 		Expect(actual).Should(BeNumerically(">=", size), "device at least as large as requested")
 		cleanupList[name] = true

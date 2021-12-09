@@ -515,9 +515,9 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
            "
     } } finally {
         echo "Writing cluster state and kubelet logs into files."
-        sh "_work/${env.CLUSTER}/ssh.0 kubectl get nodes -o wide > joblog-${BUILD_TAG}-nodestate-${kubernetesVersion}.log"
-        sh "_work/${env.CLUSTER}/ssh.0 kubectl get pods --all-namespaces -o wide > joblog-${BUILD_TAG}-podstate-${kubernetesVersion}.log"
-        sh "for cmd in `ls _work/${env.CLUSTER}/ssh.*`; do \$cmd sudo journalctl -u kubelet >> joblog-${BUILD_TAG}-kubeletlogs-${kubernetesVersion}.log; done"
+        sh "_work/${env.CLUSTER}/ssh.0 kubectl get nodes -o wide > joblog-${BUILD_TAG}-${kubernetesVersion}-nodestate.log"
+        sh "_work/${env.CLUSTER}/ssh.0 kubectl get pods --all-namespaces -o wide > joblog-${BUILD_TAG}-${kubernetesVersion}-podstate.log"
+        sh "for cmd in `ls _work/${env.CLUSTER}/ssh.*`; do suffix=`basename \$cmd | sed -e s/^ssh.//`; \$cmd sudo journalctl -u kubelet > joblog-${BUILD_TAG}-${kubernetesVersion}-kubelet.\${suffix}.log; \$cmd sudo journalctl > joblog-${BUILD_TAG}-${kubernetesVersion}-journal-\${suffix}.log; done"
         // Each test run produces junit_*.xml files with testsuite name="PMEM E2E suite".
         // To make test names unique in the Jenkins UI, we rename that test suite per run,
         // mangle the <testcase name="..." classname="..."> such that

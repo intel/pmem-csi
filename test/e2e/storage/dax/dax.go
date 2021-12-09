@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"regexp"
 	"strings"
 
 	v1 "k8s.io/api/core/v1"
@@ -40,13 +41,14 @@ import (
 )
 
 type daxTestSuite struct {
-	tsInfo storageframework.TestSuiteInfo
+	tsInfo       storageframework.TestSuiteInfo
+	daxSupported bool
 }
 
 var _ storageframework.TestSuite = &daxTestSuite{}
 
 // InitDaxTestSuite returns daxTestSuite that implements TestSuite interface
-func InitDaxTestSuite() storageframework.TestSuite {
+func InitDaxTestSuite(daxSupported bool) storageframework.TestSuite {
 	suite := &daxTestSuite{
 		tsInfo: storageframework.TestSuiteInfo{
 			Name: "dax",
@@ -58,6 +60,7 @@ func InitDaxTestSuite() storageframework.TestSuite {
 				storageframework.BlockVolModeDynamicPV,
 			},
 		},
+		daxSupported: daxSupported,
 	}
 	if ephemeral.Supported {
 		suite.tsInfo.TestPatterns = append(suite.tsInfo.TestPatterns,
@@ -84,10 +87,6 @@ type local struct {
 	root     string
 }
 
-const (
-	daxCheckBinary = "_work/pmem-dax-check"
-)
-
 func (p *daxTestSuite) DefineTests(driver storageframework.TestDriver, pattern storageframework.TestPattern) {
 	var l local
 
@@ -95,16 +94,6 @@ func (p *daxTestSuite) DefineTests(driver storageframework.TestDriver, pattern s
 
 	init := func() {
 		l = local{}
-
-		// Build pmem-dax-check helper binary.
-		l.root = os.Getenv("REPO_ROOT")
-		build := exec.Command("/bin/sh", "-c", os.Getenv("GO")+" build -o "+daxCheckBinary+" ./test/cmd/pmem-dax-check")
-		build.Stdout = GinkgoWriter
-		build.Stderr = GinkgoWriter
-		build.Dir = l.root
-		By("Compiling with: " + strings.Join(build.Args, " "))
-		err := build.Run()
-		framework.ExpectNoError(err, "compile ./test/cmd/pmem-dax-check")
 
 		// Now do the more expensive test initialization.
 		l.config, l.testCleanup = driver.PrepareTest(f)
@@ -125,11 +114,16 @@ func (p *daxTestSuite) DefineTests(driver storageframework.TestDriver, pattern s
 
 	withKataContainers := strings.HasSuffix(driver.GetDriverInfo().Name, "-kata")
 
-	It("should support MAP_SYNC", func() {
+	testName := "should support MAP_SYNC"
+	if !p.daxSupported {
+		testName = "should not support MAP_SYNC"
+	}
+
+	It(testName, func() {
 		init()
 		defer cleanup()
 
-		testDaxInPod(f, l.root, l.resource.Pattern.VolMode, l.resource.VolSource, l.config, withKataContainers)
+		testDaxInPod(f, l.root, l.resource.Pattern.VolMode, l.resource.VolSource, l.config, withKataContainers, p.daxSupported)
 	})
 }
 
@@ -140,8 +134,9 @@ func testDaxInPod(
 	source *v1.VolumeSource,
 	config *storageframework.PerTestConfig,
 	withKataContainers bool,
+	daxSupported bool,
 ) {
-	expectDax := true
+	expectDax := daxSupported
 	if withKataContainers {
 		nodes, err := f.ClientSet.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{
 			LabelSelector: "katacontainers.io/kata-runtime=true",
@@ -351,14 +346,109 @@ func testDax(
 	}
 
 	By("checking that missing DAX support is detected")
-	pmempod.RunInPod(f, root, []string{daxCheckBinary}, "/tmp/"+path.Base(daxCheckBinary)+" /tmp/no-dax; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
+	pmempod.RunInPod(f, root, nil, "/usr/local/bin/pmem-dax-check /tmp/no-dax; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
 
 	if expectDax {
 		By("checking volume for DAX support")
-		pmempod.RunInPod(f, root, []string{daxCheckBinary}, "lsblk; mount | grep /mnt; /tmp/"+path.Base(daxCheckBinary)+" /mnt/daxtest", ns, pod.Name, containerName)
+		pmempod.RunInPod(f, root, nil, "lsblk; mount | grep /mnt; /usr/local/bin/pmem-dax-check /mnt/daxtest", ns, pod.Name, containerName)
 	} else {
 		By("checking volume for missing DAX support")
-		pmempod.RunInPod(f, root, []string{daxCheckBinary}, "lsblk; mount | grep /mnt; /tmp/"+path.Base(daxCheckBinary)+" /mnt/daxtest; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
+		stdout, _ := pmempod.RunInPod(f, root, nil, "ndctl list -NR; lsblk; mount | grep /mnt; /usr/local/bin/pmem-dax-check /mnt/daxtest; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
+
+		// Example output for LVM:
+		// {
+		//   "regions":[
+		//     {
+		//       "dev":"region0",
+		//       "size":68719476736,
+		//       "align":16777216,
+		//       "available_size":34359738368,
+		//       "max_available_extent":34359738368,
+		//       "type":"pmem",
+		//       "iset_id":10248187106440278,
+		//       "persistence_domain":"unknown",
+		//       "namespaces":[
+		//         {
+		//           "dev":"namespace0.0",
+		//           "mode":"fsdax",
+		//           "map":"dev",
+		//           "size":33820770304,
+		//           "uuid":"fc19e441-5436-11ec-a262-d24c0cef132a",
+		//           "sector_size":512,
+		//           "align":2097152,
+		//           "blockdev":"pmem0",
+		//           "name":"pmem-csi"
+		//         }
+		//       ]
+		//     }
+		//   ]
+		// }
+		// NAME                                                                                   MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+		// vda                                                                                    252:0    0  400G  0 disk
+		// `-vda1                                                                                 252:1    0  400G  0 part /etc/resolv.conf
+		// vdb                                                                                    252:16   0  372K  0 disk
+		// pmem0                                                                                  259:0    0 31.5G  0 disk
+		// `-ndbus0region0fsdax-pvc--9c--469c9c0315f43b4fed4dea2e3cfb161aa785745f25fbd3d87fb707b3 253:0    0  112M  0 lvm  /mnt
+		// ...
+		//
+		// And for direct mode:
+		// {
+		//   "regions":[
+		//     {
+		//       "dev":"region0",
+		//       "size":68719476736,
+		//       "align":16777216,
+		//       "available_size":34242297856,
+		//       "max_available_extent":34242297856,
+		//       "type":"pmem",
+		//       "iset_id":10248187106440278,
+		//       "persistence_domain":"unknown",
+		//       "namespaces":[
+		//         {
+		//           "dev":"namespace0.1",
+		//           "mode":"sector",
+		//           "size":116244480,
+		//           "uuid":"8de85ee4-543f-11ec-926c-fac81ab79323",
+		//           "sector_size":4096,
+		//           "blockdev":"pmem0.1s",
+		//           "name":"pvc-da-09a5800f57d8dd95b39340a51d0d55b988758c61e48284e172e64590"
+		//         },
+		//         {
+		//           "dev":"namespace0.0",
+		//           "mode":"fsdax",
+		//           "map":"dev",
+		//           "size":33820770304,
+		//           "uuid":"fc1ec450-5436-11ec-98c0-9e2e2f0fefae",
+		//           "sector_size":512,
+		//           "align":2097152,
+		//           "blockdev":"pmem0",
+		//           "name":"pmem-csi"
+		//         }
+		//       ]
+		//     }
+		//   ]
+		// }
+		// NAME     MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
+		// vda      252:0    0   400G  0 disk
+		// `-vda1   252:1    0   400G  0 part /etc/resolv.conf
+		// vdb      252:16   0   372K  0 disk
+		// pmem0    259:0    0  31.5G  0 disk
+		// pmem0.1s 259:1    0 110.9M  0 disk /mnt
+		// ...
+
+		// If /mnt is on a namespace, we can check that it has sector mode.
+		m := regexp.MustCompile(`(?m)^(\S+).*(lvm|disk|loop)\s+/mnt$`).FindStringSubmatch(stdout)
+		if m == nil {
+			framework.Failf("expect line about /mnt, did not find it in:\n%s", stdout)
+		}
+		switch m[2] {
+		case "lvm", "loop":
+			// Not direct mode or a runtime like Kata Containers.
+		case "disk":
+			if !strings.HasSuffix(m[1], "s") {
+				framework.Failf("expected sector namespace for mount point (like pmem0.1s), got instead: %s", m[0])
+			}
+		}
 	}
 
 	// Data written in a container running under Kata Containers
