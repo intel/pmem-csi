@@ -100,7 +100,7 @@ management](docs/DEVELOPMENT.md#release-management).
 
 Click the image to watch the animated demo on asciinema.org:
 
-[![asciicast](https://asciinema.org/a/4M5PSwbYkaXs0dPHYUIVbakqB.svg)](https://asciinema.org/a/4M5PSwbYkaXs0dPHYUIVbakqB)
+[![asciicast](https://asciinema.org/a/Bz0KrHGgwHMSokekheZazDR2m.svg)](https://asciinema.org/a/Bz0KrHGgwHMSokekheZazDR2m)
 
 ## License
 
