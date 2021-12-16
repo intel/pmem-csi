@@ -73,8 +73,8 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 
 							ip := pod.Status.PodIP
 							portNum := port.ContainerPort
-							Expect(ip).ToNot(BeEmpty(), "have pod IP")
-							Expect(portNum).ToNot(Equal(0), "have container port")
+							Expect(ip).ToNot(BeEmpty(), "have pod IP for pod %s", pod)
+							Expect(portNum).ToNot(Equal(0), "have container port for pod %s", pod)
 
 							url := fmt.Sprintf("http://%s.%s:%d/metrics",
 								pod.Namespace, pod.Name, port.ContainerPort)
@@ -91,7 +91,7 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 								return
 							}
 							data, err := ioutil.ReadAll(resp.Body)
-							framework.ExpectNoError(err, "read GET response")
+							framework.ExpectNoError(err, "read GET response for pod %s and url %s", pod, url)
 							name := pod.Name + "/" + container.Name
 							if isPmemCSI {
 								Expect(data).To(ContainSubstring("build_info"), name)
@@ -116,7 +116,7 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 						}
 					}
 				}
-				Expect(numPorts).NotTo(Equal(0), "at least one container should have a 'metrics' port")
+				Expect(numPorts).NotTo(Equal(0), "at least one container should have a 'metrics' port in pod %s", pod)
 			}
 			Expect(numPods).NotTo(Equal(0), "at least one container should have a 'metrics' port")
 		}
@@ -133,7 +133,7 @@ var _ = deploy.Describe("direct-testing", "direct-testing-metrics", "", func(d *
 				return strings.Join(InterceptGomegaFailures(func() {
 					testData(simple, pods)
 				}), "\n")
-			}, "10s", "1s").Should(BeEmpty())
+			}, "60s", "1s").Should(BeEmpty())
 		}
 
 		It("full", func() {
