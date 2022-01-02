@@ -1246,7 +1246,7 @@ func EnsureDeploymentNow(f *framework.Framework, deployment *Deployment) {
 		// generated oln-bundles under /deploy in the source tree.
 		if deployment.HasOLM {
 			make := exec.Command("make", "operator-generate-bundle", "VERSION="+tag, "REPO_ROOT="+workRoot)
-			make.Dir = root
+			make.Dir = workRoot
 			make.Env = env
 			_, err := pmemexec.Run(ctx, make)
 			framework.ExpectNoError(err, "%s: generate bundle for operator version %s", deployment.Name(), deployment.Version)
