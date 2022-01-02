@@ -129,7 +129,7 @@ func (p *daxTestSuite) DefineTests(driver storageframework.TestDriver, pattern s
 		init()
 		defer cleanup()
 
-		testDaxInPod(f, l.root, l.resource.Pattern.VolMode, l.resource.VolSource, l.config, withKataContainers)
+		testDaxInPod(f, l.root, l.resource.Pattern.VolMode, l.resource.VolSource, l.config, withKataContainers, l.resource.Pattern.FsType)
 	})
 }
 
@@ -140,6 +140,7 @@ func testDaxInPod(
 	source *v1.VolumeSource,
 	config *storageframework.PerTestConfig,
 	withKataContainers bool,
+	fstype string,
 ) {
 	expectDax := true
 	if withKataContainers {
@@ -156,11 +157,19 @@ func testDaxInPod(
 		}
 	}
 
+	// Workaround for https://github.com/kubernetes/kubernetes/issues/107286:
+	// the storage framework should set FSType but doesn't.
+	if source.CSI != nil &&
+		source.CSI.FSType == nil &&
+		fstype != "" {
+		source.CSI.FSType = &fstype
+	}
+
 	pod := CreatePod(f, "dax-volume-test", volumeMode, source, config, withKataContainers)
 	defer func() {
 		DeletePod(f, pod)
 	}()
-	checkWithNormalRuntime := testDax(f, pod, root, volumeMode, source, withKataContainers, expectDax)
+	checkWithNormalRuntime := testDax(f, pod, root, volumeMode, source, withKataContainers, expectDax, fstype)
 	DeletePod(f, pod)
 	if checkWithNormalRuntime {
 		testDaxOutside(f, pod, root)
@@ -341,6 +350,7 @@ func testDax(
 	source *v1.VolumeSource,
 	withKataContainers bool,
 	expectDax bool,
+	fstype string,
 ) bool {
 	ns := f.Namespace.Name
 	containerName := pod.Spec.Containers[0].Name
@@ -356,6 +366,11 @@ func testDax(
 	if expectDax {
 		By("checking volume for DAX support")
 		pmempod.RunInPod(f, root, []string{daxCheckBinary}, "lsblk; mount | grep /mnt; /tmp/"+path.Base(daxCheckBinary)+" /mnt/daxtest", ns, pod.Name, containerName)
+		if fstype == "xfs" {
+			By("checking volume for extsize 2m")
+			// "xfs_io -c extsize" prints "[2097152] /mnt".
+			pmempod.RunInPod(f, root, nil, "xfs_io -c extsize /mnt | tee /dev/stderr | grep -q -w 2097152", ns, pod.Name, containerName)
+		}
 	} else {
 		By("checking volume for missing DAX support")
 		pmempod.RunInPod(f, root, []string{daxCheckBinary}, "lsblk; mount | grep /mnt; /tmp/"+path.Base(daxCheckBinary)+" /mnt/daxtest; if [ $? -ne 1 ]; then echo should have reported missing DAX >&2; exit 1; fi", ns, pod.Name, containerName)
