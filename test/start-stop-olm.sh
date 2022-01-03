@@ -85,6 +85,7 @@ if [ $cmd == install ]; then
             # checks for.
             ${BIN_DIR}/operator-sdk olm uninstall
             ${KUBECTL} delete -f https://github.com/operator-framework/operator-lifecycle-manager/releases/download/${OLM_VERSION}/olm.yaml
+            ${KUBECTL} delete -f https://github.com/operator-framework/operator-lifecycle-manager/releases/download/${OLM_VERSION}/crds.yaml
             ${KUBECTL} delete ns olm
         fi
     done
