@@ -30,6 +30,7 @@ import (
 	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	"github.com/intel/pmem-csi/pkg/volumepathhandler"
+	"github.com/intel/pmem-csi/pkg/xfs"
 )
 
 const (
@@ -285,12 +286,7 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 	}
 
 	if ephemeral && fsType == "xfs" {
-		// FS was created only in ephemeral case.
-		// Only if created filesytem and it was XFS:
-		// Tune XFS file system to serve huge pages:
-		// Set file system extent size to 2 MiB sized and aligned block allocations.
-		_, err := pmemexec.RunCommand(ctx, "xfs_io", "-c", "extsize 2m", hostMount)
-		if err != nil {
+		if err := xfs.ConfigureFS(hostMount); err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
@@ -587,11 +583,8 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	if existingFsType == "" && requestedFsType == "xfs" {
-		// Only if created a new filesytem and it was XFS:
-		// Align XFS file system for hugepages
-		_, err := pmemexec.RunCommand(ctx, "xfs_io", "-c", "extsize 2m", stagingtargetPath)
-		if err != nil {
+	if requestedFsType == "xfs" {
+		if err := xfs.ConfigureFS(stagingtargetPath); err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
