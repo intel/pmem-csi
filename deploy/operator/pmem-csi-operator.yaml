@@ -188,7 +188,7 @@ spec:
           value: pmem-csi-operator
         - name: GODEBUG
           value: x509ignoreCN=0
-        image: intel/pmem-csi-driver:v1.0.1
+        image: intel/pmem-csi-driver:v1.0.2
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 5
