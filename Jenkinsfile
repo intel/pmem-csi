@@ -115,23 +115,6 @@ pipeline {
             }
         }
 
-        stage('docsite') {
-            steps {
-                sh "${RunInBuilder()} ${env.BUILD_CONTAINER} env GITHUB_SHA=${GIT_COMMIT} GITHUB_REPOSITORY=${SourceRepo()} make vhtml"
-                publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: false, reportDir: '_output/html', reportFiles: 'index.html', reportName: 'Doc Site', reportTitles: ''])
-            }
-        }
-
-        stage('make test') {
-            options {
-                timeout(time: 40, unit: "MINUTES")
-            }
-
-            steps {
-                sh "${RunInBuilder()} ${env.BUILD_CONTAINER} make test"
-            }
-        }
-
         stage('Build test image') {
             options {
                 timeout(time: 60, unit: "MINUTES")
@@ -180,10 +163,16 @@ pipeline {
         //   (more tests, runs longer, thus gets to use the existing worker)
         stage('Testing') {
             parallel {
-                stage('1.22') {
+                stage('coverage') {
                     steps {
+                        sh "make kustomize KUSTOMIZE_WITH_COVERAGE=true"
+
                         // Skip production, i.e. run testing.
                         TestInVM("", "fedora", "", "1.22", "Top.Level..[[:alpha:]]*-production[[:space:]]")
+
+                        sh "make _work/coverage.html _work/coverage.txt"
+                        sh "cat _work/coverage.txt"
+                        publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: true, reportDir: '_work', reportFiles: 'coverage.html', reportName: 'Code Coverage', reportTitles: ''])
                     }
                 }
 
@@ -213,6 +202,10 @@ pipeline {
                     }
                 }
                 stage('1.19') {
+                    when {
+		        beforeAgent true
+		        not { changeRequest() }
+                    }
                     agent {
                         label "pmem-csi"
                     }
