@@ -165,14 +165,16 @@ pipeline {
             parallel {
                 stage('coverage') {
                     steps {
-                        sh "make kustomize KUSTOMIZE_WITH_COVERAGE=true"
+                        sh "${RunInBuilder()} -e CLUSTER=${env.CLUSTER} ${env.BUILD_CONTAINER} make kustomize KUSTOMIZE_WITH_COVERAGE=true"
 
-                        // Skip production, i.e. run testing.
-                        TestInVM("", "fedora", "", "1.22", "Top.Level..[[:alpha:]]*-production[[:space:]]")
-
-                        sh "make _work/coverage.html _work/coverage.txt"
-                        sh "cat _work/coverage.txt"
-                        publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: true, reportDir: '_work', reportFiles: 'coverage.html', reportName: 'Code Coverage', reportTitles: ''])
+                        try {
+                            // Skip production, i.e. run testing.
+                            TestInVM("", "fedora", "", "1.22", "Top.Level..[[:alpha:]]*-production[[:space:]]")
+                        } finally {
+                            sh "${RunInBuilder()} -e CLUSTER=${env.CLUSTER} ${env.BUILD_CONTAINER} make _work/coverage/coverage.html _work/coverage/coverage.txt"
+                            sh "cat _work/coverage/coverage.txt"
+                            publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: true, reportDir: '_work/coverage', reportFiles: 'coverage.html', reportName: 'Code Coverage', reportTitles: ''])
+                        }
                     }
                 }
 
