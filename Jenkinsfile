@@ -499,7 +499,9 @@ void TestInVM(worker, coverage, distro, distroVersion, kubernetesVersion, skipIf
                            done && \
                            testrun=\$(echo '${distro}-${distroVersion}-${coverage}${kubernetesVersion}' | sed -e s/--*/-/g | tr . _ ) && \
                            make test_e2e TEST_E2E_REPORT_DIR=${WORKSPACE}/build/reports.tmp/\$testrun \
-                                         TEST_E2E_SKIP=\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]@${skipIfPR}; fi) \
+                                         TEST_E2E_SKIP=\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]@${skipIfPR}; elif \
+                                                          [ \"${coverage}\" ]; then echo Top.Level..[[:alpha:]]*-operator-direct@Top.Level..[[:alpha:]]*-operator-lvm@Top.Level..[[:alpha:]]*-olm; \
+                                                          fi) \
                            ') 2>&1 | tee joblog-${BUILD_TAG}-test-${coverage}${kubernetesVersion}.log | grep --line-buffered -E -e 'checking for test|Passed|FAIL:|^ERROR' \
            "
     } } finally {
@@ -543,12 +545,12 @@ void TestInVM(worker, coverage, distro, distroVersion, kubernetesVersion, skipIf
             // The tag ensures that reports from different jobs get merged.
             // https://plugins.jenkins.io/code-coverage-api/#plugin-content-reports-combining-support
             // works, no source code:   publishCoverage adapters: [cobertura(coberturaReportFile: '_work/coverage/coverage.xml')], tag: 't'
-            // Source code and coverage file must be in the same directory because paths are relative ("github.com/intel/...").
-            sh "cp _work/coverage/coverage.xml ../../.."
-            publishCoverage adapters: [coberturaAdapter(coberturaReportFile: '../../../coverage.xml')], tag: 't'
+            // Fix relative paths ("github.com/intel/pmem-csi/...").
+            sh "sed -i -e 's;filename=\";filename=\"../../../;g' _work/coverage/coverage.xml"
+            publishCoverage adapters: [coberturaAdapter(coberturaReportFile: '_work/coverage/coverage.xml')], tag: 't'
 
             // Cannot merge, but nicer diagram?
-            cobertura coberturaReportFile: '../../../coverage.xml', enableNewApi: true // , lineCoverageTargets: '80, 60, 70'
+            cobertura coberturaReportFile: '_work/coverage/coverage.xml', enableNewApi: true // , lineCoverageTargets: '80, 60, 70'
         }
     }
 }
