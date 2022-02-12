@@ -547,7 +547,7 @@ void TestInVM(worker, coverage, distro, distroVersion, kubernetesVersion, skipIf
             // works, no source code:   publishCoverage adapters: [cobertura(coberturaReportFile: '_work/coverage/coverage.xml')], tag: 't'
             // Fix relative paths ("github.com/intel/pmem-csi/...").
             sh "sed -i -e 's;filename=\";filename=\"../../../;g' _work/coverage/coverage.xml"
-            publishCoverage adapters: [coberturaAdapter(coberturaReportFile: '_work/coverage/coverage.xml')], tag: 't'
+            publishCoverage adapters: [coberturaAdapter(path: '_work/coverage/coverage.xml')], tag: 't'
 
             // Cannot merge, but nicer diagram?
             cobertura coberturaReportFile: '_work/coverage/coverage.xml', enableNewApi: true // , lineCoverageTargets: '80, 60, 70'
