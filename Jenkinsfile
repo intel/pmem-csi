@@ -540,11 +540,15 @@ void TestInVM(worker, coverage, distro, distroVersion, kubernetesVersion, skipIf
             // https://www.jenkins.io/doc/pipeline/steps/cobertura/
             sh "${RunInBuilder()} -e CLUSTER=${env.CLUSTER} ${env.BUILD_CONTAINER} make _work/coverage/coverage.txt _work/coverage/coverage.xml"
             sh "cat _work/coverage/coverage.txt"
-            // cobertura coberturaReportFile: '_work/coverage/coverage.xml', enableNewApi: true // , lineCoverageTargets: '80, 60, 70'
             // The tag ensures that reports from different jobs get merged.
             // https://plugins.jenkins.io/code-coverage-api/#plugin-content-reports-combining-support
             // works, no source code:   publishCoverage adapters: [cobertura(coberturaReportFile: '_work/coverage/coverage.xml')], tag: 't'
-            publishCoverage adapters: [coberturaAdapter(coberturaReportFile: '_work/coverage/coverage.xml')], tag: 't'
+            // Source code and coverage file must be in the same directory because paths are relative ("github.com/intel/...").
+            sh "cp _work/coverage/coverage.xml ../../.."
+            publishCoverage adapters: [coberturaAdapter(coberturaReportFile: '../../../coverage.xml')], tag: 't'
+
+            // Cannot merge, but nicer diagram?
+            cobertura coberturaReportFile: '../../../coverage.xml', enableNewApi: true // , lineCoverageTargets: '80, 60, 70'
         }
     }
 }
