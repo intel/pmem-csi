@@ -165,14 +165,7 @@ pipeline {
             parallel {
                 stage('coverage') {
                     steps {
-                        sh "${RunInBuilder()} -e CLUSTER=${env.CLUSTER} ${env.BUILD_CONTAINER} make kustomize KUSTOMIZE_WITH_COVERAGE=true"
-                        TestInVM("", "fedora", "", "1.22", "Top.Level..[[:alpha:]]*-production[[:space:]]")
-                        sh "${RunInBuilder()} -e CLUSTER=${env.CLUSTER} ${env.BUILD_CONTAINER} make _work/coverage/coverage.html _work/coverage/coverage.txt _work/coverage/coverage.xml"
-                        sh "cat _work/coverage/coverage.txt"
-                        publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: true, reportDir: '_work/coverage', reportFiles: 'coverage.html', reportName: 'Code Coverage', reportTitles: ''])
-                        // https://stackoverflow.com/questions/36918370/cobertura-code-coverage-report-for-jenkins-pipeline-jobs
-                        // https://www.jenkins.io/doc/pipeline/steps/cobertura/
-                        cobertura coberturaReportFile: '_work/coverage/coverage.xml', enableNewApi: true // , lineCoverageTargets: '80, 60, 70'
+                        TestInVM("", "coverage-", "fedora", "", "1.22", "Top.Level..[[:alpha:]]*-production[[:space:]]")
                     }
                 }
 
@@ -186,7 +179,7 @@ pipeline {
                         label "pmem-csi"
                     }
                     steps {
-                        TestInVM("fedora-1.21", "fedora", "", "1.21", "")
+                        TestInVM("fedora-1.21", "", "fedora", "", "1.21", "")
                     }
                 }
                 stage('1.20') {
@@ -198,7 +191,7 @@ pipeline {
                         label "pmem-csi"
                     }
                     steps {
-                        TestInVM("fedora-1.20", "fedora", "", "1.20", "")
+                        TestInVM("fedora-1.20", "", "fedora", "", "1.20", "")
                     }
                 }
                 stage('1.19') {
@@ -211,7 +204,7 @@ pipeline {
                     }
                     steps {
                         // Skip testing, i.e. run production.
-                        TestInVM("fedora-1.19", "fedora", "", "1.19",  "Top.Level..[[:alpha:]]*-testing[[:space:]]")
+                        TestInVM("fedora-1.19", "", "fedora", "", "1.19",  "Top.Level..[[:alpha:]]*-testing[[:space:]]")
                     }
                 }
             }
@@ -429,9 +422,12 @@ void RestoreEnv() {
         done"
 }
 
-void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
+void TestInVM(worker, coverage, distro, distroVersion, kubernetesVersion, skipIfPR) {
     if (worker) {
         RestoreEnv()
+    }
+    if (coverage) {
+        sh "${RunInBuilder()} -e CLUSTER=${env.CLUSTER} ${env.BUILD_CONTAINER} make kustomize KUSTOMIZE_WITH_COVERAGE=true"
     }
     try { timeout(unit: "HOURS", time: TestTimeoutHours()) {
         /*
@@ -501,10 +497,10 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
                                  done | sed -e \"s/^/\$hostname: /\" ) & \
                                loggers=\"\$loggers \$!\"; \
                            done && \
-                           testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}' | sed -e s/--*/-/g | tr . _ ) && \
+                           testrun=\$(echo '${distro}-${distroVersion}-${coverage}${kubernetesVersion}' | sed -e s/--*/-/g | tr . _ ) && \
                            make test_e2e TEST_E2E_REPORT_DIR=${WORKSPACE}/build/reports.tmp/\$testrun \
                                          TEST_E2E_SKIP=\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]@${skipIfPR}; fi) \
-                           ') 2>&1 | tee joblog-${BUILD_TAG}-test-${kubernetesVersion}.log | grep --line-buffered -E -e 'checking for test|Passed|FAIL:|^ERROR' \
+                           ') 2>&1 | tee joblog-${BUILD_TAG}-test-${coverage}${kubernetesVersion}.log | grep --line-buffered -E -e 'checking for test|Passed|FAIL:|^ERROR' \
            "
     } } finally {
         echo "Writing cluster state and kubelet logs into files."
@@ -538,6 +534,17 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
            done'''
         archiveArtifacts('**/joblog-*')
         junit 'build/reports/**/*.xml'
+
+        if (coverage) {
+            // https://stackoverflow.com/questions/36918370/cobertura-code-coverage-report-for-jenkins-pipeline-jobs
+            // https://www.jenkins.io/doc/pipeline/steps/cobertura/
+            sh "${RunInBuilder()} -e CLUSTER=${env.CLUSTER} ${env.BUILD_CONTAINER} make _work/coverage/coverage.txt _work/coverage/coverage.xml"
+            sh "cat _work/coverage/coverage.txt"
+            // cobertura coberturaReportFile: '_work/coverage/coverage.xml', enableNewApi: true // , lineCoverageTargets: '80, 60, 70'
+            // The tag ensures that reports from different jobs get merged.
+            // https://plugins.jenkins.io/code-coverage-api/#plugin-content-reports-combining-support
+            publishCoverage adapters: [cobertura('_work/coverage/coverage.xml')], tag: 't'
+        }
     }
 }
 
