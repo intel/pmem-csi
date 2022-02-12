@@ -167,9 +167,12 @@ pipeline {
                     steps {
                         sh "${RunInBuilder()} -e CLUSTER=${env.CLUSTER} ${env.BUILD_CONTAINER} make kustomize KUSTOMIZE_WITH_COVERAGE=true"
                         TestInVM("", "fedora", "", "1.22", "Top.Level..[[:alpha:]]*-production[[:space:]]")
-                        sh "${RunInBuilder()} -e CLUSTER=${env.CLUSTER} ${env.BUILD_CONTAINER} make _work/coverage/coverage.html _work/coverage/coverage.txt"
+                        sh "${RunInBuilder()} -e CLUSTER=${env.CLUSTER} ${env.BUILD_CONTAINER} make _work/coverage/coverage.html _work/coverage/coverage.txt _work/coverage/coverage.xml"
                         sh "cat _work/coverage/coverage.txt"
                         publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: true, reportDir: '_work/coverage', reportFiles: 'coverage.html', reportName: 'Code Coverage', reportTitles: ''])
+                        // https://stackoverflow.com/questions/36918370/cobertura-code-coverage-report-for-jenkins-pipeline-jobs
+                        // https://www.jenkins.io/doc/pipeline/steps/cobertura/
+                        cobertura coberturaReportFile: '_work/coverage/coverage.xml', enableNewApi: true // , lineCoverageTargets: '80, 60, 70'
                     }
                 }
 
