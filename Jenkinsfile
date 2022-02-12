@@ -543,12 +543,14 @@ void TestInVM(worker, coverage, distro, distroVersion, kubernetesVersion, skipIf
             // The tag ensures that reports from different jobs get merged.
             // https://plugins.jenkins.io/code-coverage-api/#plugin-content-reports-combining-support
             // works, no source code:   publishCoverage adapters: [cobertura(coberturaReportFile: '_work/coverage/coverage.xml')], tag: 't'
-            // Fix relative paths ("github.com/intel/pmem-csi/...").
-            sh "sed -i -e 's;filename=\";filename=\"../../../;g' _work/coverage/coverage.xml"
-            publishCoverage adapters: [coberturaAdapter(path: '_work/coverage/coverage.xml')], tag: 't'
+            // Simplify relative paths ("github.com/intel/pmem-csi/...").
+            sh "sed -e 's;filename=\"github.com/intel/pmem-csi/;filename=\";g' _work/coverage/coverage.xml >coverage.xml"
+            publishCoverage adapters: [cobertura(coberturaReportFile: 'coverage.xml')], tag: 't'
+            // Didn't work?
+            // publishCoverage adapters: [coberturaAdapter(path: '_work/coverage/coverage.xml')], tag: 't'
 
             // Cannot merge, but nicer diagram?
-            cobertura coberturaReportFile: '_work/coverage/coverage.xml', enableNewApi: true // , lineCoverageTargets: '80, 60, 70'
+            cobertura coberturaReportFile: 'coverage.xml', enableNewApi: true // , lineCoverageTargets: '80, 60, 70'
         }
     }
 }
