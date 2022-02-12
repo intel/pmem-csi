@@ -543,7 +543,7 @@ void TestInVM(worker, coverage, distro, distroVersion, kubernetesVersion, skipIf
             // cobertura coberturaReportFile: '_work/coverage/coverage.xml', enableNewApi: true // , lineCoverageTargets: '80, 60, 70'
             // The tag ensures that reports from different jobs get merged.
             // https://plugins.jenkins.io/code-coverage-api/#plugin-content-reports-combining-support
-            publishCoverage adapters: [cobertura('_work/coverage/coverage.xml')], tag: 't'
+            publishCoverage adapters: [cobertura(path: '_work/coverage/coverage.xml')], tag: 't'
         }
     }
 }
