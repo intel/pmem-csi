@@ -165,7 +165,7 @@ pipeline {
             parallel {
                 stage('coverage') {
                     steps {
-                        TestInVM("", "coverage-", "fedora", "", "1.22", "Top.Level..[[:alpha:]]*-production[[:space:]]")
+                        TestInVM("", "coverage-", "fedora", "", "1.22", "Top.Level..[[:alpha:]]*-production[[:space:]]", "Top.Level..operator-direct@Top.Level..operator-lvm@Top.Level..olm")
                     }
                 }
 
@@ -422,7 +422,7 @@ void RestoreEnv() {
         done"
 }
 
-void TestInVM(worker, coverage, distro, distroVersion, kubernetesVersion, skipIfPR) {
+void TestInVM(worker, coverage, distro, distroVersion, kubernetesVersion, skipIfPR, skipAlways) {
     if (worker) {
         RestoreEnv()
     }
@@ -452,7 +452,7 @@ void TestInVM(worker, coverage, distro, distroVersion, kubernetesVersion, skipIf
         so for now we disable VMX with -vmx.
         */
         sh "#!/bin/bash\n \
-           echo Note: job output is filtered, see joblog-${BUILD_TAG}-test-${kubernetesVersion}.log artifact for full output. && \
+           echo Note: job output is filtered, see joblog-${BUILD_TAG}-test-${coverage}${kubernetesVersion}.log artifact for full output. && \
            set -o pipefail && \
            ( \
            loggers=; \
@@ -499,9 +499,7 @@ void TestInVM(worker, coverage, distro, distroVersion, kubernetesVersion, skipIf
                            done && \
                            testrun=\$(echo '${distro}-${distroVersion}-${coverage}${kubernetesVersion}' | sed -e s/--*/-/g | tr . _ ) && \
                            make test_e2e TEST_E2E_REPORT_DIR=${WORKSPACE}/build/reports.tmp/\$testrun \
-                                         TEST_E2E_SKIP=\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]@${skipIfPR}; elif \
-                                                          [ \"${coverage}\" ]; then echo Top.Level..[[:alpha:]]*-operator-direct@Top.Level..[[:alpha:]]*-operator-lvm@Top.Level..[[:alpha:]]*-olm; \
-                                                          fi) \
+                                         TEST_E2E_SKIP=$(skipAlways)@\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]@${skipIfPR}; fi) \
                            ') 2>&1 | tee joblog-${BUILD_TAG}-test-${coverage}${kubernetesVersion}.log | grep --line-buffered -E -e 'checking for test|Passed|FAIL:|^ERROR' \
            "
     } } finally {
