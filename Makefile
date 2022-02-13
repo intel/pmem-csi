@@ -159,14 +159,21 @@ KUSTOMIZE_INPUT := $(shell [ ! -d deploy/kustomize ] || find deploy/kustomize -t
 # Output files and their corresponding kustomization, in the format <target .yaml>=<kustomization directory>
 KUSTOMIZE :=
 
+# Setting this to any non-empty value before "make kustomize" will enable
+# collection of coverage profiles in all deployments.
+KUSTOMIZE_WITH_COVERAGE =
+ifneq "$(KUSTOMIZE_WITH_COVERAGE)" ""
+KUSTOMIZE_COVERAGE_SUFFIX = -coverage
+endif
+
 # For each supported Kubernetes version, we provide four different flavors.
 # The "testing" flavor of the generated files contains both
 # the loglevel changes but does not enable coverage data collection.
 KUSTOMIZE_KUBERNETES_OUTPUT = \
-    deploy/kubernetes-X.XX/pmem-csi-direct.yaml=deploy/kustomize/kubernetes-base-direct \
-    deploy/kubernetes-X.XX/pmem-csi-lvm.yaml=deploy/kustomize/kubernetes-base-lvm \
-    deploy/kubernetes-X.XX/pmem-csi-direct-testing.yaml=deploy/kustomize/kubernetes-base-direct-testing \
-    deploy/kubernetes-X.XX/pmem-csi-lvm-testing.yaml=deploy/kustomize/kubernetes-base-lvm-testing \
+    deploy/kubernetes-X.XX/pmem-csi-direct.yaml=deploy/kustomize/kubernetes-base-direct$(KUSTOMIZE_COVERAGE_SUFFIX) \
+    deploy/kubernetes-X.XX/pmem-csi-lvm.yaml=deploy/kustomize/kubernetes-base-lvm$(KUSTOMIZE_COVERAGE_SUFFIX) \
+    deploy/kubernetes-X.XX/pmem-csi-direct-testing.yaml=deploy/kustomize/kubernetes-base-direct-testing$(KUSTOMIZE_COVERAGE_SUFFIX) \
+    deploy/kubernetes-X.XX/pmem-csi-lvm-testing.yaml=deploy/kustomize/kubernetes-base-lvm-testing$(KUSTOMIZE_COVERAGE_SUFFIX) \
 
 # Kubernetes versions derived from kubernetes-base.
 #

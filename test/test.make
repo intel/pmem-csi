@@ -188,46 +188,54 @@ _work/.setupcfssl-stamp:
 # Build gocovmerge at a certain revision. Depends on go >= 1.11
 # because we use module support.
 GOCOVMERGE_VERSION=b5bfa59ec0adc420475f97f89b58045c721d761c
-_work/gocovmerge-$(GOCOVMERGE_VERSION):
-	tmpdir=`mktemp -d` && \
-	trap 'rm -r $$tmpdir' EXIT && \
-	cd $$tmpdir && \
-	echo "module foo" >go.mod && \
-	go get github.com/wadey/gocovmerge@$(GOCOVMERGE_VERSION) && \
-	go build -o $(abspath $@) github.com/wadey/gocovmerge
-	ln -sf $(@F) _work/gocovmerge
+_work/gocovmerge-$(GOCOVMERGE_VERSION): check-go-version-$(GO_BINARY)
+	GOBIN=`pwd`/_work go install github.com/wadey/gocovmerge@$(GOCOVMERGE_VERSION)
+	ln -sf gocovmerge  $@
 
-# This is a special target that runs unit and E2E testing and
-# combines the various cover profiles into one. To re-run testing,
-# remove the file or use "make coverage".
+GOCOVER_COBERTURA_VERSION=aaee18c8195c3f2d90e5ef80ca918d265463842a
+_work/gocover-cobertura-$(GOCOVER_COBERTURA_VERSION): check-go-version-$(GO_BINARY)
+	GOBIN=`pwd`/_work go install github.com/t-yuki/gocover-cobertura@$(GOCOVER_COBERTURA_VERSION)
+	ln -sf gocover-cobertura $@
+
+# This is a special target that collects the coverage information from E2E
+# testing (which includes Go unit tests) and combines it into one file.
 #
-# We remove all pmem-csi-driver coverage files
-# before testing, restart the driver, and then collect all
-# files, including the ones written earlier by init containers.
-_work/coverage.out: _work/gocovmerge-$(GOCOVMERGE_VERSION)
-	$(MAKE) start
-	@ echo "removing old pmem-csi-driver coverage information from all nodes"
-	@ for ssh in _work/$(CLUSTER)/ssh.*; do for i in $$($$ssh ls /var/lib/pmem-csi-coverage/pmem-csi-driver* 2>/dev/null); do (set -x; $$ssh rm $$i); done; done
-	@ rm -rf _work/coverage
-	@ mkdir _work/coverage
-	@ go clean -testcache
-	$(subst go test,go test -coverprofile=$(abspath _work/coverage/unit.out) -covermode=atomic,$(RUN_TESTS))
-	$(RUN_E2E)
-	@ echo "killing pmem-csi-driver to flush coverage data"
-	@ for ssh in _work/$(CLUSTER)/ssh.*; do (set -x; $$ssh killall pmem-csi-driver); done
-	@ echo "waiting for all pods to restart"
-	@ while _work/$(CLUSTER)/ssh.0 kubectl get --no-headers pods | grep -q -v Running; do sleep 5; done
+# Beware that "make kustomize KUSTOMIZE_WITH_COVERAGE=true" must have been run
+# before starting tests. This replaces YAML files in "deploy" with versions
+# that support coverage.
+#
+# To ensure that the results of the current driver instance are included, it
+# gets removed first.
+.PHONY: _work/coverage.out
+_work/coverage/coverage.out: _work/gocovmerge-$(GOCOVMERGE_VERSION)
+	@ echo "removing PMEM-CSI to flush coverage data"
+	test/delete-deployment.sh
 	@ echo "collecting coverage data"
-	@ for ssh in _work/$(CLUSTER)/ssh.*; do for i in $$($$ssh ls /var/lib/pmem-csi-coverage/ 2>/dev/null); do (set -x; $$ssh cat /var/lib/pmem-csi-coverage/$$i) >_work/coverage/$$(echo $$ssh | sed -e 's;.*/ssh\.;;').$$i; done; done
-	$< _work/coverage/* >$@
+	@ rm -rf ${@D}
+	@ mkdir -p ${@D}
+	@ node=0; while true; do ssh=_work/$(CLUSTER)/ssh.$$node; if ! [ -e $$ssh ]; then break; fi; for i in $$($$ssh ls /var/lib/pmem-csi-coverage/ 2>/dev/null); do in=/var/lib/pmem-csi-coverage/$$i; out=${@D}/node-$$node.$$i; (set -x; $$ssh sudo cat $$in | tee $$out >/dev/null); done; node=$$((node + 1)); done
+	$< ${@D}/* >$@
 
-_work/coverage.html: _work/coverage.out
+_work/coverage/coverage.html: _work/coverage/coverage.out check-go-version-$(GO_BINARY)
 	$(GO) tool cover -html $< -o $@
 
-_work/coverage.txt: _work/coverage.out check-go-version-$(GO_BINARY)
+_work/coverage/coverage.txt: _work/coverage/coverage.out check-go-version-$(GO_BINARY)
 	$(GO) tool cover -func $< -o $@
 
+# Convert to Cobertura XML for Jenkins.
+_work/coverage/coverage.xml: _work/gocover-cobertura-$(GOCOVER_COBERTURA_VERSION) _work/coverage/coverage.out
+	$<  <_work/coverage/coverage.out >$@
+
+# This runs all steps for coverage profile collection.
+# The Jenkinsfile has its own rules for this.
 .PHONY: coverage
 coverage:
-	@ rm -rf _work/coverage.out
+	@ rm -rf _work/coverage
+	$(MAKE) kustomize KUSTOMIZE_WITH_COVERAGE=true"
+	$(MAKE) start
+	@ echo "removing old PMEM-CSI installation"
+	test/delete-deployment.sh
+	@ echo "removing old pmem-csi-driver coverage information from all nodes"
+	@ for ssh in _work/$(CLUSTER)/ssh.*; do $$ssh sudo rm -f /var/lib/pmem-csi-coverage/pmem-csi-driver* || exit 1; done
+	$(RUN_E2E)
 	$(MAKE) _work/coverage.txt _work/coverage.html

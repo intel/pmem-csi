@@ -68,6 +68,10 @@ pipeline {
         TEST_ETCD_TMPFS = "${WORKSPACE}/_work/${env.CLUSTER}/data/pmem-csi-${env.CLUSTER}-master/etcd-tmpfs"
         TEST_ETCD_VOLUME = "${env.TEST_ETCD_TMPFS}/etcd-volume"
         TEST_ETCD_VOLUME_SIZE = "1073741824" // 1GB
+
+        // Tests that will get skipped when collecting coverage information.
+        // The operator tests fail because the reference files get modified.
+        COVERAGE_SKIP = "Top.Level..operator@Top.Level..olm"
     }
 
     stages {
@@ -166,7 +170,19 @@ pipeline {
                 stage('1.22') {
                     steps {
                         // Skip production, i.e. run testing.
-                        TestInVM("", "fedora", "", "1.22", "Top.Level..[[:alpha:]]*-production[[:space:]]")
+                        TestInVM("", "", "fedora", "", "1.22", "Top.Level..[[:alpha:]]*-production[[:space:]]", "")
+                    }
+                }
+                stage('coverage-1.22') {
+                    when {
+		        beforeAgent true
+		        not { changeRequest() }
+                    }
+                    agent {
+                        label "pmem-csi"
+                    }
+                    steps {
+                        TestInVM("fedora-coverage-1.22", "coverage-", "fedora", "", "1.22", "", "${env.COVERAGE_SKIP}")
                     }
                 }
 
@@ -180,7 +196,7 @@ pipeline {
                         label "pmem-csi"
                     }
                     steps {
-                        TestInVM("fedora-1.21", "fedora", "", "1.21", "")
+                        TestInVM("fedora-1.21", "", "fedora", "", "1.21", "", "")
                     }
                 }
                 stage('1.20') {
@@ -192,7 +208,7 @@ pipeline {
                         label "pmem-csi"
                     }
                     steps {
-                        TestInVM("fedora-1.20", "fedora", "", "1.20", "")
+                        TestInVM("fedora-1.20", "", "fedora", "", "1.20", "", "")
                     }
                 }
                 stage('1.19') {
@@ -201,7 +217,19 @@ pipeline {
                     }
                     steps {
                         // Skip testing, i.e. run production.
-                        TestInVM("fedora-1.19", "fedora", "", "1.19",  "Top.Level..[[:alpha:]]*-testing[[:space:]]")
+                        TestInVM("fedora-1.19", "", "fedora", "", "1.19",  "Top.Level..[[:alpha:]]*-testing[[:space:]]", "")
+                    }
+                }
+                stage('coverage-1.19') {
+                    when {
+		        beforeAgent true
+		        not { changeRequest() }
+                    }
+                    agent {
+                        label "pmem-csi"
+                    }
+                    steps {
+                        TestInVM("fedora-coverage-1.19", "coverage-", "fedora", "", "1.19", "", "${env.COVERAGE_SKIP}")
                     }
                 }
             }
@@ -419,9 +447,12 @@ void RestoreEnv() {
         done"
 }
 
-void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
+void TestInVM(worker, coverage, distro, distroVersion, kubernetesVersion, skipIfPR, skipAlways) {
     if (worker) {
         RestoreEnv()
+    }
+    if (coverage) {
+        sh "${RunInBuilder()} -e CLUSTER=${env.CLUSTER} ${env.BUILD_CONTAINER} make kustomize KUSTOMIZE_WITH_COVERAGE=true"
     }
     try { timeout(unit: "HOURS", time: TestTimeoutHours()) {
         /*
@@ -446,7 +477,7 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
         so for now we disable VMX with -vmx.
         */
         sh "#!/bin/bash\n \
-           echo Note: job output is filtered, see joblog-${BUILD_TAG}-test-${kubernetesVersion}.log artifact for full output. && \
+           echo Note: job output is filtered, see joblog-${BUILD_TAG}-test-${coverage}${kubernetesVersion}.log artifact for full output. && \
            set -o pipefail && \
            ( \
            loggers=; \
@@ -491,10 +522,10 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
                                  done | sed -e \"s/^/\$hostname: /\" ) & \
                                loggers=\"\$loggers \$!\"; \
                            done && \
-                           testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}' | sed -e s/--*/-/g | tr . _ ) && \
+                           testrun=\$(echo '${distro}-${distroVersion}-${coverage}${kubernetesVersion}' | sed -e s/--*/-/g | tr . _ ) && \
                            make test_e2e TEST_E2E_REPORT_DIR=${WORKSPACE}/build/reports.tmp/\$testrun \
-                                         TEST_E2E_SKIP=\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]@${skipIfPR}; fi) \
-                           ') 2>&1 | tee joblog-${BUILD_TAG}-test-${kubernetesVersion}.log | grep --line-buffered -E -e 'checking for test|Passed|FAIL:|^ERROR' \
+                                         TEST_E2E_SKIP=${skipAlways}@\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]@${skipIfPR}; fi) \
+                           ') 2>&1 | tee joblog-${BUILD_TAG}-test-${coverage}${kubernetesVersion}.log | grep --line-buffered -E -e 'checking for test|Passed|FAIL:|^ERROR' \
            "
     } } finally {
         echo "Writing cluster state and kubelet logs into files."
@@ -528,6 +559,30 @@ void TestInVM(worker, distro, distroVersion, kubernetesVersion, skipIfPR) {
            done'''
         archiveArtifacts('**/joblog-*')
         junit 'build/reports/**/*.xml'
+
+        if (coverage) {
+            // https://stackoverflow.com/questions/36918370/cobertura-code-coverage-report-for-jenkins-pipeline-jobs
+            // https://www.jenkins.io/doc/pipeline/steps/cobertura/
+            sh "${RunInBuilder()} -e CLUSTER=${env.CLUSTER} ${env.BUILD_CONTAINER} make _work/coverage/coverage.txt _work/coverage/coverage.xml"
+            sh "cat _work/coverage/coverage.txt"
+            // The tag ensures that reports from different jobs get merged.
+            // https://plugins.jenkins.io/code-coverage-api/#plugin-content-reports-combining-support
+            // works, no source code:   publishCoverage adapters: [cobertura(coberturaReportFile: '_work/coverage/coverage.xml')], tag: 't'
+            // Simplify relative paths ("github.com/intel/pmem-csi/...").
+            // To view source code, Jenkins users must be logged in (https://stackoverflow.com/a/59951809).
+            sh "sed -e 's;filename=\"github.com/intel/pmem-csi/;filename=\";g' _work/coverage/coverage.xml >coverage.xml"
+
+            // The relationship between "Code Coverage API Plugin" and "Cobertura" plugin is not clear.
+            // With just "Code Coverage API Plugin" installed, this here works, but doesn't show source code
+            // (old UI?):
+            // publishCoverage adapters: [cobertura(path: 'coverage.xml')], tag: 't'
+
+            // When both are installed, this here works (note the different coberura parameter!)
+            // and shows source code.
+            publishCoverage adapters: [cobertura(coberturaReportFile: 'coverage.xml')], tag: 't'
+
+            // There is also a "coberturaAdapter". That one hasn't been tested.
+        }
     }
 }
 

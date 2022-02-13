@@ -1,5 +1,5 @@
 bases:
-- ../kubernetes-base-direct-testing/
+- ../kubernetes-base-direct/
 
 patchesJson6902:
 - target:
