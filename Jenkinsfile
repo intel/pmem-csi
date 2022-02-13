@@ -115,23 +115,6 @@ pipeline {
             }
         }
 
-        stage('docsite') {
-            steps {
-                sh "${RunInBuilder()} ${env.BUILD_CONTAINER} env GITHUB_SHA=${GIT_COMMIT} GITHUB_REPOSITORY=${SourceRepo()} make vhtml"
-                publishHTML([allowMissing: false, alwaysLinkToLastBuild: false, keepAll: false, reportDir: '_output/html', reportFiles: 'index.html', reportName: 'Doc Site', reportTitles: ''])
-            }
-        }
-
-        stage('make test') {
-            options {
-                timeout(time: 40, unit: "MINUTES")
-            }
-
-            steps {
-                sh "${RunInBuilder()} ${env.BUILD_CONTAINER} make test"
-            }
-        }
-
         stage('Build test image') {
             options {
                 timeout(time: 60, unit: "MINUTES")
