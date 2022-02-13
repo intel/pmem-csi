@@ -46,7 +46,7 @@ func runGoTest(f *framework.Framework, pkg string) {
 	root := os.Getenv("REPO_ROOT")
 	var err error
 
-	build := exec.Command("/bin/sh", "-c", os.Getenv("TEST_CMD")+" -c -o _work/test.test "+pkg)
+	build := exec.Command("/bin/sh", "-c", os.Getenv("TEST_CMD")+" --cover -covermode=atomic -c -o _work/test.test "+pkg)
 	build.Stdout = GinkgoWriter
 	build.Stderr = GinkgoWriter
 	build.Dir = root
@@ -60,11 +60,28 @@ func runGoTest(f *framework.Framework, pkg string) {
 	Expect(pods.Items).NotTo(BeEmpty(), "have PMEM-CSI pods")
 	pmem := pods.Items[0]
 
+	coverDir := "/var/lib/pmem-csi-coverage"
+	coverFile := strings.ReplaceAll(pkg, "/", "-")
+	if strings.HasPrefix(coverFile, ".") {
+		coverFile = coverFile[1:]
+	}
+
 	By(fmt.Sprintf("Running in PMEM-CSI pod %s", pmem.Name))
 	pod.RunInPod(f, root,
 		[]string{"_work/test.test"},
-		"if /tmp/test.test -h 2>&1 | grep -q ginkgo; then "+
-			"TEST_WORK=_work REPO_ROOT=. /tmp/test.test -ginkgo.v; else "+
-			"TEST_WORK=_work REPO_ROOT=. /tmp/test.test; fi",
+		""+
+			"if [ -d "+coverDir+" ]; then "+
+			"  if /tmp/test.test -h 2>&1 | grep -q ginkgo; then "+
+			"     TEST_WORK=_work REPO_ROOT=. /tmp/test.test -test.coverprofile="+coverDir+"/gotest"+coverFile+".out -ginkgo.v; "+
+			"  else "+
+			"     TEST_WORK=_work REPO_ROOT=. /tmp/test.test -test.coverprofile="+coverDir+"/gotest"+coverFile+".out;"+
+			"  fi;"+
+			"else "+
+			"  if /tmp/test.test -h 2>&1 | grep -q ginkgo; then "+
+			"     TEST_WORK=_work REPO_ROOT=. /tmp/test.test -ginkgo.v; "+
+			"  else "+
+			"     TEST_WORK=_work REPO_ROOT=. /tmp/test.test;"+
+			"  fi;"+
+			"fi",
 		pmem.Namespace, pmem.Name, "pmem-driver")
 }
