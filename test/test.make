@@ -117,7 +117,7 @@ TEST_E2E_SKIP_ALL += direct.*binding.stress.test
 TEST_E2E_SKIP_ALL += $(TEST_E2E_SKIP_$(shell cat _work/$(CLUSTER)/kubernetes.version))
 
 # E2E tests which are to be executed (space separated list of regular expressions, default is all that aren't skipped).
-TEST_E2E_FOCUS =
+TEST_E2E_FOCUS = operator.API.deployment.with.defaults direct-production-image.ipmctl.can.run
 
 foobar:
 	echo TEST_E2E_SKIP_$(shell cat _work/$(CLUSTER)/kubernetes.version)
