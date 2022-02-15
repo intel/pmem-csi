@@ -117,7 +117,7 @@ TEST_E2E_SKIP_ALL += direct.*binding.stress.test
 TEST_E2E_SKIP_ALL += $(TEST_E2E_SKIP_$(shell cat _work/$(CLUSTER)/kubernetes.version))
 
 # E2E tests which are to be executed (space separated list of regular expressions, default is all that aren't skipped).
-TEST_E2E_FOCUS = direct-production-image.ipmctl.can.run direct-production.Driver.AppDirect..Testpattern..CSI.Ephemeral-volume..default.fs...dax.should.support.MAP_SYNC
+TEST_E2E_FOCUS = direct-production.Driver.AppDirect.*xfs.*dax.should.support.MAP_SYNC direct-production.Driver.AppDirect.*ext4.*dax.should.support.MAP_SYNC
 
 foobar:
 	echo TEST_E2E_SKIP_$(shell cat _work/$(CLUSTER)/kubernetes.version)

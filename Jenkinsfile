@@ -182,7 +182,7 @@ pipeline {
                         label "pmem-csi"
                     }
                     steps {
-                        TestInVM("fedora-coverage-1.22", "coverage-", "fedora", "", "1.22", "", "${env.COVERAGE_SKIP}")
+                        TestInVM("fedora-coverage-1.22", "coverage-", "fedora", "", "1.22", "", "${env.COVERAGE_SKIP}@ext4")
                     }
                 }
 
@@ -229,7 +229,7 @@ pipeline {
                         label "pmem-csi"
                     }
                     steps {
-                        TestInVM("fedora-coverage-1.19", "coverage-", "fedora", "", "1.19", "", "${env.COVERAGE_SKIP}")
+                        TestInVM("fedora-coverage-1.19", "coverage-", "fedora", "", "1.19", "", "${env.COVERAGE_SKIP}@xfs")
                     }
                 }
             }
