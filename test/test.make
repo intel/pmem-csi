@@ -185,11 +185,15 @@ _work/.setupcfssl-stamp:
 # Build gocovmerge at a certain revision. Depends on go >= 1.11
 # because we use module support.
 GOCOVMERGE_VERSION=b5bfa59ec0adc420475f97f89b58045c721d761c
+.PHONY: _work/gocovmerge
+_work/gocovmerge: _work/gocovmerge-$(GOCOVMERGE_VERSION)
 _work/gocovmerge-$(GOCOVMERGE_VERSION): check-go-version-$(GO_BINARY)
 	GOBIN=`pwd`/_work go install github.com/wadey/gocovmerge@$(GOCOVMERGE_VERSION)
 	ln -sf gocovmerge  $@
 
 GOCOVER_COBERTURA_VERSION=aaee18c8195c3f2d90e5ef80ca918d265463842a
+.PHONY: _work/gocover-cobertura
+_work/gocover-cobertura: _work/gocover-cobertura-$(GOCOVER_COBERTURA_VERSION)
 _work/gocover-cobertura-$(GOCOVER_COBERTURA_VERSION): check-go-version-$(GO_BINARY)
 	GOBIN=`pwd`/_work go install github.com/t-yuki/gocover-cobertura@$(GOCOVER_COBERTURA_VERSION)
 	ln -sf gocover-cobertura $@
