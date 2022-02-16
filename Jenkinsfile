@@ -173,6 +173,8 @@ pipeline {
                         TestInVM("", "", "fedora", "", "1.22", "Top.Level..[[:alpha:]]*-production[[:space:]]", "")
                     }
                 }
+
+                // When adding or removing coverage workers, update the "Code Coverage" step below!
                 stage('coverage-1.22') {
                     when {
 		        beforeAgent true
@@ -300,6 +302,42 @@ git push origin HEAD:master
                     fi"
                 // Also push the build image, for later reuse in PR jobs.
                 sh "${RunInBuilder()} ${env.BUILD_CONTAINER} docker image push ${env.BUILD_IMAGE}"
+            }
+        }
+
+        // Merge and publish coverage data.
+        stage('Code Coverage') {
+            when {
+                not { changeRequest() }
+            }
+            steps {
+                // Restore <cluster>-coverage.out files.
+                unstash '1.22-coverage'
+                unstash '1.19-coverage'
+
+                // Merge and convert to Cobertura XML.
+                sh "${RunInBuilder()} ${env.BUILD_CONTAINER} make _work/gocovmerge _work/gocover-cobertura"
+                sh "${RunInBuilder()} ${env.BUILD_CONTAINER} _work/gocovmerge *-coverage.out >coverage.out"
+                sh "${RunInBuilder()} ${env.BUILD_CONTAINER} _work/gocover-cobertura <coverage.out >coverage.xml"
+
+                // Simplify relative paths ("github.com/intel/pmem-csi/...").
+                // To view source code (https://stackoverflow.com/a/59951809):
+                // - Jenkins users must be logged in.
+                // - A job must complete successfully.
+                sh "sed -i -e 's;filename=\"github.com/intel/pmem-csi/;filename=\";g' coverage.xml"
+
+                // The relationship between "Code Coverage API Plugin" and "Cobertura" plugin is not clear
+                // (https://stackoverflow.com/questions/71133394/what-is-the-relationship-between-the-jenkins-cobertura-and-code-coverage-api).
+                //
+                // With just "Code Coverage API Plugin" installed, this here works, but doesn't show source code
+                // (old UI?):
+                // publishCoverage adapters: [cobertura(path: 'coverage.xml')], tag: 't'
+
+                // When both are installed, this here works (note the different coberura parameter!)
+                // and shows source code.
+                publishCoverage adapters: [cobertura(coberturaReportFile: 'coverage.xml')]
+
+                // There is also a "coberturaAdapter". That one hasn't been tested.
             }
         }
     }
@@ -563,25 +601,15 @@ void TestInVM(worker, coverage, distro, distroVersion, kubernetesVersion, skipIf
         if (coverage) {
             // https://stackoverflow.com/questions/36918370/cobertura-code-coverage-report-for-jenkins-pipeline-jobs
             // https://www.jenkins.io/doc/pipeline/steps/cobertura/
-            sh "${RunInBuilder()} -e CLUSTER=${env.CLUSTER} ${env.BUILD_CONTAINER} make _work/coverage/coverage.txt _work/coverage/coverage.xml"
+            sh "${RunInBuilder()} -e CLUSTER=${env.CLUSTER} ${env.BUILD_CONTAINER} make _work/coverage/coverage.txt"
             sh "cat _work/coverage/coverage.txt"
-            // The tag ensures that reports from different jobs get merged.
+
             // https://plugins.jenkins.io/code-coverage-api/#plugin-content-reports-combining-support
-            // works, no source code:   publishCoverage adapters: [cobertura(coberturaReportFile: '_work/coverage/coverage.xml')], tag: 't'
-            // Simplify relative paths ("github.com/intel/pmem-csi/...").
-            // To view source code, Jenkins users must be logged in (https://stackoverflow.com/a/59951809).
-            sh "sed -e 's;filename=\"github.com/intel/pmem-csi/;filename=\";g' _work/coverage/coverage.xml >coverage.xml"
-
-            // The relationship between "Code Coverage API Plugin" and "Cobertura" plugin is not clear.
-            // With just "Code Coverage API Plugin" installed, this here works, but doesn't show source code
-            // (old UI?):
-            // publishCoverage adapters: [cobertura(path: 'coverage.xml')], tag: 't'
-
-            // When both are installed, this here works (note the different coberura parameter!)
-            // and shows source code.
-            publishCoverage adapters: [cobertura(coberturaReportFile: 'coverage.xml')], tag: 't'
-
-            // There is also a "coberturaAdapter". That one hasn't been tested.
+            // claims that different reports can be merged, but that didn't work in practice
+            // (two "coverage reports" listed in the job UI with the same URL and unmerged data from
+            // one worker). Therefore we stash the individual results and merge later.
+            sh "mv _work/coverage/coverage.out ${kubernetesVersion}-coverage.out"
+            stash includes: "${kubernetesVersion}-coverage.out", name: "${kubernetesVersion}-coverage"
         }
     }
 }
