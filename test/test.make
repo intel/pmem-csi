@@ -95,6 +95,9 @@ run_tests: $(RUN_TEST_DEPS)
 TEST_E2E_SKIP =
 TEST_E2E_SKIP_ALL = $(TEST_E2E_SKIP)
 
+# OLM is currently failing to start
+TEST_E2E_SKIP_ALL += olm
+
 # The test's check whether a driver supports multiple nodes is incomplete and does
 # not work for the topology-based single-node access in PMEM-CSI:
 # https://github.com/kubernetes/kubernetes/blob/25ffbe633810609743944edd42d164cd7990071c/test/e2e/storage/testsuites/provisioning.go#L175-L181
