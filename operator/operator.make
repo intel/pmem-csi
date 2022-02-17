@@ -1,4 +1,4 @@
-OPERATOR_SDK_VERSION=1.15.0
+OPERATOR_SDK_VERSION=1.17.0
 CONTROLLER_GEN_VERSION=v0.7.0
 CONTROLLER_GEN=_work/bin/controller-gen-$(CONTROLLER_GEN_VERSION)
 
@@ -78,10 +78,16 @@ endif
 	@make operator-validate-bundle
 
 operator-validate-bundle: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) $(BUNDLE_DIR)
-	@if ! OUT="$$($< bundle validate --select-optional  name=operatorhub $(BUNDLE_DIR))"; then \
+	@if ! OUT="$$($< bundle validate --select-optional name=operatorhub  $(BUNDLE_DIR) 2>&1 && \
+	              $< bundle validate --select-optional name=good-practices  $(BUNDLE_DIR) 2>&1 )"; then \
 		echo >&2 "ERROR: Operator bundle in $(BUNDLE_DIR) did not pass validation:"; \
 		echo >&2 "$$OUT"; \
 		exit 1; \
+	elif echo "$$OUT" | grep -q -i -e "WARN" -e Warning; then \
+		echo "Operator bundle in $(BUNDLE_DIR) passed validation with warnings:"; \
+		echo "$$OUT"; \
+	else \
+		echo "Operator bundle in $(BUNDLE_DIR) passed validation without warnings."; \
 	fi
 
 .PHONY: operator-generate
