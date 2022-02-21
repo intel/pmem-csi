@@ -361,17 +361,21 @@ func patchPodTemplate(obj *unstructured.Unstructured, deployment api.PmemCSIDepl
 }
 
 func yamlPath(kubernetes version.Version, deviceMode api.DeviceMode) string {
-	return fmt.Sprintf("kubernetes-%s/%s/pmem-csi.yaml", kubernetes, deviceMode)
+	return fmt.Sprintf("kubernetes-%s/pmem-csi-%s.yaml", kubernetes, deviceMode)
 }
 
 func loadYAML(path string,
 	patchYAML func(yaml *[]byte),
 	enabled func(obj *unstructured.Unstructured) bool,
 	patchUnstructured func(obj *unstructured.Unstructured)) ([]unstructured.Unstructured, error) {
-	// We load the builtin yaml files.
-	yaml, err := deploy.Asset(path)
+	// We load the builtin yaml files. If they exist, we prefer
+	// the version without the patched in coverage support.
+	yaml, err := deploy.Asset("nocoverage/" + path)
 	if err != nil {
-		return nil, fmt.Errorf("read reference yaml file: %w", err)
+		yaml, err = deploy.Asset(path)
+		if err != nil {
+			return nil, fmt.Errorf("read reference yaml file: %w", err)
+		}
 	}
 
 	// Split at the "---" separator before working on individual
