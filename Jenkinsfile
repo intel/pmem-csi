@@ -70,8 +70,13 @@ pipeline {
         TEST_ETCD_VOLUME_SIZE = "1073741824" // 1GB
 
         // Tests that will get skipped when collecting coverage information.
-        // The operator tests fail because the reference files get modified.
-        COVERAGE_SKIP = "Top.Level..operator@Top.Level..olm"
+        //
+        // The operator itself installs without enabling coverage collection,
+        // so running those tests doesn't help us. The relevant test is
+        // "operator API".
+        //
+        // Testing with OLM doesn't add much additional coverage.
+        COVERAGE_SKIP = "Top.Level..operator-direct@Top.Level..operator-lvm@Top.Level..olm"
     }
 
     stages {
