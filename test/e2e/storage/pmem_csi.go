@@ -133,7 +133,7 @@ var _ = deploy.DescribeForAll("Deployment", func(d *deploy.Deployment) {
 
 		_, err = patchMasterNode(removeLabel)
 		framework.ExpectNoError(err, "remove label with %q", removeLabel)
-		Eventually(getMasterCSINode, "2m", "10s").ShouldNot(driverRunning{d.DriverName})
+		Eventually(getMasterCSINode, "5m", "10s").ShouldNot(driverRunning{d.DriverName})
 	})
 })
 
