@@ -159,14 +159,23 @@ KUSTOMIZE_INPUT := $(shell [ ! -d deploy/kustomize ] || find deploy/kustomize -t
 # Output files and their corresponding kustomization, in the format <target .yaml>=<kustomization directory>
 KUSTOMIZE :=
 
+# Setting this to any non-empty value before "make kustomize" will enable
+# collection of coverage profiles in all deployments. This also sets up the
+# original deployment files under "deploy/nocoverage" for use as reference when
+# testing the operator.
+KUSTOMIZE_WITH_COVERAGE =
+ifneq "$(KUSTOMIZE_WITH_COVERAGE)" ""
+KUSTOMIZE_COVERAGE_SUFFIX = -coverage
+endif
+
 # For each supported Kubernetes version, we provide four different flavors.
 # The "testing" flavor of the generated files contains both
 # the loglevel changes but does not enable coverage data collection.
 KUSTOMIZE_KUBERNETES_OUTPUT = \
-    deploy/kubernetes-X.XX/pmem-csi-direct.yaml=deploy/kustomize/kubernetes-base-direct \
-    deploy/kubernetes-X.XX/pmem-csi-lvm.yaml=deploy/kustomize/kubernetes-base-lvm \
-    deploy/kubernetes-X.XX/pmem-csi-direct-testing.yaml=deploy/kustomize/kubernetes-base-direct-testing \
-    deploy/kubernetes-X.XX/pmem-csi-lvm-testing.yaml=deploy/kustomize/kubernetes-base-lvm-testing \
+    deploy/kubernetes-X.XX/pmem-csi-direct.yaml=deploy/kustomize/kubernetes-base-direct$(KUSTOMIZE_COVERAGE_SUFFIX) \
+    deploy/kubernetes-X.XX/pmem-csi-lvm.yaml=deploy/kustomize/kubernetes-base-lvm$(KUSTOMIZE_COVERAGE_SUFFIX) \
+    deploy/kubernetes-X.XX/pmem-csi-direct-testing.yaml=deploy/kustomize/kubernetes-base-direct-testing$(KUSTOMIZE_COVERAGE_SUFFIX) \
+    deploy/kubernetes-X.XX/pmem-csi-lvm-testing.yaml=deploy/kustomize/kubernetes-base-lvm-testing$(KUSTOMIZE_COVERAGE_SUFFIX) \
 
 # Kubernetes versions derived from kubernetes-base.
 #
@@ -199,14 +208,22 @@ KUSTOMIZE_OUTPUT := $(foreach item,$(KUSTOMIZE),$(firstword $(subst =, ,$(item))
 # right one.
 KUSTOMIZE_LOOKUP_KUSTOMIZATION = $(strip $(foreach item,$(KUSTOMIZE),$(if $(filter $(1)=%,$(item)),$(word 2,$(subst =, ,$(item))))))
 
+# This is a wrapper around KUSTOMIZE_LOOKUP_KUSTOMIZATION which
+# removes the -coverage suffix.
+KUSTOMIZE_LOOKUP_KUSTOMIZATION_NO_COVERAGE = $(subst -coverage,,$(call KUSTOMIZE_LOOKUP_KUSTOMIZATION,$(1)))
+
 # This function takes the kustomize binary and the name of an output
 # file as arguments and returns the command which produces that file
 # as stdout.
-KUSTOMIZE_INVOCATION = (echo '\# Generated with "make kustomize", do not edit!'; echo; $(1) build --load-restrictor LoadRestrictionsNone $(call KUSTOMIZE_LOOKUP_KUSTOMIZATION,$(2)))
+KUSTOMIZE_INVOCATION = (echo '\# Generated with "make kustomize", do not edit!'; echo; $(1) build --load-restrictor LoadRestrictionsNone $(call $(3),$(2)))
 
 $(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
 	mkdir -p ${@D}
-	$(call KUSTOMIZE_INVOCATION,$<,$@) >$@
+	$(call KUSTOMIZE_INVOCATION,$<,$@,KUSTOMIZE_LOOKUP_KUSTOMIZATION) >$@
+ifneq "$(KUSTOMIZE_WITH_COVERAGE)" ""
+	mkdir -p $(subst deploy/,deploy/nocoverage/,${@D})
+	$(call KUSTOMIZE_INVOCATION,$<,$@,KUSTOMIZE_LOOKUP_KUSTOMIZATION_NO_COVERAGE) >$(subst deploy/,deploy/nocoverage/,$@)
+endif
 	if echo "$@" | grep '/pmem-csi-' | grep -qv '\-operator'; then \
 		dir=$$(echo "$@" | tr - / | sed -e 's;kubernetes/;kubernetes-;' -e 's;/alpha/;-alpha/;'  -e 's;/distributed/;-distributed/;' -e 's/.yaml//' -e 's;/pmem/csi/;/;') && \
 		mkdir -p $$dir && \
@@ -215,9 +232,13 @@ $(KUSTOMIZE_OUTPUT): _work/kustomize $(KUSTOMIZE_INPUT)
 	fi
 
 kustomize: clean_kustomize_output $(KUSTOMIZE_OUTPUT)
+ifneq "$(KUSTOMIZE_WITH_COVERAGE)" ""
+	sed -i -e 's/embed kubernetes-/embed nocoverage kubernetes-/' deploy/yamls.go
+endif
 
 clean_kustomize_output:
-	rm -rf deploy/kubernetes-*
+	rm -rf deploy/kubernetes-* deploy/nocoverage
+	sed -i -e 's/embed nocoverage /embed /' deploy/yamls.go
 	rm -f $(KUSTOMIZE_OUTPUT)
 
 # Always re-generate the output files because "git rebase" might have
@@ -234,7 +255,7 @@ clean-kustomize:
 test: test-kustomize
 test-kustomize: $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT))
 $(addprefix test-kustomize-,$(KUSTOMIZE_OUTPUT)): test-kustomize-%: _work/kustomize
-	@ if ! diff <($(call KUSTOMIZE_INVOCATION,$<,$*)) $*; then echo "$* was modified manually" && false; fi
+	@ if ! diff <($(call KUSTOMIZE_INVOCATION,$<,$*,KUSTOMIZE_LOOKUP_KUSTOMIZATION)) $*; then echo "$* was modified manually" && false; fi
 
 # Targets in the makefile can depend on check-go-version-<path to go binary>
 # to trigger a warning if the x.y version of that binary does not match

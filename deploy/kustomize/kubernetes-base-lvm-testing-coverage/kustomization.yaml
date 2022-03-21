@@ -1,5 +1,5 @@
 bases:
-- ../kubernetes-base-lvm/
+- ../kubernetes-base-lvm-testing/
 
 patchesJson6902:
 - target:

@@ -16,7 +16,7 @@ import (
 	"github.com/intel/pmem-csi/pkg/version"
 )
 
-//go:embed kubernetes-*/*/pmem-csi.yaml
+//go:embed kubernetes-*/pmem-csi-*.yaml
 //go:embed kustomize/webhook/webhook.yaml
 //go:embed kustomize/scheduler/scheduler-service.yaml
 //go:embed kustomize/webhook/webhook-service.yaml
@@ -42,7 +42,7 @@ type YamlFile struct {
 
 var yamls []YamlFile
 
-var re = regexp.MustCompile(`^kubernetes-([0-9\.]*)([^/]*)/([^/]*)$`)
+var re = regexp.MustCompile(`^kubernetes-([0-9\.]*)/pmem-csi-(lvm|direct)(.*).yaml$`)
 
 func init() {
 	deployDir, err := assets.ReadDir(".")
@@ -71,7 +71,7 @@ func init() {
 				Name:       name,
 				Kubernetes: kubernetes,
 				Flavor:     parts[3],
-				DeviceMode: api.DeviceMode(parts[3]),
+				DeviceMode: api.DeviceMode(parts[2]),
 			})
 		}
 	}
