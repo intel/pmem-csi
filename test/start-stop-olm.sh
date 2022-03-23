@@ -16,6 +16,9 @@ CLUSTER=${CLUSTER:-pmem-govm}
 CLUSTER_DIR="${CLUSTER_DIRECTORY:-${REPO_DIR}/_work/${CLUSTER}}"
 SSH="${CLUSTER_DIR}/ssh.0"
 KUBECTL="${SSH} kubectl" # Always use the kubectl installed in the cluster.
+
+# https://github.com/operator-framework/operator-lifecycle-manager/releases
+# Not the latest because of https://github.com/operator-framework/operator-sdk/issues/5410
 OLM_VERSION=v0.18.3
 
 function usage() {
