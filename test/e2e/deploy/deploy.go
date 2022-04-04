@@ -1012,7 +1012,15 @@ func findOperatorOnce(c *Cluster) (*Deployment, error) {
 	return deployment, nil
 }
 
+// The order matters here: the deployments listed first will also run first,
+// and somehow that helps OLM. When it was run at the end, there were OLM
+// errors ("operatorhubio-catalog-lbdrz 0/1 CrashLoopBackOff") that did not
+// occur locally or when running the tests on a "fresh" CI cluster.
 var allDeployments = []string{
+	"olm", // operator installed by OLM
+	"olm-lvm-production",
+	"olm-direct-production",
+
 	"lvm-production",
 	"direct-production",
 	"operator",
@@ -1021,9 +1029,6 @@ var allDeployments = []string{
 	// Uses kube-system, to ensure that deployment in a namespace also works,
 	// and *no* controller.
 	"operator-direct-production",
-	"olm", // operator installed by OLM
-	"olm-lvm-production",
-	"olm-direct-production",
 }
 var deploymentRE = regexp.MustCompile(`^(operator|olm)?-?(\w*)?-?(testing|production)?-?([0-9\.]*)$`)
 
