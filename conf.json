@@ -19,6 +19,11 @@
         "sphinx_md",
         "sphinx_copybutton"
     ],
+    "linkcheck_ignore": [
+        "https://help.github.com/en/articles/creating-a-personal-access-token-for-the-command-line",
+        "https://help.github.com/articles/using-pull-requests/",
+        ".*cloudnative-k8sci.southcentralus.cloudapp.azure.com.*"
+    ],
     "linkcheck_anchors_ignore": [
         "^!",
         "^L[0-9]+-L[0-9]+$",
