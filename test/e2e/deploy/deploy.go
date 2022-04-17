@@ -1483,8 +1483,11 @@ var tests = map[string]map[string][]func(d *Deployment){}
 
 // Describe remembers a certain test. The actual registration in
 // Ginkgo happens in DefineTests, ordered such that all tests with the
-// same "deployment" string are defined on after the after with the
+// same "deployment" string are defined one after the after with the
 // given "describe" string.
+//
+// An empty deployment is valid. Those tests will run after the ones
+// which use deployments. Their callback is passed a nil Deployment.
 //
 // When "describe" is already unique, "what" can be left empty.
 func Describe(deployment, describe, what string, f func(d *Deployment)) bool {
@@ -1509,18 +1512,41 @@ func Describe(deployment, describe, what string, f func(d *Deployment)) bool {
 
 // DefineTests must be called to register all tests defined so far via Describe.
 func DefineTests() {
-	for deploymentName, group := range tests {
+	all := allDeployments[:]
+	for deploymentName := range tests {
+		if !haveDeployment(all, deploymentName) {
+			all = append(all, deploymentName)
+		}
+	}
+
+	for _, deploymentName := range all {
+		group, ok := tests[deploymentName]
+		if !ok {
+			continue
+		}
 		deploymentName := deploymentName
 		for describe, funcs := range group {
 			funcs := funcs
 			ginkgo.Describe(describe, func() {
-				deployment := EnsureDeployment(deploymentName)
+				var deployment *Deployment
+				if deploymentName != "" {
+					deployment = EnsureDeployment(deploymentName)
+				}
 				for _, f := range funcs {
 					f(deployment)
 				}
 			})
 		}
 	}
+}
+
+func haveDeployment(all []string, one string) bool {
+	for _, a := range all {
+		if a == one {
+			return true
+		}
+	}
+	return false
 }
 
 // waitForPodDeletion returns an error if it takes too long for the pod to fully terminate.
