@@ -1511,6 +1511,10 @@ func Describe(deployment, describe, what string, f func(d *Deployment)) bool {
 
 // DefineTests must be called to register all tests defined so far via Describe.
 func DefineTests() {
+	ginkgo.Context("Deploy", ginkgo.Ordered, defineTests)
+}
+
+func defineTests() {
 	all := allDeployments[:]
 	for deploymentName := range tests {
 		if !haveDeployment(all, deploymentName) {
