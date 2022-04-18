@@ -1,5 +1,5 @@
 # https://github.com/operator-framework/operator-sdk/releases
-OPERATOR_SDK_VERSION=1.17.0
+OPERATOR_SDK_VERSION=1.19.1
 # https://github.com/kubernetes-sigs/controller-tools/releases
 CONTROLLER_GEN_VERSION=v0.8.0
 CONTROLLER_GEN=_work/bin/controller-gen-$(CONTROLLER_GEN_VERSION)

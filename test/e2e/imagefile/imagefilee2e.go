@@ -14,6 +14,7 @@ import (
 	"github.com/onsi/ginkgo"
 
 	"github.com/intel/pmem-csi/pkg/imagefile/test"
+	"github.com/intel/pmem-csi/test/e2e/deploy"
 )
 
 type tImplementation struct {
@@ -39,7 +40,7 @@ func (t *tImplementation) Skipf(format string, args ...interface{}) {
 	ginkgo.Skip(fmt.Sprintf(format, args...))
 }
 
-var _ = ginkgo.Describe("imagefile", func() {
+var _ = deploy.Describe("", "imagefile", "", func(d *deploy.Deployment) {
 	// Our Outer and Inner implementation do not need a valid pointer.
 	test.ImageFile((*tImplementation)(nil))
 })
