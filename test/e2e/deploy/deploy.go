@@ -44,7 +44,7 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/pod"
 	testconfig "github.com/intel/pmem-csi/test/test-config"
 
-	"github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 )
 
@@ -1102,7 +1102,7 @@ func EnsureDeployment(deploymentName string) *Deployment {
 
 	ginkgo.BeforeEach(func() {
 		ginkgo.By(fmt.Sprintf("preparing for test %q in namespace %s",
-			ginkgo.CurrentGinkgoTestDescription().FullTestText,
+			ginkgo.CurrentSpecReport().FullText(),
 			deployment.Namespace,
 		))
 
@@ -1117,14 +1117,11 @@ func EnsureDeployment(deploymentName string) *Deployment {
 	})
 
 	ginkgo.AfterEach(func() {
-		state := "success"
-		if ginkgo.CurrentGinkgoTestDescription().Failed {
-			state = "failure"
-		}
+		report := ginkgo.CurrentSpecReport()
 		ginkgo.By(fmt.Sprintf("checking for test %q in namespace %s, test %s",
-			ginkgo.CurrentGinkgoTestDescription().FullTestText,
+			report.FullText(),
 			deployment.Namespace,
-			state,
+			report.State,
 		))
 
 		// Check list of volumes after test to detect left-overs

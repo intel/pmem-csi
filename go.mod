@@ -18,7 +18,7 @@ require (
 	github.com/kubernetes-csi/csi-test/v4 v4.2.0
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/miekg/dns v1.1.38 // indirect
-	github.com/onsi/ginkgo v1.16.5
+	github.com/onsi/ginkgo/v2 v2.1.3
 	github.com/onsi/gomega v1.17.0
 	github.com/operator-framework/operator-lib v0.4.0
 	github.com/prometheus/client_golang v1.12.1
@@ -77,3 +77,8 @@ replace (
 	k8s.io/pod-security-admission => k8s.io/pod-security-admission v0.24.0-beta.0
 	k8s.io/sample-apiserver => k8s.io/sample-apiserver v0.24.0-beta.0
 )
+
+// TODO: replace with official releases
+replace k8s.io/kubernetes => github.com/pohly/kubernetes v1.10.0-alpha.3.0.20220419153908-2091974d0d06
+
+replace github.com/kubernetes-csi/csi-test/v4 => github.com/pohly/csi-test/v4 v4.0.0-20220419123141-32b537f68828

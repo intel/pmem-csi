@@ -26,7 +26,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework/config"
 	"k8s.io/kubernetes/test/e2e/framework/testfiles"
 
-	. "github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/v2"
 
 	// test sources
 	_ "github.com/intel/pmem-csi/test/e2e/gotests"

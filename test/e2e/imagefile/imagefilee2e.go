@@ -11,7 +11,7 @@ package imagefilee2e
 import (
 	"fmt"
 
-	"github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/v2"
 
 	"github.com/intel/pmem-csi/pkg/imagefile/test"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
@@ -35,7 +35,7 @@ func (t *tImplementation) Inner(name string, cb func(t test.TInterface)) {
 	})
 }
 
-// Only necessary because of https://github.com/onsi/ginkgo/issues/659
+// Only necessary because of https://github.com/onsi/ginkgo/v2/issues/659
 func (t *tImplementation) Skipf(format string, args ...interface{}) {
 	ginkgo.Skip(fmt.Sprintf(format, args...))
 }

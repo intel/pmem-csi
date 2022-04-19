@@ -148,11 +148,15 @@ RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 	TEST_PKGS='$(shell for i in ./pkg/pmem-device-manager ./pkg/imagefile/test; do if ls $$i/*_test.go 2>/dev/null >&2; then echo $$i; fi; done)' \
 	$(GO) test -count=1 -timeout 0 -v ./test/e2e -args \
                 -v=5 \
+                -ginkgo.v \
+                -ginkgo.slow-spec-threshold=30m \
+                -ginkgo.always-emit-ginkgo-writer=false \
+                -ginkgo.timeout=0 \
+                -ginkgo.no-color \
                 -ginkgo.skip='$(subst $(space),|,$(strip $(subst @,$(space),$(TEST_E2E_SKIP_ALL))))' \
                 -ginkgo.focus='$(subst $(space),|,$(strip $(subst @,$(space),$(TEST_E2E_FOCUS))))' \
-		-ginkgo.randomizeAllSpecs=false \
-	        $(TEST_E2E_ARGS) \
-                -report-dir=$(TEST_E2E_REPORT_DIR)
+                $(TEST_E2E_ARGS) \
+                -ginkgo.junit-report=$(if $(TEST_E2E_REPORT_DIR),$(TEST_E2E_REPORT_DIR)/junit_01.xml)
 test_e2e: start $(RUN_TEST_DEPS) operator-generate-bundle
 	$(RUN_E2E)
 

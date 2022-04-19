@@ -59,7 +59,7 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/pod"
 	pmeme2epod "github.com/intel/pmem-csi/test/e2e/pod"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -290,11 +290,9 @@ fi
 			cc = csi.NewControllerClient(sc.ControllerConn)
 			ncc = csi.NewControllerClient(sc.Conn) // This works because PMEM-CSI exposes the node, controller, and ID server via its csi.sock.
 			resources = &sanity.Resources{
-				Context:                    sc,
-				NodeClient:                 nc,
-				ControllerClient:           cc,
-				ControllerPublishSupported: true,
-				NodeStageSupported:         true,
+				Context:          sc,
+				NodeClient:       nc,
+				ControllerClient: cc,
 			}
 			rebooted = false
 			nid, err := nc.NodeGetInfo(
@@ -843,8 +841,7 @@ fi
 
 			BeforeEach(func() {
 				_, ctx := ktesting.NewTestContext(GinkgoT(0))
-				ctx, cancel := context.WithCancel(ctx)
-				defer cancel()
+				ctx, cancel = context.WithCancel(ctx)
 
 				// Worker nodes with PMEM.
 				nodes = make(map[string]nodeClient)

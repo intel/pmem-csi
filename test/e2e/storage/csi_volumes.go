@@ -38,7 +38,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/storage/podlogs"
 	"k8s.io/kubernetes/test/e2e/storage/testsuites"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 )
 
 var (
