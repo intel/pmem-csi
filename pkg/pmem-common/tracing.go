@@ -11,13 +11,12 @@ import (
 	"github.com/kubernetes-csi/csi-lib-utils/protosanitizer"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-
-	pmemlog "github.com/intel/pmem-csi/pkg/logger"
+	"k8s.io/klog/v2"
 )
 
 // LogGRPCServer logs the server-side call information via klog.
 func LogGRPCServer(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	logger := pmemlog.Get(ctx)
+	logger := klog.FromContext(ctx)
 	values := []interface{}{"full-method", info.FullMethod}
 	if logger.V(5).Enabled() {
 		values = append(values, "request", protosanitizer.StripSecrets(req))
@@ -34,7 +33,7 @@ func LogGRPCServer(ctx context.Context, req interface{}, info *grpc.UnaryServerI
 
 // LogGRPCClient does the same as LogGRPCServer, only on the client side.
 func LogGRPCClient(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-	logger := pmemlog.Get(ctx)
+	logger := klog.FromContext(ctx)
 	values := []interface{}{"full-method", method}
 	if logger.V(5).Enabled() {
 		values = append(values, "request", protosanitizer.StripSecrets(req))

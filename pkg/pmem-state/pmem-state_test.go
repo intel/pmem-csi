@@ -16,7 +16,7 @@ import (
 	"time"
 
 	pmemstate "github.com/intel/pmem-csi/pkg/pmem-state"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 

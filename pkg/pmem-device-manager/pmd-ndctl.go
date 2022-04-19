@@ -7,6 +7,8 @@ import (
 	"os"
 	"sync"
 
+	"k8s.io/klog/v2"
+
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	pmemlog "github.com/intel/pmem-csi/pkg/logger"
@@ -74,7 +76,7 @@ func newPmemDeviceManagerNdctl(ctx context.Context, pmemPercentage uint) (PmemDe
 
 // sysIsWritable returns true if any of the /sys mounts is writable.
 func sysIsWritable(ctx context.Context) (bool, error) {
-	logger := pmemlog.Get(ctx).WithName("sysIsWritable")
+	logger := klog.FromContext(ctx).WithName("sysIsWritable")
 	mounts, err := mount.New("").List()
 	if err != nil {
 		return false, fmt.Errorf("list mounts: %v", err)

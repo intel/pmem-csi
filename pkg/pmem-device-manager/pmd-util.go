@@ -7,9 +7,10 @@ import (
 	"strconv"
 	"time"
 
+	"k8s.io/klog/v2"
+
 	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
-	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	"golang.org/x/sys/unix"
 )
 
@@ -18,8 +19,8 @@ const (
 )
 
 func clearDevice(ctx context.Context, dev *PmemDeviceInfo, flush bool) error {
-	logger := pmemlog.Get(ctx).WithName("clearDevice").WithValues("device", dev.Path)
-	ctx = pmemlog.Set(ctx, logger)
+	logger := klog.FromContext(ctx).WithName("clearDevice").WithValues("device", dev.Path)
+	ctx = klog.NewContext(ctx, logger)
 	logger.V(4).Info("Starting", "flush", flush)
 
 	// by default, clear 4 kbytes to avoid recognizing file system by next volume seeing data area
@@ -75,7 +76,7 @@ func clearDevice(ctx context.Context, dev *PmemDeviceInfo, flush bool) error {
 }
 
 func waitDeviceAppears(ctx context.Context, dev *PmemDeviceInfo) error {
-	logger := pmemlog.Get(ctx).WithName("waitDeviceAppears").WithValues("device", dev.Path)
+	logger := klog.FromContext(ctx).WithName("waitDeviceAppears").WithValues("device", dev.Path)
 	for i := 0; i < 10; i++ {
 		if _, err := os.Stat(dev.Path); err == nil {
 			return nil

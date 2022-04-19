@@ -32,8 +32,6 @@ import (
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
-	"github.com/intel/pmem-csi/pkg/logger"
-	"github.com/intel/pmem-csi/pkg/logger/testinglogger"
 	"github.com/kubernetes-csi/csi-test/v4/pkg/sanity"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -48,7 +46,8 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	clientexec "k8s.io/client-go/util/exec"
-	"k8s.io/klog/v2/klogr"
+	"k8s.io/klog/v2"
+	"k8s.io/klog/v2/ktesting"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
@@ -91,7 +90,9 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			return nil, err
 		}
 		dialer := pod.NewDialer(cs, cfg)
-		return dialer.DialContainerPort(ctx, klogr.New().WithName("gRPC socat"), *addr)
+		logger := klog.FromContext(ctx)
+		ctx = klog.NewContext(ctx, logger.WithName("gRPC socat"))
+		return dialer.DialContainerPort(ctx, *addr)
 	}
 	dialOptions := []grpc.DialOption{
 		// For our restart tests.
@@ -841,9 +842,9 @@ fi
 			)
 
 			BeforeEach(func() {
-				ctx, cancel = context.WithCancel(context.Background())
-				l := testinglogger.New(GinkgoT(0))
-				ctx = logger.Set(ctx, l)
+				_, ctx := ktesting.NewTestContext(GinkgoT(0))
+				ctx, cancel := context.WithCancel(ctx)
+				defer cancel()
 
 				// Worker nodes with PMEM.
 				nodes = make(map[string]nodeClient)
@@ -867,7 +868,7 @@ fi
 						// because the underlying code doesn't support it.
 						// The address is already known.
 						func(ctx context.Context, _ string) (net.Conn, error) {
-							return pmeme2epod.NewDialer(f.ClientSet, f.ClientConfig()).DialContainerPort(ctx, l, pmeme2epod.Addr{
+							return pmeme2epod.NewDialer(f.ClientSet, f.ClientConfig()).DialContainerPort(ctx, pmeme2epod.Addr{
 								Namespace: pod.Namespace,
 								PodName:   pod.Name,
 								Port:      deploy.SocatPort,

@@ -318,9 +318,9 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					framework.ExpectNoError(err, "get controller pod logs for %s", controllerPod.Name)
 
 					if format == api.LogFormatJSON {
-						Expect(output).To(MatchRegexp(`\{"ts":\d+.\d+,"msg":.*"version":`), "PMEM-CSI driver output in JSON")
+						Expect(output).To(MatchRegexp(`\{"ts":\d+.\d+,"caller":"pmem-csi-driver/main.go:\d+","msg":.*"version":`), "PMEM-CSI driver output in JSON")
 					} else {
-						Expect(output).To(MatchRegexp(`I.*main.go:.*version="`), "PMEM-CSI driver output in glog format")
+						Expect(output).To(MatchRegexp(`I.*main.go:.*version="`), "PMEM-CSI driver output in klog format")
 					}
 					framework.Logf("got pod log: %s", output)
 				})

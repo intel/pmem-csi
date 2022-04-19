@@ -36,14 +36,14 @@ const (
 
 // Handle implements admission.Handler interface.
 func (s scheduler) Handle(ctx context.Context, req admission.Request) admission.Response {
-	logger := pmemlog.Get(ctx).WithName("mutating-pod-webhook")
+	logger := klog.FromContext(ctx).WithName("mutating-pod-webhook")
 	pod := &corev1.Pod{}
 	err := s.decoder.Decode(req, pod)
 	if err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 	logger = logger.WithValues("pod", pmemlog.KObj(pod))
-	ctx = pmemlog.Set(ctx, logger)
+	ctx = klog.NewContext(ctx, logger)
 	if len(pod.Spec.Containers) == 0 {
 		return admission.Denied("pod has no containers")
 	}
@@ -118,7 +118,7 @@ func (s scheduler) mustFilterSC(sc *storagev1.StorageClass) bool {
 }
 
 func (s scheduler) mustFilterPod(ctx context.Context, pod *corev1.Pod, targets map[string]bool) (bool, error) {
-	logger := pmemlog.Get(ctx)
+	logger := klog.FromContext(ctx)
 	for _, vol := range pod.Spec.Volumes {
 		if vol.PersistentVolumeClaim != nil {
 			pvcName := vol.PersistentVolumeClaim.ClaimName

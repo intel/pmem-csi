@@ -21,7 +21,6 @@ import (
 	"os"
 	"testing"
 
-	"k8s.io/component-base/logs"
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/framework/config"
@@ -43,8 +42,11 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	klog.SetOutput(GinkgoWriter)
-	logs.InitLogs()
+	klog.InitFlags(nil)
+	flag.Set("logtostderr", "false")
+	flag.Set("alsologtostderr", "false")
+	flag.Set("one_output", "true")
+	klog.SetOutput(ginkgo.GinkgoWriter)
 
 	deploy.DefineTests()
 

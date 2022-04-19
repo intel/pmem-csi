@@ -13,9 +13,10 @@ import (
 	"flag"
 	"fmt"
 
+	"k8s.io/klog/v2"
+
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	"github.com/intel/pmem-csi/pkg/logger"
-	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 )
 
@@ -56,20 +57,21 @@ func init() {
 	flag.StringVar(&config.StateBasePath, "statePath", "", "node: directory path where to persist the state of the driver, defaults to /var/lib/<drivername>")
 	flag.UintVar(&config.PmemPercentage, "pmemPercentage", 100, "node: percentage of space to be used by the driver in each PMEM region")
 
-	_ = flag.Set("logtostderr", "true")
+	klog.InitFlags(nil)
 }
 
 func Main() int {
 	flag.Parse()
-	logFormat.Apply()
 	if *showVersion {
 		fmt.Println(version)
 		return 0
 	}
 
+	// This ensures that code which does not use klog as fallback also uses
+	// the klog logger.
 	ctx := context.Background()
-	logger := pmemlog.Get(ctx)
-	ctx = pmemlog.Set(ctx, logger)
+	logger := klog.FromContext(ctx)
+	ctx = klog.NewContext(ctx, logger)
 
 	logger.Info("PMEM-CSI started.", "version", version)
 	defer logger.Info("PMEM-CSI stopped.")

@@ -15,7 +15,7 @@ import (
 	"os/exec"
 	"sync"
 
-	pmemlog "github.com/intel/pmem-csi/pkg/logger"
+	"k8s.io/klog/v2"
 )
 
 // RunCommand executes the command with logging through klog, with
@@ -30,7 +30,7 @@ func RunCommand(ctx context.Context, cmd string, args ...string) (string, error)
 // cmd. Stdout and stderr are ignored and replaced with the output
 // handling described for RunCommand.
 func Run(ctx context.Context, cmd *exec.Cmd) (string, error) {
-	logger := pmemlog.Get(ctx).WithValues("command", cmd.Path)
+	logger := klog.FromContext(ctx).WithValues("command", cmd.Path)
 	logger.V(4).Info("Starting command", "args", cmd.Args)
 
 	r, w := io.Pipe()
@@ -43,8 +43,8 @@ func Run(ctx context.Context, cmd *exec.Cmd) (string, error) {
 	// Collect stdout and stderr separately. Storing in the
 	// combined buffer is a bit racy, but we need to know which
 	// output is stdout.
-	go dumpOutput(pmemlog.Set(ctx, logger.WithName("stdout")), &wg, r, []io.Writer{&stdout, &both})
-	go dumpOutput(pmemlog.Set(ctx, logger.WithName("stderr")), &wg, r2, []io.Writer{&both})
+	go dumpOutput(klog.NewContext(ctx, logger.WithName("stdout")), &wg, r, []io.Writer{&stdout, &both})
+	go dumpOutput(klog.NewContext(ctx, logger.WithName("stderr")), &wg, r2, []io.Writer{&both})
 	err := cmd.Run()
 	w.Close()
 	w2.Close()
@@ -61,7 +61,7 @@ func Run(ctx context.Context, cmd *exec.Cmd) (string, error) {
 }
 
 func dumpOutput(ctx context.Context, wg *sync.WaitGroup, in io.Reader, out []io.Writer) {
-	logger := pmemlog.Get(ctx)
+	logger := klog.FromContext(ctx)
 	defer wg.Done()
 	scanner := bufio.NewScanner(in)
 	for scanner.Scan() {

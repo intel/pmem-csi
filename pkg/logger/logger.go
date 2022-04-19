@@ -19,29 +19,12 @@ package logger
 import (
 	"context"
 
-	"k8s.io/klog/v2/klogr"
-
-	"github.com/go-logr/logr"
+	"k8s.io/klog/v2"
 )
 
-// Set returns a context with the given structured logger added to the given context.
-func Set(ctx context.Context, logger logr.Logger) context.Context {
-	return logr.NewContext(ctx, logger)
-}
-
-// Get returns the structured logger stored in the context or (if not set)
-// a klog based logger.
-func Get(ctx context.Context) logr.Logger {
-	l := logr.FromContext(ctx)
-	if l != nil {
-		return l
-	}
-	return klogr.NewWithOptions(klogr.WithFormat(klogr.FormatKlog))
-}
-
 // WithName updates the logger in the context and returns the new logger and context.
-func WithName(ctx context.Context, name string) (context.Context, logr.Logger) {
-	logger := Get(ctx).WithName(name)
-	ctx = Set(ctx, logger)
+func WithName(ctx context.Context, name string) (context.Context, klog.Logger) {
+	logger := klog.FromContext(ctx).WithName(name)
+	ctx = klog.NewContext(ctx, logger)
 	return ctx, logger
 }

@@ -32,6 +32,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/klogr"
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
@@ -387,10 +388,11 @@ func WaitForPMEMDriver(c *Cluster, d *Deployment, controllerReplicas int32) (met
 			}
 			dialer := pod.NewDialer(c.ClientSet(), c.Config())
 			// Here we discard error messages because those are expected while
-			// the driver starts up. Once we update to logr 1.0.0, we could redirect
-			// the output into a string buffer via the sink mechanism and include
-			// it in the error message.
-			conn, err := dialer.DialContainerPort(deadline, logr.Discard(), *addr)
+			// the driver starts up. TODO: we could redirect
+			// the output into a string buffer via https://github.com/kubernetes/klog/issues/317
+			// and include it in the error message.
+			ctx := klog.NewContext(deadline, logr.Discard())
+			conn, err := dialer.DialContainerPort(ctx, *addr)
 			if err != nil {
 				return fmt.Errorf("dial %s: %v", address, err)
 			}

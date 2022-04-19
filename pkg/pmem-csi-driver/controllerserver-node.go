@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+	"k8s.io/klog/v2"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 
@@ -208,8 +209,8 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 	volumeCapabilities []*csi.VolumeCapability,
 	capacity *csi.CapacityRange,
 ) (volumeID string, actual int64, statusErr error) {
-	logger := pmemlog.Get(ctx).WithValues("volume-name", volumeName)
-	ctx = pmemlog.Set(ctx, logger)
+	logger := klog.FromContext(ctx).WithValues("volume-name", volumeName)
+	ctx = klog.NewContext(ctx, logger)
 
 	// Keep volume name as part of volume parameters for use in
 	// getVolumeByName.
@@ -233,7 +234,7 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 	volumeID = generateVolumeID(volumeName)
 	logger = logger.WithValues("volume-id", volumeID)
 	logger.V(4).Info("Creating new volume", "minimum-size", pmemlog.CapacityRef(asked), "maximum-size", pmemlog.CapacityRef(capacity.GetLimitBytes()))
-	ctx = pmemlog.Set(ctx, logger)
+	ctx = klog.NewContext(ctx, logger)
 
 	// Check do we have entry with newly generated VolumeID already
 	if vol := cs.getVolumeByID(volumeID); vol != nil {
@@ -305,8 +306,8 @@ func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 
 func (cs *nodeControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVolumeRequest) (*csi.DeleteVolumeResponse, error) {
 	volumeID := req.GetVolumeId()
-	logger := pmemlog.Get(ctx).WithValues("volume-id", volumeID)
-	ctx = pmemlog.Set(ctx, logger)
+	logger := klog.FromContext(ctx).WithValues("volume-id", volumeID)
+	ctx = klog.NewContext(ctx, logger)
 
 	// Check arguments
 	if volumeID == "" {

@@ -9,17 +9,17 @@ package deploy
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	e2essh "k8s.io/kubernetes/test/e2e/framework/ssh"
 
 	"github.com/intel/pmem-csi/pkg/k8sutil"
 	"github.com/intel/pmem-csi/pkg/version"
@@ -43,17 +43,15 @@ func NewCluster(cs kubernetes.Interface, dc dynamic.Interface, cfg *rest.Config)
 		cfg: cfg,
 	}
 
-	hosts, err := e2essh.NodeSSHHosts(cs)
+	hosts, err := nodeIPs(cs)
 	if err != nil {
 		return nil, fmt.Errorf("find external/internal IPs for every node: %v", err)
 	}
 	if len(hosts) <= 1 {
 		return nil, fmt.Errorf("expected one master and one worker node, only got: %v", hosts)
 	}
-	for _, sshHost := range hosts {
-		host := strings.Split(sshHost, ":")[0] // Instead of duplicating the NodeSSHHosts logic we simply strip the ssh port.
-		cluster.nodeIPs = append(cluster.nodeIPs, host)
-	}
+	cluster.nodeIPs = hosts
+
 	version, err := k8sutil.GetKubernetesVersion(cfg)
 	if err != nil {
 		return nil, err
@@ -166,4 +164,78 @@ func (c *Cluster) GetStatefulSet(ctx context.Context, setName, namespace string)
 // It only checks the Kubernetes version.
 func (c *Cluster) StorageCapacitySupported() bool {
 	return c.version.Compare(1, 21) >= 0
+}
+
+// nodeIPs returns IP addresses for all schedulable nodes, in the
+// order in which the nodes get listed.
+//
+// If it can't find any external IPs, it falls back to
+// looking for internal IPs. If it can't find an internal IP for every node it
+// returns an error, though it still returns all hosts that it found in that
+// case.
+//
+// This was copied from https://github.com/kubernetes/kubernetes/blob/9e372bffeffbf52f024f23d050767bbeaa30ad92/test/e2e/framework/ssh/ssh.go
+// without https://github.com/kubernetes/kubernetes/commit/9e372bffeffbf52f024f23d050767bbeaa30ad92
+// because the order was no longer guaranteed.
+func nodeIPs(c kubernetes.Interface) ([]string, error) {
+	nodelist, err := waitListSchedulableNodes(c)
+	if err != nil {
+		return nil, err
+	}
+
+	hosts := nodeAddresses(nodelist, v1.NodeExternalIP)
+	// If  ExternalIPs aren't available for all nodes, try falling back to the InternalIPs.
+	if len(hosts) < len(nodelist.Items) {
+		hosts = nodeAddresses(nodelist, v1.NodeInternalIP)
+	}
+
+	// Error if neither External nor Internal IPs weren't available for all nodes.
+	if len(hosts) != len(nodelist.Items) {
+		return hosts, fmt.Errorf(
+			"only found %d IPs on nodes, but found %d nodes. Nodelist: %v",
+			len(hosts), len(nodelist.Items), nodelist)
+	}
+
+	return hosts, nil
+}
+
+const (
+	// pollNodeInterval is how often to Poll pods.
+	pollNodeInterval = 2 * time.Second
+
+	// singleCallTimeout is how long to try single API calls (like 'get' or 'list'). Used to prevent
+	// transient failures from failing tests.
+	singleCallTimeout = 5 * time.Minute
+)
+
+// waitListSchedulableNodes is a wrapper around listing nodes supporting retries.
+func waitListSchedulableNodes(c kubernetes.Interface) (*v1.NodeList, error) {
+	var nodes *v1.NodeList
+	var err error
+	if wait.PollImmediate(pollNodeInterval, singleCallTimeout, func() (bool, error) {
+		nodes, err = c.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{FieldSelector: fields.Set{
+			"spec.unschedulable": "false",
+		}.AsSelector().String()})
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	}) != nil {
+		return nodes, err
+	}
+	return nodes, nil
+}
+
+// nodeAddresses returns the first address of the given type of each node.
+func nodeAddresses(nodelist *v1.NodeList, addrType v1.NodeAddressType) []string {
+	hosts := []string{}
+	for _, n := range nodelist.Items {
+		for _, addr := range n.Status.Addresses {
+			if addr.Type == addrType && addr.Address != "" {
+				hosts = append(hosts, addr.Address)
+				break
+			}
+		}
+	}
+	return hosts
 }

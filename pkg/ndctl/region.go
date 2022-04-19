@@ -11,6 +11,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"k8s.io/klog/v2"
 
 	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	pmemlog "github.com/intel/pmem-csi/pkg/logger"
@@ -156,7 +157,7 @@ func (r *region) GetAlign() uint64 {
 
 func (r *region) CreateNamespace(ctx gocontext.Context, opts CreateNamespaceOpts) (Namespace, error) {
 	regionName := r.DeviceName()
-	logger := pmemlog.Get(ctx).WithName("CreateNamespace").WithValues("region", regionName)
+	logger := klog.FromContext(ctx).WithName("CreateNamespace").WithValues("region", regionName)
 
 	var err error
 	/* Set defaults */
