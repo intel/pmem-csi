@@ -7,7 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package pmemcsidriver
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -16,10 +15,9 @@ import (
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/klog/v2/ktesting"
 	"sigs.k8s.io/sig-storage-lib-external-provisioner/v6/controller"
 
-	"github.com/intel/pmem-csi/pkg/logger"
-	"github.com/intel/pmem-csi/pkg/logger/testinglogger"
 	"github.com/intel/pmem-csi/pkg/types"
 )
 
@@ -132,7 +130,7 @@ func TestRescheduler(t *testing.T) {
 
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
-			ctx := logger.Set(context.Background(), testinglogger.New(t))
+			_, ctx := ktesting.NewTestContext(t)
 			pcp := pmemCSIProvisioner{
 				driverName:   driverName,
 				nodeSelector: tc.nodeSelector,

@@ -21,13 +21,13 @@ import (
 	"os"
 	"testing"
 
-	"k8s.io/component-base/logs"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/test/e2e/framework"
 	"k8s.io/kubernetes/test/e2e/framework/config"
 	"k8s.io/kubernetes/test/e2e/framework/testfiles"
 
-	. "github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo"
 
 	// test sources
 	_ "github.com/intel/pmem-csi/test/e2e/gotests"
@@ -43,8 +43,11 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	klog.SetOutput(GinkgoWriter)
-	logs.InitLogs()
+	klog.InitFlags(nil)
+	utilruntime.Must(flag.Set("logtostderr", "false"))
+	utilruntime.Must(flag.Set("alsologtostderr", "false"))
+	utilruntime.Must(flag.Set("one_output", "true"))
+	klog.SetOutput(ginkgo.GinkgoWriter)
 
 	deploy.DefineTests()
 

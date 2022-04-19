@@ -45,14 +45,11 @@ var (
 )
 
 func init() {
-	// klog gets initialized by k8s.io/component-base/logs.
-
-	_ = flag.Set("logtostderr", "true")
+	klog.InitFlags(nil)
 }
 
 func Main() int {
 	flag.Parse()
-	logFormat.Apply()
 
 	printVersion()
 

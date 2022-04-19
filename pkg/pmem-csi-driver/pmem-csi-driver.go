@@ -20,10 +20,11 @@ import (
 	"syscall"
 	"time"
 
+	"k8s.io/klog/v2"
+
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	"github.com/intel/pmem-csi/pkg/k8sutil"
-	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	pmemstate "github.com/intel/pmem-csi/pkg/pmem-state"
@@ -184,7 +185,7 @@ func (csid *csiDriver) Run(ctx context.Context) error {
 	}()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	logger := pmemlog.Get(ctx)
+	logger := klog.FromContext(ctx)
 
 	switch csid.cfg.Mode {
 	case Webhooks:
@@ -400,7 +401,7 @@ func (csid *csiDriver) startHTTPSServer(ctx context.Context, cancel func(), list
 	if useTLS {
 		name = "HTTPS server"
 	}
-	logger := pmemlog.Get(ctx).WithName(name).WithValues("listen", listen)
+	logger := klog.FromContext(ctx).WithName(name).WithValues("listen", listen)
 	var config *tls.Config
 	if useTLS {
 		c, err := pmemgrpc.LoadServerTLS(ctx, csid.cfg.CAFile, csid.cfg.CertFile, csid.cfg.KeyFile, "" /* any peer can connect */)

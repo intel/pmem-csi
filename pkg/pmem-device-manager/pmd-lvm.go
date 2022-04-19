@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 
+	"k8s.io/klog/v2"
+
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
@@ -106,8 +108,8 @@ type vgInfo struct {
 }
 
 func (lvm *pmemLvm) GetCapacity(ctx context.Context) (capacity Capacity, err error) {
-	logger := pmemlog.Get(ctx).WithName("LVM-GetCapacity")
-	ctx = pmemlog.Set(ctx, logger)
+	logger := klog.FromContext(ctx).WithName("LVM-GetCapacity")
+	ctx = klog.NewContext(ctx, logger)
 
 	lvmMutex.Lock()
 	defer lvmMutex.Unlock()

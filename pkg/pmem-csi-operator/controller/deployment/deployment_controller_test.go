@@ -20,8 +20,6 @@ import (
 	"github.com/intel/pmem-csi/deploy"
 	"github.com/intel/pmem-csi/pkg/apis"
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
-	"github.com/intel/pmem-csi/pkg/logger"
-	"github.com/intel/pmem-csi/pkg/logger/testinglogger"
 	pmemcontroller "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller/deployment/testcases"
@@ -40,6 +38,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	cgfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/klog/v2/ktesting"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -200,7 +199,7 @@ func newTestContext(t *testing.T, k8sVersion version.Version, initObjs ...runtim
 	for _, obj := range initObjs {
 		objs = append(objs, obj.DeepCopyObject())
 	}
-	ctx := logger.Set(context.Background(), testinglogger.New(t))
+	_, ctx := ktesting.NewTestContext(t)
 	tc := &testContext{
 		ctx:              ctx,
 		t:                t,

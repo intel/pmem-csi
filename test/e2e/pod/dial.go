@@ -27,6 +27,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
+	"k8s.io/klog/v2"
 )
 
 // NewTransport creates a transport which uses the port forward dialer.
@@ -39,7 +40,10 @@ func NewTransport(logger logr.Logger, client kubernetes.Interface, restConfig *r
 			if err != nil {
 				return nil, err
 			}
-			return dialer.DialContainerPort(ctx, logger, *a)
+			if _, err := logr.FromContext(ctx); err != nil {
+				ctx = logr.NewContext(ctx, logger)
+			}
+			return dialer.DialContainerPort(ctx, *a)
 		},
 	}
 }
@@ -59,7 +63,8 @@ type Dialer struct {
 }
 
 // DialContainerPort connects to a certain container port in a pod.
-func (d *Dialer) DialContainerPort(ctx context.Context, logger logr.Logger, addr Addr) (conn net.Conn, finalErr error) {
+func (d *Dialer) DialContainerPort(ctx context.Context, addr Addr) (conn net.Conn, finalErr error) {
+	logger := klog.FromContext(ctx)
 	restClient := d.client.CoreV1().RESTClient()
 	restConfig := d.restConfig
 	if restConfig.GroupVersion == nil {
