@@ -40,7 +40,6 @@ github.com/spf13/pflag,BSD-3-Clause
 go.uber.org/atomic,MIT
 go.uber.org/multierr,MIT
 go.uber.org/zap,MIT
-golang.org/x/crypto/ed25519,BSD-3-Clause
 golang.org/x/net,BSD-3-Clause
 golang.org/x/oauth2,BSD-3-Clause
 golang.org/x/sys,BSD-3-Clause
