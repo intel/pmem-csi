@@ -131,6 +131,11 @@ TEST_E2E_ARGS =
 empty:=
 space:= $(empty) $(empty)
 
+GO_TEST_E2E = $(GO) test -count=1 -timeout 0 -v ./test/e2e -args
+ifneq ($(WITH_DLV),)
+GO_TEST_E2E = dlv test ./test/e2e --
+endif
+
 # E2E testing relies on a running QEMU test cluster. It therefore starts it,
 # but because it might have been running already and might have to be kept
 # running to debug test failures, it doesn't stop it.
@@ -146,7 +151,7 @@ RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 	TEST_CMD='$(TEST_CMD)' \
 	GO='$(GO)' \
 	TEST_PKGS='$(shell for i in ./pkg/pmem-device-manager ./pkg/imagefile/test; do if ls $$i/*_test.go 2>/dev/null >&2; then echo $$i; fi; done)' \
-	$(GO) test -count=1 -timeout 0 -v ./test/e2e -args \
+	$(GO_TEST_E2E) \
                 -v=5 \
                 -ginkgo.skip='$(subst $(space),|,$(strip $(subst @,$(space),$(TEST_E2E_SKIP_ALL))))' \
                 -ginkgo.focus='$(subst $(space),|,$(strip $(subst @,$(space),$(TEST_E2E_FOCUS))))' \
