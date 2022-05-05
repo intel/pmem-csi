@@ -7,7 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package pmdmanager
 
 import (
-	"context"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -18,9 +17,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/klog/v2/ktesting"
 
-	"github.com/intel/pmem-csi/pkg/logger"
-	"github.com/intel/pmem-csi/pkg/logger/testinglogger"
 	"github.com/intel/pmem-csi/pkg/ndctl"
 	ndctlfake "github.com/intel/pmem-csi/pkg/ndctl/fake"
 	"github.com/intel/pmem-csi/pkg/types"
@@ -300,7 +298,7 @@ esac
 			}
 			os.Setenv("PATH", tmp+":"+path)
 
-			ctx := logger.Set(context.Background(), testinglogger.New(t))
+			_, ctx := ktesting.NewTestContext(t)
 
 			numConverted, err := convert(ctx, tc.hardware)
 			if tc.expectError {
@@ -427,7 +425,7 @@ func TestRelabel(t *testing.T) {
 
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
-			ctx := logger.Set(context.Background(), testinglogger.New(t))
+			_, ctx := ktesting.NewTestContext(t)
 			client := fake.NewSimpleClientset(tc.objects...)
 			err := relabel(ctx, client, tc.driverName, tc.nodeSelector, tc.nodeName)
 			if tc.expectError {

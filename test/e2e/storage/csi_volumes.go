@@ -211,7 +211,7 @@ func DefineLateBindingTests(d *deploy.Deployment, f *framework.Framework) {
 				LogWriter:    GinkgoWriter,
 			}
 			framework.ExpectNoError(podlogs.CopyAllLogs(ctx, f.ClientSet, f.Namespace.Name, to))
-			framework.ExpectNoError(podlogs.WatchPods(ctx, f.ClientSet, f.Namespace.Name, GinkgoWriter))
+			framework.ExpectNoError(podlogs.WatchPods(ctx, f.ClientSet, f.Namespace.Name, GinkgoWriter, nil))
 
 			wg := sync.WaitGroup{}
 			volumes := int64(0)

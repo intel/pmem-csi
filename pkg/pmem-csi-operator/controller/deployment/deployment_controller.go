@@ -27,6 +27,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/klog/v2"
 	"k8s.io/kubectl/pkg/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -62,7 +63,7 @@ func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error
 	if err != nil {
 		return fmt.Errorf("create controller: %v", err)
 	}
-	l := logger.Get(ctx)
+	l := klog.FromContext(ctx)
 
 	p := predicate.Funcs{
 		UpdateFunc: func(e event.UpdateEvent) bool {
@@ -212,8 +213,8 @@ type ReconcileDeployment struct {
 // NewReconcileDeployment creates new deployment reconciler
 func NewReconcileDeployment(ctx context.Context, client client.Client, opts pmemcontroller.ControllerOptions) (reconcile.Reconciler, error) {
 	// "reconcile" will be part of all future log messages.
-	l := logger.Get(ctx).WithName("reconcile")
-	ctx = logger.Set(ctx, l)
+	l := klog.FromContext(ctx).WithName("reconcile")
+	ctx = klog.NewContext(ctx, l)
 
 	if opts.Namespace == "" {
 		opts.Namespace = k8sutil.GetNamespace(ctx)
@@ -266,8 +267,8 @@ func (r *ReconcileDeployment) Reconcile(ctx context.Context, request reconcile.R
 	startTime := time.Now()
 
 	requeueDelayOnError := 2 * time.Minute
-	l := logger.Get(r.ctx).WithValues("deployment", request.NamespacedName.Name)
-	ctx = logger.Set(ctx, l)
+	l := klog.FromContext(r.ctx).WithValues("deployment", request.NamespacedName.Name)
+	ctx = klog.NewContext(ctx, l)
 
 	// Fetch the Deployment instance
 	deployment := &api.PmemCSIDeployment{}
@@ -375,7 +376,7 @@ func (r *ReconcileDeployment) Get(obj client.Object) error {
 
 // Delete delete existing Kubernetes object
 func (r *ReconcileDeployment) Delete(obj client.Object) error {
-	logger.Get(r.ctx).Info("deleting", "object", logger.KObjWithType(obj))
+	klog.FromContext(r.ctx).Info("deleting", "object", logger.KObjWithType(obj))
 	return r.client.Delete(r.ctx, obj)
 }
 
@@ -430,7 +431,7 @@ func (r *ReconcileDeployment) getDeploymentFor(ctx context.Context, obj metav1.O
 // newDeployment prepares for object creation and will modify the PmemCSIDeployment.
 // Callers who don't want that need to clone it first.
 func (r *ReconcileDeployment) newDeployment(ctx context.Context, deployment *api.PmemCSIDeployment) (*pmemCSIDeployment, error) {
-	l := logger.Get(ctx).WithName("newDeployment")
+	l := klog.FromContext(ctx).WithName("newDeployment")
 
 	if err := deployment.EnsureDefaults(r.containerImage); err != nil {
 		return nil, err

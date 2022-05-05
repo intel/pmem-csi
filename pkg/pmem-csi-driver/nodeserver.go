@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"k8s.io/klog/v2"
 	"k8s.io/utils/keymutex"
 	"k8s.io/utils/mount"
 
@@ -110,8 +111,8 @@ func (ns *nodeServer) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVo
 
 func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
 	volumeID := req.GetVolumeId()
-	logger := pmemlog.Get(ctx).WithValues("volume-id", volumeID)
-	ctx = pmemlog.Set(ctx, logger)
+	logger := klog.FromContext(ctx).WithValues("volume-id", volumeID)
+	ctx = klog.NewContext(ctx, logger)
 
 	// Check arguments
 	if req.GetVolumeCapability() == nil {
@@ -359,8 +360,8 @@ func (ns *nodeServer) NodePublishVolume(ctx context.Context, req *csi.NodePublis
 func (ns *nodeServer) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnpublishVolumeRequest) (*csi.NodeUnpublishVolumeResponse, error) {
 	volumeID := req.GetVolumeId()
 	targetPath := req.GetTargetPath()
-	logger := pmemlog.Get(ctx).WithValues("volume-id", volumeID, "target-path", targetPath)
-	ctx = pmemlog.Set(ctx, logger)
+	logger := klog.FromContext(ctx).WithValues("volume-id", volumeID, "target-path", targetPath)
+	ctx = klog.NewContext(ctx, logger)
 
 	// Check arguments
 	if volumeID == "" {
@@ -465,8 +466,8 @@ func (ns *nodeServer) nodeUnpublishKataContainerImage(ctx context.Context, req *
 	// and can detach the loop device from it.
 	imageFile := filepath.Join(hostMount, kataContainersImageFilename)
 
-	logger := pmemlog.Get(ctx).WithName("nodeUnpublishKataContainerImage").WithValues("image-file", imageFile)
-	ctx = pmemlog.Set(ctx, logger)
+	logger := klog.FromContext(ctx).WithName("nodeUnpublishKataContainerImage").WithValues("image-file", imageFile)
+	ctx = klog.NewContext(ctx, logger)
 
 	// This will warn if the loop device is not found, but won't treat that as an error.
 	// This is the behavior that we want.
@@ -499,8 +500,8 @@ func (ns *nodeServer) nodeUnpublishKataContainerImage(ctx context.Context, req *
 func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
 	volumeID := req.GetVolumeId()
 	stagingtargetPath := req.GetStagingTargetPath()
-	logger := pmemlog.Get(ctx).WithValues("volume-id", volumeID, "staging-target-path", stagingtargetPath)
-	ctx = pmemlog.Set(ctx, logger)
+	logger := klog.FromContext(ctx).WithValues("volume-id", volumeID, "staging-target-path", stagingtargetPath)
+	ctx = klog.NewContext(ctx, logger)
 
 	// Check arguments
 	if volumeID == "" {
@@ -595,8 +596,8 @@ func (ns *nodeServer) NodeStageVolume(ctx context.Context, req *csi.NodeStageVol
 func (ns *nodeServer) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnstageVolumeRequest) (*csi.NodeUnstageVolumeResponse, error) {
 	volumeID := req.GetVolumeId()
 	stagingtargetPath := req.GetStagingTargetPath()
-	logger := pmemlog.Get(ctx).WithValues("volume-id", volumeID, "staging-target-path", stagingtargetPath)
-	ctx = pmemlog.Set(ctx, logger)
+	logger := klog.FromContext(ctx).WithValues("volume-id", volumeID, "staging-target-path", stagingtargetPath)
+	ctx = klog.NewContext(ctx, logger)
 
 	// Check arguments
 	if volumeID == "" {

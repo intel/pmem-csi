@@ -7,13 +7,10 @@ SPDX-License-Identifier: Apache-2.0
 package exec
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	pmemlog "github.com/intel/pmem-csi/pkg/logger"
-	"github.com/intel/pmem-csi/pkg/logger/testinglogger"
+	"k8s.io/klog/v2/ktesting"
 )
 
 var testcases = map[string]struct {
@@ -104,7 +101,7 @@ hello world
 func TestRun(t *testing.T) {
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
-			ctx := pmemlog.Set(context.Background(), testinglogger.New(t))
+			_, ctx := ktesting.NewTestContext(t)
 			output, err := RunCommand(ctx, tc.cmd[0], tc.cmd[1:]...)
 			assert.Equal(t, tc.expectedOutput, output, "output")
 			errStr := ""

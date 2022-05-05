@@ -12,10 +12,11 @@ import (
 	"fmt"
 	"sync"
 
-	pmemlog "github.com/intel/pmem-csi/pkg/logger"
-	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 	"google.golang.org/grpc"
+	"k8s.io/klog/v2"
+
+	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 )
 
 type Service interface {
@@ -47,7 +48,7 @@ func (s *NonBlockingGRPCServer) Start(ctx context.Context, endpoint, errorPrefix
 	}
 	s.servers = append(s.servers, rpcServer)
 
-	logger := pmemlog.Get(ctx).WithName("GRPC-server").WithValues("endpoint", endpoint)
+	logger := klog.FromContext(ctx).WithName("GRPC-server").WithValues("endpoint", endpoint)
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()

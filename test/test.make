@@ -95,6 +95,10 @@ run_tests: $(RUN_TEST_DEPS)
 TEST_E2E_SKIP =
 TEST_E2E_SKIP_ALL = $(TEST_E2E_SKIP)
 
+# Depends on test/e2e/testing-manifests/storage-csi/any-volume-datasource/crd/populator.storage.k8s.io_volumepopulators.yaml
+# which isn't available when we import the test suite.
+TEST_E2E_SKIP_ALL += provisioning.should.provision.storage.with.any.volume.data.source
+
 # The test's check whether a driver supports multiple nodes is incomplete and does
 # not work for the topology-based single-node access in PMEM-CSI:
 # https://github.com/kubernetes/kubernetes/blob/25ffbe633810609743944edd42d164cd7990071c/test/e2e/storage/testsuites/provisioning.go#L175-L181
@@ -109,6 +113,21 @@ TEST_E2E_SKIP_ALL += volumeIO.*should.write.files.of.various.sizes.*verify.size.
 # Do not run driver stress tests in direct mode, they are consuming more time(~17m per test)
 # The reason is shredding the ndctl device is consuming most of the time.
 TEST_E2E_SKIP_ALL += direct.*binding.stress.test
+
+# This test relies on new behavior in kubelet 1.24.
+# https://github.com/kubernetes/kubernetes/pull/107065/commits/4a076578451aa27e8ac60beec1fd3f23918c5331#r855413674
+TEST_E2E_SKIP_1.23 += should.mount.multiple.PV.pointing.to.the.same.storage.on.the.same.node
+TEST_E2E_SKIP_1.22 += should.mount.multiple.PV.pointing.to.the.same.storage.on.the.same.node
+TEST_E2E_SKIP_1.21 += should.mount.multiple.PV.pointing.to.the.same.storage.on.the.same.node
+TEST_E2E_SKIP_1.20 += should.mount.multiple.PV.pointing.to.the.same.storage.on.the.same.node
+TEST_E2E_SKIP_1.19 += should.mount.multiple.PV.pointing.to.the.same.storage.on.the.same.node
+
+# Fails for Kubernetes <= 1.22 with an incorrect error (fixed later in Kubernetes 1.23):
+# Invalid value: "my-volume-0": can only use volume source type of PersistentVolumeClaim for block mode
+TEST_E2E_SKIP_1.22 += Generic.Ephemeral-volume..block.volmode
+TEST_E2E_SKIP_1.21 += Generic.Ephemeral-volume..block.volmode
+TEST_E2E_SKIP_1.20 += Generic.Ephemeral-volume..block.volmode
+TEST_E2E_SKIP_1.19 += Generic.Ephemeral-volume..block.volmode
 
 # Add all Kubernetes version-specific suppressions.
 TEST_E2E_SKIP_ALL += $(TEST_E2E_SKIP_$(shell cat _work/$(CLUSTER)/kubernetes.version))
@@ -140,6 +159,11 @@ endif
 # but because it might have been running already and might have to be kept
 # running to debug test failures, it doesn't stop it.
 # Use count=1 to avoid test results caching, does not make sense for e2e test.
+#
+# -e2e-verify-service-account might be something that only works for Kubernetes
+# >= 1.24 - see
+# https://github.com/kubernetes/kubernetes/issues/108307#issuecomment-1074394385
+# https://github.com/kubernetes/kubernetes/pull/107763
 .PHONY: test_e2e
 RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 	REPO_ROOT=`pwd` \
@@ -153,6 +177,7 @@ RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 	TEST_PKGS='$(shell for i in ./pkg/pmem-device-manager ./pkg/imagefile/test; do if ls $$i/*_test.go 2>/dev/null >&2; then echo $$i; fi; done)' \
 	$(GO_TEST_E2E) \
                 -v=5 \
+                -e2e-verify-service-account=false \
                 -ginkgo.skip='$(subst $(space),|,$(strip $(subst @,$(space),$(TEST_E2E_SKIP_ALL))))' \
                 -ginkgo.focus='$(subst $(space),|,$(strip $(subst @,$(space),$(TEST_E2E_FOCUS))))' \
 		-ginkgo.randomizeAllSpecs=false \

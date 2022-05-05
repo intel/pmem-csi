@@ -12,8 +12,7 @@ import (
 	"os"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	pmemlog "github.com/intel/pmem-csi/pkg/logger"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -25,7 +24,7 @@ const (
 // GetNamespace returns the namespace of the operator pod
 // defaults to "kube-system"
 func GetNamespace(ctx context.Context) string {
-	logger := pmemlog.Get(ctx).WithValues("namespace-file", namespaceFile)
+	logger := klog.FromContext(ctx).WithValues("namespace-file", namespaceFile)
 	ns := os.Getenv(namespaceEnvVar)
 	if ns == "" {
 		// If environment variable not set, give it a try to fetch it from

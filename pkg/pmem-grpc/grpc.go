@@ -21,8 +21,8 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/resolver"
 	"google.golang.org/grpc/status"
+	"k8s.io/klog/v2"
 
-	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 )
 
@@ -90,10 +90,10 @@ func NewServer(endpoint, errorPrefix string, tlsConfig *tls.Config, csiMetricsMa
 			// Prepare a logger instance which always adds GRPC as prefix and a unique
 			// counter. This makes it possible to determine which log messages belong
 			// to which request and which are unrelated to gRPC.
-			logger := pmemlog.Get(ctx)
+			logger := klog.FromContext(ctx)
 			methodName := info.FullMethod[strings.LastIndex(info.FullMethod, "/")+1:]
 			logger = logger.WithName(methodName).WithValues("request-counter", atomic.AddUint64(&grpcRequestCounter, 1))
-			ctx = pmemlog.Set(ctx, logger)
+			ctx = klog.NewContext(ctx, logger)
 
 			resp, err := handler(ctx, req)
 			if errorPrefix != "" && err != nil {
@@ -149,7 +149,7 @@ func LoadServerTLS(ctx context.Context, caFile, certFile, keyFile, peerName stri
 }
 
 func serverConfig(ctx context.Context, certPool *x509.CertPool, peerCert *tls.Certificate, peerName string) *tls.Config {
-	logger := pmemlog.Get(ctx).WithName("serverConfig").WithValues("peername", peerName)
+	logger := klog.FromContext(ctx).WithName("serverConfig").WithValues("peername", peerName)
 	return &tls.Config{
 		GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {
 			if info == nil {

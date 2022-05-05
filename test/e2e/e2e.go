@@ -122,7 +122,7 @@ var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 		if err := podlogs.CopyAllLogs(ctx, c, namespace, to); err != nil {
 			framework.Failf("copying logs from namespace %s: %v", namespace, err)
 		}
-		if err := podlogs.WatchPods(ctx, c, namespace, ginkgo.GinkgoWriter); err != nil {
+		if err := podlogs.WatchPods(ctx, c, namespace, ginkgo.GinkgoWriter, nil); err != nil {
 			framework.Failf("watching pods in namespace %s: %v", namespace, err)
 		}
 	}
