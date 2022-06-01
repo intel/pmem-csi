@@ -315,8 +315,7 @@ persistentvolumeclaim "memcached-data-volume-pmem-memcached-0" deleted
 ## KubeDB
 
 The [KubeDB operator](https://kubedb.com) >= 0.14.0-beta.1 has
-[changes](https://github.com/kubedb/memcached/pull/146) that enable
-the usage of PMEM in ephemeral volumes. Management of persistent
+support for usage of PMEM in ephemeral volumes. Management of persistent
 volumes and thus the restartable cache feature are not supported.
 
 At this time, the upstream install instructions do not cover
