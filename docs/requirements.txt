@@ -1,6 +1,6 @@
-sphinx
-sphinx_rtd_theme
-recommonmark
-sphinx-markdown-tables
+sphinx == 4.5.0
+sphinx_rtd_theme == 1.0.0
+recommonmark == 0.7.1
+sphinx-markdown-tables == 0.0.15
 sphinx-copybutton == 0.2.11
-sphinx-md
+sphinx-md == 0.0.3
