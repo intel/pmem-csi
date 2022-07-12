@@ -345,7 +345,7 @@ When a pod requests a special [extended
 resource](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#extended-resources)
 , the Kubernetes scheduler calls
 a [scheduler
-extender](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/scheduling/scheduler_extender.md)
+extender](https://github.com/kubernetes/design-proposals-archive/blob/acc25e14ca83dfda4f66d8cb1f1b491f26e78ffe/scheduling/scheduler_extender.md)
 provided by PMEM-CSI with a list of nodes that a pod might run
 on.
 
