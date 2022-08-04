@@ -91,7 +91,9 @@ function deploy_using_olm() {
   fi
 
   # Deploy the operator
+  # Pinning the image is a workaround for https://github.com/operator-framework/operator-registry/issues/984.
   ${BINDIR}/operator-sdk run bundle${upgrade} ${NAMESPACE} --timeout 5m ${TEST_LOCAL_REGISTRY}/pmem-csi-bundle:v${BUNDLE_VERSION} \
+           --index-image=quay.io/operator-framework/opm:v1.23.0 \
            $(if ${TEST_LOCAL_REGISTRY_SKIP_TLS}; then echo '--skip-tls'; fi)
 }
 
