@@ -93,7 +93,7 @@ func init() {
 	simpleMetrics.MustRegister(buildInfo)
 }
 
-//Config type for driver configuration
+// Config type for driver configuration
 type Config struct {
 	//DriverName name of the csi driver
 	DriverName string

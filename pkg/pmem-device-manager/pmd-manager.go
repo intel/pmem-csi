@@ -71,7 +71,7 @@ type PmemDeviceCapacity interface {
 	GetCapacity(ctx context.Context) (Capacity, error)
 }
 
-//PmemDeviceManager interface to manage the PMEM block devices
+// PmemDeviceManager interface to manage the PMEM block devices
 type PmemDeviceManager interface {
 	PmemDeviceCapacity
 

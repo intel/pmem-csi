@@ -240,12 +240,12 @@ type redeployObject struct {
 
 // redeploy creates or patches one sub-object so that it matches
 // the PmemCSIDeployment spec.
-//  1.
-//  2. Retrieve the latest data saved at APIServer for that object.
-//  3. Create an objectPatch for that object to record the changes from this point.
-//  4. Call ro.modify() to modify the object's data.
-//  5. Call objectPatch.Apply() to submit the chanages to the APIServer.
-//  6. If the update in step-5 was success, then call the ro.postUpdate() callback
+//
+//  1. Retrieve the latest data saved at APIServer for that object.
+//  2. Create an objectPatch for that object to record the changes from this point.
+//  3. Call ro.modify() to modify the object's data.
+//  4. Call objectPatch.Apply() to submit the chanages to the APIServer.
+//  5. If the update in step 4 was success, then call the ro.postUpdate() callback
 //     to run any post update steps.
 func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment, ro redeployObject) (finalObj client.Object, finalErr error) {
 	l := klog.FromContext(ctx).WithName("redeploy")

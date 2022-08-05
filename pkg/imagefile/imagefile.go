@@ -23,30 +23,29 @@ Furthermore, this file is based on the following code published by Intel under A
 /*
 Package imagefile contains code to create a file with the following content:
 
-	.-----------.----------.---------------.
-	| 0 - 512 B | 4 - 8 Kb |  2M - ...     |
-	|-----------+----------+---------------+
-	|   MBR #1  |   DAX    |  FS           |
-	'-----------'----------'---------------'
-	      |         |      ^
-	      |         '-data-'
-	      |                |
-	      '--fs-partition--'
+		.-----------.----------.---------------.
+		| 0 - 512 B | 4 - 8 Kb |  2M - ...     |
+		|-----------+----------+---------------+
+		|   MBR #1  |   DAX    |  FS           |
+		'-----------'----------'---------------'
+		      |         |      ^
+		      |         '-data-'
+		      |                |
+		      '--fs-partition--'
 
-                    ^          ^
-          daxHeaderOffset      |
-                           HeaderSize
-
+	                    ^          ^
+	          daxHeaderOffset      |
+	                           HeaderSize
 
 MBR: Master boot record.
 DAX: Metadata required by the NVDIMM driver to enable DAX in the guest (struct nd_pfn_sb).
 FS: partition that contains a filesystem.
 
 The MBR is useful for working with the image file:
-- the `file` utility uses it to determine what the file contains
-- when binding the entire file to /dev/loop0, /dev/loop0p1 will be
-  the file system (beware that partprobe /dev/loop0 might be needed);
-  alternatively one could bind the file system directly by specifying an offset
+  - the `file` utility uses it to determine what the file contains
+  - when binding the entire file to /dev/loop0, /dev/loop0p1 will be
+    the file system (beware that partprobe /dev/loop0 might be needed);
+    alternatively one could bind the file system directly by specifying an offset
 
 When such a file is created on a dax-capable filesystem, then it can
 be used as backing store for a [QEMU nvdimm

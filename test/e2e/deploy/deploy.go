@@ -1515,12 +1515,12 @@ func Describe(deployment, describe, what string, f func(d *Deployment)) bool {
 // DefineTests must be called to register all tests defined so far via Describe.
 //
 // They are placed inside a "Deploy" node because:
-// - The order of specs inside a node is not randomized by default,
-//   which is what we want, in contrast to the top-level nodes,
-//   which always get randomized (https://github.com/onsi/ginkgo/issues/966#issuecomment-1110046593).
-// - It is easier to focus on specific tests with, for example, "Deploy operator".
-//   "^operator" does not work because the internal test name string has some
-//   builtin, hidden string at the beginning (something like "top level").
+//   - The order of specs inside a node is not randomized by default,
+//     which is what we want, in contrast to the top-level nodes,
+//     which always get randomized (https://github.com/onsi/ginkgo/issues/966#issuecomment-1110046593).
+//   - It is easier to focus on specific tests with, for example, "Deploy operator".
+//     "^operator" does not work because the internal test name string has some
+//     builtin, hidden string at the beginning (something like "top level").
 func DefineTests() {
 	ginkgo.Context("Deploy", defineTests)
 }

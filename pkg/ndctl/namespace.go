@@ -43,10 +43,10 @@ const (
 	NoneMap   MapLocation = "none"
 )
 
-//NamespaceType type to represent namespace type
+// NamespaceType type to represent namespace type
 type NamespaceType string
 
-//NamespaceMode represents mode of the namespace
+// NamespaceMode represents mode of the namespace
 type NamespaceMode string
 
 func (mode NamespaceMode) toCMode() C.enum_ndctl_namespace_mode {
