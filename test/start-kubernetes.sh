@@ -71,8 +71,8 @@ case ${TEST_DISTRO} in
     fedora)
         CLOUD_USER=${CLOUD_USER:-fedora}
         EFI=${EFI:-false}
-        TEST_DISTRO_VERSION=${TEST_DISTRO_VERSION:-34}
-        FEDORA_CLOUDIMG_REL=${FEDORA_CLOUDIMG_REL:-1.2}
+        TEST_DISTRO_VERSION=${TEST_DISTRO_VERSION:-36}
+        FEDORA_CLOUDIMG_REL=${FEDORA_CLOUDIMG_REL:-1.5}
         IMAGE_URL=${IMAGE_URL:-https://download.fedoraproject.org/pub/fedora/linux/releases/${TEST_DISTRO_VERSION}/Cloud/x86_64/images}
         CLOUD_IMAGE=${CLOUD_IMAGE:-Fedora-Cloud-Base-${TEST_DISTRO_VERSION}-${FEDORA_CLOUDIMG_REL}.x86_64.raw.xz}
         ;;
@@ -371,10 +371,14 @@ function init_kubernetes_cluster() (
     vm_id=0
     pids=""
     IPS=$(print_ips)
-    # in Fedora-3[123] case, add a flag to kernel cmdline and reboot to disable cgroups v2
-    if [[ "$TEST_DISTRO" = "fedora" && "$TEST_DISTRO_VERSION" =~ 3[1-4] ]]; then
+    # in Fedora-3[123...] case, add a flag to kernel cmdline and reboot to disable cgroups v2
+    if [[ "$TEST_DISTRO" = "fedora" && "$TEST_DISTRO_VERSION" =~ 3[1-9] ]]; then
         SYSTEMD_UNIFIED_CGROUP_HIERARCHY=systemd.unified_cgroup_hierarchy
         for ip in ${IPS}; do
+            # Disable zswap, permanently (https://fedoraproject.org/wiki/Changes/SwapOnZRAM#How_can_it_be_disabled?).
+            ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo dnf -q -y remove zram-generator-defaults"
+            ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo sed -i -e '/swap/d' /etc/fstab"
+
             GRUB_BFS=$(ssh $SSH_ARGS ${CLOUD_USER}@${ip} "grep ^GRUB_ENABLE_BLSCFG /etc/default/grub | sed -e \"s;\(GRUB_ENABLE_BLSCFG=\)\(.*\);\2;g\"")
             # If BFS enabled use 'grubby' to modify kernel parameters
             if [ $GRUB_BFS = "true" ]; then
@@ -523,6 +527,12 @@ function cleanup() (
             echo "Docker log for $name:"
             docker logs $name | sed -e "s/^/$name: /"
         fi
+
+        if [ -t 0 ]; then
+            echo "Press RETURN to clean up."
+            read input
+        fi
+
         for vm in $(govm list -f '{{select (filterRegexp . "Name" "^'$(node_filter ${NODES[@]})'$") "Name"}}'); do
             govm remove "$vm"
         done

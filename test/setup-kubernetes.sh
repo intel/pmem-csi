@@ -252,6 +252,7 @@ sudo kubeadm init $kubeadm_args $kubeadm_args_init || (
     # Dump some information that might explain the failure.
     sudo systemctl status docker crio containerd kubelet
     sudo journalctl -xe -u docker -u crio -u containerd -u kubelet
+    echo "ERROR: kubeadm init failed, see above."
     exit 1
 )
 mkdir -p $HOME/.kube
