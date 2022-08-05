@@ -30,7 +30,7 @@ var _ PmemDeviceManager = &pmemNdctl{}
 // our locking strategy.
 var ndctlMutex = &sync.Mutex{}
 
-//NewPmemDeviceManagerNdctl Instantiates a new ndctl based pmem device manager
+// NewPmemDeviceManagerNdctl Instantiates a new ndctl based pmem device manager
 // FIXME(avalluri): consider pmemPercentage while calculating available space
 func newPmemDeviceManagerNdctl(ctx context.Context, pmemPercentage uint) (PmemDeviceManager, error) {
 	ctx, _ = pmemlog.WithName(ctx, "ndctl-New")

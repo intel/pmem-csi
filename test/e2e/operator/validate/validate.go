@@ -321,7 +321,8 @@ func DriverDeployment(ctx context.Context, c client.Client, k8sver version.Versi
 // When we get an object back from the apiserver, some fields get populated with generated
 // or fixed default values. defaultSpecValues contains a hierarchy of maps that stores those
 // defaults:
-//    Kind -> field -> field -> ... -> value
+//
+//	Kind -> field -> field -> ... -> value
 //
 // Those defaults are used when the original object didn't have a field value.
 // "ignore" is a special value which let's the comparison skip the field.

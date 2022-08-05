@@ -4,12 +4,10 @@ Copyright 2020 Intel Corporation.
 SPDX-License-Identifier: Apache-2.0
 */
 
-/* Version skew testing ensures that APIs and state is compatible
-across up- and downgrades. The driver for older releases is installed
-by checking out the deployment YAML files from an older release.
-
-The operator is not covered yet.
-*/
+// Package versionskew testing ensures that APIs and state is compatible
+// across up- and downgrades. The driver for older releases is installed
+// by checking out the deployment YAML files from an older release.
+// The operator is not covered yet.
 package versionskew
 
 import (

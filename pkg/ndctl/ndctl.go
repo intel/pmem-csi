@@ -21,7 +21,7 @@ const (
 	mib2 uint64 = mib * 2
 )
 
-//CreateNamespaceOpts options to create a namespace
+// CreateNamespaceOpts options to create a namespace
 type CreateNamespaceOpts struct {
 	Name       string
 	Size       uint64

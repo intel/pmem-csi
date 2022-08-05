@@ -279,7 +279,7 @@ func listDevices(ctx context.Context, volumeGroups ...string) (map[string]*PmemD
 	return parseLVSOutput(output)
 }
 
-//lvs options "lv_name,lv_path,lv_size,lv_free"
+// lvs options "lv_name,lv_path,lv_size,lv_free"
 func parseLVSOutput(output string) (map[string]*PmemDeviceInfo, error) {
 	devices := map[string]*PmemDeviceInfo{}
 	lines := strings.Split(output, "\n")

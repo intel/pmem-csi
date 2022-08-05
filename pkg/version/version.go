@@ -60,10 +60,10 @@ func (v Version) Minor() uint {
 }
 
 // Compare compares v with given otherVersion
-// Returns,
-//  0 if two versions are same
-//  >0 if v is greater otherVersion
-//  <0 if v is less than otherVersion
+// Returns
+// - 0 if two versions are same
+// - >0 if v is greater otherVersion
+// - <0 if v is less than otherVersion
 func (v Version) Compare(major, minor uint) int {
 	d := int(v.major - major)
 	if d == 0 {

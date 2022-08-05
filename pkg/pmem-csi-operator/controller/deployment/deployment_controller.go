@@ -368,7 +368,7 @@ func (r *ReconcileDeployment) RemoveHook(h ReconcileHook) {
 	delete(r.reconcileHooks, h)
 }
 
-//Get tries to retrives the Kubernetes objects
+// Get tries to retrives the Kubernetes objects
 func (r *ReconcileDeployment) Get(obj client.Object) error {
 	key := client.ObjectKeyFromObject(obj)
 	return r.client.Get(r.ctx, key, obj)
