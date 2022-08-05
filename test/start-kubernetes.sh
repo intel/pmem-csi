@@ -523,6 +523,12 @@ function cleanup() (
             echo "Docker log for $name:"
             docker logs $name | sed -e "s/^/$name: /"
         fi
+
+        if [ -t 0 ]; then
+            echo "Press RETURN to clean up."
+            read input
+        fi
+
         for vm in $(govm list -f '{{select (filterRegexp . "Name" "^'$(node_filter ${NODES[@]})'$") "Name"}}'); do
             govm remove "$vm"
         done
