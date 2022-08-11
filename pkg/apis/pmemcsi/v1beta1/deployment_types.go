@@ -284,10 +284,10 @@ const (
 	// can be used to update both.
 
 	// DefaultProvisionerImage default external provisioner image to use
-	DefaultProvisionerImage = "k8s.gcr.io/sig-storage/csi-provisioner:v2.2.2"
+	DefaultProvisionerImage = "registry.k8s.io/sig-storage/csi-provisioner:v3.2.1"
 
 	// DefaultRegistrarImage default node driver registrar image to use
-	DefaultRegistrarImage = "k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.2.0"
+	DefaultRegistrarImage = "registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.5.1"
 
 	// Below resource requests and limits are derived(with minor adjustments) from
 	// recommendations reported by VirtualPodAutoscaler(LowerBound -> Requests and UpperBound -> Limits)

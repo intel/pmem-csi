@@ -1004,13 +1004,6 @@ func (d *pmemCSIDeployment) getSchedulerService(service *corev1.Service) {
 func (d *pmemCSIDeployment) getControllerProvisionerRole(role *rbacv1.Role) {
 	role.Rules = []rbacv1.PolicyRule{
 		{
-			APIGroups: []string{""},
-			Resources: []string{"endpoints"},
-			Verbs: []string{
-				"get", "watch", "list", "delete", "update", "create",
-			},
-		},
-		{
 			APIGroups: []string{"coordination.k8s.io"},
 			Resources: []string{"leases"},
 			Verbs: []string{

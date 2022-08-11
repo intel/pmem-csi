@@ -33,17 +33,6 @@ metadata:
   namespace: pmem-csi
 rules:
 - apiGroups:
-  - ""
-  resources:
-  - endpoints
-  verbs:
-  - get
-  - watch
-  - list
-  - delete
-  - update
-  - create
-- apiGroups:
   - coordination.k8s.io
   resources:
   - leases
@@ -536,7 +525,7 @@ spec:
         env:
         - name: PMEM_CSI_DRIVER_NAME
           value: pmem-csi.intel.com
-        image: k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.2.0
+        image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.5.1
         imagePullPolicy: IfNotPresent
         name: driver-registrar
         resources:
@@ -577,7 +566,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: k8s.gcr.io/sig-storage/csi-provisioner:v2.2.2
+        image: registry.k8s.io/sig-storage/csi-provisioner:v3.2.1
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 6
