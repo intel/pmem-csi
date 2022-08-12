@@ -43,11 +43,8 @@ const (
 )
 
 func baseSupportsKubernetes(ver version.Version) bool {
-	switch ver {
-	// No exceptions at the moment.
-	default:
-		return true
-	}
+	// v1.0.x only supports Kubernetes 1.22, not 1.23 and higher.
+	return ver.CompareVersion(version.NewVersion(1, 22)) <= 0
 }
 
 type skewTestSuite struct {

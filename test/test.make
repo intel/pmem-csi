@@ -119,15 +119,11 @@ TEST_E2E_SKIP_ALL += direct.*binding.stress.test
 TEST_E2E_SKIP_1.23 += should.mount.multiple.PV.pointing.to.the.same.storage.on.the.same.node
 TEST_E2E_SKIP_1.22 += should.mount.multiple.PV.pointing.to.the.same.storage.on.the.same.node
 TEST_E2E_SKIP_1.21 += should.mount.multiple.PV.pointing.to.the.same.storage.on.the.same.node
-TEST_E2E_SKIP_1.20 += should.mount.multiple.PV.pointing.to.the.same.storage.on.the.same.node
-TEST_E2E_SKIP_1.19 += should.mount.multiple.PV.pointing.to.the.same.storage.on.the.same.node
 
 # Fails for Kubernetes <= 1.22 with an incorrect error (fixed later in Kubernetes 1.23):
 # Invalid value: "my-volume-0": can only use volume source type of PersistentVolumeClaim for block mode
 TEST_E2E_SKIP_1.22 += Generic.Ephemeral-volume..block.volmode
 TEST_E2E_SKIP_1.21 += Generic.Ephemeral-volume..block.volmode
-TEST_E2E_SKIP_1.20 += Generic.Ephemeral-volume..block.volmode
-TEST_E2E_SKIP_1.19 += Generic.Ephemeral-volume..block.volmode
 
 # Add all Kubernetes version-specific suppressions.
 TEST_E2E_SKIP_ALL += $(TEST_E2E_SKIP_$(shell cat _work/$(CLUSTER)/kubernetes.version))

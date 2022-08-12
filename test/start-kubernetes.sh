@@ -444,6 +444,9 @@ function init_kubernetes_cluster() (
 
     # Determine actual Kubernetes version and record for other tools which need
     # to know without being able to call kubectl.
+    #
+    # --short got deprecated in 1.24 (https://github.com/kubernetes/kubernetes/pull/108987)
+    # and triggers a deprecation warning that cannot be disabled.
     ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} kubectl version --short | \
         grep 'Server Version' | \
         sed -e 's/.*: v\([0-9]*\)\.\([0-9]*\)\..*/\1.\2/' \

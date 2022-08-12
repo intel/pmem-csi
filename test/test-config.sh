@@ -157,7 +157,7 @@ fi
 # is installed instead of the latest one. Ignored when
 # using Clear Linux as OS because with Clear Linux we have
 # to use the Kubernetes version that ships with it.
-: ${TEST_KUBERNETES_VERSION:=1.21}
+: ${TEST_KUBERNETES_VERSION:=1.24}
 
 # Can be used to pick one of potentially severally of the
 # pre-generated deploy/kubernetes-<version><flavor> deployment
@@ -173,13 +173,10 @@ fi
 : ${TEST_HAVE_OLM:=false}
 
 # Kubernetes feature gates to enable/disable.
-# EndpointSlice is disabled because of https://github.com/kubernetes/kubernetes/issues/91287 (Kubernetes
-# < 1.19) and because there were random connection failures to node ports during sanity
-# testing (Kubernetes 1.19.0)
+#
+# Can be made version specific with code like
+# $(case ${TEST_KUBERNETES_VERSION} in ...) echo '...=false,';; esac) \
 : ${TEST_FEATURE_GATES:=\
-$(case ${TEST_KUBERNETES_VERSION} in 1.1[6-9]) echo 'EndpointSlice=false,';; esac)\
-$(case ${TEST_KUBERNETES_VERSION} in 1.1[8-9]) echo 'EndpointSliceProxying=false,';; esac)\
-$(case ${TEST_KUBERNETES_VERSION} in 1.19 | 1.20) echo 'GenericEphemeralVolume=true,';; esac)\
 }
 
 # If non-empty, the version of Kata Containers which is to be installed

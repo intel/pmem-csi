@@ -549,9 +549,9 @@ spec:
         - --timeout=5m
         - --default-fstype=ext4
         - --worker-threads=5
+        - --enable-capacity
         - --metrics-address=:10011
         - -v=5
-        - --enable-capacity
         env:
         - name: NODE_NAME
           valueFrom:
