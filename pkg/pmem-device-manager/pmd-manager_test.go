@@ -18,7 +18,7 @@ import (
 	pmemerr "github.com/intel/pmem-csi/pkg/errors"
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-driver/parameters"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	losetup "gopkg.in/freddierice/go-losetup.v1"

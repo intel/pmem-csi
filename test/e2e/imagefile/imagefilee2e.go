@@ -11,7 +11,7 @@ package imagefilee2e
 import (
 	"fmt"
 
-	"github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/v2"
 
 	"github.com/intel/pmem-csi/pkg/imagefile/test"
 	"github.com/intel/pmem-csi/test/e2e/deploy"

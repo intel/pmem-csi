@@ -33,7 +33,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 )
 
 func DefineImmediateBindingTests(d *deploy.Deployment, f *framework.Framework) {

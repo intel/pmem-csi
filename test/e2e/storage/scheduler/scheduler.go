@@ -33,7 +33,7 @@ import (
 	e2edriver "github.com/intel/pmem-csi/test/e2e/driver"
 	"github.com/intel/pmem-csi/test/e2e/ephemeral"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 

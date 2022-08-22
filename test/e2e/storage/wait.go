@@ -17,8 +17,8 @@ import (
 	"math"
 	"time"
 
-	"k8s.io/apimachinery/pkg/util/clock"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/utils/clock"
 )
 
 // BackoffManager manages backoff with a particular scheme based on its underlying implementation. It provides

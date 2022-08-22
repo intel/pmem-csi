@@ -30,7 +30,7 @@ import (
 	e2edeployment "k8s.io/kubernetes/test/e2e/framework/deployment"
 	e2evolume "k8s.io/kubernetes/test/e2e/framework/volume"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 

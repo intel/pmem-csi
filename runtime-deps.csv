@@ -3,7 +3,7 @@ github.com/blang/semver/v4,MIT
 github.com/cespare/xxhash/v2,MIT
 github.com/container-storage-interface/spec/lib/go/csi,Apache-2.0
 github.com/davecgh/go-spew/spew,ISC
-github.com/emicklei/go-restful,MIT
+github.com/emicklei/go-restful/v3,MIT
 github.com/evanphx/json-patch,BSD-3-Clause
 github.com/fsnotify/fsnotify,BSD-3-Clause
 github.com/go-logr/logr,Apache-2.0

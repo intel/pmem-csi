@@ -37,7 +37,7 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/ephemeral"
 	pmempod "github.com/intel/pmem-csi/test/e2e/pod"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 )
 
 type daxTestSuite struct {

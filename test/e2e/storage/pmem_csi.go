@@ -28,7 +28,7 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/storage/scheduler"
 	"github.com/intel/pmem-csi/test/e2e/versionskew"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
 )

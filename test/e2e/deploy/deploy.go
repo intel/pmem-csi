@@ -44,7 +44,7 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/pod"
 	testconfig "github.com/intel/pmem-csi/test/test-config"
 
-	"github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 )
 
