@@ -31,6 +31,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
+	admissionapi "k8s.io/pod-security-admission/api"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
@@ -47,6 +48,9 @@ var _ = deploy.DescribeForSome("raw-conversion", func(d *deploy.Deployment) bool
 	return d.Mode == api.DeviceModeLVM && !d.Testing && d.HasDriver
 }, func(d *deploy.Deployment) {
 	f := framework.NewDefaultFramework("conversion")
+
+	// Several pods needs privileges.
+	f.NamespacePodSecurityEnforceLevel = admissionapi.LevelPrivileged
 
 	It("works", func() {
 		testRawNamespaceConversion(f, d.DriverName, d.Namespace)

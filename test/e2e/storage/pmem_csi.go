@@ -19,6 +19,7 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/kubernetes/test/e2e/framework"
 	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
+	admissionapi "k8s.io/pod-security-admission/api"
 	runtime "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/intel/pmem-csi/pkg/k8sutil"
@@ -51,6 +52,9 @@ var _ = deploy.DescribeForAll("Deployment", func(d *deploy.Deployment) {
 
 var _ = deploy.DescribeForAll("Deployment", func(d *deploy.Deployment) {
 	f := framework.NewDefaultFramework("pmem-csi")
+
+	// Several pods needs privileges.
+	f.NamespacePodSecurityEnforceLevel = admissionapi.LevelPrivileged
 
 	DefineLateBindingTests(d, f)
 	DefineImmediateBindingTests(d, f)

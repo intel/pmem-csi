@@ -15,20 +15,21 @@ import (
 	"fmt"
 	"strconv"
 
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/kubernetes/test/e2e/framework"
+	e2edeployment "k8s.io/kubernetes/test/e2e/framework/deployment"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
+	e2evolume "k8s.io/kubernetes/test/e2e/framework/volume"
 	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
+	admissionapi "k8s.io/pod-security-admission/api"
 
 	"github.com/intel/pmem-csi/pkg/k8sutil"
 	"github.com/intel/pmem-csi/pkg/version"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 	"github.com/intel/pmem-csi/test/e2e/driver"
 	"github.com/intel/pmem-csi/test/e2e/storage/dax"
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	e2edeployment "k8s.io/kubernetes/test/e2e/framework/deployment"
-	e2evolume "k8s.io/kubernetes/test/e2e/framework/volume"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -154,6 +155,9 @@ func (p *skewTestSuite) DefineTests(driver storageframework.TestDriver, pattern 
 	var l local
 
 	f := framework.NewDefaultFramework("skew")
+
+	// Several pods needs privileges.
+	f.NamespacePodSecurityEnforceLevel = admissionapi.LevelPrivileged
 
 	// We rely here on the driver being named after a deployment
 	// (see csi_volumes.go).

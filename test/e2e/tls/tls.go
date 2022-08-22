@@ -19,6 +19,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
+	admissionapi "k8s.io/pod-security-admission/api"
 
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 	pmempod "github.com/intel/pmem-csi/test/e2e/pod"
@@ -30,6 +31,9 @@ import (
 
 var _ = deploy.DescribeForAll("TLS", func(d *deploy.Deployment) {
 	f := framework.NewDefaultFramework("tls")
+
+	// Several pods needs privileges.
+	f.NamespacePodSecurityEnforceLevel = admissionapi.LevelPrivileged
 
 	// All of the following pod names, namespaces and ports match
 	// those in the current deployment files.
