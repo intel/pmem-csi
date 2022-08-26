@@ -140,6 +140,9 @@ foobar:
 # i.e. usually just junit_01.xml.
 TEST_E2E_REPORT_DIR=
 
+# The value for the -ginkgo.timeout parameter.
+TEST_E2E_TIMEOUT=5h
+
 # Additional e2e.test arguments, like -ginkgo.failFast.
 TEST_E2E_ARGS =
 
@@ -177,6 +180,7 @@ RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
                 -ginkgo.skip='$(subst $(space),|,$(strip $(subst @,$(space),$(TEST_E2E_SKIP_ALL))))' \
                 -ginkgo.focus='$(subst $(space),|,$(strip $(subst @,$(space),$(TEST_E2E_FOCUS))))' \
 		-ginkgo.randomizeAllSpecs=false \
+		-ginkgo.timeout=$(TEST_E2E_TIMEOUT) \
 	        $(TEST_E2E_ARGS) \
                 -report-dir=$(TEST_E2E_REPORT_DIR)
 test_e2e: start $(RUN_TEST_DEPS) operator-generate-bundle
