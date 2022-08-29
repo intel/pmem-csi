@@ -588,6 +588,7 @@ void TestInVM(worker, coverage, distro, distroVersion, kubernetesVersion, skipIf
                            make test_e2e TEST_E2E_REPORT_DIR=${WORKSPACE}/build/reports.tmp/\$testrun \
                                          TEST_E2E_SKIP=${skipAlways}@\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]@${skipIfPR}; fi) \
                                          TEST_E2E_TIMEOUT=${TestTimeoutHours()-1}h \
+                                         TEST_E2E_ARGS=-ginkgo.no-color \
                            ') 2>&1 | tee joblog-${BUILD_TAG}-test-${coverage}${kubernetesVersion}.log | grep --line-buffered -E -e 'checking for test|Passed|FAIL:|^ERROR' \
            "
     } } finally {
