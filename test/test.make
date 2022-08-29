@@ -120,6 +120,12 @@ TEST_E2E_SKIP_1.23 += should.mount.multiple.PV.pointing.to.the.same.storage.on.t
 TEST_E2E_SKIP_1.22 += should.mount.multiple.PV.pointing.to.the.same.storage.on.the.same.node
 TEST_E2E_SKIP_1.21 += should.mount.multiple.PV.pointing.to.the.same.storage.on.the.same.node
 
+# These tests depend on ephemeral containers, a feature only enabled by default in Kubernetes 1.25.
+TEST_E2E_SKIP_1.21 += volumes.should.store.data
+TEST_E2E_SKIP_1.22 += volumes.should.store.data
+TEST_E2E_SKIP_1.23 += volumes.should.store.data
+TEST_E2E_SKIP_1.24 += volumes.should.store.data
+
 # Fails for Kubernetes <= 1.22 with an incorrect error (fixed later in Kubernetes 1.23):
 # Invalid value: "my-volume-0": can only use volume source type of PersistentVolumeClaim for block mode
 TEST_E2E_SKIP_1.22 += Generic.Ephemeral-volume..block.volmode
