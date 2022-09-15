@@ -189,15 +189,15 @@ pipeline {
         //   (more tests, runs longer, thus gets to use the existing worker)
         stage('Testing') {
             parallel {
-                stage('1.24') {
+                stage('1.25') {
                     steps {
                         // Skip production, i.e. run testing.
-                        TestInVM("", "", "fedora", "", "1.24", "Top.Level..[[:alpha:]]*-production[[:space:]]", "")
+                        TestInVM("", "", "fedora", "", "1.25", "Top.Level..[[:alpha:]]*-production[[:space:]]", "")
                     }
                 }
 
                 // When adding or removing coverage workers, update the "Code Coverage" step below!
-                stage('coverage-1.24') {
+                stage('coverage-1.25') {
                     when {
 		        beforeAgent true
 		        not { changeRequest() }
@@ -206,11 +206,23 @@ pipeline {
                         label "pmem-csi"
                     }
                     steps {
-                        TestInVM("fedora-coverage-1.24", "coverage-", "fedora", "", "1.24", "", "${env.COVERAGE_SKIP}")
+                        TestInVM("fedora-coverage-1.25", "coverage-", "fedora", "", "1.25", "", "${env.COVERAGE_SKIP}")
                     }
                 }
 
                 // All others set up their own worker.
+                stage('1.24') {
+                    when {
+		        beforeAgent true
+		        not { changeRequest() }
+                    }
+                    agent {
+                        label "pmem-csi"
+                    }
+                    steps {
+                        TestInVM("fedora-1.24", "", "fedora", "", "1.24", "", "")
+                    }
+                }
                 stage('1.23') {
                     when {
 		        beforeAgent true
@@ -334,7 +346,7 @@ git push origin HEAD:master
             }
             steps {
                 // Restore <cluster>-coverage.out files.
-                unstash '1.24-coverage'
+                unstash '1.25-coverage'
                 unstash '1.21-coverage'
 
                 // Merge and convert to Cobertura XML.

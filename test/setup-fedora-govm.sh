@@ -59,6 +59,7 @@ EOF
         1.22) packages+=" kubelet-1.22.12-0 kubeadm-1.22.12-0 kubectl-1.22.12-0";;
         1.23) packages+=" kubelet-1.23.9-0 kubeadm-1.23.9-0 kubectl-1.23.9-0";;
         1.24) packages+=" kubelet-1.24.3-0 kubeadm-1.24.3-0 kubectl-1.24.3-0";;
+        1.25) packages+=" kubelet-1.25.0-0 kubeadm-1.25.0-0 kubectl-1.25.0-0";;
         *) echo >&2 "Kubernetes version ${TEST_KUBERNETES_VERSION} not supported, package list in $0 must be updated."; exit 1;;
     esac
     packages+=" --disableexcludes=kubernetes"
