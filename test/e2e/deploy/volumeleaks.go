@@ -17,7 +17,7 @@ import (
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 
-	"github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/assert"
 )

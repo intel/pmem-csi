@@ -178,19 +178,14 @@ KUSTOMIZE_KUBERNETES_OUTPUT = \
     deploy/kubernetes-X.XX/pmem-csi-lvm-testing.yaml=deploy/kustomize/kubernetes-base-lvm-testing$(KUSTOMIZE_COVERAGE_SUFFIX) \
 
 # Kubernetes versions derived from kubernetes-base.
-#
-# Once we drop support for 1.19, all the remaining versions can
-# be moved back here and the changes for storage capacity
-# tracking can be moved into kubernetes-base and
-# kubernetes-1.20 removed.
 KUSTOMIZE_KUBERNETES_VERSIONS = \
-    1.19 \
-    1.20
-KUSTOMIZE += $(foreach version,$(KUSTOMIZE_KUBERNETES_VERSIONS),$(subst X.XX,$(version),$(KUSTOMIZE_KUBERNETES_OUTPUT)))
+    1.21 \
+    1.22 \
+    1.23 \
+    1.24 \
+    1.25 \
 
-# Deployments that have storage capacity tracking enabled, using the v1beta1 API.
-KUSTOMIZE += $(subst kubernetes-base,kubernetes-1.21,$(subst X.XX,1.21,$(KUSTOMIZE_KUBERNETES_OUTPUT)))
-KUSTOMIZE += $(subst kubernetes-base,kubernetes-1.21,$(subst X.XX,1.22,$(KUSTOMIZE_KUBERNETES_OUTPUT)))
+KUSTOMIZE += $(foreach version,$(KUSTOMIZE_KUBERNETES_VERSIONS),$(subst X.XX,$(version),$(KUSTOMIZE_KUBERNETES_OUTPUT)))
 
 KUSTOMIZE += deploy/common/pmem-storageclass-default.yaml=deploy/kustomize/storageclass
 KUSTOMIZE += deploy/common/pmem-storageclass-ext4.yaml=deploy/kustomize/storageclass-ext4

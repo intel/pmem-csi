@@ -1004,13 +1004,6 @@ func (d *pmemCSIDeployment) getSchedulerService(service *corev1.Service) {
 func (d *pmemCSIDeployment) getControllerProvisionerRole(role *rbacv1.Role) {
 	role.Rules = []rbacv1.PolicyRule{
 		{
-			APIGroups: []string{""},
-			Resources: []string{"endpoints"},
-			Verbs: []string{
-				"get", "watch", "list", "delete", "update", "create",
-			},
-		},
-		{
 			APIGroups: []string{"coordination.k8s.io"},
 			Resources: []string{"leases"},
 			Verbs: []string{
@@ -1537,7 +1530,6 @@ func (d *pmemCSIDeployment) getProvisionerContainer() corev1.Container {
 			"--timeout=5m",
 			"--default-fstype=ext4",
 			"--worker-threads=5",
-			fmt.Sprintf("--metrics-address=:%d", provisionerMetricsPort),
 		},
 		Env: []corev1.EnvVar{
 			{
@@ -1590,6 +1582,10 @@ func (d *pmemCSIDeployment) getProvisionerContainer() corev1.Container {
 			},
 		}...)
 	}
+
+	// Order must match the reference files (--enable-capacity before --metrics-address).
+	container.Args = append(container.Args, fmt.Sprintf("--metrics-address=:%d", provisionerMetricsPort))
+
 	return container
 }
 

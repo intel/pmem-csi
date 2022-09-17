@@ -31,13 +31,14 @@ import (
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"k8s.io/kubernetes/test/e2e/framework/volume"
 	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
+	admissionapi "k8s.io/pod-security-admission/api"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 	"github.com/intel/pmem-csi/test/e2e/ephemeral"
 	pmempod "github.com/intel/pmem-csi/test/e2e/pod"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 )
 
 type daxTestSuite struct {
@@ -91,6 +92,9 @@ func (p *daxTestSuite) DefineTests(driver storageframework.TestDriver, pattern s
 	var l local
 
 	f := framework.NewDefaultFramework("dax")
+
+	// Several pods needs privileges.
+	f.NamespacePodSecurityEnforceLevel = admissionapi.LevelPrivileged
 
 	init := func() {
 		l = local{}
@@ -525,6 +529,10 @@ var _ = deploy.DescribeForSome("dax", func(d *deploy.Deployment) bool {
 }, func(d *deploy.Deployment) {
 	var l local
 	f := framework.NewDefaultFramework("dax")
+
+	// Several pods needs privileges.
+	f.NamespacePodSecurityEnforceLevel = admissionapi.LevelPrivileged
+
 	init := func() {
 		l = local{}
 

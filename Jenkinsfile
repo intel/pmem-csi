@@ -189,15 +189,15 @@ pipeline {
         //   (more tests, runs longer, thus gets to use the existing worker)
         stage('Testing') {
             parallel {
-                stage('1.22') {
+                stage('1.25') {
                     steps {
                         // Skip production, i.e. run testing.
-                        TestInVM("", "", "fedora", "", "1.22", "Top.Level..[[:alpha:]]*-production[[:space:]]", "")
+                        TestInVM("", "", "fedora", "", "1.25", "Top.Level..[[:alpha:]]*-production[[:space:]]", "")
                     }
                 }
 
                 // When adding or removing coverage workers, update the "Code Coverage" step below!
-                stage('coverage-1.22') {
+                stage('coverage-1.25') {
                     when {
 		        beforeAgent true
 		        not { changeRequest() }
@@ -206,45 +206,57 @@ pipeline {
                         label "pmem-csi"
                     }
                     steps {
-                        TestInVM("fedora-coverage-1.22", "coverage-", "fedora", "", "1.22", "", "${env.COVERAGE_SKIP}")
+                        TestInVM("fedora-coverage-1.25", "coverage-", "fedora", "", "1.25", "", "${env.COVERAGE_SKIP}")
                     }
                 }
 
                 // All others set up their own worker.
+                stage('1.24') {
+                    when {
+		        beforeAgent true
+		        not { changeRequest() }
+                    }
+                    agent {
+                        label "pmem-csi"
+                    }
+                    steps {
+                        TestInVM("fedora-1.24", "", "fedora", "", "1.24", "", "")
+                    }
+                }
+                stage('1.23') {
+                    when {
+		        beforeAgent true
+		        not { changeRequest() }
+                    }
+                    agent {
+                        label "pmem-csi"
+                    }
+                    steps {
+                        TestInVM("fedora-1.23", "", "fedora", "", "1.23", "", "")
+                    }
+                }
+                stage('1.22') {
+                    when {
+		        beforeAgent true
+		        not { changeRequest() }
+                    }
+                    agent {
+                        label "pmem-csi"
+                    }
+                    steps {
+                        TestInVM("fedora-1.22", "", "fedora", "", "1.22", "", "")
+                    }
+                }
                 stage('1.21') {
-                    when {
-		        beforeAgent true
-		        not { changeRequest() }
-                    }
-                    agent {
-                        label "pmem-csi"
-                    }
-                    steps {
-                        TestInVM("fedora-1.21", "", "fedora", "", "1.21", "", "")
-                    }
-                }
-                stage('1.20') {
-                    when {
-		        beforeAgent true
-		        not { changeRequest() }
-                    }
-                    agent {
-                        label "pmem-csi"
-                    }
-                    steps {
-                        TestInVM("fedora-1.20", "", "fedora", "", "1.20", "", "")
-                    }
-                }
-                stage('1.19') {
                     agent {
                         label "pmem-csi"
                     }
                     steps {
                         // Skip testing, i.e. run production.
-                        TestInVM("fedora-1.19", "", "fedora", "", "1.19",  "Top.Level..[[:alpha:]]*-testing[[:space:]]", "")
+                        TestInVM("fedora-1.21", "", "fedora", "", "1.21",  "Top.Level..[[:alpha:]]*-testing[[:space:]]", "")
                     }
                 }
-                stage('coverage-1.19') {
+                stage('coverage-1.21') {
                     when {
 		        beforeAgent true
 		        not { changeRequest() }
@@ -253,7 +265,7 @@ pipeline {
                         label "pmem-csi"
                     }
                     steps {
-                        TestInVM("fedora-coverage-1.19", "coverage-", "fedora", "", "1.19", "", "${env.COVERAGE_SKIP}")
+                        TestInVM("fedora-coverage-1.21", "coverage-", "fedora", "", "1.21", "", "${env.COVERAGE_SKIP}")
                     }
                 }
             }
@@ -334,8 +346,8 @@ git push origin HEAD:master
             }
             steps {
                 // Restore <cluster>-coverage.out files.
-                unstash '1.22-coverage'
-                unstash '1.19-coverage'
+                unstash '1.25-coverage'
+                unstash '1.21-coverage'
 
                 // Merge and convert to Cobertura XML.
                 sh "${RunInBuilder()} ${env.BUILD_CONTAINER} make _work/gocovmerge _work/gocover-cobertura"
@@ -587,6 +599,8 @@ void TestInVM(worker, coverage, distro, distroVersion, kubernetesVersion, skipIf
                            testrun=\$(echo '${distro}-${distroVersion}-${coverage}${kubernetesVersion}' | sed -e s/--*/-/g | tr . _ ) && \
                            make test_e2e TEST_E2E_REPORT_DIR=${WORKSPACE}/build/reports.tmp/\$testrun \
                                          TEST_E2E_SKIP=${skipAlways}@\$(if [ \"${env.CHANGE_ID}\" ] && [ \"${env.CHANGE_ID}\" != null ]; then echo \\\\[Slow\\\\]@${skipIfPR}; fi) \
+                                         TEST_E2E_TIMEOUT=${TestTimeoutHours()-1}h \
+                                         TEST_E2E_ARGS=-ginkgo.no-color \
                            ') 2>&1 | tee joblog-${BUILD_TAG}-test-${coverage}${kubernetesVersion}.log | grep --line-buffered -E -e 'checking for test|Passed|FAIL:|^ERROR' \
            "
     } } finally {

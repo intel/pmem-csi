@@ -32,7 +32,7 @@ import (
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
-	"github.com/kubernetes-csi/csi-test/v4/pkg/sanity"
+	"github.com/kubernetes-csi/csi-test/v5/pkg/sanity"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
@@ -41,7 +41,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/clock"
 	"k8s.io/client-go/kubernetes"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -51,6 +50,7 @@ import (
 	"k8s.io/kubernetes/test/e2e/framework"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"k8s.io/kubernetes/test/e2e/framework/skipper"
+	"k8s.io/utils/clock"
 
 	pmemexec "github.com/intel/pmem-csi/pkg/exec"
 	pmemlog "github.com/intel/pmem-csi/pkg/logger"
@@ -59,7 +59,7 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/pod"
 	pmeme2epod "github.com/intel/pmem-csi/test/e2e/pod"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -290,11 +290,9 @@ fi
 			cc = csi.NewControllerClient(sc.ControllerConn)
 			ncc = csi.NewControllerClient(sc.Conn) // This works because PMEM-CSI exposes the node, controller, and ID server via its csi.sock.
 			resources = &sanity.Resources{
-				Context:                    sc,
-				NodeClient:                 nc,
-				ControllerClient:           cc,
-				ControllerPublishSupported: true,
-				NodeStageSupported:         true,
+				Context:          sc,
+				NodeClient:       nc,
+				ControllerClient: cc,
 			}
 			rebooted = false
 			nid, err := nc.NodeGetInfo(

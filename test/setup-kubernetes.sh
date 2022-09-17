@@ -122,7 +122,7 @@ EOF
 }
 EOF
         ;;
-    *)
+    v1.19*|v1.2[012]*)
         # https://github.com/kubernetes/kubernetes/blob/1afc53514032a44d091ae4a9f6e092171db9fe10/staging/src/k8s.io/kube-scheduler/config/v1beta1/types.go#L44-L96
         sudo sh -c 'cat >/var/lib/scheduler/scheduler-config.yaml' <<EOF
 apiVersion: kubescheduler.config.k8s.io/v1beta1
@@ -272,6 +272,7 @@ while ! kubectl get nodes | grep -q 'Ready'; do
 done
 kubectl get nodes
 kubectl get pods --all-namespaces
+kubectl version
 
 ${TEST_CONFIGURE_POST_MASTER}
 

@@ -5,6 +5,7 @@ metadata:
 spec:
   attachRequired: false
   podInfoOnMount: true
+  storageCapacity: true # beta in 1.21, GA in 1.23
   volumeLifecycleModes:
   - Persistent
   - Ephemeral
