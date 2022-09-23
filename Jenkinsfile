@@ -306,6 +306,8 @@ pipeline {
                     // All tests have passed on the "devel" branch, we can now fast-forward "master" to it.
                     sh '''
 head=$(git rev-parse HEAD) &&
+git diff &&
+git reset --hard &&
 git fetch origin master &&
 git checkout FETCH_HEAD &&
 git merge --ff-only $head &&
