@@ -3,14 +3,14 @@
   path: /spec/template/spec/containers/0/command/-
   value: -coverprofile=/var/lib/pmem-csi-coverage/pmem-csi-driver-controller-*.out
 - op: add
-  path: /spec/template/spec/containers/0/volumeMounts/-
+  path: /spec/template/spec/containers/0/volumeMounts
   value:
-    mountPath: /var/lib/pmem-csi-coverage
-    name: coverage-dir
+    - mountPath: /var/lib/pmem-csi-coverage
+      name: coverage-dir
 - op: add
-  path: /spec/template/spec/volumes/-
+  path: /spec/template/spec/volumes
   value:
-    name: coverage-dir
-    hostPath:
-      path: /var/lib/pmem-csi-coverage
-      type: DirectoryOrCreate
+    - name: coverage-dir
+      hostPath:
+        path: /var/lib/pmem-csi-coverage
+        type: DirectoryOrCreate

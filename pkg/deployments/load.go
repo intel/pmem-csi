@@ -8,7 +8,6 @@ package deployments
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -38,7 +37,6 @@ var driverNameRegex = regexp.MustCompile(`(?m)(name|app\.kubernetes.io/instance)
 // and updates them on-the-fly according to the deployment spec, namespace and name.
 func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMode,
 	namespace string, deployment api.PmemCSIDeployment,
-	controllerCABundle []byte,
 ) ([]unstructured.Unstructured, error) {
 
 	// Conceptually this function is similar to calling "kustomize" for
@@ -153,72 +151,12 @@ func LoadAndCustomizeObjects(kubernetes version.Version, deviceMode api.DeviceMo
 					spec["nodeSelector"] = selector
 				}
 			}
-		case "MutatingWebhookConfiguration":
-			webhooks := obj.Object["webhooks"].([]interface{})
-			failurePolicy := "Ignore"
-			if deployment.Spec.MutatePods == api.MutatePodsAlways {
-				failurePolicy = "Fail"
-			}
-			webhook := webhooks[0].(map[string]interface{})
-			webhook["failurePolicy"] = failurePolicy
-			clientConfig := webhook["clientConfig"].(map[string]interface{})
-			if controllerCABundle != nil {
-				clientConfig["caBundle"] = base64.StdEncoding.EncodeToString(controllerCABundle)
-
-			}
-			if deployment.Spec.ControllerTLSSecret == api.ControllerTLSSecretOpenshift {
-				meta := obj.Object["metadata"].(map[string]interface{})
-				meta["annotations"] = map[string]string{
-					"service.beta.openshift.io/inject-cabundle": "true",
-				}
-			}
-		case "Service":
-			switch obj.GetName() {
-			case deployment.SchedulerServiceName():
-				spec := obj.Object["spec"].(map[string]interface{})
-				ports := spec["ports"].([]interface{})
-				port0 := ports[0].(map[string]interface{})
-				if deployment.Spec.SchedulerNodePort != 0 {
-					spec["type"] = "NodePort"
-					port0["nodePort"] = deployment.Spec.SchedulerNodePort
-				}
-				if deployment.Spec.ControllerTLSSecret == api.ControllerTLSSecretOpenshift {
-					port0["targetPort"] = 8001
-					port0["port"] = 80
-				}
-			case deployment.WebhooksServiceName():
-				if deployment.Spec.ControllerTLSSecret == api.ControllerTLSSecretOpenshift {
-					meta := obj.Object["metadata"].(map[string]interface{})
-					meta["annotations"] = map[string]string{
-						"service.beta.openshift.io/serving-cert-secret-name": deployment.ControllerTLSSecretOpenshiftName(),
-					}
-				}
-			}
 		}
 	}
 
 	objects, err := loadYAML(yamlPath(kubernetes, deviceMode), patchYAML, enabled, patchUnstructured)
 	if err != nil {
 		return nil, err
-	}
-
-	scheduler, err := loadYAML("kustomize/scheduler/scheduler-service.yaml", patchYAML, enabled, patchUnstructured)
-	if err != nil {
-		return nil, err
-	}
-	objects = append(objects, scheduler...)
-
-	if deployment.Spec.ControllerTLSSecret != "" && deployment.Spec.MutatePods != api.MutatePodsNever {
-		webhook, err := loadYAML("kustomize/webhook/webhook.yaml", patchYAML, enabled, patchUnstructured)
-		if err != nil {
-			return nil, err
-		}
-		objects = append(objects, webhook...)
-		service, err := loadYAML("kustomize/webhook/webhook-service.yaml", patchYAML, enabled, patchUnstructured)
-		if err != nil {
-			return nil, err
-		}
-		objects = append(objects, service...)
 	}
 
 	return objects, nil
@@ -229,10 +167,6 @@ func patchPodTemplate(obj *unstructured.Unstructured, deployment api.PmemCSIDepl
 	template := outerSpec["template"].(map[string]interface{})
 	spec := template["spec"].(map[string]interface{})
 	metadata := template["metadata"].(map[string]interface{})
-
-	isController := strings.Contains(obj.GetName(), "controller")
-	stripTLS := isController && deployment.Spec.ControllerTLSSecret == ""
-	openshiftTLS := isController && deployment.Spec.ControllerTLSSecret == api.ControllerTLSSecretOpenshift
 
 	if deployment.Spec.Labels != nil {
 		labels := metadata["labels"]
@@ -265,10 +199,6 @@ func patchPodTemplate(obj *unstructured.Unstructured, deployment api.PmemCSIDepl
 		return obj, nil
 	}
 
-	if stripTLS {
-		spec["volumes"] = nil
-	}
-
 	containers := spec["containers"].([]interface{})
 	for _, container := range containers {
 		container := container.(map[string]interface{})
@@ -278,36 +208,6 @@ func patchPodTemplate(obj *unstructured.Unstructured, deployment api.PmemCSIDepl
 			return err
 		}
 		container["resources"] = obj
-
-		if stripTLS && container["name"].(string) == "pmem-driver" {
-			container["volumeMounts"] = nil
-			var command []interface{}
-			for _, arg := range container["command"].([]interface{}) {
-				switch strings.Split(arg.(string), "=")[0] {
-				case "-caFile",
-					"-certFile",
-					"-keyFile",
-					"-schedulerListen":
-					// remove these parameters
-				default:
-					command = append(command, arg)
-				}
-			}
-			container["command"] = command
-		}
-
-		if openshiftTLS && container["name"].(string) == "pmem-driver" {
-			var command []interface{}
-			for _, arg := range container["command"].([]interface{}) {
-				switch arg.(string) {
-				case "-schedulerListen=:8000":
-					command = append(command, arg, "-insecureSchedulerListen=:8001")
-				default:
-					command = append(command, arg)
-				}
-			}
-			container["command"] = command
-		}
 
 		// Override driver name in env var.
 		env := container["env"]
@@ -340,21 +240,6 @@ func patchPodTemplate(obj *unstructured.Unstructured, deployment api.PmemCSIDepl
 		}
 		if image != "" {
 			container["image"] = image
-		}
-	}
-
-	if deployment.Spec.ControllerTLSSecret != "" {
-		volumes := spec["volumes"].([]interface{})
-		for _, volume := range volumes {
-			volume := volume.(map[string]interface{})
-			volumeName := volume["name"].(string)
-			if volumeName == "webhook-cert" {
-				name := deployment.Spec.ControllerTLSSecret
-				if name == api.ControllerTLSSecretOpenshift {
-					name = deployment.ControllerTLSSecretOpenshiftName()
-				}
-				volume["secret"].(map[string]interface{})["secretName"] = name
-			}
 		}
 	}
 	return nil

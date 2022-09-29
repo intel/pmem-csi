@@ -177,7 +177,6 @@ Network ports are opened as configured in manifest files:
 
 - metrics endpoint: typical port values 10010 (PMEM-CSI) and 10011
   (external-provisioner)
-- webhook endpoint: disabled by default, port chosen when [enabling the scheduler extensions](install.md#enable-scheduler-extensions)
 
 ### Local sockets
 

@@ -17,9 +17,6 @@ import (
 )
 
 //go:embed kubernetes-*/pmem-csi-*.yaml
-//go:embed kustomize/webhook/webhook.yaml
-//go:embed kustomize/scheduler/scheduler-service.yaml
-//go:embed kustomize/webhook/webhook-service.yaml
 var assets embed.FS
 
 // YamlFile contains all objects of a certain deployment.

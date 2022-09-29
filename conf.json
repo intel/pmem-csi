@@ -9,8 +9,7 @@
         "_work",
         "deploy/kustomize",
         "third-party",
-        "test/test-config.d",
-        "pkg/scheduler"
+        "test/test-config.d"
     ],
     "extensions": [
         "linkcheck2",

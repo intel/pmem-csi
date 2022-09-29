@@ -26,7 +26,6 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/deploy"
 	"github.com/intel/pmem-csi/test/e2e/driver"
 	"github.com/intel/pmem-csi/test/e2e/operator/validate"
-	"github.com/intel/pmem-csi/test/e2e/storage/scheduler"
 	"github.com/intel/pmem-csi/test/e2e/versionskew"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -40,11 +39,6 @@ var _ = deploy.DescribeForAll("Deployment", func(d *deploy.Deployment) {
 	// List of testSuites to be added below.
 	var csiTestSuites = []func() storageframework.TestSuite{
 		versionskew.InitSkewTestSuite,
-	}
-
-	if d.HasController {
-		// Scheduler tests depend on the webhooks in the controller.
-		csiTestSuites = append(csiTestSuites, scheduler.InitSchedulerTestSuite)
 	}
 
 	storageframework.DefineTestSuites(csiTestDriver, csiTestSuites)

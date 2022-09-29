@@ -62,7 +62,6 @@ k8s.io/component-base,Apache-2.0
 k8s.io/klog/v2,Apache-2.0
 k8s.io/kube-openapi/pkg,Apache-2.0
 k8s.io/kube-openapi/pkg/validation/spec,Apache-2.0
-k8s.io/kube-scheduler/extender/v1,Apache-2.0
 k8s.io/kubectl/pkg/scheme,Apache-2.0
 k8s.io/utils,Apache-2.0
 k8s.io/utils/internal/third_party/forked/golang/net,BSD-3-Clause

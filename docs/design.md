@@ -186,13 +186,6 @@ provisioning"](https://github.com/kubernetes-csi/external-provisioner/tree/v2.1.
   have been created on a node which has insufficient RAM and CPU
   resources for a pod.
 
-PMEM-CSI also has a central component which implements the [scheduler
-extender](#scheduler-extender) webhook. That component needs to know
-on which nodes the PMEM-CSI driver is running and how much capacity is
-available there. This information is retrieved by dynamically
-discovering PMEM-CSI pods and connecting to their [metrics
-endpoint](/docs/install.md#metrics-support).
-
 ## Communication between components
 
 The following diagram illustrates the communication channels between driver components:
@@ -205,26 +198,6 @@ endpoint](/docs/install.md#metrics-support) is not considered
 confidential and therefore offered without access control via
 HTTP. This also simplifies scraping that data with tools like
 Prometheus.
-
-The communication between Kubernetes and the scheduler extender
-webhook is protected by TLS because this is encouraged and supported
-by Kubernetes. But as the webhook only exposes information that is
-already available, it accepts all incoming connection without
-checking the client certificate.
-
-The [`test/setup-ca.sh`](/test/setup-ca.sh)
-script shows how to generate self-signed certificates. The test cluster is set
-up using certificates created by that script, with secrets prepared by
-[`test/setup-deployment.sh`](/test/setup-deployment.sh) before
-deploying the driver using the provided [deployment files](/deploy/).
-
-Beware that these are just examples. Administrators of a cluster must
-ensure that they choose key lengths and algorithms of sufficient
-strength for their purposes and manage certificate distribution.
-
-A production deployment can improve upon that by using some other key
-delivery mechanism, like for example
-[Vault](https://www.vaultproject.io/).
 
 The PMEM-CSI controller runs with the default security context. On
 upstream Kubernetes, this means that it runs as root. The expectation
@@ -338,77 +311,6 @@ pod scheduling with late binding of volumes.
 
 Until that feature becomes generally available, PMEM-CSI provides two
 components that help with pod scheduling:
-
-### Scheduler extender
-
-When a pod requests a special [extended
-resource](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#extended-resources)
-, the Kubernetes scheduler calls
-a [scheduler
-extender](https://github.com/kubernetes/design-proposals-archive/blob/main/scheduling/scheduler_extender.md)
-provided by PMEM-CSI with a list of nodes that a pod might run
-on.
-
-The name of that special resource is `<CSI driver name>/scheduler`,
-i.e. `pmem-csi.intel.com/scheduler` when the default PMEM-CSI driver
-name is used. It is possible to configure one extender per PMEM-CSI
-deployment because each deployment has its own unique driver name.
-
-This extender is implemented in the PMEM-CSI controller and retrieves
-metrics data from each PMEM-CSI node driver instance to filter out all
-nodes which currently do not
-have enough storage left for the volumes that still need to be
-created. This considers inline ephemeral volumes and all unbound
-volumes, regardless whether they use late binding or immediate
-binding.
-
-This special scheduling can be requested manually by adding this snippet
-to one container in the pod spec:
-```
-containers:
-- name: some-container
-  ...
-  resources:
-    limits:
-      pmem-csi.intel.com/scheduler: "1"
-    requests:
-      pmem-csi.intel.com/scheduler: "1"
-```
-
-This scheduler extender is optional and not necessarily installed in
-all clusters that have PMEM-CSI. Don't add this extended resource
-unless the scheduler extender is installed, otherwise the pod won't
-start!
-
-See our [implementation](http://github.com/intel/pmem-csi/tree/devel/pkg/scheduler) of a scheduler extender.
-
-### Pod admission webhook
-
-Having to add the `<CSI driver name>/scheduler` extended resource manually is not
-user-friendly. To simplify this, PMEM-CSI provides a [mutating
-admission
-webhook](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/)
-which intercepts the creation of all pods. If that pod uses inline
-ephemeral volumes or volumes with late binding that are provided by
-PMEM-CSI, the webhook transparently adds the extended resource
-request. PMEM-CSI volumes with immediate binding are ignored because
-for those the normal topology support ensures that unsuitable nodes
-are filtered out.
-
-The webhook can only do that if the persistent volume claim (PVC) and
-its storage class have been created already. This is normally not
-required: it's okay to create the pod first, then later add the
-PVC. The pod simply won't start in the meantime.
-
-The webhook deals with this uncertainty by allowing the creation of
-the pod without adding the extended resource when it lacks the
-necessary information. The alternative would be to reject the pod, but
-that would be a change of behavior of the cluster that may affect also pods
-that don't use PMEM-CSI at all.
-
-Users must take care to create PVCs first, then the pods if they want
-to use the webhook. In practice, that is often already done because it
-is more natural, so it is not a big limitation.
 
 ## PMEM-CSI Operator
 

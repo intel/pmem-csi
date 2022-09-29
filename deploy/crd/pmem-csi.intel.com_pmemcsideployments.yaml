@@ -89,12 +89,9 @@ spec:
                     type: object
                 type: object
               controllerTLSSecret:
-                description: ControllerTLSSecret is the name of a secret which contains
-                  ca.crt, tls.crt and tls.key data for the scheduler extender and
-                  pod mutation webhook. A controller is started if (and only if) this
-                  secret is specified. The special string "-openshift-" enables the
-                  usage of https://docs.openshift.com/container-platform/4.6/security/certificates/service-serving-certificate.html
-                  to create certificates.
+                description: "ControllerTLSSecret used to be the name of a secret
+                  which contains ca.crt, tls.crt and tls.key data for the scheduler
+                  extender and pod mutation webhook. It is now unused. \n DEPRECATED"
                 type: string
               deviceMode:
                 description: DeviceMode to use to manage PMEM devices.
@@ -135,9 +132,9 @@ spec:
                   increased with this setting, either with a higher integer or a percentage.
                 x-kubernetes-int-or-string: true
               mutatePods:
-                description: MutatePod defines how a mutating pod webhook is configured
+                description: "MutatePod defines how a mutating pod webhook is configured
                   if a controller is started. The field is ignored if the controller
-                  is not enabled. The default is "Try".
+                  is not enabled. The default is \"Try\". \n DEPRECATED"
                 enum:
                 - Always
                 - Try
@@ -246,12 +243,12 @@ spec:
                     type: object
                 type: object
               schedulerNodePort:
-                description: SchedulerNodePort, if non-zero, ensures that the "scheduler"
+                description: "SchedulerNodePort, if non-zero, ensures that the \"scheduler\"
                   service is created as a NodeService with that fixed port number.
                   Otherwise that service is created as a cluster service. The number
                   must be from the range reserved by Kubernetes for node ports. This
                   is useful if the kube-scheduler cannot reach the scheduler extender
-                  via a cluster service.
+                  via a cluster service. \n DEPRECATED"
                 format: int32
                 type: integer
             type: object

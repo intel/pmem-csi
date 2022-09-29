@@ -41,26 +41,15 @@ installation by name, which indirectly determines the device mode. A
 storage class also chooses which filesystem is used (xfs or ext4) and
 enables [Kata Containers support](#kata-containers-support).
 
-Optionally, the administrator can enable [the scheduler
-extensions](#enable-scheduler-extensions) and monitoring of resource
+Optionally, the administrator can enable monitoring of resource
 usage via the [metrics support](#metrics-support).
 
 It is [recommended](./design.md#dynamic-provisioning-of-local-volumes)
-to enable the scheduler extensions and use
+to use
 `volumeBindingMode: WaitForFirstConsumer` as in the
 [`pmem-storageclass-late-binding.yaml`](/deploy/common/pmem-storageclass-late-binding.yaml)
 example. This ensures that pods get scheduled onto nodes that have
-sufficient RAM, CPU and PMEM. Without the scheduler extensions, it is
-random whether the scheduler picks a node that has PMEM available and
-immediate binding (the default volume binding mode) might work
-better. However, then pods might not be able to run when the node
-where volumes were created are overloaded.
-
-Starting with Kubernetes 1.21, PMEM-CSI uses [storage capacity
-tracking](https://kubernetes.io/docs/concepts/storage/storage-capacity/)
-to handle Pod scheduling and the scheduler extensions are not needed
-anymore. `WaitForFirstConsumer` still is the recommended volume
-binding mode.
+sufficient RAM, CPU and PMEM.
 
 Optionally, the log output format can be changed from the default
 "text" format (= the traditional glog format) to "json" (= output via
@@ -348,11 +337,7 @@ for a complete list of supported properties.
 Here is a minimal example driver deployment created with a custom resource:
 
 **NOTE**: `nodeSelector` must match the node label that was set in the
-[installation and setup](#installation-and-setup) section. The PMEM-CSI
-[scheduler extender](design.md#scheduler-extender) and
-[webhook](design.md#pod-admission-webhook) are not enabled in this basic
-installation. See [below](#enable-scheduler-extensions) for
-instructions about that.
+[installation and setup](#installation-and-setup) section.
 
 ``` ShellSession
 $ kubectl create -f - <<EOF
@@ -450,47 +435,14 @@ $ git clone https://github.com/intel/pmem-csi
 
 - **Choose a namespace**
 
-By default, setting up certificates as described in the next step will
-automatically create a `pmem-csi` namespace if it does not exist yet.
-Later the driver will be installed in that namespace.
-
-This can be changed by:
-- setting the `TEST_DRIVER_NAMESPACE` env variable to a different name
-  when invoking `setup-ca-kubernetes.sh` and
-- modifying the deployment with kustomize as explained below.
-
-- **Set up certificates**
-
-Certificates are required as explained in [Security](design.md#security) for
-running the PMEM-CSI [scheduler extender](design.md#scheduler-extender) and
-[webhook](design.md#pod-admission-webhook). If those are not used, then certificate
-creation can be skipped. However, the YAML deployment files always create the PMEM-CSI
-controller StatefulSet which needs the certificates. Without them, the
-`pmem-csi-intel-com-controller` pod cannot start, so it is recommended to create
-certificates or customize the deployment so that this Deployment is not created.
-
-On OpenShift, certificates can be created automatically as described
-in https://docs.openshift.com/container-platform/4.6/security/certificates/service-serving-certificate.html.
-The PMEM-CSI operator uses that approach and therefore is a
-simpler way to install PMEM-CSI on OpenShift.
-
-Certificates can be created by running the `./test/setup-ca-kubernetes.sh` script for your cluster.
-This script requires "cfssl" tools which can be downloaded.
-These are the steps for manual set-up of certificates:
-
-- Download cfssl tools
-
-``` console
-$ curl -L https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 -o _work/bin/cfssl --create-dirs
-$ curl -L https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64 -o _work/bin/cfssljson --create-dirs
-$ chmod a+x _work/bin/cfssl _work/bin/cfssljson
+By default, a `pmem-csi` namespace is expected to exist by the YAML deploy
+files. It must be created manually with
+```console
+$ kubectl create ns pmem-csi
 ```
 
-- Run certificates set-up script
-
-``` console
-$ KUBCONFIG="<<your cluster kubeconfig path>>" PATH="$PWD/_work/bin:$PATH" ./test/setup-ca-kubernetes.sh
-```
+A different namespace be used by modifying the deployment with kustomize as
+explained below.
 
 - **Deploy the driver to Kubernetes**
 
@@ -512,11 +464,6 @@ For example, to deploy for production with LVM device mode onto Kubernetes 1.18,
 ``` console
 $ kubectl create -f deploy/kubernetes-1.18/pmem-csi-lvm.yaml
 ```
-
-The PMEM-CSI [scheduler extender](design.md#scheduler-extender) and
-[webhook](design.md#pod-admission-webhook) are not enabled in this basic
-installation. See [below](#enable-scheduler-extensions) for
-instructions about that.
 
 These variants were generated with
 [`kustomize`](https://github.com/kubernetes-sigs/kustomize).
@@ -701,71 +648,6 @@ This can be checked with `kubectl get pods --all-namespaces -o wide`.
 Have nodes been labeled as expected by the driver deployment? Check
 with `kubectl get nodes -o yaml`.
 
-#### Example Pod getting assigned to a node with no PMEM
-
-This can happen on clusters where only some worker nodes have PMEM and
-the [PMEM-CSI scheduler extensions](#enable-scheduler-extensions) are
-not enabled. This can be checked by looking at the `selected-node`
-annotation of the PVC:
-``` console
-$ kubectl get pvc/pmem-csi-pvc-late-binding -o yaml | grep ' volume.kubernetes.io/selected-node:'
-    volume.kubernetes.io/selected-node: pmem-csi-pmem-govm-worker2
-```
-
-The PMEM-CSI controller pod will detect this and ask the scheduler to
-pick a node anew by removing that annotation, but it is random whether
-the next choice is better and starting the Pod may get delayed.
-
-To avoid this, enable the scheduler extensions.
-
-#### Example Pod getting assigned to a node with insufficient PMEM
-
-This also can only happen when the [PMEM-CSI scheduler
-extensions](#enable-scheduler-extensions) are not enabled. Then volume
-creation is attempted repeatedly, potentially on different nodes, but
-fails with `not enough space` errors:
-
-``` console
-$ kubectl describe pvc/pmem-csi-pvc-late-binding
-Name:          pmem-csi-pvc-late-binding
-Namespace:     default
-StorageClass:  pmem-csi-sc-late-binding
-Status:        Pending
-Volume:        
-Labels:        <none>
-Annotations:   volume.beta.kubernetes.io/storage-provisioner: pmem-csi.intel.com
-Finalizers:    [kubernetes.io/pvc-protection]
-Capacity:      
-Access Modes:  
-VolumeMode:    Filesystem
-Used By:       my-csi-app
-Events:
-  Type     Reason                Age                     From                                                                                   Message
-  ----     ------                ----                    ----                                                                                   -------
-  Normal   WaitForFirstConsumer  7m30s                   persistentvolume-controller                                                            waiting for first consumer to be created before binding
-  Normal   WaitForPodScheduled   6m (x15 over 7m19s)     persistentvolume-controller                                                            waiting for pod my-csi-app to be scheduled
-  Warning  ProvisioningFailed    3m59s (x12 over 7m19s)  pmem-csi.intel.com_pmem-csi-intel-com-node-nwkqv_cc2984e6-915f-4cf2-93a0-e143da407917  failed to provision volume with StorageClass "pmem-csi-sc-late-binding": rpc error: code = ResourceExhausted desc = Node CreateVolume: device creation failed: not enough space
-  Warning  ProvisioningFailed    2m47s (x12 over 7m18s)  pmem-csi.intel.com_pmem-csi-intel-com-node-9vlhf_6ac47898-58bf-45e1-b601-5d8f39d21f4e  failed to provision volume with StorageClass "pmem-csi-sc-late-binding": rpc error: code = ResourceExhausted desc = Node CreateVolume: device creation failed: not enough space
-  Normal   ExternalProvisioning  2m23s (x28 over 7m19s)  persistentvolume-controller                                                            waiting for a volume to be created, either by external provisioner "pmem-csi.intel.com" or manually created by system administrator
-  Normal   Provisioning          2m11s (x14 over 7m18s)  pmem-csi.intel.com_pmem-csi-intel-com-node-9vlhf_6ac47898-58bf-45e1-b601-5d8f39d21f4e  External provisioner is provisioning volume for claim "default/pmem-csi-pvc-late-binding"
-  Normal   Provisioning          107s (x16 over 7m19s)   pmem-csi.intel.com_pmem-csi-intel-com-node-nwkqv_cc2984e6-915f-4cf2-93a0-e143da407917  External provisioner is provisioning volume for claim "default/pmem-csi-pvc-late-binding"
-```
-
-The scheduler extensions prevent these useless attempts on nodes with
-insufficient PMEM. When none of the available nodes have sufficient
-PMEM, the attempt to schedule the example Pod fails:
-
-``` console
-$ kubectl describe pod/my-csi-app
-Name:         my-csi-app
-Namespace:    default
-...
-Events:
-  Type     Reason            Age                From               Message
-  ----     ------            ----               ----               -------
-  Warning  FailedScheduling  12s (x2 over 12s)  default-scheduler  0/4 nodes are available: 1 node(s) had taint {node-role.kubernetes.io/master: }, that the pod didn't tolerate, 3 only 63484MiB of PMEM available, need 400GiB.
-```
-
 #### Less PMEM available than expected
 
 This is usually the result of not preparing the node(s) as describe in
@@ -872,7 +754,6 @@ Pod Template:
                     app.kubernetes.io/name=pmem-csi-node-setup
                     app.kubernetes.io/part-of=pmem-csi
                     pmem-csi.intel.com/deployment=lvm-production
-                    pmem-csi.intel.com/webhook=ignore
   Service Account:  pmem-csi-intel-com-node-setup
   Containers:
    pmem-driver:
@@ -1007,11 +888,6 @@ cluster has the feature enabled. See
 [`pmem-app-generic-ephemeral.yaml`](/deploy/common/pmem-app-generic-ephemeral.yaml)
 for an example.
 
-When using generic ephemeral inline volumes together with [storage
-capacity tracking](#storage-capacity-tracking), the [PMEM-CSI
-scheduler extensions](#enable-scheduler-extensions) are not needed
-anymore.
-
 ### Raw block volumes
 
 Applications can use volumes provisioned by PMEM-CSI as [raw block
@@ -1034,403 +910,6 @@ That example demonstrates how to handle some details:
   an unsuitable value depending on the volume size.
 - [Kubernetes bug #85624](https://github.com/kubernetes/kubernetes/issues/85624)
   must be worked around to format and mount the raw block device.
-
-### Enable scheduler extensions
-
-#### Manual scheduler configuration
-
-**NOTE**: this sections provides an in-depth explanation that makes no
-assumptions about how the cluster works. For simpler install
-instructions on OpenShift see [below](#openshift-scheduler-configuration).
-
-The PMEM-CSI scheduler extender and admission webhook are provided by
-the PMEM-CSI controller. They need to be enabled during deployment via
-the `--schedulerListen=[<listen address>]:<port>` parameter. The
-listen address is optional and can be left out. The port is where a
-HTTPS server will run. The YAML files already enable this. The
-operator has the `controllerTLSSecret` and `mutatePods` properties in
-the [`DeploymentSpec`](#deploymentspec).
-
-The controller needs TLS certificates which must be created in
-advance. The YAML files expects them in a secret called
-`pmem-csi-intel-com-controller-secret` and will not work without one.
-The operator is more flexible and creates a driver without the
-controller by default. This can be changed by setting the
-`controllerTLSSecret` field in the `PmemCSIDeployment` API.
-
-That secret must contain the following data items:
-- `ca.crt`: root CA certificate
-- `tls.key`: secret key of the webhook
-- `tls.crt`: public key of the webhook
-
-The webhook certificate must include host names that match how the
-webhooks are going to be called by the `kube-apiserver`
-(i.e. `pmem-csi-intel-com-scheduler.pmem-csi.svc` for a
-deployment with the `pmem-csi.intel.com` driver name in the `pmem-csi`
-namespace) and by the `kube-scheduler` (might be the same service name, through some external
-load balancer or `127.0.0.1` when using the node port workaround
-described below).
-
-To enable the PMEM-CSI scheduler extender, a configuration file and an
-additional `--config` parameter for `kube-scheduler` must be added to
-the cluster control plane, or, if there is already such a
-configuration file, one new entry must be added to the `extenders`
-array. A full example is presented below.
-
-The `kube-scheduler` must be able to connect to the PMEM-CSI
-controller via the `urlPrefix` in its configuration. In some clusters
-it is possible to use cluster DNS and thus a symbolic service name. If
-that is the case, then deploy the [scheduler
-service](/deploy/kustomize/scheduler/scheduler-service.yaml) as-is
-and use `https://pmem-csi-scheduler.default.svc` as `urlPrefix`. If
-the PMEM-CSI driver is deployed in a namespace, replace `default` with
-the name of that namespace.
-
-In a cluster created with kubeadm, `kube-scheduler` is unable to use
-cluster DNS because the pod it runs in is configured with
-`hostNetwork: true` and without `dnsPolicy`. Therefore the cluster DNS
-servers are ignored. There also is no special dialer as in other
-clusters. As a workaround, the PMEM-CSI service can be exposed via a
-fixed node port like 32000 on all nodes. Then
-`https://127.0.0.1:32000` needs to be used as `urlPrefix`. Here's how
-the service can be created with that node port:
-
-``` ShellSession
-$ mkdir my-scheduler
-
-$ cat >my-scheduler/kustomization.yaml <<EOF
-bases:
-  - ../deploy/kustomize/scheduler
-patchesJson6902:
-  - target:
-      version: v1
-      kind: Service
-      name: pmem-csi-intel-com-scheduler
-      namespace: pmem-csi
-    path: node-port-patch.yaml
-EOF
-
-$ cat >my-scheduler/node-port-patch.yaml <<EOF
-- op: add
-  path: /spec/ports/0/nodePort
-  value: 32000
-- op: add
-  path: /spec/type
-  value: NodePort
-EOF
-
-$ kubectl create --kustomize my-scheduler
-```
-
-When the node port is not needed, the scheduler service can be
-created directly with:
-``` console
-kubectl create --kustomize deploy/kustomize/scheduler
-```
-
-How to (re)configure `kube-scheduler` depends on the cluster. With
-kubeadm it is possible to set all necessary options in advance before
-creating the master node with `kubeadm init`. A running cluster can
-be modified with `kubeadm upgrade`.
-
-One additional
-complication with kubeadm is that `kube-scheduler` by default doesn't
-trust any root CA. The following kubeadm config file solves
-this together with enabling the scheduler configuration by
-bind-mounting the root certificate that was used to sign the certificate used
-by the scheduler extender into the location where the Go
-runtime will find it. It works for Kubernetes <= 1.18:
-
-``` ShellSession
-$ sudo mkdir -p /var/lib/scheduler/
-$ sudo cp _work/pmem-ca/ca.pem /var/lib/scheduler/ca.crt
-
-# https://github.com/kubernetes/kubernetes/blob/52d7614a8ca5b8aebc45333b6dc8fbf86a5e7ddf/staging/src/k8s.io/kube-scheduler/config/v1alpha1/types.go#L38-L107
-$ sudo sh -c 'cat >/var/lib/scheduler/scheduler-policy.cfg' <<EOF
-{
-  "kind" : "Policy",
-  "apiVersion" : "v1",
-  "extenders" :
-    [{
-      "urlPrefix": "https://<service name or IP>:<port>",
-      "filterVerb": "filter",
-      "prioritizeVerb": "prioritize",
-      "nodeCacheCapable": true,
-      "weight": 1,
-      "managedResources":
-      [{
-        "name": "pmem-csi.intel.com/scheduler",
-        "ignoredByScheduler": true
-      }]
-    }]
-}
-EOF
-
-# https://github.com/kubernetes/kubernetes/blob/52d7614a8ca5b8aebc45333b6dc8fbf86a5e7ddf/staging/src/k8s.io/kube-scheduler/config/v1alpha1/types.go#L38-L107
-$ sudo sh -c 'cat >/var/lib/scheduler/scheduler-config.yaml' <<EOF
-apiVersion: kubescheduler.config.k8s.io/v1alpha1
-kind: KubeSchedulerConfiguration
-schedulerName: default-scheduler
-algorithmSource:
-  policy:
-    file:
-      path: /var/lib/scheduler/scheduler-policy.cfg
-clientConnection:
-  # This is where kubeadm puts it.
-  kubeconfig: /etc/kubernetes/scheduler.conf
-EOF
-
-$ cat >kubeadm.config <<EOF
-apiVersion: kubeadm.k8s.io/v1beta1
-kind: ClusterConfiguration
-scheduler:
-  extraVolumes:
-    - name: config
-      hostPath: /var/lib/scheduler
-      mountPath: /var/lib/scheduler
-      readOnly: true
-    - name: cluster-root-ca
-      hostPath: /var/lib/scheduler/ca.crt
-      mountPath: /etc/ssl/certs/ca.crt
-      readOnly: true
-  extraArgs:
-    config: /var/lib/scheduler/scheduler-config.yaml
-EOF
-
-$ kubeadm init --config=kubeadm.config
-```
-
-In Kubernetes 1.19, the configuration API of the scheduler
-changed. The corresponding command for Kubernetes >= 1.19 are:
-
-``` ShellSession
-$ sudo mkdir -p /var/lib/scheduler/
-$ sudo cp _work/pmem-ca/ca.pem /var/lib/scheduler/ca.crt
-
-# https://github.com/kubernetes/kubernetes/blob/1afc53514032a44d091ae4a9f6e092171db9fe10/staging/src/k8s.io/kube-scheduler/config/v1beta1/types.go#L44-L96
-$ sudo sh -c 'cat >/var/lib/scheduler/scheduler-config.yaml' <<EOF
-apiVersion: kubescheduler.config.k8s.io/v1beta1
-kind: KubeSchedulerConfiguration
-clientConnection:
-  # This is where kubeadm puts it.
-  kubeconfig: /etc/kubernetes/scheduler.conf
-extenders:
-- urlPrefix: https://127.0.0.1:<service name or IP>:<port>
-  filterVerb: filter
-  prioritizeVerb: prioritize
-  nodeCacheCapable: true
-  weight: 1
-  managedResources:
-  - name: pmem-csi.intel.com/scheduler
-    ignoredByScheduler: true
-EOF
-
-$ cat >kubeadm.config <<EOF
-apiVersion: kubeadm.k8s.io/v1beta1
-kind: ClusterConfiguration
-scheduler:
-  extraVolumes:
-    - name: config
-      hostPath: /var/lib/scheduler
-      mountPath: /var/lib/scheduler
-      readOnly: true
-    - name: cluster-root-ca
-      hostPath: /var/lib/scheduler/ca.crt
-      mountPath: /etc/ssl/certs/ca.crt
-      readOnly: true
-  extraArgs:
-    config: /var/lib/scheduler/scheduler-config.yaml
-EOF
-
-$ kubeadm init --config=kubeadm.config
-```
-
-It is possible to stop here without enabling the pod admission webhook.
-To enable also that, continue as follows.
-
-First of all, it is recommended to exclude all system pods from
-passing through the web hook. This ensures that they can still be
-created even when PMEM-CSI is down:
-
-``` console
-$ kubectl label ns kube-system pmem-csi.intel.com/webhook=ignore
-```
-
-This special label is configured in [the provided web hook
-definition](/deploy/kustomize/webhook/webhook.yaml). On Kubernetes >=
-1.15, it can also be used to let individual pods bypass the webhook by
-adding that label. The CA gets configured explicitly, which is
-supported for webhooks.
-
-``` ShellSession
-$ mkdir my-webhook
-
-$ cat >my-webhook/kustomization.yaml <<EOF
-bases:
-  - ../deploy/kustomize/webhook
-patchesJson6902:
-  - target:
-      group: admissionregistration.k8s.io
-      version: v1
-      kind: MutatingWebhookConfiguration
-      name: pmem-csi-intel-com-hook
-    path: webhook-patch.yaml
-EOF
-
-$ cat >my-webhook/webhook-patch.yaml <<EOF
-- op: replace
-  path: /webhooks/0/clientConfig/caBundle
-  value: $(base64 -w 0 _work/pmem-ca/ca.pem)
-EOF
-
-$ kubectl create --kustomize my-webhook
-```
-
-#### OpenShift scheduler configuration
-
-**NOTE**: The scheduler extensions are only needed on OpenShift 4.6
-and 4.7. On OpenShift 4.8, [storage capacity
-tracking](#storage-capacity-tracking) can and should be used instead.
-
-The operator should be used on OpenShift. When creating the
-deployment, set `controllerTLSSecret` to the special string
-`-openshift-`:
-
-``` ShellSession
-$ kubectl create -f - <<EOF
-apiVersion: pmem-csi.intel.com/v1beta1
-kind: PmemCSIDeployment
-metadata:
-  name: pmem-csi.intel.com
-spec:
-  deviceMode: lvm
-  nodeSelector:
-    feature.node.kubernetes.io/memory-nv.dax: "true"
-  controllerTLSSecret: -openshift-
-EOF
-```
-
-The webhook and the API server then get configured by the operator
-with [certificates created automatically by
-OpenShift](https://docs.openshift.com/container-platform/4.6/security/certificates/service-serving-certificate.html).
-
-The scheduler must be configured manually, using the same API as for
-[configuring scheduler
-policies](https://docs.openshift.com/container-platform/4.6/nodes/scheduling/nodes-scheduler-default.html#nodes-scheduler-default-modifying_nodes-scheduler-default). This
-can be done before or after deploying the PMEM-CSI driver. The
-configuration change can be left in place after removing a PMEM-CSI
-because it will then be ignored. However, without this step pods that
-use PMEM-CSI volumes will not get scheduled.
-
-Communication between the kube-scheduler and PMEM-CSI will be done via
-http and a service that listens on a dynamically allocated host
-port. This approach is necessary because:
-- kube-scheduler uses the host network and thus cannot connect to a
-  service that is only available inside the cluster and
-- There is no API for configuring TLS certificates.
-
-First, define the service inside the namespace where the PMEM-CSI
-operator runs:
-
-``` ShellSession
-oc apply -f - <<EOF
-apiVersion: v1
-kind: Service
-metadata:
-  name: pmem-csi-intel-com-http-scheduler
-  namespace: pmem-csi
-spec:
-  selector:
-    app.kubernetes.io/name: pmem-csi-controller
-    app.kubernetes.io/instance: pmem-csi.intel.com # This must be the name of the PMEM-CSI deployment.
-  type: NodePort
-  ports:
-  - targetPort: 8001
-    port: 80
-EOF
-```
-
-Then create a scheduler policy. If such a policy already exists, the
-`extenders` section below must be added to it.
-
-``` ShellSession
-oc create -f - <<EOF
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: scheduler-policy
-  namespace: openshift-config
-data:
-  policy.cfg: |
-    {
-      "kind" : "Policy",
-      "apiVersion" : "v1",
-      "extenders" : [
-        { "urlPrefix": "http://127.0.0.1:$(oc get service/pmem-csi-intel-com-http-scheduler -n pmem-csi -o jsonpath={.spec.ports[*].nodePort})",
-          "filterVerb": "filter",
-          "prioritizeVerb": "prioritize",
-          "nodeCacheCapable": true,
-          "weight": 1,
-          "managedResources": [
-            { "name": "pmem-csi.intel.com/scheduler",
-              "ignoredByScheduler": true
-            }
-          ]
-        }
-      ]
-    }
-EOF
-```
-
-Finally, activate the usage of that policy by updating the existing
-`scheduler/cluster` object. If a policy was set already, this command
-will fail with `The request is invalid`, in which case the existing
-policy config map must be edited.
-
-``` console
-$ oc patch scheduler/cluster --type json \
-   --patch '[{"op":"test","path":"/spec/policy/name","value":""}, {"op":"replace","path":"/spec/policy/name","value":"scheduler-policy"}]'
-scheduler.config.openshift.io/cluster patched
-```
-
-This causes schedulers to be restarted with a new configuration:
-
-``` console
-$ oc get events -n openshift-kube-scheduler-operator
-...
-14m         Normal    ConfigMapCreated                    deployment/openshift-kube-scheduler-operator               Created ConfigMap/policy-configmap -n openshift-kube-scheduler because it was missing
-14m         Normal    RevisionTriggered                   deployment/openshift-kube-scheduler-operator               new revision 7 triggered by "configmap/policy-configmap has changed"
-14m         Normal    ConfigMapCreated                    deployment/openshift-kube-scheduler-operator               Created ConfigMap/revision-status-7 -n openshift-kube-scheduler because it was missing
-14m         Normal    ConfigMapCreated                    deployment/openshift-kube-scheduler-operator               Created ConfigMap/kube-scheduler-pod-7 -n openshift-kube-scheduler because it was missing
-...
-13m         Normal    OperatorStatusChanged               deployment/openshift-kube-scheduler-operator               Status for clusteroperator/kube-scheduler changed: Progressing changed from True to False ("NodeInstallerProgressing: 1 nodes are at revision 8"),Available message changed from "StaticPodsAvailable: 1 nodes are active; 1 nodes are at revision 6; 0 nodes have achieved new revision 8" to "StaticPodsAvailable: 1 nodes are active; 1 nodes are at revision 8"
-13m         Normal    ConfigMapUpdated                    deployment/openshift-kube-scheduler-operator               Updated ConfigMap/revision-status-8 -n openshift-kube-scheduler:
-cause by changes in data.status
-13m         Normal    PodCreated                          deployment/openshift-kube-scheduler-operator               Created Pod/revision-pruner-8-tt-87fkd-master-0 -n openshift-kube-scheduler because it was missing
-
-$ oc get pods -n openshift-kube-scheduler -l app=openshift-kube-scheduler
-NAME                                         READY   STATUS    RESTARTS   AGE
-openshift-kube-scheduler-tt-87fkd-master-0   3/3     Running   0          11m
-
-$ oc exec -ti -n openshift-kube-scheduler openshift-kube-scheduler-tt-87fkd-master-0 -c kube-scheduler -- cat /etc/kubernetes/static-pod-resources/configmaps/policy-configmap/policy.cfg
-{
-  "kind" : "Policy",
-  "apiVersion" : "v1",
-  "extenders" : [
-    { "urlPrefix": "https://127.0.0.1:30674",
-      "filterVerb": "filter",
-      "prioritizeVerb": "prioritize",
-      "nodeCacheCapable": true,
-      "weight": 1,
-      "managedResources": [
-        { "name": "pmem-csi.intel.com/scheduler",
-          "ignoredByScheduler": true
-        }
-      ]
-    }
-  ]
-}
-```
 
 ### Storage capacity tracking
 
@@ -1662,10 +1141,7 @@ of the API specification.
 | logLevel | integer | PMEM-CSI driver logging level | 3 |
 | logFormat | text | log output format | "text" or "json" <sup>3</sup> |
 | deviceMode | string | Device management mode to use. Supports one of `lvm` or `direct` | `lvm`
-| controllerTLSSecret | string | Name of an existing secret in the driver's namespace which contains ca.crt, tls.crt and tls.key data for the scheduler extender and pod mutation webhook. A controller is started if (and only if) this secret is specified. <br> Alternatively, the special string `-openshift-` can be used on OpenShift to let OpenShift create the necessary secrets. | empty
 | controllerReplicas | int | Number of concurrently running controller pods. | 1
-| mutatePods | Always/Try/Never | Defines how a mutating pod webhook is configured if a controller is started. The field is ignored if the controller is not enabled. "Never" disables pod mutation. "Try" configured it so that pod creation is allowed to proceed even when the webhook fails. "Always" requires that the webhook gets invoked successfully before creating a pod. | Try
-| schedulerNodePort | int or string | If non-zero, the scheduler service is created as a NodeService with that fixed port number. Otherwise that service is created as a cluster service. The number must be from the range reserved by Kubernetes for node ports. This is useful if the kube-scheduler cannot reach the scheduler extender via a cluster service. | 0
 | controllerResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for controller pod. <br/><sup>4</sup>_Deprecated and only available in `v1alpha1`._ |
 | nodeResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for the pods running on node(s). <br/>_<sup>4</sup>Deprecated and only available in `v1alpha1`._ |
 | controllerDriverResources | [ResourceRequirements](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core) | Describes the compute resource requirements for controller driver container running on master node. Available since `v1beta1`. |

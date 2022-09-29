@@ -57,101 +57,6 @@ list_gates () (
     done
 )
 
-# We create a scheduler configuration on the master node which enables
-# the PMEM-CSI scheduler extender. Because of the "managedResources"
-# filter, the extender is only going to be called for pods which
-# explicitly enable it and thus other pods (including PMEM-CSI
-# itself!)  can be scheduled without it.
-#
-# In order to reach the scheduler extender, a fixed node port
-# is used regardless of the driver name, so only one deployment
-# can be active at once. In production this has to be solved
-# differently.
-#
-# Usually the driver name will be "pmem-csi.intel.com", but for testing
-# purposed we also configure a second extender.
-sudo mkdir -p /var/lib/scheduler/
-sudo cp ca.crt /var/lib/scheduler/
-
-case "$k8sversion" in
-    v1.1[5678]*)
-        # https://github.com/kubernetes/kubernetes/blob/52d7614a8ca5b8aebc45333b6dc8fbf86a5e7ddf/staging/src/k8s.io/kube-scheduler/config/v1alpha1/types.go#L38-L107
-        sudo sh -c 'cat >/var/lib/scheduler/scheduler-config.yaml' <<EOF
-apiVersion: kubescheduler.config.k8s.io/v1alpha1
-kind: KubeSchedulerConfiguration
-schedulerName: default-scheduler
-algorithmSource:
-  policy:
-    file:
-      path: /var/lib/scheduler/scheduler-policy.cfg
-clientConnection:
-  # This is where kubeadm puts it.
-  kubeconfig: /etc/kubernetes/scheduler.conf
-EOF
-
-        # https://github.com/kubernetes/kubernetes/blob/52d7614a8ca5b8aebc45333b6dc8fbf86a5e7ddf/staging/src/k8s.io/kube-scheduler/config/v1/types.go#L28-L47
-        sudo sh -c 'cat >/var/lib/scheduler/scheduler-policy.cfg' <<EOF
-{
-  "kind" : "Policy",
-  "apiVersion" : "v1",
-  "extenders" :
-    [{
-      "urlPrefix": "https://127.0.0.1:${TEST_SCHEDULER_EXTENDER_NODE_PORT}",
-      "filterVerb": "filter",
-      "prioritizeVerb": "prioritize",
-      "nodeCacheCapable": true,
-      "weight": 1,
-      "managedResources":
-      [{
-        "name": "pmem-csi.intel.com/scheduler",
-        "ignoredByScheduler": true
-      }]
-    },
-    {
-      "urlPrefix": "https://127.0.0.1:${TEST_SCHEDULER_EXTENDER_NODE_PORT}",
-      "filterVerb": "filter",
-      "prioritizeVerb": "prioritize",
-      "nodeCacheCapable": true,
-      "weight": 1,
-      "managedResources":
-      [{
-        "name": "second.pmem-csi.intel.com/scheduler",
-        "ignoredByScheduler": true
-      }]
-    }]
-}
-EOF
-        ;;
-    v1.19*|v1.2[012]*)
-        # https://github.com/kubernetes/kubernetes/blob/1afc53514032a44d091ae4a9f6e092171db9fe10/staging/src/k8s.io/kube-scheduler/config/v1beta1/types.go#L44-L96
-        sudo sh -c 'cat >/var/lib/scheduler/scheduler-config.yaml' <<EOF
-apiVersion: kubescheduler.config.k8s.io/v1beta1
-kind: KubeSchedulerConfiguration
-clientConnection:
-  # This is where kubeadm puts it.
-  kubeconfig: /etc/kubernetes/scheduler.conf
-extenders:
-- urlPrefix: https://127.0.0.1:${TEST_SCHEDULER_EXTENDER_NODE_PORT}
-  filterVerb: filter
-  prioritizeVerb: prioritize
-  nodeCacheCapable: true
-  weight: 1
-  managedResources:
-  - name: pmem-csi.intel.com/scheduler
-    ignoredByScheduler: true
-- urlPrefix: https://127.0.0.1:${TEST_SCHEDULER_EXTENDER_NODE_PORT}
-  filterVerb: filter
-  prioritizeVerb: prioritize
-  nodeCacheCapable: true
-  weight: 1
-  managedResources:
-  - name: second.pmem-csi.intel.com/scheduler
-    ignoredByScheduler: true
-EOF
-        ;;
-esac
-
-
 # We always use systemd. Auto-detected for Docker, but not for other
 # CRIs
 # (https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/#configure-cgroup-driver-used-by-kubelet-on-control-plane-node).
@@ -177,28 +82,8 @@ controllerManager:
     kube-api-burst: \"100000\"
     kube-api-qps: \"100000\"
 scheduler:
-  extraVolumes:
-    - name: config
-      hostPath: /var/lib/scheduler
-      mountPath: /var/lib/scheduler
-      readOnly: true
-    # This is necessary to ensure that the API server accepts
-    # certificates signed by the cluster root CA when
-    # establishing an https connection to a webhook.
-    #
-    # This works because the normal trust store
-    # of the host (/etc/ssl/certs) is not mounted
-    # for the scheduler. If it was (as for the apiserver),
-    # then adding another file would either modify
-    # the host (for the mount point) or fail (when
-    # the bind mount is read-only).
-    - name: cluster-root-ca
-      hostPath: /var/lib/scheduler/ca.crt
-      mountPath: /etc/ssl/certs/ca.crt
-      readOnly: true
   extraArgs:
     feature-gates: ${TEST_FEATURE_GATES}
-    $(if [ -e /var/lib/scheduler/scheduler-config.yaml ]; then echo 'config: /var/lib/scheduler/scheduler-config.yaml'; fi)
 "
 
 if [ -e /dev/vdc ]; then

@@ -24,12 +24,9 @@ import (
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/metrics"
 	"github.com/intel/pmem-csi/pkg/version"
 	"github.com/intel/pmem-csi/test/e2e/deploy"
-	apierrs "k8s.io/apimachinery/pkg/api/errors"
 
 	cm "github.com/prometheus/client_model/go"
 	"gopkg.in/yaml.v2"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -225,31 +222,7 @@ func DriverDeployment(ctx context.Context, c client.Client, k8sver version.Versi
 		return err
 	}
 
-	// Load secret if it exists. If it doesn't, we validate without it.
-	var controllerCABundle []byte
-	if deployment.Spec.ControllerTLSSecret != "" {
-		secret := &corev1.Secret{
-			TypeMeta: metav1.TypeMeta{
-				APIVersion: "v1",
-				Kind:       "Secret",
-			},
-		}
-		objKey := client.ObjectKey{
-			Namespace: namespace,
-			Name:      deployment.Spec.ControllerTLSSecret,
-		}
-		if err := c.Get(ctx, objKey, secret); err != nil {
-			if !apierrs.IsNotFound(err) {
-				return err
-			}
-		} else {
-			if ca, ok := secret.Data[api.TLSSecretCA]; ok {
-				controllerCABundle = ca
-			}
-		}
-	}
-
-	expectedObjects, err := deployments.LoadAndCustomizeObjects(k8sver, deployment.Spec.DeviceMode, namespace, deployment, controllerCABundle)
+	expectedObjects, err := deployments.LoadAndCustomizeObjects(k8sver, deployment.Spec.DeviceMode, namespace, deployment)
 	if err != nil {
 		return fmt.Errorf("customize expected objects: %v", err)
 	}

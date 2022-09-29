@@ -103,12 +103,11 @@ type DeploymentSpec struct {
 	NodeDriverResources *corev1.ResourceRequirements `json:"nodeDriverResources,omitempty"`
 	// ControllerDriverResources Compute resources required by central driver container
 	ControllerDriverResources *corev1.ResourceRequirements `json:"controllerDriverResources,omitempty"`
-	// ControllerTLSSecret is the name of a secret which contains ca.crt, tls.crt and tls.key data
-	// for the scheduler extender and pod mutation webhook. A controller is started if (and only if)
-	// this secret is specified. The special string "-openshift-" enables the usage of
-	// https://docs.openshift.com/container-platform/4.6/security/certificates/service-serving-certificate.html
-	// to create certificates.
-	ControllerTLSSecret string `json:"controllerTLSSecret,omitempty"`
+	// ControllerTLSSecret used to be the name of a secret which contains ca.crt, tls.crt and tls.key data
+	// for the scheduler extender and pod mutation webhook. It is now unused.
+	//
+	// DEPRECATED
+	DeprecatedControllerTLSSecret string `json:"controllerTLSSecret,omitempty"`
 	// ControllerReplicas determines how many copys of the controller Pod run concurrently.
 	// Zero (= unset) selects the builtin default, which is currently 1.
 	// +kubebuilder:validation:Minimum=0
@@ -116,15 +115,19 @@ type DeploymentSpec struct {
 	// MutatePod defines how a mutating pod webhook is configured if a controller
 	// is started. The field is ignored if the controller is not enabled.
 	// The default is "Try".
+	//
+	// DEPRECATED
 	// +kubebuilder:validation:Enum=Always;Try;Never
-	MutatePods MutatePods `json:"mutatePods,omitempty"`
+	DeprecatedMutatePods MutatePods `json:"mutatePods,omitempty"`
 	// SchedulerNodePort, if non-zero, ensures that the "scheduler" service
 	// is created as a NodeService with that fixed port number. Otherwise
 	// that service is created as a cluster service. The number must be
 	// from the range reserved by Kubernetes for
 	// node ports. This is useful if the kube-scheduler cannot reach the scheduler
 	// extender via a cluster service.
-	SchedulerNodePort int32 `json:"schedulerNodePort,omitempty"`
+	//
+	// DEPRECATED
+	DeprecatedSchedulerNodePort int32 `json:"schedulerNodePort,omitempty"`
 	// DeviceMode to use to manage PMEM devices.
 	// +kubebuilder:validation:Enum=lvm;direct
 	DeviceMode DeviceMode `json:"deviceMode,omitempty"`
@@ -277,8 +280,6 @@ const (
 	// DefaultDriverImage default PMEM-CSI driver docker image
 	DefaultDriverImage = defaultDriverImageName + ":" + defaultDriverImageTag
 
-	DefaultMutatePods = MutatePodsTry
-
 	// The sidecar versions must be kept in sync with the
 	// deploy/kustomize YAML files! hack/bump-image-versions.sh
 	// can be used to update both.
@@ -389,14 +390,6 @@ func (d *PmemCSIDeployment) EnsureDefaults(operatorImage string) error {
 		return fmt.Errorf("invalid device mode %q", d.Spec.DeviceMode)
 	}
 
-	switch d.Spec.MutatePods {
-	case "":
-		d.Spec.MutatePods = DefaultMutatePods
-	case MutatePodsAlways, MutatePodsTry, MutatePodsNever:
-	default:
-		return fmt.Errorf("invalid MutatePods value: %s", d.Spec.MutatePods)
-	}
-
 	if d.Spec.Image == "" {
 		// If provided use operatorImage
 		if operatorImage != "" {
@@ -482,24 +475,6 @@ func (d *PmemCSIDeployment) GetHyphenedName() string {
 	return strings.ReplaceAll(d.GetName(), ".", "-")
 }
 
-// ControllerTLSSecretOpenshiftName returns the name of the secret that
-// we want OpenShift to create for the controller service.
-func (d *PmemCSIDeployment) ControllerTLSSecretOpenshiftName() string {
-	return d.GetHyphenedName() + "-openshift-controller-tls"
-}
-
-// RegistrySecretName returns the name of the registry
-// Secret object used by the deployment
-func (d *PmemCSIDeployment) RegistrySecretName() string {
-	return d.GetHyphenedName() + "-registry-secrets"
-}
-
-// NodeSecretName returns the name of the node-controller
-// Secret object used by the deployment
-func (d *PmemCSIDeployment) NodeSecretName() string {
-	return d.GetHyphenedName() + "-node-secrets"
-}
-
 // CSIDriverName returns the name of the CSIDriver
 // object name for the deployment
 func (d *PmemCSIDeployment) CSIDriverName() string {
@@ -510,12 +485,6 @@ func (d *PmemCSIDeployment) CSIDriverName() string {
 // Service object used by the deployment
 func (d *PmemCSIDeployment) MetricsServiceName() string {
 	return d.GetHyphenedName() + "-metrics"
-}
-
-// SchedulerServiceName returns the name of the controller's
-// Service object for the scheduler extender.
-func (d *PmemCSIDeployment) SchedulerServiceName() string {
-	return d.GetHyphenedName() + "-scheduler"
 }
 
 // SchedulerServiceName returns the name of the controller's
@@ -552,12 +521,6 @@ func (d *PmemCSIDeployment) WebhooksClusterRoleName() string {
 // webhooks' ClusterRoleBinding object name used by the deployment
 func (d *PmemCSIDeployment) WebhooksClusterRoleBindingName() string {
 	return d.GetHyphenedName() + "-webhooks-role"
-}
-
-// MutatingWebhookName returns the name of the
-// MutatingWebhookConfiguration
-func (d *PmemCSIDeployment) MutatingWebhookName() string {
-	return d.GetHyphenedName() + "-hook"
 }
 
 // NodeServiceAccountName returns the name of the service account
