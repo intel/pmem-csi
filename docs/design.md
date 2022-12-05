@@ -40,7 +40,7 @@ based on where the storage device(s) are physically attached.
 
 <sup>3 </sup> **fsdax mode** is required for NVDIMM
 namespaces. See [Persistent Memory
-Programming](https://pmem.io/ndctl/ndctl-create-namespace.html) for
+Programming](https://docs.pmem.io/ndctl-user-guide/ndctl-man-pages/ndctl-create-namespace) for
 details. `devdax` mode is not supported. Though a
 raw block volume would be useful when a filesystem isn't needed, Kubernetes
 cannot handle [binding a character device to a loop device](https://github.com/kubernetes/kubernetes/blob/7c87b5fb55ca096c007c8739d4657a5a4e29fb09/pkg/volume/util/util.go#L531-L534).
@@ -345,7 +345,7 @@ When a pod requests a special [extended
 resource](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#extended-resources)
 , the Kubernetes scheduler calls
 a [scheduler
-extender](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/scheduling/scheduler_extender.md)
+extender](https://github.com/kubernetes/design-proposals-archive/blob/main/scheduling/scheduler_extender.md)
 provided by PMEM-CSI with a list of nodes that a pod might run
 on.
 

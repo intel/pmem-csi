@@ -300,6 +300,18 @@ particular log output in "text" format.
 
 ##### Installing the operator on an OpenShift cluster using the RedHat catalog
 
+**NOTE**: PMEM-CSI operator will go into sustaining mode starting Red Hat
+OpenShift platform 4.11. The last validation cycle for Red Hat OpenShift CSI
+Operator Certification and Badging is on 4.10. Intel is winding down future
+development and contributions including, but not limited to, maintenance, bug
+fixes, new releases, or updates, to this project.
+
+The current release of the PMEM-CSI driver and operator will
+continue to be maintained and supported until EOL of Intel Optane PMem. New releases,
+new features and bug fixes will be restricted only to business-critical
+cases. Reference [Intel’s Optane Business Unit Closure
+announcement](https://d1io3yog0oux5.cloudfront.net/_7476eb634cf21033bf2ce4974e02203e/intel/db/887/8856/prepared_remarks/Intel-CEO-CFO-2Q22-earnings-statements-1.pdf).
+
 If you run an OpenShift cluster, then it is recommended to install the PMEM-CSI operator by
 following the instructions shown by "Deploy & use" on [RedhatCatalog](https://catalog.redhat.com/software/operators/detail/612cd31535f8020a3f8bd5f2). 
 The recommended approach is "Installing from OperatorHub using the web console".
