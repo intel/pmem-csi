@@ -1017,9 +1017,12 @@ func findOperatorOnce(c *Cluster) (*Deployment, error) {
 // errors ("operatorhubio-catalog-lbdrz 0/1 CrashLoopBackOff") that did not
 // occur locally or when running the tests on a "fresh" CI cluster.
 var allDeployments = []string{
-	"olm", // operator installed by OLM
-	"olm-lvm-production",
-	"olm-direct-production",
+	// Testing with OLM is disabled. Installing it was a frequent source of
+	// random failures, it's simply not reliable enough.
+	//
+	// "olm", // operator installed by OLM
+	// "olm-lvm-production",
+	// "olm-direct-production",
 
 	"lvm-production",
 	"direct-production",
