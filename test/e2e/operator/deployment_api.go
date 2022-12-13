@@ -23,7 +23,6 @@ import (
 	"github.com/intel/pmem-csi/test/e2e/operator/validate"
 	"github.com/intel/pmem-csi/test/e2e/pod"
 
-	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -301,7 +300,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 					deployment.Spec.Image = ""
 					deployment.Spec.PMEMPercentage = 50
 					deployment.Spec.LogFormat = format
-					deployment.Spec.ControllerTLSSecret = "pmem-csi-intel-com-controller-secret"
 
 					deployment = deploy.CreateDeploymentCR(f, deployment)
 					defer deploy.DeleteDeploymentCR(f, deployment.Name)
@@ -464,36 +462,28 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 		It("shall recover from conflicts", func() {
 			deployment := getDeployment("test-recover-from-conflicts")
-			deployment.Spec.ControllerTLSSecret = "pmem-csi-intel-com-controller-secret"
-			se := &corev1.Service{
+			csiDriver := &storagev1.CSIDriver{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      deployment.GetHyphenedName() + "-scheduler",
+					Name:      deployment.GetHyphenedName(),
 					Namespace: d.Namespace,
 				},
-				Spec: corev1.ServiceSpec{
-					Selector: map[string]string{"app": "foobar"},
-					Type:     corev1.ServiceTypeClusterIP,
-					Ports: []corev1.ServicePort{
-						{Port: 433},
-					},
-				},
 			}
-			deleteService := func() {
+			deleteCSIDriver := func() {
 				Eventually(func() error {
-					err := f.ClientSet.CoreV1().Services(d.Namespace).Delete(context.Background(), se.Name, metav1.DeleteOptions{})
-					deploy.LogError(err, "Delete service error: %v, will retry...", err)
+					err := f.ClientSet.StorageV1().CSIDrivers().Delete(context.Background(), csiDriver.Name, metav1.DeleteOptions{})
+					deploy.LogError(err, "Delete CSIDriver error: %v, will retry...", err)
 					if errors.IsNotFound(err) {
 						return nil
 					}
 					return err
-				}, "3m", "1s").ShouldNot(HaveOccurred(), "delete service %s", se.Name)
+				}, "3m", "1s").ShouldNot(HaveOccurred(), "delete CSIDriver %s", csiDriver.Name)
 			}
 			Eventually(func() error {
-				_, err := f.ClientSet.CoreV1().Services(d.Namespace).Create(context.Background(), se, metav1.CreateOptions{})
-				deploy.LogError(err, "create service error: %v, will retry...", err)
+				_, err := f.ClientSet.StorageV1().CSIDrivers().Create(context.Background(), csiDriver, metav1.CreateOptions{})
+				deploy.LogError(err, "create CSIDriver error: %v, will retry...", err)
 				return err
-			}, "3m", "1s").ShouldNot(HaveOccurred(), "create service %s", se.Name)
-			defer deleteService()
+			}, "3m", "1s").ShouldNot(HaveOccurred(), "create CSIDriver %s", csiDriver.Name)
+			defer deleteCSIDriver()
 
 			deployment = deploy.CreateDeploymentCR(f, deployment)
 			defer deploy.DeleteDeploymentCR(f, deployment.Name)
@@ -506,8 +496,8 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			}, "3m", "1s").Should(BeTrue(), "deployment should fail %q", deployment.Name)
 			validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonFailed})
 
-			// Deleting the existing service should make the deployment succeed.
-			deleteService()
+			// Deleting the existing CSIDriver should make the deployment succeed.
+			deleteCSIDriver()
 			Eventually(func() bool {
 				out := deploy.GetDeploymentCR(f, deployment.Name)
 				return out.Status.Phase == api.DeploymentPhaseRunning
@@ -516,59 +506,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 
 			err := validate.DriverDeployment(ctx, client, k8sver, d.Namespace, deployment)
 			framework.ExpectNoError(err, "validate driver after resolved conflicts")
-		})
-
-		It("shall recover from missing secret", func() {
-			deployment := getDeployment("test-recover-from-missing-secret")
-			sec := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-controller-secret",
-					Namespace: d.Namespace,
-				},
-				Type: corev1.SecretTypeTLS,
-				Data: map[string][]byte{
-					"ca.crt":  []byte("fake ca"),
-					"tls.key": []byte("fake key"),
-					"tls.crt": []byte("fake crt"),
-				},
-			}
-			deployment.Spec.ControllerTLSSecret = sec.Name
-			deployment = deploy.CreateDeploymentCR(f, deployment)
-			defer deploy.DeleteDeploymentCR(f, deployment.Name)
-
-			// The deployment should fail because the required secret is missing.
-			Eventually(func() bool {
-				out := deploy.GetDeploymentCR(f, deployment.Name)
-				return out.Status.Phase == api.DeploymentPhaseFailed
-			}, "3m", "1s").Should(BeTrue(), "deployment should fail %q", deployment.Name)
-			validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonFailed})
-
-			// Creating the secret should make the deployment succeed.
-			deleteSecret := func() {
-				Eventually(func() error {
-					err := f.ClientSet.CoreV1().Secrets(d.Namespace).Delete(context.Background(), sec.Name, metav1.DeleteOptions{})
-					deploy.LogError(err, "Delete secret error: %v, will retry...", err)
-					if errors.IsNotFound(err) {
-						return nil
-					}
-					return err
-				}, "3m", "1s").ShouldNot(HaveOccurred(), "delete secret %s", sec.Name)
-			}
-			Eventually(func() error {
-				_, err := f.ClientSet.CoreV1().Secrets(d.Namespace).Create(context.Background(), sec, metav1.CreateOptions{})
-				deploy.LogError(err, "create secret error: %v, will retry...", err)
-				return err
-			}, "3m", "1s").ShouldNot(HaveOccurred(), "create secret %s", sec.Name)
-			defer deleteSecret()
-			// Now as the missing secrets are there in place, the deployment should
-			// move ahead and get succeed
-			Eventually(func() bool {
-				deployment := deploy.GetDeploymentCR(f, deployment.Name)
-				return deployment.Status.Phase == api.DeploymentPhaseRunning
-			}, "3m", "1s").Should(BeTrue(), "deployment should not fail %q", deployment.Name)
-			validateEvents(&deployment, []string{api.EventReasonNew, api.EventReasonRunning})
-			err := validate.DriverDeployment(context.Background(), client, k8sver, d.Namespace, deployment)
-			Expect(err).ShouldNot(HaveOccurred(), "validate driver after secret creation")
 		})
 	})
 
@@ -805,11 +742,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksServiceAccountName(), Namespace: d.Namespace},
 					}
 				},
-				"scheduler service": func(dep *api.PmemCSIDeployment) runtime.Object {
-					return &corev1.Service{
-						ObjectMeta: metav1.ObjectMeta{Name: dep.SchedulerServiceName(), Namespace: d.Namespace},
-					}
-				},
 				"webhooks role": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &rbacv1.Role{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksRoleName(), Namespace: d.Namespace},
@@ -828,11 +760,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				"webhooks cluster role binding": func(dep *api.PmemCSIDeployment) runtime.Object {
 					return &rbacv1.ClusterRoleBinding{
 						ObjectMeta: metav1.ObjectMeta{Name: dep.WebhooksClusterRoleBindingName()},
-					}
-				},
-				"mutating webhook config": func(dep *api.PmemCSIDeployment) runtime.Object {
-					return &admissionregistrationv1.MutatingWebhookConfiguration{
-						ObjectMeta: metav1.ObjectMeta{Name: dep.MutatingWebhookName()},
 					}
 				},
 				"provisioner role": func(dep *api.PmemCSIDeployment) runtime.Object {
@@ -887,8 +814,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				It(name, func() {
 					// Create a deployment with controller and webhook config.
 					dep := getDeployment("recover-" + strings.ReplaceAll(name, " ", "-"))
-					dep.Spec.ControllerTLSSecret = "pmem-csi-intel-com-controller-secret"
-					dep.Spec.MutatePods = api.MutatePodsAlways
 					deployment := deploy.CreateDeploymentCR(f, dep)
 					defer deploy.DeleteDeploymentCR(f, dep.Name)
 					validateDriver(deployment, nil)
@@ -939,7 +864,6 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 				name, mutate := name, mutate
 				It(name, func() {
 					dep := getDeployment("recover-" + strings.ReplaceAll(name, " ", "-"))
-					dep.Spec.ControllerTLSSecret = "pmem-csi-intel-com-controller-secret"
 					deployment := deploy.CreateDeploymentCR(f, dep)
 					defer deploy.DeleteDeploymentCR(f, dep.Name)
 					validateDriver(deployment, nil, "validate before conflicts")

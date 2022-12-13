@@ -209,7 +209,7 @@ func checkTLS(f *framework.Framework, server string) {
 			//   in our Dockerfile)
 			// - the generated keys and thus the deployment method (the
 			//   current list is for "make start" and keys created with
-			//   test/setup-ca.sh, which in turn uses cfssl as installed
+			//   test/setup-ca.sh from PMEM-CSI 1.0.x, which in turn used cfssl as installed
 			//   by test/test.make, at least in the CI)
 			//
 			// This list may have to be adapted when changing either of these.

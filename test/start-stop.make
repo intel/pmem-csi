@@ -12,7 +12,7 @@ _work/bin/govm: _work/govm_$(GOVM_VERSION)_Linux_amd64.tar.gz
 # Brings up the emulator environment:
 # - starts a Kubernetes cluster with NVDIMMs as described in https://github.com/qemu/qemu/blob/bd54b11062c4baa7d2e4efadcf71b8cfd55311fd/docs/nvdimm.txt
 # - generate pmem secrets if necessary
-start: _work/pmem-ca/.ca-stamp _work/bin/govm
+start: _work/bin/govm
 	PATH="$(PWD)/_work/bin:$$PATH" test/start-kubernetes.sh
 
 # Stops the VMs and removes all files. Beware that the simple "rm -rf" only works if we don't

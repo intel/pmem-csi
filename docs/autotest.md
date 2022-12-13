@@ -170,14 +170,6 @@ ssh igk-1 "$@"
 - Label all worker nodes with PMEM with `storage=pmem` and
   `feature.node.kubernetes.io/memory-nv.dax=true`.
 - Delete all namespaces.
-- On OpenShift 4.6 and 4.7: create the `scheduler-policy` config map with a fixed
-  host port (default: `TEST_SCHEDULER_EXTENDER_NODE_PORT=32000`) and reconfigure
-  `scheduler/cluster` as explained
-  in [OpenShift scheduler configuration](install.md#openshift-scheduler-configuration).
-  There is one crucial difference for the config map: in the `managedResources` array,
-  it must also include an entry for `second.pmem-csi.intel.com/scheduler` (use by
-  operator-lvm-production). The corresponding service will be created when deploying
-  PMEM-CSI as part of the tests.
 - Symlink `_work/<cluster>` to the directory.
 - Push a pmem-csi-driver image to a registry that the cluster can pull from.
   The normal `make push-images` and `make test_e2e` work when overriding the test config

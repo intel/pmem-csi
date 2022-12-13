@@ -102,9 +102,6 @@ func UpdateTests() []UpdateTest {
 		"kubeletDir": func(d *api.PmemCSIDeployment) {
 			d.Spec.KubeletDir = "/foo/bar"
 		},
-		"openshift": func(d *api.PmemCSIDeployment) {
-			d.Spec.ControllerTLSSecret = "-openshift-"
-		},
 	}
 
 	full := api.PmemCSIDeployment{
@@ -200,23 +197,6 @@ func UpdateTests() []UpdateTest {
 			Mutate:     updateAll,
 		})
 	}
-
-	// Special case: remove -openshift-
-	openshiftDep := api.PmemCSIDeployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "pmem-csi-for-openshift",
-		},
-		Spec: api.DeploymentSpec{
-			ControllerTLSSecret: "-openshift-",
-		},
-	}
-	tests = append(tests, UpdateTest{
-		Name:       "remove-openshift",
-		Deployment: openshiftDep,
-		Mutate: func(d *api.PmemCSIDeployment) {
-			d.Spec.ControllerTLSSecret = ""
-		},
-	})
 
 	return tests
 }

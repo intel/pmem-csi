@@ -157,7 +157,7 @@ space:= $(empty) $(empty)
 
 GO_TEST_E2E = $(GO) test -count=1 -timeout 0 -v ./test/e2e -args
 ifneq ($(WITH_DLV),)
-GO_TEST_E2E = dlv test ./test/e2e --
+GO_TEST_E2E = dlv test ./test/e2e -- -ginkgo.v
 endif
 
 # E2E testing relies on a running QEMU test cluster. It therefore starts it,
@@ -190,7 +190,9 @@ RUN_E2E = KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 		-ginkgo.timeout=$(TEST_E2E_TIMEOUT) \
 	        $(TEST_E2E_ARGS) \
                 -report-dir=$(TEST_E2E_REPORT_DIR)
-test_e2e: start $(RUN_TEST_DEPS) operator-generate-bundle
+
+# Downgrade tests to v1.0.x depends on cfssl because the v1.0.x install scripts need it.
+test_e2e: start $(RUN_TEST_DEPS) operator-generate-bundle _work/.setupcfssl-stamp _work/.operator-sdk-stamp
 	$(RUN_E2E)
 
 run_dm_tests: TEST_BINARY_NAME=pmem-dm-tests
@@ -203,12 +205,6 @@ run_dm_tests: _work/bin/govm start_test_vm
 	SSH_ARGS=$$(grep ^exec $$SSH | cut -f3- -d' ' | rev | cut -f3- -d' ' | rev); \
 	scp $$SSH_ARGS `pwd`/_work/$(TEST_BINARY_NAME) $$SSH_USER@$$NODE_IP:. ; \
 	$$SSH sudo ./$(TEST_BINARY_NAME) -ginkgo.v
-
-_work/%/.ca-stamp: test/setup-ca.sh _work/.setupcfssl-stamp
-	rm -rf $(@D)
-	WORKDIR='$(@D)' PATH='$(PWD)/_work/bin/:$(PATH)' NS=default $<
-	touch $@
-
 
 _work/.setupcfssl-stamp: CFSSL_VERSION=1.5.0
 _work/.setupcfssl-stamp:

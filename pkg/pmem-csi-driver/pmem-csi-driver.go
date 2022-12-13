@@ -20,21 +20,19 @@ import (
 	"syscall"
 	"time"
 
+	"k8s.io/client-go/informers"
 	"k8s.io/klog/v2"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1beta1"
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
 	"github.com/intel/pmem-csi/pkg/k8sutil"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
-	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	pmemstate "github.com/intel/pmem-csi/pkg/pmem-state"
-	"github.com/intel/pmem-csi/pkg/scheduler"
 	"github.com/intel/pmem-csi/pkg/types"
 	"github.com/kubernetes-csi/csi-lib-utils/metrics"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"k8s.io/client-go/informers"
 )
 
 const (
@@ -47,7 +45,7 @@ type DriverMode string
 
 func (mode *DriverMode) Set(value string) error {
 	switch value {
-	case string(Node), string(Webhooks), string(ForceConvertRawNamespaces):
+	case string(Node), string(Controller), string(ForceConvertRawNamespaces):
 		*mode = DriverMode(value)
 	default:
 		// The flag package will add the value to the final output, no need to do it here.
@@ -65,8 +63,8 @@ func (mode *DriverMode) String() string {
 const (
 	// Node driver with support for provisioning.
 	Node DriverMode = "node"
-	// Just the webhooks, using metrics instead of gRPC over TCP.
-	Webhooks DriverMode = "webhooks"
+	// The controller with the rescheduler. For historic reasons this is called "webhooks".
+	Controller DriverMode = "webhooks"
 	// Convert each raw namespace into fsdax.
 	ForceConvertRawNamespaces = "force-convert-raw-namespaces"
 )
@@ -103,12 +101,6 @@ type Config struct {
 	Endpoint string
 	//Mode mode fo the driver
 	Mode DriverMode
-	//CAFile Root certificate authority certificate file
-	CAFile string
-	//CertFile certificate for server authentication
-	CertFile string
-	//KeyFile server private key file
-	KeyFile string
 	//DeviceManager device manager to use
 	DeviceManager api.DeviceMode
 	//Directory where to persist the node driver state
@@ -125,10 +117,6 @@ type Config struct {
 	// KubeAPIQPS is the number of requests that a client is
 	// allowed to send above the average rate of request.
 	KubeAPIBurst int
-
-	// parameters for Kubernetes scheduler extender
-	schedulerListen         string
-	insecureSchedulerListen string
 
 	// parameters for rescheduler and raw namespace conversion
 	nodeSelector types.NodeSelector
@@ -188,25 +176,15 @@ func (csid *csiDriver) Run(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
 
 	switch csid.cfg.Mode {
-	case Webhooks:
+	case Controller:
 		client, err := k8sutil.NewClient(config.KubeAPIQPS, config.KubeAPIBurst)
 		if err != nil {
 			return fmt.Errorf("connect to apiserver: %v", err)
 		}
 
-		// A factory for all namespaces. Some of these are only needed by
-		// scheduler webhooks or deprovisioner, but because the normal
-		// setup is to have both enabled, the logic here is simplified so that
-		// everything gets initialized.
-		//
-		// The PV informer is not really needed, but there is no good way to
-		// tell the lib that it should watch PVs. An informer for a fake client
-		// did not work:
-		// Failed to watch *v1.PersistentVolume: unhandled watch: testing.WatchActionImpl
+		// A factory for all namespaces.
 		globalFactory := informers.NewSharedInformerFactory(client, resyncPeriod)
 		pvcInformer := globalFactory.Core().V1().PersistentVolumeClaims().Informer()
-		pvcLister := globalFactory.Core().V1().PersistentVolumeClaims().Lister()
-		scLister := globalFactory.Storage().V1().StorageClasses().Lister()
 		scInformer := globalFactory.Storage().V1().StorageClasses().Informer()
 		pvInformer := globalFactory.Core().V1().PersistentVolumes().Informer()
 		csiNodeLister := globalFactory.Storage().V1().CSINodes().Lister()
@@ -244,41 +222,6 @@ func (csid *csiDriver) Run(ctx context.Context) error {
 		for t, v := range cacheSyncResult {
 			if !v {
 				return fmt.Errorf("failed to sync informer for type %v", t)
-			}
-		}
-
-		if csid.cfg.schedulerListen != "" || csid.cfg.insecureSchedulerListen != "" {
-			// Factory for the driver's namespace.
-			namespace := os.Getenv("POD_NAMESPACE")
-			if namespace == "" {
-				return errors.New("POD_NAMESPACE env variable is not set")
-			}
-			localFactory := informers.NewSharedInformerFactoryWithOptions(client, resyncPeriod,
-				informers.WithNamespace(namespace),
-			)
-			podLister := localFactory.Core().V1().Pods().Lister()
-			c := scheduler.CapacityViaMetrics(namespace, csid.cfg.DriverName, podLister)
-			localFactory.Start(ctx.Done())
-
-			sched, err := scheduler.NewScheduler(
-				csid.cfg.DriverName,
-				c,
-				client,
-				pvcLister,
-				scLister,
-			)
-			if err != nil {
-				return fmt.Errorf("create scheduler: %v", err)
-			}
-			if csid.cfg.schedulerListen != "" {
-				if _, err := csid.startHTTPSServer(ctx, cancel, csid.cfg.schedulerListen, sched, true /* TLS */); err != nil {
-					return err
-				}
-			}
-			if csid.cfg.insecureSchedulerListen != "" {
-				if _, err := csid.startHTTPSServer(ctx, cancel, csid.cfg.insecureSchedulerListen, sched, false /* not TLS */); err != nil {
-					return err
-				}
 			}
 		}
 
@@ -389,27 +332,17 @@ func (csid *csiDriver) startMetrics(ctx context.Context, cancel func()) (string,
 		),
 	)
 	mux.Handle(csid.cfg.metricsPath+"/simple", promhttp.HandlerFor(simpleMetrics, promhttp.HandlerOpts{}))
-	return csid.startHTTPSServer(ctx, cancel, csid.cfg.metricsListen, mux, false /* no TLS */)
+	return csid.startHTTPSServer(ctx, cancel, csid.cfg.metricsListen, mux)
 }
 
 // startHTTPSServer contains the common logic for starting and
 // stopping an HTTPS server.  Returns an error or the address that can
 // be used in Dial("tcp") to reach the server (useful for testing when
 // "listen" does not include a port).
-func (csid *csiDriver) startHTTPSServer(ctx context.Context, cancel func(), listen string, handler http.Handler, useTLS bool) (string, error) {
+func (csid *csiDriver) startHTTPSServer(ctx context.Context, cancel func(), listen string, handler http.Handler) (string, error) {
 	name := "HTTP server"
-	if useTLS {
-		name = "HTTPS server"
-	}
 	logger := klog.FromContext(ctx).WithName(name).WithValues("listen", listen)
 	var config *tls.Config
-	if useTLS {
-		c, err := pmemgrpc.LoadServerTLS(ctx, csid.cfg.CAFile, csid.cfg.CertFile, csid.cfg.KeyFile, "" /* any peer can connect */)
-		if err != nil {
-			return "", fmt.Errorf("initialize HTTPS config: %v", err)
-		}
-		config = c
-	}
 	server := http.Server{
 		Addr: listen,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -426,13 +359,7 @@ func (csid *csiDriver) startHTTPSServer(ctx context.Context, cancel func(), list
 	go func() {
 		defer tcpListener.Close()
 
-		var err error
-		if useTLS {
-			err = server.ServeTLS(listener, csid.cfg.CertFile, csid.cfg.KeyFile)
-		} else {
-			err = server.Serve(listener)
-		}
-		if err != http.ErrServerClosed {
+		if err := server.Serve(listener); err != http.ErrServerClosed {
 			logger.Error(err, "Failed")
 		}
 		// Also stop main thread.

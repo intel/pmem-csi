@@ -105,6 +105,10 @@ func testImageFile(t TInterface, fs imagefile.FsType, size imagefile.Bytes, expe
 		t.Log("for testing the image under QEMU, download files for a cluster and set REPO_ROOT and CLUSTER")
 		return
 	}
+	if _, err := exec.LookPath("govm"); err != nil {
+		t.Log("for  testing the image under QEMU, install govm")
+		return
+	}
 	env := []string{
 		"EXISTING_VM_FILE=" + file.Name(),
 		os.ExpandEnv("PATH=${REPO_ROOT}/_work/bin:${PATH}"),

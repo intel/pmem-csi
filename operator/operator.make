@@ -5,6 +5,8 @@ CONTROLLER_GEN_VERSION=v0.8.0
 CONTROLLER_GEN=_work/bin/controller-gen-$(CONTROLLER_GEN_VERSION)
 
 # download operator-sdk binary
+_work/.operator-sdk-stamp: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION)
+	touch $@
 _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION):
 	mkdir -p $(@D)
 	curl -L https://github.com/operator-framework/operator-sdk/releases/download/v$(OPERATOR_SDK_VERSION)/operator-sdk_linux_amd64 -o $@

@@ -352,10 +352,6 @@ spec:
         - -mode=webhooks
         - -drivername=$(PMEM_CSI_DRIVER_NAME)
         - -nodeSelector={"storage":"pmem"}
-        - -caFile=
-        - -certFile=/certs/tls.crt
-        - -keyFile=/certs/tls.key
-        - -schedulerListen=:8000
         - -metricsListen=:10010
         - -v=5
         env:
@@ -398,9 +394,6 @@ spec:
           successThreshold: 1
           timeoutSeconds: 5
         terminationMessagePath: /dev/termination-log
-        volumeMounts:
-        - mountPath: /certs
-          name: webhook-cert
       priorityClassName: system-cluster-critical
       serviceAccountName: pmem-csi-intel-com-webhooks
       tolerations:
@@ -408,10 +401,6 @@ spec:
         operator: Exists
       - effect: NoExecute
         operator: Exists
-      volumes:
-      - name: webhook-cert
-        secret:
-          secretName: pmem-csi-intel-com-controller-secret
 ---
 apiVersion: apps/v1
 kind: DaemonSet

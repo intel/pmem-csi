@@ -59,7 +59,7 @@ RUN set -x && \
     mkdir -p /usr/local/share/package-licenses && \
     cp LICENSE /usr/local/share/package-licenses/ipmctl.LICENSE && \
     cd ipmctl && \
-    tag=$(curl --silent https://github.com/intel/ipmctl/releases/latest | sed -e 's;.*tag/\([^"]*\).*;\1;') && \
+    tag=$(basename $(curl -Ls -o /dev/null -w %{url_effective} https://github.com/intel/ipmctl/releases/latest)) && \
     git checkout $tag && \
     mkdir build && \
     cd build && \

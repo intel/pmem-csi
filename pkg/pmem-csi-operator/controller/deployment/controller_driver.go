@@ -38,8 +38,6 @@ const (
 	controllerMetricsPort  = 10010
 	nodeMetricsPort        = 10010
 	provisionerMetricsPort = 10011
-	schedulerPort          = 8000
-	insecureSchedulerPort  = 8001
 )
 
 func typeMeta(gv schema.GroupVersion, kind string) metav1.TypeMeta {
@@ -153,8 +151,6 @@ type pmemCSIDeployment struct {
 	// operator's namespace used for creating sub-resources
 	namespace  string
 	k8sVersion version.Version
-
-	controllerCABundle []byte
 }
 
 func (d *pmemCSIDeployment) withStorageCapacity() bool {
@@ -353,10 +349,6 @@ func (d *pmemCSIDeployment) redeploy(ctx context.Context, r *ReconcileDeployment
 	return o, nil
 }
 
-func mutatingWebhookEnabled(d *pmemCSIDeployment) bool {
-	return d.Spec.ControllerTLSSecret != "" && d.Spec.MutatePods != api.MutatePodsNever
-}
-
 var subObjectHandlers = map[string]redeployObject{
 	"node driver": {
 		objType: reflect.TypeOf(&appsv1.DaemonSet{}),
@@ -493,47 +485,6 @@ var subObjectHandlers = map[string]redeployObject{
 		},
 		modify: func(d *pmemCSIDeployment, o client.Object) error {
 			// nothing to customize for service account
-			return nil
-		},
-	},
-	"webhooks service": {
-		objType: reflect.TypeOf(&corev1.Service{}),
-		enabled: mutatingWebhookEnabled,
-		object: func(d *pmemCSIDeployment) client.Object {
-			return &corev1.Service{
-				TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-				ObjectMeta: d.getObjectMeta(d.WebhooksServiceName(), false),
-			}
-		},
-		modify: func(d *pmemCSIDeployment, o client.Object) error {
-			d.getWebhooksService(o.(*corev1.Service))
-			return nil
-		},
-	},
-	"mutating webhook configuration": {
-		objType: reflect.TypeOf(&admissionregistrationv1.MutatingWebhookConfiguration{}),
-		enabled: mutatingWebhookEnabled,
-		object: func(d *pmemCSIDeployment) client.Object {
-			return &admissionregistrationv1.MutatingWebhookConfiguration{
-				TypeMeta:   metav1.TypeMeta{Kind: "MutatingWebhookConfiguration", APIVersion: "admissionregistration.k8s.io/v1"},
-				ObjectMeta: d.getObjectMeta(d.MutatingWebhookName(), true),
-			}
-		},
-		modify: func(d *pmemCSIDeployment, o client.Object) error {
-			d.getMutatingWebhookConfig(o.(*admissionregistrationv1.MutatingWebhookConfiguration))
-			return nil
-		},
-	},
-	"scheduler service": {
-		objType: reflect.TypeOf(&corev1.Service{}),
-		object: func(d *pmemCSIDeployment) client.Object {
-			return &corev1.Service{
-				TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-				ObjectMeta: d.getObjectMeta(d.SchedulerServiceName(), false),
-			}
-		},
-		modify: func(d *pmemCSIDeployment, o client.Object) error {
-			d.getSchedulerService(o.(*corev1.Service))
 			return nil
 		},
 	},
@@ -881,126 +832,6 @@ func (d *pmemCSIDeployment) getWebhooksClusterRoleBinding(crb *rbacv1.ClusterRol
 	}
 }
 
-func (d *pmemCSIDeployment) getWebhooksService(service *corev1.Service) {
-	d.getService(service, corev1.ServiceTypeClusterIP, 443)
-	service.Spec.Ports[0].TargetPort.IntVal = schedulerPort
-	if d.Spec.ControllerTLSSecret == api.ControllerTLSSecretOpenshift {
-		if service.Annotations == nil {
-			service.Annotations = map[string]string{}
-		}
-		service.Annotations["service.beta.openshift.io/serving-cert-secret-name"] = d.ControllerTLSSecretOpenshiftName()
-	} else {
-		if service.Annotations != nil {
-			delete(service.Annotations, "service.beta.openshift.io/serving-cert-secret-name")
-		}
-	}
-}
-
-func (d *pmemCSIDeployment) getMutatingWebhookConfig(hook *admissionregistrationv1.MutatingWebhookConfiguration) {
-	servicePort := int32(443) // default webhook service port
-	selector := &metav1.LabelSelector{
-		MatchExpressions: []metav1.LabelSelectorRequirement{
-			{
-				Key:      "pmem-csi.intel.com/webhook",
-				Operator: metav1.LabelSelectorOpNotIn,
-				Values:   []string{"ignore"},
-			},
-		},
-	}
-	failurePolicy := admissionregistrationv1.Ignore
-	if d.Spec.MutatePods == api.MutatePodsAlways {
-		failurePolicy = admissionregistrationv1.Fail
-	}
-	path := "/pod/mutate"
-	none := admissionregistrationv1.SideEffectClassNone
-	controllerCABundle := d.controllerCABundle
-	// Preserve defaults when updating.
-	var scope *admissionregistrationv1.ScopeType
-	var timeoutSeconds *int32
-	var matchPolicy *admissionregistrationv1.MatchPolicyType
-	var reinvocationPolicy *admissionregistrationv1.ReinvocationPolicyType
-	if len(hook.Webhooks) > 0 {
-		if d.Spec.ControllerTLSSecret == api.ControllerTLSSecretOpenshift {
-			// Below we overwrite the entire hook.Webhooks. Before we do that, we must
-			// retrieve the CABundle that was generated for us by OpenShift.
-			controllerCABundle = hook.Webhooks[0].ClientConfig.CABundle
-		}
-		scope = hook.Webhooks[0].Rules[0].Scope
-		timeoutSeconds = hook.Webhooks[0].TimeoutSeconds
-		matchPolicy = hook.Webhooks[0].MatchPolicy
-		reinvocationPolicy = hook.Webhooks[0].ReinvocationPolicy
-	}
-	hook.Webhooks = []admissionregistrationv1.MutatingWebhook{
-		{
-			// Name must be "fully-qualified" (i.e. with domain) but not unique, so
-			// here "pmem-csi.intel.com" is not the default driver name.
-			// https://pkg.go.dev/k8s.io/api/admissionregistration/v1#MutatingWebhook
-			Name:               "pod-hook.pmem-csi.intel.com",
-			NamespaceSelector:  selector,
-			ObjectSelector:     selector,
-			FailurePolicy:      &failurePolicy,
-			MatchPolicy:        matchPolicy,
-			ReinvocationPolicy: reinvocationPolicy,
-			ClientConfig: admissionregistrationv1.WebhookClientConfig{
-				Service: &admissionregistrationv1.ServiceReference{
-					Name:      d.WebhooksServiceName(),
-					Namespace: d.namespace,
-					Path:      &path,
-					Port:      &servicePort,
-				},
-				// CABundle set below.
-			},
-			Rules: []admissionregistrationv1.RuleWithOperations{
-				{
-					Operations: []admissionregistrationv1.OperationType{admissionregistrationv1.Create},
-					Rule: admissionregistrationv1.Rule{
-						APIGroups:   []string{""},
-						APIVersions: []string{"v1"},
-						Resources:   []string{"pods"},
-						Scope:       scope,
-					},
-				},
-			},
-			SideEffects:             &none,
-			AdmissionReviewVersions: []string{"v1"},
-			TimeoutSeconds:          timeoutSeconds,
-		},
-	}
-
-	switch {
-	case d.Spec.ControllerTLSSecret == api.ControllerTLSSecretOpenshift:
-		if hook.Annotations == nil {
-			hook.Annotations = map[string]string{}
-		}
-		hook.Annotations["service.beta.openshift.io/inject-cabundle"] = "true"
-	case len(controllerCABundle) == 0:
-		panic("controller CA bundle empty, should have been loaded")
-	default:
-		if hook.Annotations != nil {
-			delete(hook.Annotations, "service.beta.openshift.io/inject-cabundle")
-		}
-	}
-	// Set or preserve the CABundle.
-	hook.Webhooks[0].ClientConfig.CABundle = controllerCABundle
-}
-
-func (d *pmemCSIDeployment) getSchedulerService(service *corev1.Service) {
-	targetPort := schedulerPort
-	port := 443
-	if d.Spec.ControllerTLSSecret == api.ControllerTLSSecretOpenshift {
-		targetPort = insecureSchedulerPort
-		port = 80
-	}
-	d.getService(service, corev1.ServiceTypeClusterIP, int32(port))
-	service.Spec.Ports[0].TargetPort = intstr.IntOrString{
-		IntVal: int32(targetPort),
-	}
-	service.Spec.Ports[0].NodePort = d.Spec.SchedulerNodePort
-	if d.Spec.SchedulerNodePort != 0 {
-		service.Spec.Type = corev1.ServiceTypeNodePort
-	}
-}
-
 func (d *pmemCSIDeployment) getControllerProvisionerRole(role *rbacv1.Role) {
 	role.Rules = []rbacv1.PolicyRule{
 		{
@@ -1195,22 +1026,6 @@ func (d *pmemCSIDeployment) getControllerDeployment(ss *appsv1.Deployment) {
 	// Allow this pod to run on all nodes.
 	setTolerations(&ss.Spec.Template.Spec)
 	ss.Spec.Template.Spec.Volumes = []corev1.Volume{}
-	if d.Spec.ControllerTLSSecret != "" {
-		mode := corev1.SecretVolumeSourceDefaultMode
-		name := d.Spec.ControllerTLSSecret
-		if name == api.ControllerTLSSecretOpenshift {
-			name = d.ControllerTLSSecretOpenshiftName()
-		}
-		ss.Spec.Template.Spec.Volumes = append(ss.Spec.Template.Spec.Volumes, corev1.Volume{
-			Name: "webhook-cert",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  name,
-					DefaultMode: &mode,
-				},
-			},
-		})
-	}
 }
 
 func (d *pmemCSIDeployment) getNodeDaemonSet(ds *appsv1.DaemonSet) {
@@ -1353,19 +1168,6 @@ func (d *pmemCSIDeployment) getControllerCommand() []string {
 		"-nodeSelector=" + nodeSelector.String(),
 	}
 
-	if d.Spec.ControllerTLSSecret != "" {
-		args = append(args,
-			"-caFile=",
-			"-certFile=/certs/tls.crt",
-			"-keyFile=/certs/tls.key",
-			fmt.Sprintf("-schedulerListen=:%d", schedulerPort),
-		)
-		if d.Spec.ControllerTLSSecret == api.ControllerTLSSecretOpenshift {
-			args = append(args,
-				fmt.Sprintf("-insecureSchedulerListen=:%d", insecureSchedulerPort),
-			)
-		}
-	}
 	args = append(args, fmt.Sprintf("-metricsListen=:%d", controllerMetricsPort))
 
 	return args
@@ -1424,15 +1226,6 @@ func (d *pmemCSIDeployment) getControllerContainer() corev1.Container {
 		LivenessProbe: getMetricsProbe(6, 10, "/simple"),
 		StartupProbe:  getMetricsProbe(60, 1, "/simple"),
 	}
-
-	if d.Spec.ControllerTLSSecret != "" {
-		c.VolumeMounts = append(c.VolumeMounts,
-			corev1.VolumeMount{
-				Name:      "webhook-cert",
-				MountPath: "/certs",
-			})
-	}
-
 	return c
 }
 

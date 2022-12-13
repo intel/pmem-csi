@@ -431,8 +431,6 @@ func (r *ReconcileDeployment) getDeploymentFor(ctx context.Context, obj metav1.O
 // newDeployment prepares for object creation and will modify the PmemCSIDeployment.
 // Callers who don't want that need to clone it first.
 func (r *ReconcileDeployment) newDeployment(ctx context.Context, deployment *api.PmemCSIDeployment) (*pmemCSIDeployment, error) {
-	l := klog.FromContext(ctx).WithName("newDeployment")
-
 	if err := deployment.EnsureDefaults(r.containerImage); err != nil {
 		return nil, err
 	}
@@ -441,37 +439,6 @@ func (r *ReconcileDeployment) newDeployment(ctx context.Context, deployment *api
 		PmemCSIDeployment: deployment,
 		namespace:         r.namespace,
 		k8sVersion:        r.k8sVersion,
-	}
-
-	switch d.Spec.ControllerTLSSecret {
-	case "":
-		// Nothing to do.
-	case api.ControllerTLSSecretOpenshift:
-		// Nothing to load, we just add annotations.
-	default:
-		// Load the specified secret.
-		secret := &corev1.Secret{
-			TypeMeta: metav1.TypeMeta{
-				APIVersion: "v1",
-				Kind:       "Secret",
-			},
-		}
-		objKey := client.ObjectKey{
-			Namespace: d.namespace,
-			Name:      d.Spec.ControllerTLSSecret,
-		}
-		if err := r.client.Get(ctx, objKey, secret); err != nil {
-			return nil, fmt.Errorf("loading ControllerTLSSecret %s from namespace %s: %v", d.Spec.ControllerTLSSecret, d.namespace, err)
-		}
-		ca, ok := secret.Data[api.TLSSecretCA]
-		if !ok {
-			return nil, fmt.Errorf("ControllerTLSSecret %s in namespace %s contains no %s", d.Spec.ControllerTLSSecret, d.namespace, api.TLSSecretCA)
-		}
-		d.controllerCABundle = ca
-		if len(d.controllerCABundle) == 0 {
-			return nil, fmt.Errorf("ControllerTLSSecret %s in namespace %s contains empty %s", d.Spec.ControllerTLSSecret, d.namespace, api.TLSSecretCA)
-		}
-		l.V(3).Info("load controller TLS secret", "secret", objKey, "CAlength", len(d.controllerCABundle))
 	}
 
 	return d, nil

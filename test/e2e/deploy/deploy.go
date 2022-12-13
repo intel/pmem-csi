@@ -16,7 +16,6 @@ import (
 	"os/exec"
 	"reflect"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -42,7 +41,6 @@ import (
 	pmemlog "github.com/intel/pmem-csi/pkg/logger"
 	"github.com/intel/pmem-csi/pkg/version"
 	"github.com/intel/pmem-csi/test/e2e/pod"
-	testconfig "github.com/intel/pmem-csi/test/test-config"
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
@@ -1019,9 +1017,12 @@ func findOperatorOnce(c *Cluster) (*Deployment, error) {
 // errors ("operatorhubio-catalog-lbdrz 0/1 CrashLoopBackOff") that did not
 // occur locally or when running the tests on a "fresh" CI cluster.
 var allDeployments = []string{
-	"olm", // operator installed by OLM
-	"olm-lvm-production",
-	"olm-direct-production",
+	// Testing with OLM is disabled. Installing it was a frequent source of
+	// random failures, it's simply not reliable enough.
+	//
+	// "olm", // operator installed by OLM
+	// "olm-lvm-production",
+	// "olm-direct-production",
 
 	"lvm-production",
 	"direct-production",
@@ -1357,27 +1358,6 @@ func (d *Deployment) GetDriverDeployment(c *Cluster) api.PmemCSIDeployment {
 			},
 		},
 	}
-
-	if d.HasController && !c.StorageCapacitySupported() {
-		dep.Spec.MutatePods = api.MutatePodsAlways
-		if c.isOpenShift {
-			// Use certificates prepared by OpenShift.
-			dep.Spec.ControllerTLSSecret = api.ControllerTLSSecretOpenshift
-		} else {
-			// Use a secret that must have been prepared beforehand.
-			dep.Spec.ControllerTLSSecret = strings.ReplaceAll(d.DriverName, ".", "-") + "-controller-secret"
-		}
-		// The scheduler must have been configured manually. We just
-		// create the corresponding service in the namespace where the
-		// driver is going to run.
-		portStr := testconfig.GetOrFail("TEST_SCHEDULER_EXTENDER_NODE_PORT")
-		port, err := strconv.ParseInt(portStr, 10, 32)
-		if err != nil {
-			panic(fmt.Errorf("not an int32: TEST_SCHEDULER_EXTENDER_NODE_PORT=%q: %v", portStr, err))
-		}
-		dep.Spec.SchedulerNodePort = int32(port)
-	}
-
 	return dep
 }
 

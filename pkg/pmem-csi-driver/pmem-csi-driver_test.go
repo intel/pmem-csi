@@ -12,17 +12,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-)
-
-var (
-	caFile   = os.ExpandEnv("${TEST_WORK}/pmem-ca/ca.pem")
-	certFile = os.ExpandEnv("${TEST_WORK}/pmem-ca/pmem-controller.pem")
-	keyFile  = os.ExpandEnv("${TEST_WORK}/pmem-ca/pmem-controller-key.pem")
 )
 
 func TestMetrics(t *testing.T) {
@@ -50,14 +43,11 @@ build_info{version="foo-bar-test"} 1
 		t.Run(n, func(t *testing.T) {
 			path := "/metrics2"
 			pmemd, err := GetCSIDriver(Config{
-				Mode:          Webhooks,
+				Mode:          Controller,
 				DriverName:    "pmem-csi",
 				NodeID:        "testnode",
 				Endpoint:      "unused",
 				Version:       "foo-bar-test",
-				CAFile:        caFile,
-				CertFile:      certFile,
-				KeyFile:       keyFile,
 				metricsPath:   path,
 				metricsListen: "127.0.0.1:", // port allocated dynamically
 			})

@@ -39,7 +39,7 @@ RUN equivs-build python3-fake-debian-package
 RUN set -x && \
     git clone https://github.com/intel/ipmctl.git && \
     cd ipmctl && \
-    tag=$(curl --silent https://github.com/intel/ipmctl/releases/latest | sed -e 's;.*tag/\([^"]*\).*;\1;') && \
+    tag=$(basename $(curl -Ls -o /dev/null -w %{url_effective} https://github.com/intel/ipmctl/releases/latest)) && \
     git checkout $tag && \
     mkdir build && \
     cd build && \

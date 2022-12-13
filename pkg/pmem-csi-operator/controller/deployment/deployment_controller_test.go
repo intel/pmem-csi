@@ -56,9 +56,6 @@ type pmemDeployment struct {
 	nodeCPU, nodeMemory                                 string
 	provisionerCPU, provisionerMemory                   string
 	nodeRegistarCPU, nodeRegistrarMemory                string
-	controllerTLSSecret                                 string
-	mutatePods                                          api.MutatePods
-	schedulerNodePort                                   int32
 	kubeletDir                                          string
 
 	objects []runtime.Object
@@ -83,16 +80,13 @@ func getDeployment(d *pmemDeployment) *api.PmemCSIDeployment {
 	// The entire copying block below then collapses into a single line.
 
 	dep.Spec = api.DeploymentSpec{
-		DeviceMode:          api.DeviceMode(d.deviceMode),
-		LogLevel:            d.logLevel,
-		LogFormat:           api.LogFormat(d.logFormat),
-		Image:               d.image,
-		PullPolicy:          corev1.PullPolicy(d.pullPolicy),
-		ProvisionerImage:    d.provisionerImage,
-		NodeRegistrarImage:  d.registrarImage,
-		ControllerTLSSecret: d.controllerTLSSecret,
-		MutatePods:          d.mutatePods,
-		SchedulerNodePort:   d.schedulerNodePort,
+		DeviceMode:         api.DeviceMode(d.deviceMode),
+		LogLevel:           d.logLevel,
+		LogFormat:          api.LogFormat(d.logFormat),
+		Image:              d.image,
+		PullPolicy:         corev1.PullPolicy(d.pullPolicy),
+		ProvisionerImage:   d.provisionerImage,
+		NodeRegistrarImage: d.registrarImage,
 	}
 	spec := &dep.Spec
 	spec.ControllerReplicas = d.controllerReplicas
@@ -320,12 +314,6 @@ func TestDeploymentController(t *testing.T) {
 
 		t.Parallel()
 
-		dataOkay := map[string][]byte{
-			api.TLSSecretCA:   []byte("ca"),
-			api.TLSSecretKey:  []byte("key"),
-			api.TLSSecretCert: []byte("cert"),
-		}
-
 		cases := map[string]pmemDeployment{
 			"deployment with defaults": {
 				name: "test-deployment",
@@ -357,50 +345,6 @@ func TestDeploymentController(t *testing.T) {
 			"direct mode": {
 				name:       "test-driver-modes",
 				deviceMode: "direct",
-			},
-			"with controller, no secret": {
-				name:                "test-controller",
-				controllerTLSSecret: "controller-secret",
-				expectFailure:       true,
-			},
-			"with controller, wrong secret content": {
-				name:                "test-controller",
-				controllerTLSSecret: "controller-secret",
-				objects:             []runtime.Object{createSecret("controller-secret", testNamespace, nil)},
-				expectFailure:       true,
-			},
-			"with controller, secret okay": {
-				name:                "test-controller",
-				controllerTLSSecret: "controller-secret",
-				objects:             []runtime.Object{createSecret("controller-secret", testNamespace, dataOkay)},
-			},
-			"controller, no mutate": {
-				name:                "test-controller",
-				controllerTLSSecret: "controller-secret",
-				mutatePods:          api.MutatePodsNever,
-				objects:             []runtime.Object{createSecret("controller-secret", testNamespace, dataOkay)},
-			},
-			"controller, try mutate": {
-				name:                "test-controller",
-				controllerTLSSecret: "controller-secret",
-				mutatePods:          api.MutatePodsTry,
-				objects:             []runtime.Object{createSecret("controller-secret", testNamespace, dataOkay)},
-			},
-			"controller, always mutate": {
-				name:                "test-controller",
-				controllerTLSSecret: "controller-secret",
-				mutatePods:          api.MutatePodsAlways,
-				objects:             []runtime.Object{createSecret("controller-secret", testNamespace, dataOkay)},
-			},
-			"controller, port 31000": {
-				name:                "test-controller",
-				controllerTLSSecret: "controller-secret",
-				schedulerNodePort:   31000,
-				objects:             []runtime.Object{createSecret("controller-secret", testNamespace, dataOkay)},
-			},
-			"openshift": {
-				name:                "test-controller",
-				controllerTLSSecret: "-openshift-",
 			},
 		}
 
