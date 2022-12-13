@@ -157,7 +157,7 @@ space:= $(empty) $(empty)
 
 GO_TEST_E2E = $(GO) test -count=1 -timeout 0 -v ./test/e2e -args
 ifneq ($(WITH_DLV),)
-GO_TEST_E2E = dlv test ./test/e2e --
+GO_TEST_E2E = dlv test ./test/e2e -- -ginkgo.v
 endif
 
 # E2E testing relies on a running QEMU test cluster. It therefore starts it,
