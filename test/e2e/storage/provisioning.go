@@ -150,21 +150,22 @@ func TestDynamicProvisioning(client clientset.Interface, timeouts *framework.Tim
 //
 // This is a common test that can be called from a StorageClassTest.PvCheck.
 func PVWriteReadSingleNodeCheck(client clientset.Interface, timeouts *framework.TimeoutContext, claim *v1.PersistentVolumeClaim, id string) {
+	ctx := context.TODO()
 	By(fmt.Sprintf("%s: checking the created volume is writable", id))
 	command := "echo 'hello world' > /mnt/test/data || (mount | grep 'on /mnt/test'; false)"
-	pod := testsuites.StartInPodWithVolume(client, claim.Namespace, claim.Name, "pvc-volume-tester-writer-"+id, command, e2epod.NodeSelection{})
+	pod := testsuites.StartInPodWithVolume(ctx, client, claim.Namespace, claim.Name, "pvc-volume-tester-writer-"+id, command, e2epod.NodeSelection{})
 	defer func() {
 		// pod might be nil now.
-		testsuites.StopPod(client, pod)
+		testsuites.StopPod(ctx, client, pod)
 	}()
 	framework.ExpectNoError(e2epod.WaitForPodSuccessInNamespaceSlow(client, pod.Name, pod.Namespace))
-	runningPod, err := client.CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, metav1.GetOptions{})
+	runningPod, err := client.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
 	Expect(err).NotTo(HaveOccurred(), "get pod %s", id)
 	actualNodeName := runningPod.Spec.NodeName
-	testsuites.StopPod(client, pod)
+	testsuites.StopPod(ctx, client, pod)
 	pod = nil // Don't stop twice.
 
 	By(fmt.Sprintf("%s: checking the created volume is readable and retains data on the same node %q", id, actualNodeName))
 	command = "grep 'hello world' /mnt/test/data"
-	testsuites.RunInPodWithVolume(client, timeouts, claim.Namespace, claim.Name, "pvc-volume-tester-reader-"+id, command, e2epod.NodeSelection{Name: actualNodeName})
+	testsuites.RunInPodWithVolume(ctx, client, timeouts, claim.Namespace, claim.Name, "pvc-volume-tester-reader-"+id, command, e2epod.NodeSelection{Name: actualNodeName})
 }

@@ -29,7 +29,7 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/flowcontrol"
 	"k8s.io/kubernetes/test/e2e/framework"
-	e2ekubectl "k8s.io/kubernetes/test/e2e/framework/kubectl"
+	e2enode "k8s.io/kubernetes/test/e2e/framework/node"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"k8s.io/kubernetes/test/e2e/storage/podlogs"
 )
@@ -87,7 +87,7 @@ var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 	// In large clusters we may get to this point but still have a bunch
 	// of nodes without Routes created. Since this would make a node
 	// unschedulable, we need to wait until all of them are schedulable.
-	framework.ExpectNoError(framework.WaitForAllNodesSchedulable(c, framework.TestContext.NodeSchedulableTimeout))
+	framework.ExpectNoError(e2enode.WaitForAllNodesSchedulable(c, framework.TestContext.NodeSchedulableTimeout))
 
 	// Ensure all pods are running and ready before starting tests (otherwise,
 	// cluster infrastructure pods that are being pulled or started can block
@@ -99,8 +99,6 @@ var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 	// wasting the whole run), we allow for some not-ready pods (with the
 	// number equal to the number of allowed not-ready nodes).
 	if err := e2epod.WaitForPodsRunningReady(c, metav1.NamespaceSystem, int32(framework.TestContext.MinStartupPods), int32(framework.TestContext.AllowedNotReadyNodes), podStartupTimeout, map[string]string{}); err != nil {
-		framework.DumpAllNamespaceInfo(c, metav1.NamespaceSystem)
-		e2ekubectl.LogFailedContainers(c, metav1.NamespaceSystem, framework.Logf)
 		framework.Failf("Error waiting for all pods to be running and ready: %v", err)
 	}
 
@@ -140,17 +138,6 @@ var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 
 }, func(data []byte) {
 	// Run on all Ginkgo nodes
-})
-
-// Similar to SynchornizedBeforeSuite, we want to run some operations only once (such as collecting cluster logs).
-// Here, the order of functions is reversed; first, the function which runs everywhere,
-// and then the function that only runs on the first Ginkgo node.
-var _ = ginkgo.SynchronizedAfterSuite(func() {
-	// Run on all Ginkgo nodes
-	framework.Logf("Running AfterSuite actions on all node")
-	framework.RunCleanupActions()
-}, func() {
-	// Run only Ginkgo on node 1
 })
 
 // RunE2ETests checks configuration parameters (specified through flags) and then runs

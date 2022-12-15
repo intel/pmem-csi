@@ -187,7 +187,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			socat := getSocatPod()
 
 			for {
-				stdout, stderr, err := f.ExecCommandInContainerWithFullOutput(socat.Name, "socat", args...)
+				stdout, stderr, err := e2epod.ExecCommandInContainerWithFullOutput(f, socat.Name, "socat", args...)
 				if err != nil {
 					exitErr, ok := err.(clientexec.ExitError)
 					if ok && exitErr.ExitStatus() == 126 {

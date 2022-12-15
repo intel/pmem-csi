@@ -120,15 +120,13 @@ var _ = deploy.DescribeForSome("E2E", deploy.RunAllTests, func(d *deploy.Deploym
 func DefineLateBindingTests(d *deploy.Deployment, f *framework.Framework) {
 	Context("late binding", func() {
 		var (
-			cleanup func()
-			sc      *storagev1.StorageClass
-			claim   v1.PersistentVolumeClaim
+			sc    *storagev1.StorageClass
+			claim v1.PersistentVolumeClaim
 		)
 
 		BeforeEach(func() {
 			csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil, nil)
-			config, cl := csiTestDriver.PrepareTest(f)
-			cleanup = cl
+			config := csiTestDriver.PrepareTest(f)
 			sc = csiTestDriver.(storageframework.DynamicPVTestDriver).GetDynamicProvisionStorageClass(config, "ext4")
 			lateBindingMode := storagev1.VolumeBindingWaitForFirstConsumer
 			sc.VolumeBindingMode = &lateBindingMode
@@ -146,9 +144,6 @@ func DefineLateBindingTests(d *deploy.Deployment, f *framework.Framework) {
 		AfterEach(func() {
 			err := f.ClientSet.StorageV1().StorageClasses().Delete(context.Background(), sc.Name, metav1.DeleteOptions{})
 			framework.ExpectNoError(err, "delete old storage class %s", sc.Name)
-			if cleanup != nil {
-				cleanup()
-			}
 		})
 
 		It("works", func() {

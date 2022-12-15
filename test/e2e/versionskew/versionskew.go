@@ -145,8 +145,7 @@ func (p *skewTestSuite) SkipUnsupportedTests(driver storageframework.TestDriver,
 }
 
 type local struct {
-	config      *storageframework.PerTestConfig
-	testCleanup func()
+	config *storageframework.PerTestConfig
 
 	unused, usedBefore, usedAfter *storageframework.VolumeResource
 }
@@ -176,7 +175,7 @@ func (p *skewTestSuite) DefineTests(driver storageframework.TestDriver, pattern 
 
 	init := func(all bool) {
 		l = local{}
-		l.config, l.testCleanup = driver.PrepareTest(f)
+		l.config = driver.PrepareTest(f)
 
 		// Now do the more expensive test initialization. We potentially create more than one
 		// storage class, so each resource needs a different prefix.
@@ -203,11 +202,6 @@ func (p *skewTestSuite) DefineTests(driver storageframework.TestDriver, pattern 
 		if l.usedAfter != nil {
 			cleanUpErrs = append(cleanUpErrs, l.usedAfter.CleanupResource())
 			l.usedAfter = nil
-		}
-
-		if l.testCleanup != nil {
-			l.testCleanup()
-			l.testCleanup = nil
 		}
 
 		err := utilerrors.NewAggregate(cleanUpErrs)

@@ -28,6 +28,7 @@ import (
 	storageframework "k8s.io/kubernetes/test/e2e/storage/framework"
 	"k8s.io/kubernetes/test/e2e/storage/utils"
 
+	"github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -147,7 +148,7 @@ func (m *manifestDriver) GetDynamicProvisionStorageClass(config *storageframewor
 	return sc
 }
 
-func (m *manifestDriver) PrepareTest(f *framework.Framework) (*storageframework.PerTestConfig, func()) {
+func (m *manifestDriver) PrepareTest(f *framework.Framework) *storageframework.PerTestConfig {
 	config := &storageframework.PerTestConfig{
 		Driver:    m,
 		Prefix:    "pmem",
@@ -155,7 +156,7 @@ func (m *manifestDriver) PrepareTest(f *framework.Framework) (*storageframework.
 	}
 	if len(m.manifests) == 0 {
 		// Nothing todo.
-		return config, func() {}
+		return config
 	}
 
 	By(fmt.Sprintf("deploying %s driver", m.driverInfo.Name))
@@ -165,10 +166,11 @@ func (m *manifestDriver) PrepareTest(f *framework.Framework) (*storageframework.
 		m.manifests...,
 	)
 	framework.ExpectNoError(err, "deploying driver %s", m.driverInfo.Name)
-	return config, func() {
+	ginkgo.DeferCleanup(func() {
 		By(fmt.Sprintf("uninstalling %s driver", m.driverInfo.Name))
 		cleanup()
-	}
+	})
+	return config
 }
 
 func (m *manifestDriver) finalPatchOptions(f *framework.Framework) utils.PatchCSIOptions {

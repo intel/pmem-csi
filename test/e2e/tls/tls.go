@@ -97,11 +97,11 @@ func checkTLS(f *framework.Framework, server string) {
 
 	By(fmt.Sprintf("Creating pod %s", pod.Name))
 	ns := f.Namespace.Name
-	podClient := f.PodClientNS(ns)
+	podClient := e2epod.PodClientNS(f, ns)
 	createdPod := podClient.Create(pod)
 	defer func() {
 		By("delete the pod")
-		podClient.DeleteSync(createdPod.Name, metav1.DeleteOptions{}, framework.DefaultPodDeletionTimeout)
+		podClient.DeleteSync(createdPod.Name, metav1.DeleteOptions{}, e2epod.DefaultPodDeletionTimeout)
 	}()
 	podErr := e2epod.WaitForPodRunningInNamespace(f.ClientSet, createdPod)
 	framework.ExpectNoError(podErr, "running pod")

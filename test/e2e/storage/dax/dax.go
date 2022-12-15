@@ -81,8 +81,7 @@ func (p *daxTestSuite) SkipUnsupportedTests(driver storageframework.TestDriver, 
 }
 
 type local struct {
-	config      *storageframework.PerTestConfig
-	testCleanup func()
+	config *storageframework.PerTestConfig
 
 	resource *storageframework.VolumeResource
 	root     string
@@ -100,7 +99,7 @@ func (p *daxTestSuite) DefineTests(driver storageframework.TestDriver, pattern s
 		l = local{}
 
 		// Now do the more expensive test initialization.
-		l.config, l.testCleanup = driver.PrepareTest(f)
+		l.config = driver.PrepareTest(f)
 		l.resource = storageframework.CreateVolumeResource(driver, l.config, pattern, volume.SizeRange{})
 	}
 
@@ -108,11 +107,6 @@ func (p *daxTestSuite) DefineTests(driver storageframework.TestDriver, pattern s
 		if l.resource != nil {
 			_ = l.resource.CleanupResource()
 			l.resource = nil
-		}
-
-		if l.testCleanup != nil {
-			l.testCleanup()
-			l.testCleanup = nil
 		}
 	}
 
@@ -324,7 +318,7 @@ func CreatePod(f *framework.Framework,
 
 	By(fmt.Sprintf("Creating pod %s", pod.Name))
 	ns := f.Namespace.Name
-	podClient := f.PodClientNS(ns)
+	podClient := e2epod.PodClientNS(f, ns)
 	createdPod := podClient.Create(pod)
 	defer func() {
 		if r := recover(); r != nil {
@@ -504,7 +498,7 @@ func testDaxOutside(
 
 	By(fmt.Sprintf("Creating pod %s", pod.Name))
 	ns := f.Namespace.Name
-	podClient := f.PodClientNS(ns)
+	podClient := e2epod.PodClientNS(f, ns)
 	pod = podClient.Create(pod)
 	podErr := e2epod.WaitForPodRunningInNamespace(f.ClientSet, pod)
 	framework.ExpectNoError(podErr, "running second pod")

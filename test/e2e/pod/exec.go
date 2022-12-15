@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"k8s.io/kubernetes/test/e2e/framework"
+	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 
 	. "github.com/onsi/ginkgo/v2"
 )
@@ -44,7 +45,7 @@ func RunInPod(f *framework.Framework, rootdir string, files []string, command st
 		}
 	}
 	parts = append(parts, command)
-	options := framework.ExecOptions{
+	options := e2epod.ExecOptions{
 		Command: []string{
 			"/bin/sh",
 			"-c",
@@ -57,7 +58,7 @@ func RunInPod(f *framework.Framework, rootdir string, files []string, command st
 		CaptureStdout: true,
 		CaptureStderr: true,
 	}
-	stdout, stderr, err := f.ExecWithOptions(options)
+	stdout, stderr, err := e2epod.ExecWithOptions(f, options)
 	framework.ExpectNoError(err, "command failed in namespace %s, pod/container %s/%s:\nstderr:\n%s\nstdout:%s\n",
 		namespace, pod, container, stderr, stdout)
 	fmt.Fprintf(GinkgoWriter, "stderr:\n%s\nstdout:\n%s\n",
