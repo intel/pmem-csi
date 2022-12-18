@@ -153,7 +153,7 @@ spec:
       priorityClassName: system-cluster-critical
       containers:
       - name: pmem-driver
-        image: intel/pmem-csi-driver:canary
+        image: intel/pmem-csi-driver:v1.1.0
         imagePullPolicy: IfNotPresent
         command:
         - /usr/local/bin/pmem-csi-driver
@@ -221,7 +221,7 @@ spec:
         storage: pmem
       containers:
       - name: pmem-driver
-        image: intel/pmem-csi-driver:canary
+        image: intel/pmem-csi-driver:v1.1.0
         imagePullPolicy: IfNotPresent
         command:
         - /usr/local/bin/pmem-csi-driver
@@ -457,7 +457,7 @@ spec:
         pmem-csi.intel.com/convert-raw-namespaces: force
       containers:
       - name: pmem-driver
-        image: intel/pmem-csi-driver:canary
+        image: intel/pmem-csi-driver:v1.1.0
         imagePullPolicy: IfNotPresent
         command:
         - /usr/local/bin/pmem-csi-driver

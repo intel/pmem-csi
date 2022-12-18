@@ -46,7 +46,7 @@ NO_PROXY:=$(shell echo "$${NO_PROXY:-$${no_proxy}},$$(if command -v ip &>/dev/nu
 export HTTP_PROXY HTTPS_PROXY NO_PROXY
 
 REGISTRY_NAME?=$(shell . test/test-config.sh && echo $${TEST_BUILD_PMEM_REGISTRY})
-IMAGE_VERSION?=canary
+IMAGE_VERSION?=v1.1.0
 IMAGE_TAG=$(REGISTRY_NAME)/pmem-csi-driver$*:$(IMAGE_VERSION)
 # Pass proxy config via --build-arg only if these are set,
 # enabling proxy config other way, like ~/.docker/config.json
