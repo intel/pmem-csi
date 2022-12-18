@@ -40,7 +40,7 @@ FROM registry.access.redhat.com/ubi8
 WORKDIR /pmem-csi
 COPY . .
 
-ARG GO_VERSION="1.16.1"
+ARG GO_VERSION="1.19.4"
 
 # CACHEBUST is set by the CI when building releases to ensure that apt-get really gets
 # run instead of just using some older, cached result.
