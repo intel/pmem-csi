@@ -79,9 +79,6 @@ endif
 	sed -i -e "s;$(BUNDLE_DIR)/;;g"  -e "/scorecard/d" -e '/FROM scratch/a LABEL com.redhat.openshift.versions="$(OPENSHIFT_VERSIONS)"' bundle.Dockerfile
 	sed -i -e "/scorecard/d" $(BUNDLE_DIR)/metadata/annotations.yaml
 	mv bundle.Dockerfile $(BUNDLE_DIR)
-	@make operator-validate-bundle
-
-operator-validate-bundle: _work/bin/operator-sdk-$(OPERATOR_SDK_VERSION) $(BUNDLE_DIR)
 	@if ! OUT="$$($< bundle validate --select-optional name=operatorhub  $(BUNDLE_DIR) 2>&1 && \
 	              $< bundle validate --select-optional name=good-practices  $(BUNDLE_DIR) 2>&1 )"; then \
 		echo >&2 "ERROR: Operator bundle in $(BUNDLE_DIR) did not pass validation:"; \
