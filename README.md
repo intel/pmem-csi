@@ -36,11 +36,14 @@ versions:
 | 1.15               | CSIInlineVolume                | unsupported <sup>3</sup>
 | 1.16               |                                | unsupported <sup>4</sup>
 | 1.17               |                                | unsupported <sup>5</sup>
-| 1.18               |                                | untested
-| 1.19               |                                | supported
-| 1.20               |                                | supported
-| 1.21               |                                | supported
+| 1.18               |                                | unsupported <sup>6</sup>
+| 1.19               |                                | unsupported <sup>6</sup>
+| 1.20               |                                | unsupported <sup>6</sup>
+| 1.21               |                                | untested
 | 1.22               |                                | supported
+| 1.23               |                                | supported
+| 1.24               |                                | supported
+| 1.25               |                                | supported
 
 <sup>1</sup> Several relevant features are only available in alpha
 quality in Kubernetes 1.13 and the combination of skip attach and
@@ -62,6 +65,10 @@ Not supported officially by upstream anymore.
 supported officially by upstream anymore.
 
 <sup>5</sup> Kubernetes 1.17 uses deprecated beta storage APIs.
+
+<sup>6</sup> Storage capacity tracking is expected to be enabled. It became
+[beta in Kubernetes
+1.21](https://kubernetes.io/blog/2021/04/14/local-storage-features-go-beta/).
 
 ## Feature status
 
