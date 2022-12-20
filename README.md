@@ -16,6 +16,7 @@ and bug fixes. 0.9 is still supported.
 
 Documentation is part of the source code for each release and also
 available in rendered form for easier reading:
+- [latest 1.1.x release](https://intel.github.io/pmem-csi/1.1/)
 - [latest 1.0.x release](https://intel.github.io/pmem-csi/1.0/)
 - [latest 0.9.x release](https://intel.github.io/pmem-csi/0.9/)
 - [latest 0.8.x release](https://intel.github.io/pmem-csi/0.8/)

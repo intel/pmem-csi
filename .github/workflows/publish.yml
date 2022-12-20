@@ -8,6 +8,7 @@ on:
         - release-0.8
         - release-0.9
         - release-1.0
+        - release-1.1
 
 jobs:
   build:
@@ -78,6 +79,16 @@ jobs:
         rm -rf _work/venv
         make vhtml
         mv _output/html $HOME/output/1.0
+    - uses: actions/checkout@v2
+      with:
+        ref: release-1.1
+    - name: Build release-1.1
+      run: |
+        GITHUB_SHA=$(git rev-parse HEAD)
+        export GITHUB_SHA
+        rm -rf _work/venv
+        make vhtml
+        mv _output/html $HOME/output/1.1
     - name: Deploy the docs
       run: |
         cd $HOME/output
