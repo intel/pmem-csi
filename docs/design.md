@@ -403,7 +403,7 @@ all clusters that have PMEM-CSI. Don't add this extended resource
 unless the scheduler extender is installed, otherwise the pod won't
 start!
 
-See our [implementation](http://github.com/intel/pmem-csi/tree/devel/pkg/scheduler) of a scheduler extender.
+See our [implementation](http://github.com/intel/pmem-csi/tree/release-0.7/pkg/scheduler) of a scheduler extender.
 
 ### Pod admission webhook
 
