@@ -9,7 +9,7 @@ ARG LINUX_BASE=debian:buster-slim
 FROM ${LINUX_BASE} AS build
 ARG APT_GET="env DEBIAN_FRONTEND=noninteractive apt-get"
 
-ARG GO_VERSION="1.19.4"
+ARG GO_VERSION="1.20.2"
 
 # CACHEBUST is set by the CI when building releases to ensure that apt-get really gets
 # run instead of just using some older, cached result.
