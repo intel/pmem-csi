@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Design and architecture &mdash; PMEM-CSI v0.7 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/copybutton.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+        <script src="../_static/clipboard.min.js"></script>
+        <script src="../_static/copybutton.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Installation and Usage" href="install.html" />
+    <link rel="prev" title="Introduction to PMEM-CSI for Kubernetes" href="../README.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            PMEM-CSI
+          </a>
+              <div class="version">
+                v0.7
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../README.html">Introduction to PMEM-CSI for Kubernetes</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Design and architecture</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#architecture-and-operation">Architecture and Operation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#lvm-device-mode">LVM device mode</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#namespace-modes-in-lvm-device-mode">Namespace modes in LVM device mode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#using-limited-amount-of-total-space-in-lvm-device-mode">Using limited amount of total space in LVM device mode</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#direct-device-mode">Direct device mode</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#namespace-modes-in-direct-device-mode">Namespace modes in direct device mode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#using-limited-amount-of-total-space-in-direct-device-mode">Using limited amount of total space in direct device mode</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#kata-containers-support">Kata Containers support</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#driver-modes">Driver modes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#driver-components">Driver Components</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#identity-server">Identity Server</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#node-registry-server">Node Registry Server</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#master-controller-server">Master Controller Server</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#node-controller-server">Node Controller Server</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#node-server">Node Server</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#communication-between-components">Communication between components</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#security">Security</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#volume-persistency">Volume Persistency</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#capacity-aware-pod-scheduling">Capacity-aware pod scheduling</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#scheduler-extender">Scheduler extender</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pod-admission-webhook">Pod admission webhook</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#pmem-csi-operator">PMEM-CSI Operator</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation and Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="DEVELOPMENT.html">Develop and contribute</a></li>
+<li class="toctree-l1"><a class="reference internal" href="autotest.html">Automated testing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/readme.html">Application examples</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://github.com/intel/pmem-csi">Project GitHub repository</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">PMEM-CSI</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Design and architecture</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="design-and-architecture">
+<h1>Design and architecture<a class="headerlink" href="#design-and-architecture" title="Permalink to this heading"></a></h1>
+<ul class="simple">
+<li><p><a class="reference external" href="#design">Design</a></p>
+<ul>
+<li><p><a class="reference external" href="#architecture-and-operation">Architecture and Operation</a></p></li>
+<li><p><a class="reference external" href="#lvm-device-mode">LVM device mode</a></p></li>
+<li><p><a class="reference external" href="#direct-device-mode">Direct device mode</a></p></li>
+<li><p><a class="reference external" href="#kata-containers-support">Kata Containers support</a></p></li>
+<li><p><a class="reference external" href="#driver-modes">Driver modes</a></p></li>
+<li><p><a class="reference external" href="#driver-components">Driver Components</a></p></li>
+<li><p><a class="reference external" href="#communication-between-components">Communication between components</a></p></li>
+<li><p><a class="reference external" href="#security">Security</a></p></li>
+<li><p><a class="reference external" href="#volume-persistency">Volume Persistency</a></p></li>
+<li><p><a class="reference external" href="#capacity-aware-pod-scheduling">Capacity-aware pod scheduling</a></p></li>
+<li><p><a class="reference external" href="#pmem-csi-operator">PMEM-CSI operator</a></p></li>
+</ul>
+</li>
+</ul>
+<section id="architecture-and-operation">
+<h2>Architecture and Operation<a class="headerlink" href="#architecture-and-operation" title="Permalink to this heading"></a></h2>
+<p>The PMEM-CSI driver can operate in two different device modes: <em>LVM</em> and
+<em>direct</em>. This table contains an overview and comparison of those modes.
+There is a more detailed explanation in the following paragraphs.</p>
+<table border="1" class="docutils">
+<thead>
+<tr>
+<th style="text-align: left;"></th>
+<th style="text-align: left;"><code>LVM</code></th>
+<th style="text-align: left;"><code>direct</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Main advantage</td>
+<td style="text-align: left;">avoids free space fragmentation<sup>1</sup></td>
+<td style="text-align: left;">simpler, somewhat faster, but free space may get fragmented<sup>1</sup></td>
+</tr>
+<tr>
+<td style="text-align: left;">What is served</td>
+<td style="text-align: left;">LVM logical volume</td>
+<td style="text-align: left;">pmem block device</td>
+</tr>
+<tr>
+<td style="text-align: left;">Region affinity<sup>2</sup></td>
+<td style="text-align: left;">yes: one LVM volume group is created per region, and a volume has to be in one volume group</td>
+<td style="text-align: left;">yes: namespace can belong to one region only</td>
+</tr>
+<tr>
+<td style="text-align: left;">Startup</td>
+<td style="text-align: left;">two extra stages: pmem-ns-init (creates namespaces), vgm (creates volume groups)</td>
+<td style="text-align: left;">no extra steps at startup</td>
+</tr>
+<tr>
+<td style="text-align: left;">Namespace modes</td>
+<td style="text-align: left;"><code>fsdax</code> mode<sup>3</sup> namespaces pre-created as pools</td>
+<td style="text-align: left;">namespace in <code>fsdax</code> mode created directly, no need to pre-create pools</td>
+</tr>
+<tr>
+<td style="text-align: left;">Limiting space usage</td>
+<td style="text-align: left;">can leave part of device unused during pools creation</td>
+<td style="text-align: left;">no limits, creates namespaces on device until runs out of space</td>
+</tr>
+<tr>
+<td style="text-align: left;"><em>Name</em> field in namespace</td>
+<td style="text-align: left;"><em>Name</em> gets set to 'pmem-csi' to achieve own vs. foreign marking</td>
+<td style="text-align: left;"><em>Name</em> gets set to VolumeID, without attempting own vs. foreign marking</td>
+</tr>
+<tr>
+<td style="text-align: left;">Minimum volume size</td>
+<td style="text-align: left;">4 MB</td>
+<td style="text-align: left;">1 GB (see also alignment adjustment below)</td>
+</tr>
+<tr>
+<td style="text-align: left;">Alignment requirements</td>
+<td style="text-align: left;">LVM creation aligns size up to next 4MB boundary</td>
+<td style="text-align: left;">driver aligns  size up to next alignment boundary. The default alignment step is 1 GB. Device(s) in interleaved mode will require larger minimum as size has to be at least one alignment step. The possibly bigger alignment step is calculated as interleave-set-size multiplied by 1 GB</td>
+</tr>
+</tbody>
+</table><p><sup>1 </sup> <strong>Free space fragmentation</strong> is a problem when there appears to
+be enough free capacity for a new namespace, but there isn’t a contiguous
+region big enough to allocate it. The PMEM-CSI driver is only capable of
+allocating continguous memory to a namespace and cannot de-fragment or combine
+smaller blocks. For example, this could happen when you create a 63 GB
+namespace, followed by a 1 GB namespace, and then delete the 63 GB namespace.
+Eventhough there is 127 GB available, the driver cannot create a namespace
+larger than 64 GB.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">---------------------------------------------------------------------</span>
+<span class="o">|</span>         <span class="mi">63</span> <span class="n">GB</span> <span class="n">free</span>         <span class="o">|</span> <span class="mi">1</span><span class="n">GB</span> <span class="n">used</span> <span class="o">|</span>         <span class="mi">64</span> <span class="n">GB</span> <span class="n">free</span>        <span class="o">|</span>
+<span class="o">---------------------------------------------------------------------</span>
+</pre></div>
+</div>
+<p><sup>2 </sup> <strong>Region affinity</strong> means that all parts of a provisioned file
+system are physically located on device(s) that belong to same PMEM region.
+This is important on multi-socket systems where media access time may vary
+based on where the storage device(s) are physically attached.</p>
+<p><sup>3 </sup> <strong>fsdax mode</strong> is required for NVDIMM
+namespaces. See <a class="reference external" href="https://pmem.io/ndctl/ndctl-create-namespace.html">Persistent Memory
+Programming</a> for
+details. <code class="docutils literal notranslate"><span class="pre">devdax</span></code> mode is not supported. Though a
+raw block volume would be useful when a filesystem isn’t needed, Kubernetes
+cannot handle <a class="reference external" href="https://github.com/kubernetes/kubernetes/blob/7c87b5fb55ca096c007c8739d4657a5a4e29fb09/pkg/volume/util/util.go#L531-L534">binding a character device to a loop device</a>.</p>
+</section>
+<section id="lvm-device-mode">
+<h2>LVM device mode<a class="headerlink" href="#lvm-device-mode" title="Permalink to this heading"></a></h2>
+<p>In Logical Volume Management (LVM) mode the PMEM-CSI driver
+uses LVM for logical volume Management to avoid the risk of fragmentation. The
+LVM logical volumes are served to satisfy API requests. There is one volume
+group created per region, ensuring the region-affinity of served volumes.</p>
+<p><img alt="devicemode-lvm diagram" src="../_images/pmem-csi-lvm.png" /></p>
+<p>The driver consists of three separate binaries that form two
+initialization stages and a third API-serving stage.</p>
+<p>During startup, the driver scans persistent memory for regions and
+namespaces, and tries to create more namespaces using all or part
+(selectable via option) of the remaining available space. This first
+stage is performed by a separate entity <code class="docutils literal notranslate"><span class="pre">pmem-ns-init</span></code>.</p>
+<p>The second stage of initialization arranges physical volumes provided
+by namespaces into LVM volume groups. This is performed by a separate
+binary <code class="docutils literal notranslate"><span class="pre">pmem-vgm</span></code>.</p>
+<p>After two initialization stages, the third binary <code class="docutils literal notranslate"><span class="pre">pmem-csi-driver</span></code>
+starts serving CSI API requests.</p>
+<section id="namespace-modes-in-lvm-device-mode">
+<h3>Namespace modes in LVM device mode<a class="headerlink" href="#namespace-modes-in-lvm-device-mode" title="Permalink to this heading"></a></h3>
+<p>The PMEM-CSI driver pre-creates namespaces in <code class="docutils literal notranslate"><span class="pre">fsdax</span></code> mode forming
+the corresponding LVM volume group. The amount of space to be
+used is determined using the option <code class="docutils literal notranslate"><span class="pre">-useforfsdax</span></code> given to <code class="docutils literal notranslate"><span class="pre">pmem-ns-init</span></code>.
+This options specifies an integer presenting limit as percentage.
+The default value is <code class="docutils literal notranslate"><span class="pre">useforfsdax=100</span></code>.</p>
+</section>
+<section id="using-limited-amount-of-total-space-in-lvm-device-mode">
+<h3>Using limited amount of total space in LVM device mode<a class="headerlink" href="#using-limited-amount-of-total-space-in-lvm-device-mode" title="Permalink to this heading"></a></h3>
+<p>The PMEM-CSI driver can leave space on devices for others, and
+recognize “own” namespaces. Leaving space for others can be achieved
+by specifying lower-than-100 value to <code class="docutils literal notranslate"><span class="pre">-useforfsdax</span></code> options
+The distinction “own” vs. “foreign” is
+implemented by setting the <em>Name</em> field in namespace to a static
+string “pmem-csi” during namespace creation. When adding physical
+volumes to volume groups, only those physical volumes that are based on
+namespaces with the name “pmem-csi” are considered.</p>
+</section>
+</section>
+<section id="direct-device-mode">
+<h2>Direct device mode<a class="headerlink" href="#direct-device-mode" title="Permalink to this heading"></a></h2>
+<p>The following diagram illustrates the operation in Direct device mode:
+<img alt="devicemode-direct diagram" src="../_images/pmem-csi-direct.png" /></p>
+<p>In direct device mode PMEM-CSI driver allocates namespaces directly
+from the storage device. This creates device space fragmentation risk,
+but reduces complexity and run-time overhead by avoiding additional
+device mapping layer. Direct mode also ensures the region-affinity of
+served volumes, because provisioned volume can belong to one region
+only.</p>
+<p>In Direct mode, the two preparation stages used in LVM mode, are not
+needed.</p>
+<section id="namespace-modes-in-direct-device-mode">
+<h3>Namespace modes in direct device mode<a class="headerlink" href="#namespace-modes-in-direct-device-mode" title="Permalink to this heading"></a></h3>
+<p>The PMEM-CSI driver creates a namespace directly in the mode which is
+asked by volume creation request, thus bypassing the complexity of
+pre-allocated pools that are used in LVM device mode.</p>
+</section>
+<section id="using-limited-amount-of-total-space-in-direct-device-mode">
+<h3>Using limited amount of total space in direct device mode<a class="headerlink" href="#using-limited-amount-of-total-space-in-direct-device-mode" title="Permalink to this heading"></a></h3>
+<p>In direct device mode, the driver does not attempt to limit space
+use. It also does not mark “own” namespaces. The <em>Name</em> field of a
+namespace gets value of the VolumeID.</p>
+</section>
+</section>
+<section id="kata-containers-support">
+<h2>Kata Containers support<a class="headerlink" href="#kata-containers-support" title="Permalink to this heading"></a></h2>
+<p><a class="reference external" href="https://katacontainers.io">Kata Containers</a> runs applications inside a
+virtual machine. This poses a problem for App Direct mode, because
+access to the filesystem prepared by PMEM-CSI is provided inside the
+virtual machine by the 9p or virtio-fs filesystems. Both do not
+support App Direct mode:</p>
+<ul class="simple">
+<li><p>9p does not support <code class="docutils literal notranslate"><span class="pre">mmap</span></code> at all.</p></li>
+<li><p>virtio-fs only supports it when not using <code class="docutils literal notranslate"><span class="pre">MAP_SYNC</span></code>, i.e. without dax
+semantic.</p></li>
+</ul>
+<p>This gets solved as follows:</p>
+<ul class="simple">
+<li><p>PMEM-CSI creates a volume as usual, either in direct mode or LVM mode.</p></li>
+<li><p>Inside that volume it sets up an ext4 or xfs filesystem.</p></li>
+<li><p>Inside that filesystem it creates a <code class="docutils literal notranslate"><span class="pre">pmem-csi-vm.img</span></code> file that contains
+partition tables, dax metadata and a partition that takes up most of the
+space available in the volume.</p></li>
+<li><p>That partition is bound to a <code class="docutils literal notranslate"><span class="pre">/dev/loop</span></code> device and the formatted
+with the requested filesystem type for the volume.</p></li>
+<li><p>When an application needs access to the volume, PMEM-CSI mounts
+that <code class="docutils literal notranslate"><span class="pre">/dev/loop</span></code> device.</p></li>
+<li><p>An application not running under Kata Containers then uses
+that filesystem normally <em>but</em> due to limitations in the Linux
+kernel, mounting might have to be done without <code class="docutils literal notranslate"><span class="pre">-odax</span></code> and thus
+App Direct access does not work.</p></li>
+<li><p>When the Kata Containers runtime is asked to provide access to that
+filesystem, it will instead pass the underlying <code class="docutils literal notranslate"><span class="pre">pmem-csi-vm.img</span></code>
+file into QEMU as a <a class="reference external" href="https://github.com/qemu/qemu/blob/master/docs/nvdimm.txt">nvdimm
+device</a>
+and inside the VM mount the <code class="docutils literal notranslate"><span class="pre">/dev/pmem0p1</span></code> partition that the
+Linux kernel sets up based on the dax meta data that was placed in the
+file by PMEM-CSI. Inside the VM, the App Direct semantic is fully
+supported.</p></li>
+</ul>
+<p>Such volumes can be used with full dax semantic <em>only</em> inside Kata
+Containers. They are still usable with other runtimes, just not
+with dax semantic. Because of that and the additional space overhead,
+Kata Containers support has to be enabled explicitly via a <a class="reference external" href="install.html#kata-containers-support">storage
+class parameter and Kata Containers must be set up
+appropriately</a>.</p>
+</section>
+<section id="driver-modes">
+<h2>Driver modes<a class="headerlink" href="#driver-modes" title="Permalink to this heading"></a></h2>
+<p>The PMEM-CSI driver supports running in different modes, which can be
+controlled by passing one of the below options to the driver’s
+‘<em>-mode</em>’ command line option. In each mode, it starts a different set
+of open source Remote Procedure Call (gRPC)
+<a class="reference external" href="#driver-components">servers</a> on given driver endpoint(s).</p>
+<ul class="simple">
+<li><p><strong><em>Controller</em></strong> should run as a single instance in cluster level. When the
+driver is running in <em>Controller</em> mode, it forwards the pmem volume
+create/delete requests to the registered node controller servers
+running on the worker node. In this mode, the driver starts the
+following gRPC servers:</p>
+<ul>
+<li><p><a class="reference external" href="#identity-server">IdentityServer</a></p></li>
+<li><p><a class="reference external" href="#node-registry-server">NodeRegistryServer</a></p></li>
+<li><p><a class="reference external" href="#master-controller-server">MasterControllerServer</a></p></li>
+</ul>
+</li>
+<li><p>One <strong><em>Node</em></strong> instance should run on each
+worker node that has persistent memory devices installed. When the
+driver starts in such mode, it registers with the <em>Controller</em>
+driver running on a given <em>-registryEndpoint</em>. In this mode, the
+driver starts the following servers:</p>
+<ul>
+<li><p><a class="reference external" href="#identity-server">IdentityServer</a></p></li>
+<li><p><a class="reference external" href="#node-controller-server">NodeControllerServer</a></p></li>
+<li><p><a class="reference external" href="#node-server">NodeServer</a></p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="driver-components">
+<h2>Driver Components<a class="headerlink" href="#driver-components" title="Permalink to this heading"></a></h2>
+<section id="identity-server">
+<h3>Identity Server<a class="headerlink" href="#identity-server" title="Permalink to this heading"></a></h3>
+<p>This gRPC server operates on a given endpoint in all driver modes and
+implements the CSI <a class="reference external" href="https://github.com/container-storage-interface/spec/blob/master/spec.md#identity-service-rpc">Identity
+interface</a>.</p>
+</section>
+<section id="node-registry-server">
+<h3>Node Registry Server<a class="headerlink" href="#node-registry-server" title="Permalink to this heading"></a></h3>
+<p>When the PMEM-CSI driver runs in <em>Controller</em> mode, it starts a gRPC
+server on a given endpoint(<em>-registryEndpoint</em>) and serves the
+<a class="reference external" href="https://github.com/intel/pmem-csi/blob/dd6e468dbffaf8d56d079ba90ae8fc253e603fa7/pkg/pmem-registry/pmem-registry.proto">RegistryServer</a> interface. The
+driver(s) running in <em>Node</em> mode can register themselves with node
+specific information such as node id,
+<a class="reference external" href="#node-controller-server">NodeControllerServer</a> endpoint, and their
+available persistent memory capacity.</p>
+</section>
+<section id="master-controller-server">
+<h3>Master Controller Server<a class="headerlink" href="#master-controller-server" title="Permalink to this heading"></a></h3>
+<p>This gRPC server is started by the PMEM-CSI driver running in
+<em>Controller</em> mode and serves the
+<a class="reference external" href="https://github.com/container-storage-interface/spec/blob/master/spec.md#controller-service-rpc">Controller</a>
+interface defined by the CSI specification. The server responds to
+CreateVolume(), DeleteVolume(), ControllerPublishVolume(),
+ControllerUnpublishVolume(), and ListVolumes() calls coming from
+external-provisioner() and external-attacher() sidecars. It
+forwards the publish and unpublish volume requests to the appropriate
+<a class="reference external" href="#node-controller-server">Node controller server</a> running on a worker
+node that was registered with the driver.</p>
+</section>
+<section id="node-controller-server">
+<h3>Node Controller Server<a class="headerlink" href="#node-controller-server" title="Permalink to this heading"></a></h3>
+<p>This gRPC server is started by the PMEM-CSI driver running in <em>Node</em>
+mode and implements the
+<a class="reference external" href="https://github.com/container-storage-interface/spec/blob/master/spec.md#controllerpublishvolume">ControllerPublishVolume</a>
+and
+<a class="reference external" href="https://github.com/container-storage-interface/spec/blob/master/spec.md#controllerunpublishvolume">ControllerUnpublishVolume</a>
+methods of the <a class="reference external" href="https://github.com/container-storage-interface/spec/blob/master/spec.md#controller-service-rpc">Controller
+service</a>
+interface defined by the CSI specification. It serves the
+ControllerPublishVolume() and ControllerUnpublish() requests coming
+from the <a class="reference external" href="#master-controller-server">Master controller server</a> and
+creates/deletes persistent memory devices.</p>
+</section>
+<section id="node-server">
+<h3>Node Server<a class="headerlink" href="#node-server" title="Permalink to this heading"></a></h3>
+<p>This gRPC server is started by the driver running in <em>Node</em> mode and
+implements the <a class="reference external" href="https://github.com/container-storage-interface/spec/blob/master/spec.md#node-service-rpc">Node
+service</a>
+interface defined in the CSI specification. It serves the
+NodeStageVolume(), NodeUnstageVolume(), NodePublishVolume(), and
+NodeUnpublishVolume() requests coming from the Container Orchestrator
+(CO).</p>
+</section>
+</section>
+<section id="communication-between-components">
+<h2>Communication between components<a class="headerlink" href="#communication-between-components" title="Permalink to this heading"></a></h2>
+<p>The following diagram illustrates the communication channels between driver components:
+<img alt="communication diagram" src="../_images/pmem-csi-communication-diagram.png" /></p>
+</section>
+<section id="security">
+<h2>Security<a class="headerlink" href="#security" title="Permalink to this heading"></a></h2>
+<p>All PMEM-CSI specific communication <a class="reference external" href="#communication-between-components">shown in above
+section</a> between Master
+Controller(<a class="reference external" href="#node-registry-server">RegistryServer</a>,
+<a class="reference external" href="#master-controller-server">MasterControllerServer</a>) and
+NodeControllers(<a class="reference external" href="#node-controller-server">NodeControllerServer</a>) is
+protected by mutual TLS. Both client and server must identify
+themselves and the certificate they present must be trusted. The
+common name in each certificate is used to identify the different
+components. The following common names have a special meaning:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">pmem-registry</span></code> is used by the <a class="reference external" href="#node-registry-server">RegistryServer</a>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">pmem-node-controller</span></code> is used by <a class="reference external" href="#node-controller-server">NodeControllerServers</a></p></li>
+</ul>
+<p>The <a class="reference external" href="https://github.com/intel/pmem-csi/blob/dd6e468dbffaf8d56d079ba90ae8fc253e603fa7/test/setup-ca.sh"><code class="docutils literal notranslate"><span class="pre">test/setup-ca.sh</span></code></a>
+script shows how to generate self-signed certificates. The test cluster is set
+up using certificates created by that script, with secrets prepared by
+<a class="reference external" href="https://github.com/intel/pmem-csi/blob/dd6e468dbffaf8d56d079ba90ae8fc253e603fa7/test/setup-deployment.sh"><code class="docutils literal notranslate"><span class="pre">test/setup-deployment.sh</span></code></a> before
+deploying the driver using the provided <a class="reference external" href="https://github.com/intel/pmem-csi/tree/dd6e468dbffaf8d56d079ba90ae8fc253e603fa7/deploy/">deployment files</a>.</p>
+<p>Beware that these are just examples. Administrators of a cluster must
+ensure that they choose key lengths and algorithms of sufficient
+strength for their purposes and manage certificate distribution.</p>
+<p>A production deployment can improve upon that by using some other key
+delivery mechanism, like for example
+<a class="reference external" href="https://www.vaultproject.io/">Vault</a>.</p>
+<!-- FILL TEMPLATE:
+* Target users and use cases
+* Design decisions & tradeoffs that were made
+* What is in scope and outside of scope
+--></section>
+<section id="volume-persistency">
+<h2>Volume Persistency<a class="headerlink" href="#volume-persistency" title="Permalink to this heading"></a></h2>
+<p>In a typical CSI deployment, volumes are provided by a storage backend
+that is independent of a particular node. When a node goes offline,
+the volume can be mounted elsewhere. But PMEM volumes are <em>local</em> to
+node and thus can only be used on the node where they were
+created. This means the applications using PMEM volume cannot freely
+move between nodes. This limitation needs to be considered when
+designing and deploying applications that are to use <em>local storage</em>.</p>
+<p>These are the volume persistency models considered for implementation
+in PMEM-CSI to serve different application use cases:</p>
+<ul class="simple">
+<li><p><strong>Persistent volumes</strong><br />A volume gets created independently of the application, on some node
+where there is enough free space. Applications using such a volume are
+then forced to run on that node and cannot run when the node is
+down. Data is retained until the volume gets deleted.</p></li>
+<li><p><strong>Ephemeral volumes</strong><br />Each time an application starts to run on a node, a new volume is
+created for it on that node. When the application stops, the volume is
+deleted. The volume cannot be shared with other applications. Data on
+this volume is retained only while the application runs.</p></li>
+<li><p><strong>Cache volumes</strong><br />Volumes are pre-created on a certain set of nodes, each with its own
+local data. Applications are started on those nodes and then get to
+use the volume on their node. Data persists across application
+restarts. This is useful when the data is only cached information that
+can be discarded and reconstructed at any time <em>and</em> the application
+can reuse existing local data when restarting.</p></li>
+</ul>
+<table border="1" class="docutils">
+<thead>
+<tr>
+<th>Volume</th>
+<th>Kubernetes</th>
+<th>PMEM-CSI</th>
+<th>Limitations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Persistent</td>
+<td>supported</td>
+<td>supported</td>
+<td>topology aware scheduling<sup>1</sup></td>
+</tr>
+<tr>
+<td>Ephemeral</td>
+<td>supported<sup>2</sup></td>
+<td>supported</td>
+<td>resource constraints<sup>3</sup></td>
+</tr>
+<tr>
+<td>Cache</td>
+<td>supported</td>
+<td>supported</td>
+<td>topology aware scheduling<sup>1</sup></td>
+</tr>
+</tbody>
+</table><p><sup>1 </sup><a class="reference external" href="https://github.com/kubernetes/enhancements/issues/490">Topology aware
+scheduling</a>
+ensures that an application runs on a node where the volume was
+created. For CSI-based drivers like PMEM-CSI, Kubernetes &gt;= 1.13 is
+needed. On older Kubernetes releases, pods must be scheduled manually
+onto the right node(s).</p>
+<p><sup>2 </sup> <a class="reference external" href="https://kubernetes.io/docs/concepts/storage/volumes/#csi-ephemeral-volumes">CSI ephemeral volumes</a>
+feature support is alpha in Kubernetes v1.15, and beta in v1.16.</p>
+<p><sup>3 </sup>The upstream design for ephemeral volumes currently does
+not take <a class="reference external" href="https://github.com/kubernetes/enhancements/pull/716#discussion_r250536632">resource
+constraints</a>
+into account. If an application gets scheduled onto a node and then
+creating the ephemeral volume on that node fails, the application on
+the node cannot start until resources become available.</p>
+<p>See <a class="reference external" href="install.html#expose-persistent-and-cache-volumes-to-applications">exposing persistent and cache volumes</a> for configuration information.</p>
+</section>
+<section id="capacity-aware-pod-scheduling">
+<h2>Capacity-aware pod scheduling<a class="headerlink" href="#capacity-aware-pod-scheduling" title="Permalink to this heading"></a></h2>
+<p>PMEM-CSI implements the CSI <code class="docutils literal notranslate"><span class="pre">GetCapacity</span></code> call, but Kubernetes
+currently doesn’t call that and schedules pods onto nodes without
+being aware of available storage capacity on the nodes. The effect is
+that pods using volumes with late binding may get tentatively assigned
+to a node and then get stuck because that decision is not reconsidered
+when the volume cannot be created there (<a class="reference external" href="https://github.com/kubernetes/kubernetes/issues/72031">a
+bug</a>). Even if
+that decision is reconsidered, the same node may get selected again
+because Kubernetes does not get informed about the insufficient
+storage. Pods with ephemeral inline volumes always get stuck because
+the decision to use the node <a class="reference external" href="https://github.com/kubernetes-sigs/descheduler/issues/62">is final</a>.</p>
+<p>Work is <a class="reference external" href="https://github.com/kubernetes/enhancements/pull/1353">under
+way</a> to enhance
+scheduling in Kubernetes. In the meantime, PMEM-CSI provides two components
+that help with pod scheduling:</p>
+<section id="scheduler-extender">
+<h3>Scheduler extender<a class="headerlink" href="#scheduler-extender" title="Permalink to this heading"></a></h3>
+<p>When a pod requests the special <a class="reference external" href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#extended-resources">extended
+resource</a>
+called <code class="docutils literal notranslate"><span class="pre">pmem-csi.intel.com/scheduler</span></code>, the Kubernetes scheduler calls
+a <a class="reference external" href="https://github.com/kubernetes/community/blob/master/contributors/design-proposals/scheduling/scheduler_extender.md">scheduler
+extender</a>
+provided by PMEM-CSI with a list of nodes that a pod might run
+on. This extender is implemented in the master controller and thus can
+connect to the controller on each of these nodes to check for
+capacity. PMEM-CSI then filters out all nodes which currently do not
+have enough storage left for the volumes that still need to be
+created. This considers inline ephemeral volumes and all unbound
+volumes, regardless whether they use late binding or immediate
+binding.</p>
+<p>This special scheduling can be requested manually by adding this snippet
+to one container in the pod spec:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">containers</span><span class="p">:</span>
+<span class="o">-</span> <span class="n">name</span><span class="p">:</span> <span class="n">some</span><span class="o">-</span><span class="n">container</span>
+  <span class="o">...</span>
+  <span class="n">resources</span><span class="p">:</span>
+    <span class="n">limits</span><span class="p">:</span>
+      <span class="n">pmem</span><span class="o">-</span><span class="n">csi</span><span class="o">.</span><span class="n">intel</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">scheduler</span><span class="p">:</span> <span class="s2">&quot;1&quot;</span>
+    <span class="n">requests</span><span class="p">:</span>
+      <span class="n">pmem</span><span class="o">-</span><span class="n">csi</span><span class="o">.</span><span class="n">intel</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">scheduler</span><span class="p">:</span> <span class="s2">&quot;1&quot;</span>
+</pre></div>
+</div>
+<p>This scheduler extender is optional and not necessarily installed in
+all clusters that have PMEM-CSI. Don’t add this extended resource
+unless the scheduler extender is installed, otherwise the pod won’t
+start!</p>
+<p>See our <a class="reference external" href="http://github.com/intel/pmem-csi/tree/release-0.7/pkg/scheduler">implementation</a> of a scheduler extender.</p>
+</section>
+<section id="pod-admission-webhook">
+<h3>Pod admission webhook<a class="headerlink" href="#pod-admission-webhook" title="Permalink to this heading"></a></h3>
+<p>Having to add <code class="docutils literal notranslate"><span class="pre">pmem-csi.intel.com/scheduler</span></code> manually is not
+user-friendly. To simplify this, PMEM-CSI provides a <a class="reference external" href="https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/">mutating
+admission
+webhook</a>
+which intercepts the creation of all pods. If that pod uses inline
+ephemeral volumes or volumes with late binding that are provided by
+PMEM-CSI, the webhook transparently adds the extended resource
+request. PMEM-CSI volumes with immediate binding are ignored because
+for those the normal topology support ensures that unsuitable nodes
+are filtered out.</p>
+<p>The webhook can only do that if the persistent volume claim (PVC) and
+its storage class have been created already. This is normally not
+required: it’s okay to create the pod first, then later add the
+PVC. The pod simply won’t start in the meantime.</p>
+<p>The webhook deals with this uncertainty by allowing the creation of
+the pod without adding the extended resource when it lacks the
+necessary information. The alternative would be to reject the pod, but
+that would be a change of behavior of the cluster that may affect also pods
+that don’t use PMEM-CSI at all.</p>
+<p>Users must take care to create PVCs first, then the pods if they want
+to use the webhook. In practice, that is often already done because it
+is more natural, so it is not a big limitation.</p>
+</section>
+</section>
+<section id="pmem-csi-operator">
+<h2>PMEM-CSI Operator<a class="headerlink" href="#pmem-csi-operator" title="Permalink to this heading"></a></h2>
+<p>PMEM-CSI operator facilitates deploying and managing the <a class="reference external" href="https://github.com/intel/pmem-csi">PMEM-CSI driver</a>
+on a Kubernetes cluster. This operator is based on the CoreOS <a class="reference external" href="https://github.com/operator-framework/operator-sdk">operator-sdk</a>
+tools and APIs.</p>
+<p>The driver deployment is controlled by a cluster-scoped <a class="reference external" href="https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/">custom resource</a>
+named <a class="reference external" href="./install.html#pmem-csi-deployment-crd"><code class="docutils literal notranslate"><span class="pre">Deployment</span></code></a> in the
+<code class="docutils literal notranslate"><span class="pre">pmem-csi.intel.com/v1alpha1</span></code> API group. The operator runs inside the cluster
+and listens for deployment changes. It makes sure that the required Kubernetes
+objects are created for a driver deployment.
+Refer to <a class="reference external" href="./install.html#deployment">Deployment CRD</a> for details.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../README.html" class="btn btn-neutral float-left" title="Introduction to PMEM-CSI for Kubernetes" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="install.html" class="btn btn-neutral float-right" title="Installation and Usage" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2019,.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>memcached &mdash; PMEM-CSI v0.8 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/copybutton.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/override.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+        <script src="../_static/clipboard.min.js"></script>
+        <script src="../_static/copybutton.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Cassandra" href="cassandra.html" />
+    <link rel="prev" title="Redis-pmem operator" href="redis-operator.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            PMEM-CSI
+          </a>
+              <div class="version">
+                v0.8
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../README.html">Introduction to PMEM-CSI for Kubernetes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../docs/design.html">Design and architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../docs/install.html">Installation and Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../docs/DEVELOPMENT.html">Develop and contribute</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../docs/autotest.html">Automated testing</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="readme.html">Application examples</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="redis-operator.html">Redis-pmem operator</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">memcached</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#prerequisites">Prerequisites</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pmem-as-dram-replacement">PMEM as DRAM replacement</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#restartable-cache">Restartable Cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kubedb">KubeDB</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="cassandra.html">Cassandra</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gce.html">Google Cloud Engine</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference external" href="https://github.com/intel/pmem-csi">Project GitHub repository</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">PMEM-CSI</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="readme.html">Application examples</a></li>
+      <li class="breadcrumb-item active">memcached</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="memcached">
+<h1>memcached<a class="headerlink" href="#memcached" title="Permalink to this heading"></a></h1>
+<p>As shown in <a class="reference external" href="https://memcached.org/blog/persistent-memory/">this blog
+post</a>, memcached can
+efficiently utilize PMEM as replacement for DRAM. This makes it
+possible to increase cache sizes and/or reduce costs. The memcached
+maintainers make container images available which support this
+feature. This example shows how to take advantage of PMEM with
+memcached running on Kubernetes.</p>
+<section id="prerequisites">
+<h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Permalink to this heading"></a></h2>
+<p>The instructions below assume that:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">kubectl</span></code> is available and can access the cluster.</p></li>
+<li><p>PMEM-CSI <a class="reference external" href="/docs/install.html#installation-and-setup">was installed</a>
+with the default <code class="docutils literal notranslate"><span class="pre">pmem-csi.intel.com</span></code> driver name and with the
+<a class="reference external" href="https://github.com/intel/pmem-csi/blob/5cb16d16a461cbfd1a64cbf4dd472f80a848ea3f/deploy/common/pmem-storageclass-ext4.yaml"><code class="docutils literal notranslate"><span class="pre">pmem-csi-sc-ext4</span></code> storage
+class</a>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">telnet</span></code> or similar tools like <code class="docutils literal notranslate"><span class="pre">socat</span></code> are available.</p></li>
+</ul>
+<p>It is not necessary to check out the PMEM-CSI source code.</p>
+<p>The next two sections use plain YAML files to install memcached. The
+last sections shows installation via the <a class="reference external" href="https://kubedb.com">KubeDB
+operator</a>. Additional requirements for that:</p>
+<ul class="simple">
+<li><p>Helm &gt;= 3.0.0</p></li>
+<li><p>git (at least until KubeDB 0.14.0 is released)</p></li>
+</ul>
+</section>
+<section id="pmem-as-dram-replacement">
+<h2>PMEM as DRAM replacement<a class="headerlink" href="#pmem-as-dram-replacement" title="Permalink to this heading"></a></h2>
+<p>Memcached can map PMEM into its address space and then store the bulk
+of the cache there. The advantage is higher capacity and (depending on
+pricing) less costs.</p>
+<p>The cache could be stored in a persistent volume and reused after a
+restart (see next section), but when that isn’t the goal, a
+<a class="reference external" href="https://github.com/intel/pmem-csi/blob/5cb16d16a461cbfd1a64cbf4dd472f80a848ea3f/deploy/kustomize/memcached/ephemeral/memcached-ephemeral.yaml">deployment with one CSI ephemeral inline
+volume</a>
+per memcached pod is very simple:</p>
+<ul class="simple">
+<li><p>A Kubernetes deployment manages the memcached instance(s).</p></li>
+<li><p>In the pod template, one additional PMEM volume of a certain size is
+requested.</p></li>
+<li><p>An init container prepares that volume for use by memcached:</p>
+<ul>
+<li><p>It determines how large the actual file can be that memcached will use.</p></li>
+<li><p>It changes volume ownership so that memcached can run as non-root
+process.</p></li>
+</ul>
+</li>
+<li><p>A wrapper script adds the <code class="docutils literal notranslate"><span class="pre">--memory-file</span></code> and <code class="docutils literal notranslate"><span class="pre">--memory-limit</span></code> parameters
+when invoking memcached, which enables the use of PMEM.</p></li>
+</ul>
+<p>In this mode, the PMEM-CSI driver is referenced through its name
+(usually <code class="docutils literal notranslate"><span class="pre">pmem-csi.intel.com</span></code>). No storage classes are needed. That
+name and other parameters in the deployment can be modified with
+<a class="reference external" href="https://github.com/kubernetes-sigs/kustomize"><code class="docutils literal notranslate"><span class="pre">kustomize</span></code></a>. Here’s
+how one can change the namespace, volume size or add additional
+command line parameters:</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>mkdir<span class="w"> </span>-p<span class="w"> </span>my-memcached-deployment
+
+<span class="gp">$ </span>cat<span class="w"> </span>&gt;my-memcached-deployment/kustomization.yaml<span class="w"> </span>&lt;&lt;EOF
+<span class="go">namespace: demo</span>
+<span class="go">bases:</span>
+<span class="go"> - github.com/intel/pmem-csi/deploy/kustomize/memcached/ephemeral</span>?ref=5cb16d16a461cbfd1a64cbf4dd472f80a848ea3f
+<span class="go">patchesStrategicMerge:</span>
+<span class="go">- update-deployment.yaml</span>
+<span class="go">EOF</span>
+
+<span class="gp">$ </span>cat<span class="w"> </span>&gt;my-memcached-deployment/update-deployment.yaml<span class="w"> </span>&lt;&lt;EOF
+<span class="go">apiVersion: apps/v1</span>
+<span class="go">kind: Deployment</span>
+<span class="go">metadata:</span>
+<span class="go">  name: pmem-memcached</span>
+<span class="go">spec:</span>
+<span class="go">  template:</span>
+<span class="go">    spec:</span>
+<span class="go">      containers:</span>
+<span class="go">      - name: memcached</span>
+<span class="go">        env:</span>
+<span class="go">        - name: MEMCACHED_ARGS</span>
+<span class="go">          value: --conn-limit=500</span>
+<span class="go">      volumes:</span>
+<span class="go">      - name: data-volume</span>
+<span class="go">        csi:</span>
+<span class="go">          volumeAttributes:</span>
+<span class="go">            size: 500Mi</span>
+<span class="go">EOF</span>
+</pre></div>
+</div>
+<p>These commands then create the namespace and the deployment:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>ns<span class="w"> </span>demo
+<span class="go">namespace/demo created</span>
+<span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>--kustomize<span class="w"> </span>my-memcached-deployment
+<span class="go">service/pmem-memcached created</span>
+<span class="go">deployment.apps/pmem-memcached created</span>
+</pre></div>
+</div>
+<p>Eventually, there will be one pod with memcached running:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span><span class="nb">wait</span><span class="w"> </span>--for<span class="o">=</span><span class="nv">condition</span><span class="o">=</span>Ready<span class="w"> </span>-n<span class="w"> </span>demo<span class="w"> </span>pods<span class="w"> </span>-l<span class="w"> </span>app.kubernetes.io/name<span class="o">=</span>pmem-memcached
+<span class="go">pod/pmem-memcached-96f6b5986-hdx6n condition met</span>
+</pre></div>
+</div>
+<p>How to access a service from remote varies between cluster
+installations and how they handle incoming connections. Therefore we
+use <a class="reference external" href="https://kubernetes.io/docs/tasks/access-application-cluster/port-forward-access-application-cluster/"><code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">port-forward</span></code></a>
+to access the service. Run this command in one shell and keep it
+running there:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>port-forward<span class="w"> </span>-n<span class="w"> </span>demo<span class="w"> </span>service/pmem-memcached<span class="w"> </span><span class="m">11211</span>
+<span class="go">Forwarding from 127.0.0.1:11211 -&gt; 11211</span>
+<span class="go">Forwarding from [::1]:11211 -&gt; 11211</span>
+</pre></div>
+</div>
+<p>In another shell we can now use <code class="docutils literal notranslate"><span class="pre">telnet</span></code> to connect to memcached:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>telnet<span class="w"> </span>localhost<span class="w"> </span><span class="m">11211</span>
+<span class="go">Trying ::1...</span>
+<span class="go">Connected to localhost.</span>
+<span class="go">Escape character is &#39;^]&#39;.</span>
+</pre></div>
+</div>
+<p>Memcached accepts simple plain-text commands. To set a key with 10
+characters, a time-to-live of 500 seconds and default flags, enter:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nb">set</span> <span class="n">demo_key</span> <span class="mi">0</span> <span class="mi">500000</span> <span class="mi">10</span>
+<span class="n">I</span> <span class="n">am</span> <span class="n">PMEM</span><span class="o">.</span>
+</pre></div>
+</div>
+<p>Memcached acknowledges this with:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">STORED</span>
+</pre></div>
+</div>
+<p>We can verify that the key exists with:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">get</span> <span class="n">demo_key</span>
+</pre></div>
+</div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">VALUE</span> <span class="n">demo_key</span> <span class="mi">0</span> <span class="mi">10</span>
+<span class="n">I</span> <span class="n">am</span> <span class="n">PMEM</span><span class="o">.</span>
+<span class="n">END</span>
+</pre></div>
+</div>
+<p>To disconnect, use:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">quit</span>
+</pre></div>
+</div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Connection</span> <span class="n">closed</span> <span class="n">by</span> <span class="n">foreign</span> <span class="n">host</span><span class="o">.</span>
+</pre></div>
+</div>
+<p>The following command verifies the data was stored in a persistent
+memory data volume:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-n<span class="w"> </span>demo<span class="w"> </span><span class="k">$(</span>kubectl<span class="w"> </span>get<span class="w"> </span>-n<span class="w"> </span>demo<span class="w"> </span>pods<span class="w"> </span>-l<span class="w"> </span>app.kubernetes.io/name<span class="o">=</span>pmem-memcached<span class="w"> </span>-o<span class="w"> </span><span class="nv">jsonpath</span><span class="o">={</span>..metadata.name<span class="o">}</span><span class="k">)</span><span class="w"> </span>grep<span class="w"> </span><span class="s1">&#39;I am PMEM.&#39;</span><span class="w"> </span>/data/memcached-memory-file
+<span class="go">Binary file /data/memcached-memory-file matches</span>
+</pre></div>
+</div>
+<p>To clean up, terminate the <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">port-forward</span></code> command and delete the memcached deployment with:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>delete<span class="w"> </span>--kustomize<span class="w"> </span>my-memcached-deployment
+<span class="go">service &quot;pmem-memcached&quot; deleted</span>
+<span class="go">deployment.apps &quot;pmem-memcached&quot; deleted</span>
+</pre></div>
+</div>
+</section>
+<section id="restartable-cache">
+<h2>Restartable Cache<a class="headerlink" href="#restartable-cache" title="Permalink to this heading"></a></h2>
+<p>The <a class="reference external" href="https://github.com/memcached/memcached/wiki/WarmRestart">restartable cache
+feature</a>
+works like non-persistent usage of PMEM. In addition, memcached writes
+out one additional, short state file during a shutdown triggered by
+<code class="docutils literal notranslate"><span class="pre">SIGUSR1</span></code>. The state file describes the content of the memory file and
+is used during a restart by memcached to decide whether it can use the
+existing cached data.</p>
+<p>The <a class="reference external" href="https://github.com/intel/pmem-csi/blob/5cb16d16a461cbfd1a64cbf4dd472f80a848ea3f/deploy/kustomize/memcached/persistent/memcached-persistent.yaml">example
+deployment</a>
+uses a stateful set because that can automatically create persistent
+volumes for each instance. The shell wrapper around memcached
+translates the normal <a class="reference external" href="https://kubernetes.io/docs/concepts/workloads/pods/pod/#termination-of-pods"><code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> shutdown
+signal</a>
+into <code class="docutils literal notranslate"><span class="pre">SIGUSR1</span></code>.</p>
+<p>Deploying like that becomes less flexible because the memcached pods
+can no longer move freely between nodes. Instead, each pod has to be
+restarted on the node where its volume was created. There are also
+<a class="reference external" href="https://github.com/memcached/memcached/wiki/WarmRestart#caveats">several caveats for memcached in this
+mode</a>
+that admins and application developers must be aware of.</p>
+<p>This example can also be kustomized. It uses the <a class="reference external" href="https://github.com/intel/pmem-csi/blob/5cb16d16a461cbfd1a64cbf4dd472f80a848ea3f/deploy/common/pmem-storageclass-ext4.yaml"><code class="docutils literal notranslate"><span class="pre">pmem-csi-sc-ext4</span></code>
+storage class</a>. Here we
+just use the defaults, in particular the default namespace:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>apply<span class="w"> </span>--kustomize<span class="w"> </span>github.com/intel/pmem-csi/deploy/kustomize/memcached/persistent?ref=5cb16d16a461cbfd1a64cbf4dd472f80a848ea3f
+<span class="go">service/pmem-memcached created</span>
+<span class="go">statefulset.apps/pmem-memcached created</span>
+</pre></div>
+</div>
+<p>We can verify that memcached really does a warm restart by storing
+some data, removing the instance and then starting it again.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span><span class="nb">wait</span><span class="w"> </span>--for<span class="o">=</span><span class="nv">condition</span><span class="o">=</span>Ready<span class="w"> </span>pods<span class="w"> </span>-l<span class="w"> </span>app.kubernetes.io/name<span class="o">=</span>pmem-memcached
+<span class="go">pod/pmem-memcached-0 condition met</span>
+</pre></div>
+</div>
+<p>Because we use a stateful set, the pod name is deterministic.</p>
+<p>There is also a corresponding persistent volume:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>get<span class="w"> </span>pvc
+<span class="go">NAME                                     STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS       AGE</span>
+<span class="go">memcached-data-volume-pmem-memcached-0   Bound    pvc-bb2cde11-6aa2-46da-8521-9bc35c08426d   200Mi      RWO            pmem-csi-sc-ext4   5m45s</span>
+</pre></div>
+</div>
+<p>First set a key using the same approach as before:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>port-forward<span class="w"> </span>service/pmem-memcached<span class="w"> </span><span class="m">11211</span>
+<span class="go">Forwarding from 127.0.0.1:11211 -&gt; 11211</span>
+<span class="go">Forwarding from [::1]:11211 -&gt; 11211</span>
+</pre></div>
+</div>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>telnet<span class="w"> </span>localhost<span class="w"> </span><span class="m">11211</span>
+<span class="go">Trying ::1...</span>
+<span class="go">Connected to localhost.</span>
+<span class="go">Escape character is &#39;^]&#39;.</span>
+</pre></div>
+</div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nb">set</span> <span class="n">demo_key</span> <span class="mi">0</span> <span class="mi">500000</span> <span class="mi">10</span>
+<span class="n">I</span> <span class="n">am</span> <span class="n">PMEM</span><span class="o">.</span>
+</pre></div>
+</div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">STORED</span>
+</pre></div>
+</div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">quit</span>
+</pre></div>
+</div>
+<p>Then scale down the number of memcached instances down to zero, then
+restart it. To avoid race conditions, it is important to wait for
+Kubernetes to catch up:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>scale<span class="w"> </span>--replicas<span class="o">=</span><span class="m">0</span><span class="w"> </span>statefulset/pmem-memcached
+<span class="go">statefulset.apps/pmem-memcached scaled</span>
+
+<span class="gp">$ </span>kubectl<span class="w"> </span><span class="nb">wait</span><span class="w"> </span>--for<span class="w"> </span>delete<span class="w"> </span>pod/pmem-memcached-0
+<span class="go">Error from server (NotFound): pods &quot;pmem-memcached-0&quot; not found</span>
+
+<span class="gp">$ </span>kubectl<span class="w"> </span>scale<span class="w"> </span>--replicas<span class="o">=</span><span class="m">1</span><span class="w"> </span>statefulset/pmem-memcached
+<span class="go">statefulset.apps/pmem-memcached scaled</span>
+
+<span class="gp">$ </span>kubectl<span class="w"> </span><span class="nb">wait</span><span class="w"> </span>--for<span class="o">=</span><span class="nv">condition</span><span class="o">=</span>Ready<span class="w"> </span>pods<span class="w"> </span>-l<span class="w"> </span>app.kubernetes.io/name<span class="o">=</span>pmem-memcached
+<span class="go">pod/pmem-memcached-0 condition met</span>
+</pre></div>
+</div>
+<p>Restart the port forwarding now because it is tied to the previous pod.</p>
+<p>Without the persistent volume and the restartable cache, the memcached
+cache would be empty now. With <code class="docutils literal notranslate"><span class="pre">telnet</span></code> we can verify that this is not
+the case and that the key is still known:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>telnet<span class="w"> </span><span class="m">127</span>.0.0.1<span class="w"> </span><span class="m">11211</span>
+<span class="go">Trying 127.0.0.1...</span>
+<span class="go">Connected to 127.0.0.1.</span>
+<span class="go">Escape character is &#39;^]&#39;.</span>
+</pre></div>
+</div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">get</span> <span class="n">demo_key</span>
+</pre></div>
+</div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">VALUE</span> <span class="n">demo_key</span> <span class="mi">0</span> <span class="mi">10</span>
+<span class="n">I</span> <span class="n">am</span> <span class="n">PMEM</span><span class="o">.</span>
+<span class="n">END</span>
+</pre></div>
+</div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">quit</span>
+</pre></div>
+</div>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Connection</span> <span class="n">closed</span> <span class="n">by</span> <span class="n">foreign</span> <span class="n">host</span><span class="o">.</span>
+</pre></div>
+</div>
+<p>To clean up, terminate the <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">port-forward</span></code> command and delete the memcached deployment with:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>delete<span class="w"> </span>--kustomize<span class="w"> </span>github.com/intel/pmem-csi/deploy/kustomize/memcached/persistent?ref=5cb16d16a461cbfd1a64cbf4dd472f80a848ea3f
+<span class="go">service &quot;pmem-memcached&quot; deleted</span>
+<span class="go">statefulset.apps &quot;pmem-memcached&quot; deleted</span>
+</pre></div>
+</div>
+<p>Beware that at the moment, the volumes need to be removed manually
+after removing the stateful set. A <a class="reference external" href="https://github.com/kubernetes/kubernetes/issues/55045">request to automate
+that</a> is open.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>delete<span class="w"> </span>pvc<span class="w"> </span>-l<span class="w"> </span>app.kubernetes.io/name<span class="o">=</span>pmem-memcached
+<span class="go">persistentvolumeclaim &quot;memcached-data-volume-pmem-memcached-0&quot; deleted</span>
+</pre></div>
+</div>
+</section>
+<section id="kubedb">
+<h2>KubeDB<a class="headerlink" href="#kubedb" title="Permalink to this heading"></a></h2>
+<p>The <a class="reference external" href="https://kubedb.com">KubeDB operator</a> &gt;= 0.14.0-beta.1 has
+<a class="reference external" href="https://github.com/kubedb/memcached/pull/146">changes</a> that enable
+the usage of PMEM in ephemeral volumes. Management of persistent
+volumes and thus the restartable cache feature are not supported.</p>
+<p>At this time, the upstream install instructions do not cover
+0.14.0-beta.1 yet. Only installation via Helm will be supported and
+already works as follows:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>git<span class="w"> </span>clone<span class="w">  </span>https://github.com/kubedb/installer
+<span class="go">Cloning into &#39;installer&#39;...</span>
+<span class="go">...</span>
+
+<span class="gp">$ </span><span class="nb">cd</span><span class="w"> </span>installer
+
+<span class="gp">$ </span>git<span class="w"> </span>checkout<span class="w"> </span>v0.14.0-beta.1
+<span class="go">Note: checking out &#39;v0.14.0-beta.1&#39;.</span>
+<span class="go">...</span>
+<span class="go">HEAD is now at a081a36 Prepare for release v0.14.0-beta.1 (#107)</span>
+
+<span class="gp">$ </span>helm<span class="w"> </span>install<span class="w"> </span>kubedb<span class="w"> </span>./charts/kubedb
+<span class="go">NAME: kubedb</span>
+<span class="go">LAST DEPLOYED: Thu Aug 27 13:02:57 2020</span>
+<span class="go">NAMESPACE: default</span>
+<span class="go">STATUS: deployed</span>
+<span class="go">REVISION: 1</span>
+<span class="go">TEST SUITE: None</span>
+<span class="go">NOTES:</span>
+<span class="go">To verify that KubeDB has started, run:</span>
+
+<span class="go">  kubectl get deployment --namespace default -l &quot;app.kubernetes.io/name=kubedb,app.kubernetes.io/instance=kubedb&quot;</span>
+
+<span class="go">Now install/upgrade appscode/kubedb-catalog chart.</span>
+
+<span class="go">To install, run:</span>
+
+<span class="go">  helm install appscode/kubedb-catalog --name kubedb-catalog --version v0.14.0-beta.1 --namespace default</span>
+
+<span class="go">To upgrade, run:</span>
+
+<span class="go">  helm upgrade kubedb-catalog appscode/kubedb-catalog --version v0.14.0-beta.1 --namespace default</span>
+
+<span class="gp">$ </span>helm<span class="w"> </span>install<span class="w"> </span>kubedb-catalog<span class="w"> </span>./charts/kubedb-catalog
+<span class="go">NAME: kubedb-catalog</span>
+<span class="go">LAST DEPLOYED: Thu Aug 27 13:03:11 2020</span>
+<span class="go">NAMESPACE: default</span>
+<span class="go">STATUS: deployed</span>
+<span class="go">REVISION: 1</span>
+<span class="go">TEST SUITE: None</span>
+</pre></div>
+</div>
+<p>KubeDB is now operational and knows how to install memcached:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>get<span class="w"> </span>deployment<span class="w"> </span>--namespace<span class="w"> </span>default<span class="w"> </span>-l<span class="w"> </span><span class="s2">&quot;app.kubernetes.io/name=kubedb,app.kubernetes.io/instance=kubedb&quot;</span>
+<span class="go">NAME     READY   UP-TO-DATE   AVAILABLE   AGE</span>
+<span class="go">kubedb   1/1     1            1           119s</span>
+
+<span class="gp">$ </span>kubectl<span class="w"> </span>get<span class="w"> </span>memcachedversions.catalog.kubedb.com
+<span class="go">NAME       VERSION   DB_IMAGE                    DEPRECATED   AGE</span>
+<span class="go">1.5        1.5       kubedb/memcached:1.5        true         2m46s</span>
+<span class="go">1.5-v1     1.5       kubedb/memcached:1.5-v1     true         2m46s</span>
+<span class="go">1.5.22     1.5.22    kubedb/memcached:1.5.22                  2m46s</span>
+<span class="go">1.5.4      1.5.4     kubedb/memcached:1.5.4      true         2m46s</span>
+<span class="go">1.5.4-v1   1.5.4     kubedb/memcached:1.5.4-v1                2m46s</span>
+</pre></div>
+</div>
+<p>The following command creates a memcached installation with one CSI
+ephemeral inline volume. The volume size is 500MiB (specified inside
+the custom resource) and the actual file size a bit less at 450MiB
+(specified with a <a class="reference external" href="https://kubedb.com/docs/v0.13.0-rc.0/guides/memcached/custom-config/using-custom-config/">custom
+config</a>
+to account for filesystem overhead:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>ns<span class="w"> </span>demo
+<span class="go">namespace/demo created</span>
+
+<span class="gp">$ </span>cat<span class="w"> </span>&lt;&lt;EOF<span class="w"> </span>&gt;memcached.conf
+<span class="go">memory-file = /data/memcached-memory-file</span>
+<span class="go">memory-limit = 450</span>
+<span class="go">EOF</span>
+
+<span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>configmap<span class="w"> </span>-n<span class="w"> </span>demo<span class="w"> </span>mc-pmem-conf<span class="w"> </span>--from-file<span class="o">=</span>memcached.conf
+<span class="go">configmap/mc-pmem-conf created</span>
+
+<span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>-<span class="w"> </span>&lt;&lt;EOF
+<span class="go">apiVersion: kubedb.com/v1alpha1</span>
+<span class="go">kind: Memcached</span>
+<span class="go">metadata:</span>
+<span class="go">  name: memcd-pmem</span>
+<span class="go">  namespace: demo</span>
+<span class="go">spec:</span>
+<span class="go">  replicas: 3</span>
+<span class="go">  version: &quot;1.5.22&quot;</span>
+<span class="go">  configSource:</span>
+<span class="go">    configMap:</span>
+<span class="go">      name: mc-pmem-conf</span>
+<span class="go">  podTemplate:</span>
+<span class="go">    spec:</span>
+<span class="go">      resources:</span>
+<span class="go">        limits:</span>
+<span class="go">          cpu: 500m</span>
+<span class="go">          memory: 128Mi</span>
+<span class="go">        requests:</span>
+<span class="go">          cpu: 250m</span>
+<span class="go">          memory: 64Mi</span>
+<span class="go">  terminationPolicy: DoNotTerminate</span>
+<span class="go">  dataVolume:</span>
+<span class="go">    csi:</span>
+<span class="go">      driver: &quot;pmem-csi.intel.com&quot;</span>
+<span class="go">      volumeAttributes:</span>
+<span class="go">        size: 500Mi</span>
+<span class="go">EOF</span>
+
+<span class="go">memcached.kubedb.com/memcd-pmem created</span>
+</pre></div>
+</div>
+<p>The resulting pods then have one additional data volume:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>get<span class="w"> </span>-n<span class="w"> </span>demo<span class="w"> </span>pods
+<span class="go">NAME                          READY   STATUS    RESTARTS   AGE</span>
+<span class="go">memcd-pmem-56996fb55d-g2z7h   1/1     Running   0          11m</span>
+<span class="go">memcd-pmem-56996fb55d-ht2rs   1/1     Running   0          11m</span>
+<span class="go">memcd-pmem-56996fb55d-nbrcs   1/1     Running   0          11m</span>
+
+<span class="gp">$ </span>kubectl<span class="w"> </span>describe<span class="w"> </span>-n<span class="w"> </span>demo<span class="w"> </span>pods/memcd-pmem-56996fb55d-g2z7h
+<span class="go">Name:         memcd-pmem-56996fb55d-g2z7h</span>
+<span class="go">Namespace:    demo</span>
+<span class="go">Priority:     0</span>
+<span class="go">Node:         pmem-csi-pmem-govm-worker2/172.17.0.3</span>
+<span class="go">Start Time:   Thu, 27 Aug 2020 14:12:09 +0200</span>
+<span class="go">Labels:       kubedb.com/kind=Memcached</span>
+<span class="go">              kubedb.com/name=memcd-pmem</span>
+<span class="go">              pod-template-hash=56996fb55d</span>
+<span class="go">Annotations:  &lt;none&gt;</span>
+<span class="go">Status:       Running</span>
+<span class="go">IP:           10.42.0.3</span>
+<span class="go">IPs:</span>
+<span class="go">  IP:           10.42.0.3</span>
+<span class="go">Controlled By:  ReplicaSet/memcd-pmem-56996fb55d</span>
+<span class="go">Init Containers:</span>
+<span class="go">  data-volume-owner:</span>
+<span class="go">    Container ID:  containerd://9ab4241571ef897733e0b1b368b5f4ada09df6fa155b66b47d6f704ea4895c17</span>
+<span class="go">    Image:         kubedb/memcached:1.5.22</span>
+<span class="go">    Image ID:      docker.io/kubedb/memcached@sha256:bca5f1901a7304c5eeb17d785341a906cfdf10520fd94f80396097df6bc77e2a</span>
+<span class="go">    Port:          &lt;none&gt;</span>
+<span class="go">    Host Port:     &lt;none&gt;</span>
+<span class="go">    Command:</span>
+<span class="go">      /bin/chown</span>
+<span class="go">      memcache</span>
+<span class="go">      /data</span>
+<span class="go">    State:          Terminated</span>
+<span class="go">      Reason:       Completed</span>
+<span class="go">      Exit Code:    0</span>
+<span class="go">      Started:      Thu, 27 Aug 2020 14:18:24 +0200</span>
+<span class="go">      Finished:     Thu, 27 Aug 2020 14:18:24 +0200</span>
+<span class="go">    Ready:          True</span>
+<span class="go">    Restart Count:  0</span>
+<span class="go">    Environment:    &lt;none&gt;</span>
+<span class="go">    Mounts:</span>
+<span class="go">      /data from data-volume (rw)</span>
+<span class="go">      /var/run/secrets/kubernetes.io/serviceaccount from memcd-pmem-token-gbcsx (ro)</span>
+<span class="go">Containers:</span>
+<span class="go">  memcached:</span>
+<span class="go">    Container ID:   containerd://df06f7aeb8c14d61c053ccc5891dc2cca8d81544906d3b17301e961fd281ddfa</span>
+<span class="go">    Image:          kubedb/memcached:1.5.22</span>
+<span class="go">    Image ID:       docker.io/kubedb/memcached@sha256:bca5f1901a7304c5eeb17d785341a906cfdf10520fd94f80396097df6bc77e2a</span>
+<span class="go">    Port:           11211/TCP</span>
+<span class="go">    Host Port:      0/TCP</span>
+<span class="go">    State:          Running</span>
+<span class="go">      Started:      Thu, 27 Aug 2020 14:18:24 +0200</span>
+<span class="go">    Ready:          True</span>
+<span class="go">    Restart Count:  0</span>
+<span class="go">    Limits:</span>
+<span class="go">      cpu:     500m</span>
+<span class="go">      memory:  128Mi</span>
+<span class="go">    Requests:</span>
+<span class="go">      cpu:        250m</span>
+<span class="go">      memory:     64Mi</span>
+<span class="go">    Environment:  &lt;none&gt;</span>
+<span class="go">    Mounts:</span>
+<span class="go">      /data from data-volume (rw)</span>
+<span class="go">      /usr/config/ from custom-config (rw)</span>
+<span class="go">      /var/run/secrets/kubernetes.io/serviceaccount from memcd-pmem-token-gbcsx (ro)</span>
+<span class="go">Conditions:</span>
+<span class="go">  Type              Status</span>
+<span class="go">  Initialized       True </span>
+<span class="go">  Ready             True </span>
+<span class="go">  ContainersReady   True </span>
+<span class="go">  PodScheduled      True </span>
+<span class="go">Volumes:</span>
+<span class="go">  custom-config:</span>
+<span class="go">    Type:      ConfigMap (a volume populated by a ConfigMap)</span>
+<span class="go">    Name:      mc-pmem-conf</span>
+<span class="go">    Optional:  false</span>
+<span class="go">  data-volume:</span>
+<span class="go">    Type:              CSI (a Container Storage Interface (CSI) volume source)</span>
+<span class="go">    Driver:            pmem-csi.intel.com</span>
+<span class="go">    FSType:            </span>
+<span class="go">    ReadOnly:          false</span>
+<span class="go">    VolumeAttributes:      size=500Mi</span>
+<span class="go">  memcd-pmem-token-gbcsx:</span>
+<span class="go">    Type:        Secret (a volume populated by a Secret)</span>
+<span class="go">    SecretName:  memcd-pmem-token-gbcsx</span>
+<span class="go">    Optional:    false</span>
+<span class="go">QoS Class:       Burstable</span>
+<span class="go">Node-Selectors:  &lt;none&gt;</span>
+<span class="go">Tolerations:     node.kubernetes.io/not-ready:NoExecute for 300s</span>
+<span class="go">                 node.kubernetes.io/unreachable:NoExecute for 300s</span>
+<span class="go">Events:</span>
+<span class="go">  Type     Reason       Age                  From                                 Message</span>
+<span class="go">  ----     ------       ----                 ----                                 -------</span>
+<span class="go">  Normal   Scheduled    11m                  default-scheduler                    Successfully assigned demo/memcd-pmem-56996fb55d-g2z7h to pmem-csi-pmem-govm-worker2</span>
+<span class="go">  Normal   Pulling      11s                 kubelet, pmem-csi-pmem-govm-worker2  Pulling image &quot;kubedb/memcached:1.5.22&quot;</span>
+<span class="go">  Normal   Pulled       11s                 kubelet, pmem-csi-pmem-govm-worker2  Successfully pulled image &quot;kubedb/memcached:1.5.22&quot;</span>
+<span class="go">  Normal   Created      11s                 kubelet, pmem-csi-pmem-govm-worker2  Created container data-volume-owner</span>
+<span class="go">  Normal   Started      11s                 kubelet, pmem-csi-pmem-govm-worker2  Started container data-volume-owner</span>
+<span class="go">  Normal   Pulled       11s                 kubelet, pmem-csi-pmem-govm-worker2  Container image &quot;kubedb/memcached:1.5.22&quot; already present on machine</span>
+<span class="go">  Normal   Created      11s                 kubelet, pmem-csi-pmem-govm-worker2  Created container memcached</span>
+<span class="go">  Normal   Started      11s                 kubelet, pmem-csi-pmem-govm-worker2  Started container memcached</span>
+</pre></div>
+</div>
+<p>The additional configuration parameters have been passed to memcached:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-n<span class="w"> </span>demo<span class="w"> </span>memcd-pmem-56996fb55d-g2z7h<span class="w"> </span>ps
+<span class="go">PID   USER     TIME  COMMAND</span>
+<span class="go">    1 memcache  0:00 {start.sh} /bin/sh /usr/local/bin/start.sh</span>
+<span class="go">   18 memcache  0:00 memcached --memory-file=/data/memcached-memory-file --memory-limit=450</span>
+<span class="go">   28 memcache  0:00 ps</span>
+</pre></div>
+</div>
+<p>To clean up, allow removal of the memcached installation, then delete
+the demo namespace and uninstall KubeDB:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>patch<span class="w"> </span>-n<span class="w"> </span>demo<span class="w"> </span>mc/memcd-pmem<span class="w"> </span>-p<span class="w"> </span><span class="s1">&#39;{&quot;spec&quot;:{&quot;terminationPolicy&quot;:&quot;WipeOut&quot;}}&#39;</span><span class="w"> </span>--type<span class="o">=</span><span class="s2">&quot;merge&quot;</span>
+<span class="go">memcached.kubedb.com/memcd-pmem patched</span>
+<span class="gp">$ </span>kubectl<span class="w"> </span>delete<span class="w"> </span>ns<span class="w"> </span>demo
+<span class="go">namespace &quot;demo&quot; deleted</span>
+<span class="gp">$ </span>helm<span class="w"> </span>uninstall<span class="w"> </span>kubedb
+<span class="go">release &quot;kubedb&quot; uninstalled</span>
+<span class="gp">$ </span>helm<span class="w"> </span>uninstall<span class="w"> </span>kubedb-catalog
+<span class="go">release &quot;kubedb-catalog&quot; uninstalled</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="redis-operator.html" class="btn btn-neutral float-left" title="Redis-pmem operator" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="cassandra.html" class="btn btn-neutral float-right" title="Cassandra" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2019,.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

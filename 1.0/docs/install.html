@@ -1,0 +1,2274 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Installation and Usage &mdash; PMEM-CSI v1.0 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/copybutton.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/override.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/clipboard.min.js"></script>
+        <script src="../_static/copybutton.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Develop and Contribute" href="DEVELOPMENT.html" />
+    <link rel="prev" title="Design and architecture" href="design.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> PMEM-CSI
+          </a>
+              <div class="version">
+                v1.0
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../README.html">Introduction to PMEM-CSI for Kubernetes*</a></li>
+<li class="toctree-l1"><a class="reference internal" href="design.html">Design and architecture</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Installation and Usage</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#prerequisites">Prerequisites</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#software-required">Software required</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#hardware-required">Hardware required</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#persistent-memory-pre-provisioning">Persistent memory pre-provisioning</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#installation-and-setup">Installation and setup</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#install-pmem-csi-driver">Install PMEM-CSI driver</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#install-using-the-operator">Install using the operator</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#install-via-yaml-files">Install via YAML files</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#volume-parameters">Volume parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#creating-volumes">Creating volumes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#troubleshooting">Troubleshooting</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#driver-or-operator-fails">Driver or operator fails</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#no-driver-pod-created-for-a-node">No driver Pod created for a node</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#example-pod-getting-assigned-to-a-node-with-no-pmem">Example Pod getting assigned to a node with no PMEM</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#example-pod-getting-assigned-to-a-node-with-insufficient-pmem">Example Pod getting assigned to a node with insufficient PMEM</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#less-pmem-available-than-expected">Less PMEM available than expected</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#automatic-node-setup">Automatic node setup</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kata-containers-support">Kata Containers support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ephemeral-inline-volumes">Ephemeral inline volumes</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#kubernetes-csi-specific">Kubernetes CSI specific</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#generic">Generic</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#raw-block-volumes">Raw block volumes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#enable-scheduler-extensions">Enable scheduler extensions</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#manual-scheduler-configuration">Manual scheduler configuration</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#openshift-scheduler-configuration">OpenShift scheduler configuration</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#storage-capacity-tracking">Storage capacity tracking</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#metrics-support">Metrics support</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#metrics-data">Metrics data</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#prometheus-example">Prometheus example</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#pmem-csi-deployment-crd">PMEM-CSI Deployment CRD</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#deploymentspec">DeploymentSpec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#deploymentstatus">DeploymentStatus</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#deployment-conditions">Deployment Conditions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#driver-component-status">Driver component status</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#deployment-events">Deployment Events</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#operator-metrics-data">Operator metrics data</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#filing-issues-and-contributing">Filing issues and contributing</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="DEVELOPMENT.html">Develop and Contribute</a></li>
+<li class="toctree-l1"><a class="reference internal" href="autotest.html">Automated testing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/readme.html">Application examples</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://github.com/intel/pmem-csi">Project GitHub repository</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">PMEM-CSI</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>Installation and Usage</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="installation-and-usage">
+<h1>Installation and Usage<a class="headerlink" href="#installation-and-usage" title="Permalink to this headline"></a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Permalink to this headline"></a></h2>
+<p>This section summarizes the steps that may be needed during the entire
+lifecycle of PMEM in a cluster, starting with the initial preparations and
+ending with decommissioning the hardware. The other sections explain
+each step in more detail.</p>
+<p>When setting up a cluster, the administrator must install the PMEM
+hardware on nodes and configure some or all of those instances of PMEM for usage by
+PMEM-CSI (<a class="reference external" href="#prerequisites">prerequisites</a>). Nodes where PMEM-CSI is
+supposed to run must have a certain <a class="reference external" href="#installation-and-setup">label in
+Kubernetes</a>.</p>
+<p>The administrator must install PMEM-CSI, using <a class="reference external" href="#install-using-the-operator">the PMEM-CSI
+operator</a> (recommended) or with <a class="reference external" href="#install-via-yaml-files">scripts
+and YAML files in the source code</a>. The default
+install settings should work for most clusters. Some clusters don’t
+use <code class="docutils literal notranslate"><span class="pre">/var/lib/kubelet</span></code> as the data directory for kubelet and then the
+corresponding PMEM-CSI setting must be changed accordingly because
+otherwise kubelet does not find PMEM-CSI. The operator has an option
+for that in its API (<code class="docutils literal notranslate"><span class="pre">kubeletDir</span></code> in the <a class="reference external" href="#deploymentspec"><code class="docutils literal notranslate"><span class="pre">DeploymentSpec</span></code></a>),
+the YAML files can be edited or modified with
+kustomize.</p>
+<p>A PMEM-CSI installation can only use <a class="reference external" href="design.html#direct-device-mode">direct device
+mode</a> or <a class="reference external" href="design.html#lvm-device-mode">LVM
+device mode</a>. It is possible to install
+PMEM-CSI twice on the same cluster with different modes, with these restrictions:</p>
+<ul class="simple">
+<li><p>The driver names must be different.</p></li>
+<li><p>The installations must run on different nodes by using different node
+labels, or the “usage” parameter of the LVM mode driver installation
+one a node must be so that it leaves spaces available for the direct mode
+driver installation on that same node.</p></li>
+</ul>
+<p>The administrator must decide which storage classes shall be available
+to users of the cluster. A storage class references a driver
+installation by name, which indirectly determines the device mode. A
+storage class also chooses which filesystem is used (xfs or ext4) and
+enables <a class="reference external" href="#kata-containers-support">Kata Containers support</a>.</p>
+<p>Optionally, the administrator can enable <a class="reference external" href="#enable-scheduler-extensions">the scheduler
+extensions</a> and monitoring of resource
+usage via the <a class="reference external" href="#metrics-support">metrics support</a>.</p>
+<p>It is <a class="reference external" href="./design.html#dynamic-provisioning-of-local-volumes">recommended</a>
+to enable the scheduler extensions and use
+<code class="docutils literal notranslate"><span class="pre">volumeBindingMode:</span> <span class="pre">WaitForFirstConsumer</span></code> as in the
+<a class="reference external" href="https://github.com/intel/pmem-csi/blob/8a22a3ed1b7041733cfef8433cd3f68b0346b347/deploy/common/pmem-storageclass-late-binding.yaml"><code class="docutils literal notranslate"><span class="pre">pmem-storageclass-late-binding.yaml</span></code></a>
+example. This ensures that pods get scheduled onto nodes that have
+sufficient RAM, CPU and PMEM. Without the scheduler extensions, it is
+random whether the scheduler picks a node that has PMEM available and
+immediate binding (the default volume binding mode) might work
+better. However, then pods might not be able to run when the node
+where volumes were created are overloaded.</p>
+<p>Starting with Kubernetes 1.21, PMEM-CSI uses <a class="reference external" href="https://kubernetes.io/docs/concepts/storage/storage-capacity/">storage capacity
+tracking</a>
+to handle Pod scheduling and the scheduler extensions are not needed
+anymore. <code class="docutils literal notranslate"><span class="pre">WaitForFirstConsumer</span></code> still is the recommended volume
+binding mode.</p>
+<p>Optionally, the log output format can be changed from the default
+“text” format (= the traditional glog format) to “json” (= output via
+<a class="reference external" href="https://github.com/uber-go/zap/blob/master/README.md">zap</a>) for easier
+processing.</p>
+<p>When using the operator, existing PMEM-CSI installations can be
+upgraded seamlessly by installing a newer version of the
+operator. Downgrading by installing an older version is also
+supported, but may need manual work which will be documented in the
+release notes.</p>
+<p>When using YAML files, the only reliable way of up- or downgrading is
+to remove the installation and install anew.</p>
+<p>Users can then create PMEM volumes via <a class="reference external" href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/">persistent volume
+claims</a> that
+reference the storage classes or via <a class="reference external" href="#ephemeral-inline-volumes">ephemeral inline
+volumes</a>.</p>
+<p>A node should only be removed from a cluster after ensuring that there
+is no pod running on it which uses PMEM and that there is no
+persistent volume (<code class="docutils literal notranslate"><span class="pre">PV</span></code>) on it. This can be checked via <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">get</span> <span class="pre">-o</span> <span class="pre">yaml</span> <span class="pre">pv</span></code> and looking for a <code class="docutils literal notranslate"><span class="pre">nodeAffinity</span></code> entry that references the
+node or via metrics data for the node. When removing a node or even
+the entire PMEM-CSI driver installation too soon, attempts to remove
+pods or volumes via the Kubernetes API will fail. Administrators can
+recover from that by force-deleting PVs for which the underlying
+hardware has already been removed.</p>
+<p>By default, PMEM-CSI wipes volumes after usage
+(<a class="reference external" href="#kubernetes-csi-specific"><code class="docutils literal notranslate"><span class="pre">eraseAfter</span></code></a>), so shredding PMEM hardware
+after decomissioning it is optional.</p>
+</section>
+<section id="prerequisites">
+<h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Permalink to this headline"></a></h2>
+<section id="software-required">
+<h3>Software required<a class="headerlink" href="#software-required" title="Permalink to this headline"></a></h3>
+<p>The recommended mimimum Linux kernel version for running the PMEM-CSI driver is 4.15. See <a class="reference external" href="https://pmem.io/2018/05/15/using_persistent_memory_devices_with_the_linux_device_mapper.html">Persistent Memory Programming</a> for more details about supported kernel versions.</p>
+</section>
+<section id="hardware-required">
+<h3>Hardware required<a class="headerlink" href="#hardware-required" title="Permalink to this headline"></a></h3>
+<p>Persistent memory device(s) are required for operation. However, some
+development and testing can be done using QEMU-emulated persistent
+memory devices. See the <a class="reference external" href="autotest.html#qemu-and-kubernetes">“QEMU and Kubernetes”</a>
+section for the commands that create such a virtual test cluster.</p>
+</section>
+<section id="persistent-memory-pre-provisioning">
+<h3>Persistent memory pre-provisioning<a class="headerlink" href="#persistent-memory-pre-provisioning" title="Permalink to this headline"></a></h3>
+<p>The PMEM-CSI driver needs pre-provisioned regions on the NVDIMM
+device(s). The PMEM-CSI driver itself intentionally leaves that to the
+administrator who then can decide how much and how PMEM is to be used
+for PMEM-CSI.</p>
+<p>Beware that the PMEM-CSI driver will run without errors on a node
+where PMEM was not prepared for it. It will then report zero local
+storage for that node, something that currently is only visible in the
+log files.</p>
+<p>When running the Kubernetes cluster and PMEM-CSI on bare metal,
+the <a class="reference external" href="https://github.com/intel/ipmctl">ipmctl</a> utility can be used to create regions.
+App Direct Mode has two configuration options - interleaved or non-interleaved.
+One region per each NVDIMM is created in non-interleaved configuration.
+In such a configuration, a PMEM-CSI volume cannot be larger than one NVDIMM.</p>
+<p>Example of creating regions without interleaving, using all NVDIMMs:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>ipmctl<span class="w"> </span>create<span class="w"> </span>-goal<span class="w"> </span><span class="nv">PersistentMemoryType</span><span class="o">=</span>AppDirectNotInterleaved
+</pre></div>
+</div>
+<p>Alternatively, multiple NVDIMMs can be combined to form an interleaved set.
+This causes the data to be striped over multiple NVDIMM devices
+for improved read/write performance and allowing one region (also, PMEM-CSI volume)
+to be larger than single NVDIMM.</p>
+<p>Example of creating regions in interleaved mode, using all NVDIMMs:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>ipmctl<span class="w"> </span>create<span class="w"> </span>-goal<span class="w"> </span><span class="nv">PersistentMemoryType</span><span class="o">=</span>AppDirect
+</pre></div>
+</div>
+<p>If the operating system on the nodes does not provide <code class="docutils literal notranslate"><span class="pre">ipmctl</span></code>, then
+it can also be run inside a container, using the PMEM-CSI image. The same
+invocation works with <code class="docutils literal notranslate"><span class="pre">podman</span></code> instead of <code class="docutils literal notranslate"><span class="pre">docker</span></code>.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>sudo<span class="w"> </span>docker<span class="w"> </span>run<span class="w"> </span>--privileged<span class="w"> </span>--rm<span class="w"> </span>-u<span class="w"> </span><span class="m">0</span>:0<span class="w"> </span>docker.io/intel/pmem-csi-driver:v1.0.2<span class="w"> </span>ipmctl<span class="w"> </span><span class="nb">help</span>
+<span class="go">Intel(R) Optane(TM) Persistent Memory Command Line Interface</span>
+
+<span class="go">    Usage: ipmctl &lt;verb&gt;[&lt;options&gt;][&lt;targets&gt;][&lt;properties&gt;]</span>
+<span class="go">...</span>
+</pre></div>
+</div>
+<p>When running inside virtual machines, each virtual machine typically
+already gets access to one region and <code class="docutils literal notranslate"><span class="pre">ipmctl</span></code> is not needed inside
+the virtual machine. Instead, that region must be made available for
+use with PMEM-CSI because when the virtual machine comes up for the
+first time, the entire region is already allocated for use as a single
+block device:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>ndctl<span class="w"> </span>list<span class="w"> </span>-RN
+<span class="go">{</span>
+<span class="go">  &quot;regions&quot;:[</span>
+<span class="go">    {</span>
+<span class="go">      &quot;dev&quot;:&quot;region0&quot;,</span>
+<span class="go">      &quot;size&quot;:34357641216,</span>
+<span class="go">      &quot;available_size&quot;:0,</span>
+<span class="go">      &quot;max_available_extent&quot;:0,</span>
+<span class="go">      &quot;type&quot;:&quot;pmem&quot;,</span>
+<span class="go">      &quot;persistence_domain&quot;:&quot;unknown&quot;,</span>
+<span class="go">      &quot;namespaces&quot;:[</span>
+<span class="go">        {</span>
+<span class="go">          &quot;dev&quot;:&quot;namespace0.0&quot;,</span>
+<span class="go">          &quot;mode&quot;:&quot;raw&quot;,</span>
+<span class="go">          &quot;size&quot;:34357641216,</span>
+<span class="go">          &quot;sector_size&quot;:512,</span>
+<span class="go">          &quot;blockdev&quot;:&quot;pmem0&quot;</span>
+<span class="go">        }</span>
+<span class="go">      ]</span>
+<span class="go">    }</span>
+<span class="go">  ]</span>
+<span class="go">}</span>
+<span class="gp">$ </span>ls<span class="w"> </span>-l<span class="w"> </span>/dev/pmem*
+<span class="go">brw-rw---- 1 root disk 259, 0 Jun  4 16:41 /dev/pmem0</span>
+</pre></div>
+</div>
+<p>Labels must be initialized in such a region, which must be performed
+once after the first boot:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>ndctl<span class="w"> </span>disable-region<span class="w"> </span>region0
+<span class="go">disabled 1 region</span>
+<span class="gp">$ </span>ndctl<span class="w"> </span>init-labels<span class="w"> </span>nmem0
+<span class="go">initialized 1 nmem</span>
+<span class="gp">$ </span>ndctl<span class="w"> </span>enable-region<span class="w"> </span>region0
+<span class="go">enabled 1 region</span>
+<span class="gp">$ </span>ndctl<span class="w"> </span>list<span class="w"> </span>-RN
+<span class="go">[</span>
+<span class="go">  {</span>
+<span class="go">    &quot;dev&quot;:&quot;region0&quot;,</span>
+<span class="go">    &quot;size&quot;:34357641216,</span>
+<span class="go">    &quot;available_size&quot;:34357641216,</span>
+<span class="go">    &quot;max_available_extent&quot;:34357641216,</span>
+<span class="go">    &quot;type&quot;:&quot;pmem&quot;,</span>
+<span class="go">    &quot;iset_id&quot;:10248187106440278,</span>
+<span class="go">    &quot;persistence_domain&quot;:&quot;unknown&quot;</span>
+<span class="go">  }</span>
+<span class="go">]</span>
+<span class="gp">$ </span>ls<span class="w"> </span>-l<span class="w"> </span>/dev/pmem*
+<span class="go">ls: cannot access &#39;/dev/pmem*&#39;: No such file or directory</span>
+</pre></div>
+</div>
+<p>On some virtual machines, for example VMware® vSphere, the persistent
+memory does not support setting labels and the <code class="docutils literal notranslate"><span class="pre">ndctl</span> <span class="pre">init-labels</span> <span class="pre">nmem0</span></code> command above would fail. What can be done in that case is to
+convert the existing namespace from “raw” to “fsdax” mode and
+then run PMEM-CSI in LVM mode. Direct mode is not possible because
+it depends on creating additional namespaces which in turn depends
+on support for labels. The command for conversion is:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>ndctl<span class="w"> </span>create-namespace<span class="w"> </span>--force<span class="w"> </span>--reconfig<span class="o">=</span>namespace0.0<span class="w"> </span>--mode<span class="o">=</span>fsdax<span class="w"> </span>--name<span class="o">=</span>pmem-csi
+<span class="go">{</span>
+<span class="go">  &quot;dev&quot;:&quot;namespace0.0&quot;,</span>
+<span class="go">  &quot;mode&quot;:&quot;fsdax&quot;,</span>
+<span class="go">  &quot;map&quot;:&quot;dev&quot;,</span>
+<span class="go">  &quot;size&quot;:67643637760,</span>
+<span class="go">  &quot;uuid&quot;:&quot;9fa6976c-ab57-491b-a00c-e52d092a4fa8&quot;,</span>
+<span class="go">  &quot;sector_size&quot;:512,</span>
+<span class="go">  &quot;align&quot;:2097152,</span>
+<span class="go">  &quot;blockdev&quot;:&quot;pmem0&quot;,</span>
+<span class="go">  &quot;name&quot;:&quot;pmem-csi&quot;</span>
+<span class="go">}</span>
+</pre></div>
+</div>
+<p>Note the <code class="docutils literal notranslate"><span class="pre">pmem-csi</span></code> name for the namespace: this is how PMEM-CSI in
+LVM mode knows that it is allowed to use this namespace. When the VM
+provides only “legacy PMEM”, ndctl silently drops that name. In that
+case, the volume group as to be created manually:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>vgcreate<span class="w"> </span>--force<span class="w"> </span>bus0region0fsdax<span class="w"> </span>/dev/pmem0
+</pre></div>
+</div>
+<p>See <a class="reference external" href="#automatic-node-setup">automatic node setup</a> below for
+instructions on how to automate this conversion.</p>
+</section>
+</section>
+<section id="installation-and-setup">
+<h2>Installation and setup<a class="headerlink" href="#installation-and-setup" title="Permalink to this headline"></a></h2>
+<p>This section assumes that a Kubernetes cluster is already available
+with at least one node that has persistent memory device(s). For
+development or testing, it is also possible to use a cluster that runs
+on QEMU virtual machines, see the <a class="reference external" href="autotest.html#qemu-and-kubernetes">“QEMU and
+Kubernetes”</a>.</p>
+<ul class="simple">
+<li><p><strong>Make sure that the alpha feature gates CSINodeInfo and CSIDriverRegistry are enabled</strong></p></li>
+</ul>
+<p>The method to configure alpha feature gates may vary, depending on the Kubernetes deployment.
+It may not be necessary anymore when the feature has reached beta state, which depends
+on the Kubernetes version.</p>
+<ul class="simple">
+<li><p><strong>Label the cluster nodes that provide persistent memory device(s)</strong></p></li>
+</ul>
+<p>PMEM-CSI manages PMEM on those nodes that have a certain label. For
+historic reasons, the default in the YAML files and the operator
+settings is to use a label <code class="docutils literal notranslate"><span class="pre">storage</span></code> with the value <code class="docutils literal notranslate"><span class="pre">pmem</span></code>.</p>
+<p>Such a label can be set for each node manually with:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>label<span class="w"> </span>node<span class="w"> </span>&lt;your<span class="w"> </span>node&gt;<span class="w"> </span><span class="nv">storage</span><span class="o">=</span>pmem
+</pre></div>
+</div>
+<p>Alternatively, the <a class="reference external" href="https://kubernetes-sigs.github.io/node-feature-discovery/stable/get-started/index.html">Node Feature
+Discovery (NFD)</a>
+add-on can be used to label nodes automatically. In that case, the
+default PMEM-CSI node selector has to be changed to
+<code class="docutils literal notranslate"><span class="pre">&quot;feature.node.kubernetes.io/memory-nv.dax&quot;:</span> <span class="pre">&quot;true&quot;</span></code>. The operator has
+the <a class="reference external" href="https://kubernetes-sigs.github.io/node-feature-discovery/stable/get-started/index.html"><code class="docutils literal notranslate"><span class="pre">nodeSelector</span></code>
+field</a>
+for that. For the YAML files a kustomize patch can be used.</p>
+<section id="install-pmem-csi-driver">
+<h3>Install PMEM-CSI driver<a class="headerlink" href="#install-pmem-csi-driver" title="Permalink to this headline"></a></h3>
+<p>PMEM-CSI driver can be deployed to a Kubernetes cluster either using the
+PMEM-CSI operator or by using reference yaml files provided in source code.</p>
+<section id="install-using-the-operator">
+<h4>Install using the operator<a class="headerlink" href="#install-using-the-operator" title="Permalink to this headline"></a></h4>
+<p>The <a class="reference external" href="./design.html#pmem-csi-operator">PMEM-CSI operator</a> facilitates deploying and managing
+the PMEM-CSI driver on a Kubernetes cluster.</p>
+<section id="installing-the-operator-from-operator-hub">
+<h5>Installing the operator from Operator Hub<a class="headerlink" href="#installing-the-operator-from-operator-hub" title="Permalink to this headline"></a></h5>
+<p>If your cluster supports managing the operators using the <a class="reference external" href="https://olm.operatorframework.io/">Operator
+Lifecycle Manager</a>, then it is
+recommended to install the PMEM-CSI operator from the
+<a class="reference external" href="https://operatorhub.io/operator/pmem-csi-operator">OperatorHub</a>. Follow
+the instructions shown by the “Install” button. When using this
+approach, the operator itself always runs with default parameters, in
+particular log output in “text” format.</p>
+</section>
+<section id="installing-the-operator-on-an-openshift-cluster-using-the-red-hat-catalog">
+<h5>Installing the operator on an OpenShift cluster using the Red Hat Catalog<a class="headerlink" href="#installing-the-operator-on-an-openshift-cluster-using-the-red-hat-catalog" title="Permalink to this headline"></a></h5>
+<p><strong>NOTE</strong>: PMEM-CSI operator will go into sustaining mode starting Red Hat
+OpenShift platform 4.11. The last validation cycle for Red Hat OpenShift CSI
+Operator Certification and Badging is on 4.10. Intel is winding down future
+development and contributions including, but not limited to, maintenance, bug
+fixes, new releases, or updates, to this project.</p>
+<p>The current release of the PMEM-CSI driver and operator will
+continue to be maintained and supported until EOL of Intel Optane PMem. New releases,
+new features and bug fixes will be restricted only to business-critical
+cases. Reference <a class="reference external" href="https://d1io3yog0oux5.cloudfront.net/_7476eb634cf21033bf2ce4974e02203e/intel/db/887/8856/prepared_remarks/Intel-CEO-CFO-2Q22-earnings-statements-1.pdf">Intel’s Optane Business Unit Closure
+announcement</a>.</p>
+<p>If you run an OpenShift cluster, then it is recommended to install the PMEM-CSI operator by
+following the instructions shown by “Deploy &amp; use” on <a class="reference external" href="https://catalog.redhat.com/software/operators/detail/612cd31535f8020a3f8bd5f2">Red Hat Catalog</a>.
+The recommended approach is “Installing from OperatorHub using the web console”.</p>
+</section>
+<section id="installing-the-operator-from-yaml">
+<h5>Installing the operator from YAML<a class="headerlink" href="#installing-the-operator-from-yaml" title="Permalink to this headline"></a></h5>
+<p>Alternatively, the you can install the operator manually from YAML files.
+First install the PmemCSIDeployment CRD:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>https://github.com/intel/pmem-csi/raw/v1.0.2/deploy/crd/pmem-csi.intel.com_pmemcsideployments.yaml
+</pre></div>
+</div>
+<p>Then install the PMEM-CSI operator itself:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>https://github.com/intel/pmem-csi/raw/v1.0.2/deploy/operator/pmem-csi-operator.yaml
+</pre></div>
+</div>
+<p>The operator gets deployed in a namespace called ‘pmem-csi’ which gets created by that YAML file.</p>
+<p><strong>WARNING:</strong> This YAML file cannot be used to stop just the operator while
+keeping the PMEM-CSI deployments running. That’s because something like
+<code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">delete</span> <span class="pre">-f</span> <span class="pre">pmem-csi-operator.yaml</span></code> will delete the <code class="docutils literal notranslate"><span class="pre">pmem-csi</span></code>
+namespace which then also causes all PMEM-CSI deployments that might have
+been created in that namespace to be deleted.</p>
+</section>
+<section id="create-a-driver-deployment">
+<h5>Create a driver deployment<a class="headerlink" href="#create-a-driver-deployment" title="Permalink to this headline"></a></h5>
+<p>Once the operator is installed and running, it is ready to handle
+<code class="docutils literal notranslate"><span class="pre">PmemCSIDeployment</span></code> objects in the <code class="docutils literal notranslate"><span class="pre">pmem-csi.intel.com</span></code> API group.
+Refer to the <a class="reference external" href="#pmem-csi-deployment-crd">PmemCSIDeployment CRD API</a>
+for a complete list of supported properties.</p>
+<p>Here is a minimal example driver deployment created with a custom resource:</p>
+<p><strong>NOTE</strong>: <code class="docutils literal notranslate"><span class="pre">nodeSelector</span></code> must match the node label that was set in the
+<a class="reference external" href="#installation-and-setup">installation and setup</a> section. The PMEM-CSI
+<a class="reference external" href="design.html#scheduler-extender">scheduler extender</a> and
+<a class="reference external" href="design.html#pod-admission-webhook">webhook</a> are not enabled in this basic
+installation. See <a class="reference external" href="#enable-scheduler-extensions">below</a> for
+instructions about that.</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>-<span class="w"> </span>&lt;&lt;EOF
+<span class="go">apiVersion: pmem-csi.intel.com/v1beta1</span>
+<span class="go">kind: PmemCSIDeployment</span>
+<span class="go">metadata:</span>
+<span class="go">  name: pmem-csi.intel.com</span>
+<span class="go">spec:</span>
+<span class="go">  deviceMode: lvm</span>
+<span class="go">  nodeSelector:</span>
+<span class="go">    feature.node.kubernetes.io/memory-nv.dax: &quot;true&quot;</span>
+<span class="go">EOF</span>
+</pre></div>
+</div>
+<p>This uses the same <code class="docutils literal notranslate"><span class="pre">pmem-csi.intel.com</span></code> driver name as the YAML files
+in <a class="reference external" href="https://github.com/intel/pmem-csi/tree/8a22a3ed1b7041733cfef8433cd3f68b0346b347/deploy"><code class="docutils literal notranslate"><span class="pre">deploy</span></code></a> and the node label created by NFD (see the <a class="reference external" href="#installation-and-setup">hardware
+installation and setup section</a>).</p>
+<p>Once the above deployment installation is successful, we can see all the driver
+pods in <code class="docutils literal notranslate"><span class="pre">Running</span></code> state:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>get<span class="w"> </span>pmemcsideployments
+<span class="go">NAME                 DEVICEMODE   NODESELECTOR   IMAGE   STATUS   AGE</span>
+<span class="go">pmem-deployment      lvm                                 Running  50s</span>
+
+<span class="gp">$ </span>kubectl<span class="w"> </span>describe<span class="w"> </span>pmemcsideployment/pmem-csi.intel.com
+<span class="go">Name:         pmem-csi.intel.com</span>
+<span class="go">Namespace:</span>
+<span class="go">Labels:       &lt;none&gt;</span>
+<span class="go">Annotations:  &lt;none&gt;</span>
+<span class="go">API Version:  pmem-csi.intel.com/v1beta1</span>
+<span class="go">Kind:         PmemCSIDeployment</span>
+<span class="go">Metadata:</span>
+<span class="go">  Creation Timestamp:  2020-10-07T07:31:58Z</span>
+<span class="go">  Generation:          1</span>
+<span class="go">  Managed Fields:</span>
+<span class="go">    ...</span>
+<span class="go">  Resource Version:  1235740</span>
+<span class="go">  Self Link:         /apis/pmem-csi.intel.com/v1beta1/pmemcsideployments/pmem-csi.intel.com</span>
+<span class="go">  UID:               d8635490-53fa-4eec-970d-cd4c76f53b23</span>
+<span class="go">Spec:</span>
+<span class="go">  Device Mode:  lvm</span>
+<span class="go">  Node Selector:</span>
+<span class="go">    Storage:  pmem</span>
+<span class="go">Status:</span>
+<span class="go">  Conditions:</span>
+<span class="go">    Last Update Time:  2020-10-07T07:32:00Z</span>
+<span class="go">    Reason:            Driver certificates are available.</span>
+<span class="go">    Status:            True</span>
+<span class="go">    Type:              CertsReady</span>
+<span class="go">    Last Update Time:  2020-10-07T07:32:02Z</span>
+<span class="go">    Reason:            Driver deployed successfully.</span>
+<span class="go">    Status:            True</span>
+<span class="go">    Type:              DriverDeployed</span>
+<span class="go">  Driver Components:</span>
+<span class="go">    Component:     Controller</span>
+<span class="go">    Last Updated:  2020-10-08T07:45:13Z</span>
+<span class="go">    Reason:        1 instance(s) of controller driver is running successfully</span>
+<span class="go">    Status:        Ready</span>
+<span class="go">    Component:     Node</span>
+<span class="go">    Last Updated:  2020-10-08T07:45:11Z</span>
+<span class="go">    Reason:        All 3 node driver pod(s) running successfully</span>
+<span class="go">    Status:        Ready</span>
+<span class="go">  Last Updated:    2020-10-07T07:32:21Z</span>
+<span class="go">  Phase:           Running</span>
+<span class="go">  Reason:          All driver components are deployed successfully</span>
+<span class="go">Events:</span>
+<span class="go">  Type    Reason         Age   From               Message</span>
+<span class="go">  ----    ------         ----  ----               -------</span>
+<span class="go">  Normal  NewDeployment  58s   pmem-csi-operator  Processing new driver deployment</span>
+<span class="go">  Normal  Running        39s   pmem-csi-operator  Driver deployment successful</span>
+
+<span class="gp">$ </span>kubectl<span class="w"> </span>get<span class="w"> </span>pod<span class="w"> </span>-n<span class="w"> </span>pmem-csi
+<span class="go">NAME                                             READY   STATUS    RESTARTS   AGE</span>
+<span class="go">pmem-csi-intel-com-controller-79cd9f799d-rt54d   2/2     Running   0          51s</span>
+<span class="go">pmem-csi-intel-com-node-4x7cv                    2/2     Running   0          50s</span>
+<span class="go">pmem-csi-intel-com-node-6grt6                    2/2     Running   0          50s</span>
+<span class="go">pmem-csi-intel-com-node-msgds                    2/2     Running   0          51s</span>
+<span class="go">pmem-csi-operator-749c7c7c69-k5k8n               1/1     Running   0          3m</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="install-via-yaml-files">
+<h4>Install via YAML files<a class="headerlink" href="#install-via-yaml-files" title="Permalink to this headline"></a></h4>
+<ul class="simple">
+<li><p><strong>Get source code</strong></p></li>
+</ul>
+<p>PMEM-CSI uses Go modules and thus can be checked out and (if that should be desired)
+built anywhere in the filesystem. Pre-built container images are available and thus
+users don’t need to build from source, but they may need some additional files
+for the following sections.
+To get the source code, use:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/intel/pmem-csi
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><strong>Choose a namespace</strong></p></li>
+</ul>
+<p>By default, setting up certificates as described in the next step will
+automatically create a <code class="docutils literal notranslate"><span class="pre">pmem-csi</span></code> namespace if it does not exist yet.
+Later the driver will be installed in that namespace.</p>
+<p>This can be changed by:</p>
+<ul class="simple">
+<li><p>setting the <code class="docutils literal notranslate"><span class="pre">TEST_DRIVER_NAMESPACE</span></code> env variable to a different name
+when invoking <code class="docutils literal notranslate"><span class="pre">setup-ca-kubernetes.sh</span></code> and</p></li>
+<li><p>modifying the deployment with kustomize as explained below.</p></li>
+<li><p><strong>Set up certificates</strong></p></li>
+</ul>
+<p>Certificates are required as explained in <a class="reference external" href="design.html#security">Security</a> for
+running the PMEM-CSI <a class="reference external" href="design.html#scheduler-extender">scheduler extender</a> and
+<a class="reference external" href="design.html#pod-admission-webhook">webhook</a>. If those are not used, then certificate
+creation can be skipped. However, the YAML deployment files always create the PMEM-CSI
+controller StatefulSet which needs the certificates. Without them, the
+<code class="docutils literal notranslate"><span class="pre">pmem-csi-intel-com-controller</span></code> pod cannot start, so it is recommended to create
+certificates or customize the deployment so that this Deployment is not created.</p>
+<p>On OpenShift, certificates can be created automatically as described
+in https://docs.openshift.com/container-platform/4.6/security/certificates/service-serving-certificate.html.
+The PMEM-CSI operator uses that approach and therefore is a
+simpler way to install PMEM-CSI on OpenShift.</p>
+<p>Certificates can be created by running the <code class="docutils literal notranslate"><span class="pre">./test/setup-ca-kubernetes.sh</span></code> script for your cluster.
+This script requires “cfssl” tools which can be downloaded.
+These are the steps for manual set-up of certificates:</p>
+<ul class="simple">
+<li><p>Download cfssl tools</p></li>
+</ul>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>curl<span class="w"> </span>-L<span class="w"> </span>https://pkg.cfssl.org/R1.2/cfssl_linux-amd64<span class="w"> </span>-o<span class="w"> </span>_work/bin/cfssl<span class="w"> </span>--create-dirs
+<span class="gp">$ </span>curl<span class="w"> </span>-L<span class="w"> </span>https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64<span class="w"> </span>-o<span class="w"> </span>_work/bin/cfssljson<span class="w"> </span>--create-dirs
+<span class="gp">$ </span>chmod<span class="w"> </span>a+x<span class="w"> </span>_work/bin/cfssl<span class="w"> </span>_work/bin/cfssljson
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>Run certificates set-up script</p></li>
+</ul>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nv">KUBCONFIG</span><span class="o">=</span><span class="s2">&quot;&lt;&lt;your cluster kubeconfig path&gt;&gt;&quot;</span><span class="w"> </span><span class="nv">PATH</span><span class="o">=</span><span class="s2">&quot;</span><span class="nv">$PWD</span><span class="s2">/_work/bin:</span><span class="nv">$PATH</span><span class="s2">&quot;</span><span class="w"> </span>./test/setup-ca-kubernetes.sh
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><strong>Deploy the driver to Kubernetes</strong></p></li>
+</ul>
+<p>The <code class="docutils literal notranslate"><span class="pre">deploy/kubernetes-&lt;kubernetes</span> <span class="pre">version&gt;</span></code> directory contains
+<code class="docutils literal notranslate"><span class="pre">pmem-csi*.yaml</span></code> files which can be used to deploy the driver on that
+Kubernetes version. The files in the directory with the highest
+Kubernetes version might also work for more recent Kubernetes
+releases. All of these deployments use images published by Intel on
+<a class="reference external" href="https://hub.docker.com/u/intel">Docker Hub</a>.</p>
+<p>For each Kubernetes version, four different deployment variants are provided:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">direct</span></code> or <code class="docutils literal notranslate"><span class="pre">lvm</span></code>: one uses direct device mode, the other LVM device mode.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">testing</span></code>: the variants with <code class="docutils literal notranslate"><span class="pre">testing</span></code> in the name enable debugging
+features and shouldn’t be used in production.</p></li>
+</ul>
+<p>For example, to deploy for production with LVM device mode onto Kubernetes 1.18, use:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>deploy/kubernetes-1.18/pmem-csi-lvm.yaml
+</pre></div>
+</div>
+<p>The PMEM-CSI <a class="reference external" href="design.html#scheduler-extender">scheduler extender</a> and
+<a class="reference external" href="design.html#pod-admission-webhook">webhook</a> are not enabled in this basic
+installation. See <a class="reference external" href="#enable-scheduler-extensions">below</a> for
+instructions about that.</p>
+<p>These variants were generated with
+<a class="reference external" href="https://github.com/kubernetes-sigs/kustomize"><code class="docutils literal notranslate"><span class="pre">kustomize</span></code></a>.
+<code class="docutils literal notranslate"><span class="pre">kubectl</span></code> &gt;= 1.14 includes some support for that. The sub-directories
+of <a class="reference external" href="https://github.com/intel/pmem-csi/tree/8a22a3ed1b7041733cfef8433cd3f68b0346b347/deploy/kustomize">deploy/kustomize</a><code class="docutils literal notranslate"><span class="pre">-&lt;kubernetes</span> <span class="pre">version&gt;</span></code> can be used as bases
+for <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">kustomize</span></code>. For example:</p>
+<ul>
+<li><p>Change namespace:</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>mkdir<span class="w"> </span>-p<span class="w"> </span>my-pmem-csi-deployment
+<span class="gp">$ </span>cat<span class="w"> </span>&gt;my-pmem-csi-deployment/kustomization.yaml<span class="w"> </span>&lt;&lt;EOF
+<span class="go">namespace: pmem-driver</span>
+<span class="go">bases:</span>
+<span class="go">  - ../deploy/kubernetes-1.18/lvm</span>
+<span class="go">EOF</span>
+<span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>--kustomize<span class="w"> </span>my-pmem-csi-deployment
+</pre></div>
+</div>
+</li>
+<li><p>Configure how much PMEM is used by PMEM-CSI for LVM
+(see <a class="reference external" href="design.html#namespace-modes-in-lvm-device-mode">Namespace modes in LVM device mode</a>):</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>mkdir<span class="w"> </span>-p<span class="w"> </span>my-pmem-csi-deployment
+<span class="gp">$ </span>cat<span class="w"> </span>&gt;my-pmem-csi-deployment/kustomization.yaml<span class="w"> </span>&lt;&lt;EOF
+<span class="go">bases:</span>
+<span class="go">  - ../deploy/kubernetes-1.18/lvm</span>
+<span class="go">patchesJson6902:</span>
+<span class="go">  - target:</span>
+<span class="go">      group: apps</span>
+<span class="go">      version: v1</span>
+<span class="go">      kind: DaemonSet</span>
+<span class="go">      name: pmem-csi-node</span>
+<span class="go">      namespace: pmem-csi</span>
+<span class="go">    path: lvm-parameters-patch.yaml</span>
+<span class="go">EOF</span>
+<span class="gp">$ </span>cat<span class="w"> </span>&gt;my-pmem-csi-deployment/lvm-parameters-patch.yaml<span class="w"> </span>&lt;&lt;EOF
+<span class="gp"># </span>pmem-driver<span class="w"> </span>is<span class="w"> </span><span class="k">in</span><span class="w"> </span>the<span class="w"> </span>container<span class="w"> </span><span class="c1">#0. Append arguments at the end.</span>
+<span class="go">- op: add</span>
+<span class="go">  path: /spec/template/spec/containers/0/args/-</span>
+<span class="go">  value: &quot;-pmemPercentage=90&quot;</span>
+<span class="go">EOF</span>
+<span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>--kustomize<span class="w"> </span>my-pmem-csi-deployment
+</pre></div>
+</div>
+</li>
+<li><p>Wait until all pods reach ‘Running’ status</p></li>
+</ul>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>pmem-csi
+<span class="go">NAME                                             READY   STATUS    RESTARTS   AGE</span>
+<span class="go">pmem-csi-intel-com-controller-79cd9f799d-rt54d   2/2     Running   0          3m15s</span>
+<span class="go">pmem-csi-intel-com-node-8kmxf                    2/2     Running   0          3m15s</span>
+<span class="go">pmem-csi-intel-com-node-bvx7m                    2/2     Running   0          3m15s</span>
+<span class="go">pmem-csi-intel-com-node-fbmpg                    2/2     Running   0          3m15s</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="volume-parameters">
+<h3>Volume parameters<a class="headerlink" href="#volume-parameters" title="Permalink to this headline"></a></h3>
+<p>A Kubernetes cluster administrators must define some volume parameters
+like the filesystem type in <a class="reference external" href="https://kubernetes.io/docs/concepts/storage/storage-classes">storage
+classes</a>.
+Users then reference those storage classes when requesting generic
+ephemeral inline or persistent volumes. The size of volumes can be chosen
+by users.</p>
+<p><code class="docutils literal notranslate"><span class="pre">xfs</span></code> and <code class="docutils literal notranslate"><span class="pre">ext4</span></code> are supported filesystem types. In addition to the
+normal parameters defined by Kubernetes, PMEM-CSI supports the
+following custom parameters in a storage class:</p>
+<table border="1" class="docutils">
+<thead>
+<tr>
+<th>key</th>
+<th>meaning</th>
+<th>optional</th>
+<th>values</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>eraseAfter</code></td>
+<td>Clear all data by overwriting with zeroes after use and before deleting the volume</td>
+<td>Yes</td>
+<td><code>true</code> (default), <code>false</code></td>
+</tr>
+<tr>
+<td><code>kataContainers</code></td>
+<td>Prepare volume for use with DAX in Kata Containers.</td>
+<td>Yes</td>
+<td><code>false/0/f/FALSE</code> (default), <code>true/1/t/TRUE</code></td>
+</tr>
+</tbody>
+</table></section>
+<section id="creating-volumes">
+<h3>Creating volumes<a class="headerlink" href="#creating-volumes" title="Permalink to this headline"></a></h3>
+<p>This section uses files from the <a class="reference external" href="https://github.com/intel/pmem-csi/tree/8a22a3ed1b7041733cfef8433cd3f68b0346b347/deploy/common">common example directory</a>.
+It is not necessary to check out the repository to use them.</p>
+<p>Create a storage class with late binding, the recommended mode:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>https://github.com/intel/pmem-csi/raw/v1.0.2/deploy/common/pmem-storageclass-late-binding.yaml
+<span class="go">storageclass.storage.k8s.io/pmem-csi-sc-late-binding created</span>
+</pre></div>
+</div>
+<p>Then request a volume which uses that class:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>https://github.com/intel/pmem-csi/raw/v1.0.2/deploy/common/pmem-pvc-late-binding.yaml
+<span class="go">persistentvolumeclaim/pmem-csi-pvc-late-binding created</span>
+</pre></div>
+</div>
+<p>At this point, the volume is not yet getting created because of the
+late binding mode:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>describe<span class="w"> </span>pvc/pmem-csi-pvc-late-binding
+<span class="go">Name:          pmem-csi-pvc-late-binding</span>
+<span class="go">Namespace:     default</span>
+<span class="go">StorageClass:  pmem-csi-sc-late-binding</span>
+<span class="go">Status:        Pending</span>
+<span class="go">Volume:        </span>
+<span class="go">Labels:        &lt;none&gt;</span>
+<span class="go">Annotations:   &lt;none&gt;</span>
+<span class="go">Finalizers:    [kubernetes.io/pvc-protection]</span>
+<span class="go">Capacity:      </span>
+<span class="go">Access Modes:  </span>
+<span class="go">VolumeMode:    Filesystem</span>
+<span class="go">Used By:       &lt;none&gt;</span>
+<span class="go">Events:</span>
+<span class="go">  Type    Reason                Age               From                         Message</span>
+<span class="go">  ----    ------                ----              ----                         -------</span>
+<span class="go">  Normal  WaitForFirstConsumer  0s (x2 over 14s)  persistentvolume-controller  waiting for first consumer to be created before binding</span>
+</pre></div>
+</div>
+<p>The volume gets created once the first Pod starts to use it, on a node that is suitable for that Pod:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>https://github.com/intel/pmem-csi/raw/v1.0.2/deploy/common/pmem-app-late-binding.yaml
+<span class="go">pod/my-csi-app created</span>
+</pre></div>
+</div>
+<p>After a short while, the volume is created and the pod can run:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>get<span class="w"> </span>pvc,pods<span class="w"> </span>-o<span class="w"> </span>wide
+<span class="go">NAME                                              STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS               AGE</span>
+<span class="go">persistentvolumeclaim/pmem-csi-pvc-late-binding   Bound    pvc-ade8dc48-a4c0-4f30-b479-84460a3e0591   4Gi        RWO            pmem-csi-sc-late-binding   55s</span>
+
+<span class="go">NAME             READY   STATUS    RESTARTS   AGE</span>
+<span class="go">pod/my-csi-app   1/1     Running   0          47s</span>
+</pre></div>
+</div>
+<p>The volume was mounted with <code class="docutils literal notranslate"><span class="pre">dax=always</span></code>, therefore all file operations and memory regions mapped from that
+volume into the address space of an application directly access the underlying PMEM:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>my-csi-app<span class="w"> </span>--<span class="w"> </span>df<span class="w"> </span>/data
+<span class="go">Filesystem                                                                              1K-blocks  Used Available Use% Mounted on</span>
+<span class="go">/dev/ndbus0region0fsdax/pvc-7d-83241976933418f96748a1c18d500c6cba91c1dfaa87145b7893569c   4062912 16376   3820440   1% /data</span>
+
+<span class="gp">$ </span>kubectl<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>my-csi-app<span class="w"> </span>--<span class="w"> </span>mount<span class="w"> </span><span class="p">|</span>grep<span class="w"> </span>/data
+<span class="go">/dev/ndbus0region0fsdax/pvc-7d-83241976933418f96748a1c18d500c6cba91c1dfaa87145b7893569c on /data type ext4 (rw,relatime,seclabel,dax=always)</span>
+</pre></div>
+</div>
+</section>
+<section id="troubleshooting">
+<h3>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permalink to this headline"></a></h3>
+<p>A few things can go wrong when trying out the previous example.</p>
+<section id="driver-or-operator-fails">
+<h4>Driver or operator fails<a class="headerlink" href="#driver-or-operator-fails" title="Permalink to this headline"></a></h4>
+<p>This shows up in <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">get</span> <span class="pre">pods</span> <span class="pre">--all-namespaces</span></code> as failed Pods
+and can be investigated with <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">describe</span> <span class="pre">--namespace</span> <span class="pre">&lt;driver</span> <span class="pre">namespace&gt;</span> <span class="pre">pods/&lt;pod</span> <span class="pre">name&gt;</span></code> and <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">logs</span> <span class="pre">--namespace</span> <span class="pre">&lt;driver</span> <span class="pre">namespace&gt;</span> <span class="pre">&lt;pod</span> <span class="pre">name&gt;</span> <span class="pre">pmem-driver</span></code> or one of the other containers
+in that Pod.</p>
+<p>When using deployment files from the <code class="docutils literal notranslate"><span class="pre">devel</span></code> branch, the corresponding
+container <code class="docutils literal notranslate"><span class="pre">canary</span></code> image might not have been published yet. Better use
+the <a class="reference external" href="https://intel.github.io/pmem-csi/">latest stable release</a>.</p>
+</section>
+<section id="no-driver-pod-created-for-a-node">
+<h4>No driver Pod created for a node<a class="headerlink" href="#no-driver-pod-created-for-a-node" title="Permalink to this headline"></a></h4>
+<p>This can be checked with <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">get</span> <span class="pre">pods</span> <span class="pre">--all-namespaces</span> <span class="pre">-o</span> <span class="pre">wide</span></code>.
+Have nodes been labeled as expected by the driver deployment? Check
+with <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">get</span> <span class="pre">nodes</span> <span class="pre">-o</span> <span class="pre">yaml</span></code>.</p>
+</section>
+<section id="example-pod-getting-assigned-to-a-node-with-no-pmem">
+<h4>Example Pod getting assigned to a node with no PMEM<a class="headerlink" href="#example-pod-getting-assigned-to-a-node-with-no-pmem" title="Permalink to this headline"></a></h4>
+<p>This can happen on clusters where only some worker nodes have PMEM and
+the <a class="reference external" href="#enable-scheduler-extensions">PMEM-CSI scheduler extensions</a> are
+not enabled. This can be checked by looking at the <code class="docutils literal notranslate"><span class="pre">selected-node</span></code>
+annotation of the PVC:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>get<span class="w"> </span>pvc/pmem-csi-pvc-late-binding<span class="w"> </span>-o<span class="w"> </span>yaml<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s1">&#39; volume.kubernetes.io/selected-node:&#39;</span>
+<span class="go">    volume.kubernetes.io/selected-node: pmem-csi-pmem-govm-worker2</span>
+</pre></div>
+</div>
+<p>The PMEM-CSI controller pod will detect this and ask the scheduler to
+pick a node anew by removing that annotation, but it is random whether
+the next choice is better and starting the Pod may get delayed.</p>
+<p>To avoid this, enable the scheduler extensions.</p>
+</section>
+<section id="example-pod-getting-assigned-to-a-node-with-insufficient-pmem">
+<h4>Example Pod getting assigned to a node with insufficient PMEM<a class="headerlink" href="#example-pod-getting-assigned-to-a-node-with-insufficient-pmem" title="Permalink to this headline"></a></h4>
+<p>This also can only happen when the <a class="reference external" href="#enable-scheduler-extensions">PMEM-CSI scheduler
+extensions</a> are not enabled. Then volume
+creation is attempted repeatedly, potentially on different nodes, but
+fails with <code class="docutils literal notranslate"><span class="pre">not</span> <span class="pre">enough</span> <span class="pre">space</span></code> errors:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>describe<span class="w"> </span>pvc/pmem-csi-pvc-late-binding
+<span class="go">Name:          pmem-csi-pvc-late-binding</span>
+<span class="go">Namespace:     default</span>
+<span class="go">StorageClass:  pmem-csi-sc-late-binding</span>
+<span class="go">Status:        Pending</span>
+<span class="go">Volume:        </span>
+<span class="go">Labels:        &lt;none&gt;</span>
+<span class="go">Annotations:   volume.beta.kubernetes.io/storage-provisioner: pmem-csi.intel.com</span>
+<span class="go">Finalizers:    [kubernetes.io/pvc-protection]</span>
+<span class="go">Capacity:      </span>
+<span class="go">Access Modes:  </span>
+<span class="go">VolumeMode:    Filesystem</span>
+<span class="go">Used By:       my-csi-app</span>
+<span class="go">Events:</span>
+<span class="go">  Type     Reason                Age                     From                                                                                   Message</span>
+<span class="go">  ----     ------                ----                    ----                                                                                   -------</span>
+<span class="go">  Normal   WaitForFirstConsumer  7m30s                   persistentvolume-controller                                                            waiting for first consumer to be created before binding</span>
+<span class="go">  Normal   WaitForPodScheduled   6m (x15 over 7m19s)     persistentvolume-controller                                                            waiting for pod my-csi-app to be scheduled</span>
+<span class="go">  Warning  ProvisioningFailed    3m59s (x12 over 7m19s)  pmem-csi.intel.com_pmem-csi-intel-com-node-nwkqv_cc2984e6-915f-4cf2-93a0-e143da407917  failed to provision volume with StorageClass &quot;pmem-csi-sc-late-binding&quot;: rpc error: code = ResourceExhausted desc = Node CreateVolume: device creation failed: not enough space</span>
+<span class="go">  Warning  ProvisioningFailed    2m47s (x12 over 7m18s)  pmem-csi.intel.com_pmem-csi-intel-com-node-9vlhf_6ac47898-58bf-45e1-b601-5d8f39d21f4e  failed to provision volume with StorageClass &quot;pmem-csi-sc-late-binding&quot;: rpc error: code = ResourceExhausted desc = Node CreateVolume: device creation failed: not enough space</span>
+<span class="go">  Normal   ExternalProvisioning  2m23s (x28 over 7m19s)  persistentvolume-controller                                                            waiting for a volume to be created, either by external provisioner &quot;pmem-csi.intel.com&quot; or manually created by system administrator</span>
+<span class="go">  Normal   Provisioning          2m11s (x14 over 7m18s)  pmem-csi.intel.com_pmem-csi-intel-com-node-9vlhf_6ac47898-58bf-45e1-b601-5d8f39d21f4e  External provisioner is provisioning volume for claim &quot;default/pmem-csi-pvc-late-binding&quot;</span>
+<span class="go">  Normal   Provisioning          107s (x16 over 7m19s)   pmem-csi.intel.com_pmem-csi-intel-com-node-nwkqv_cc2984e6-915f-4cf2-93a0-e143da407917  External provisioner is provisioning volume for claim &quot;default/pmem-csi-pvc-late-binding&quot;</span>
+</pre></div>
+</div>
+<p>The scheduler extensions prevent these useless attempts on nodes with
+insufficient PMEM. When none of the available nodes have sufficient
+PMEM, the attempt to schedule the example Pod fails:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>describe<span class="w"> </span>pod/my-csi-app
+<span class="go">Name:         my-csi-app</span>
+<span class="go">Namespace:    default</span>
+<span class="go">...</span>
+<span class="go">Events:</span>
+<span class="go">  Type     Reason            Age                From               Message</span>
+<span class="go">  ----     ------            ----               ----               -------</span>
+<span class="go">  Warning  FailedScheduling  12s (x2 over 12s)  default-scheduler  0/4 nodes are available: 1 node(s) had taint {node-role.kubernetes.io/master: }, that the pod didn&#39;t tolerate, 3 only 63484MiB of PMEM available, need 400GiB.</span>
+</pre></div>
+</div>
+</section>
+<section id="less-pmem-available-than-expected">
+<h4>Less PMEM available than expected<a class="headerlink" href="#less-pmem-available-than-expected" title="Permalink to this headline"></a></h4>
+<p>This is usually the result of not preparing the node(s) as describe in
+<a class="reference external" href="#persistent-memory-pre-provisioning">persistent memory
+pre-provisioning</a>.</p>
+<p>One way of checking this is to look at the logs of the PMEM-CSI driver
+on a node. In this case, <code class="docutils literal notranslate"><span class="pre">region0</span></code> was completely unused and the
+driver was configured to use 50% of that for an LVM volume group:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>--all-namespaces<span class="w"> </span>-l<span class="w"> </span>app.kubernetes.io/name<span class="o">=</span>pmem-csi-node<span class="w"> </span>-o<span class="w"> </span>wide
+<span class="go">NAMESPACE   NAME                            READY   STATUS    RESTARTS   AGE   IP                NODE                         NOMINATED NODE   READINESS GATES</span>
+<span class="go">pmem-csi    pmem-csi-intel-com-node-d2mfh   3/3     Running   0          75s   192.168.200.66    pmem-csi-pmem-govm-worker3   &lt;none&gt;           &lt;none&gt;</span>
+<span class="go">pmem-csi    pmem-csi-intel-com-node-jkbgz   3/3     Running   0          75s   192.168.133.134   pmem-csi-pmem-govm-worker1   &lt;none&gt;           &lt;none&gt;</span>
+<span class="go">pmem-csi    pmem-csi-intel-com-node-th56d   3/3     Running   0          75s   192.168.220.67    pmem-csi-pmem-govm-worker2   &lt;none&gt;           &lt;none&gt;</span>
+
+<span class="gp">$ </span>kubectl<span class="w"> </span>logs<span class="w"> </span>-n<span class="w"> </span>pmem-csi<span class="w"> </span>pmem-csi-intel-com-node-jkbgz<span class="w"> </span>pmem-driver
+<span class="go">I0623 07:15:18.710690       1 main.go:73] &quot;PMEM-CSI started.&quot; version=&quot;v0.9.0-188-gd451ec6f3-dirty&quot;</span>
+<span class="go">I0623 07:15:18.711645       1 pmd-lvm.go:328] &quot;LVM-New/setupNS: Checking region for fsdax namespaces&quot; region=&quot;region0&quot; percentage=50 size=&quot;64Gi&quot; available=&quot;64Gi&quot; max-available-extent=&quot;64Gi&quot; may-use=&quot;32Gi&quot;</span>
+<span class="go">I0623 07:15:18.712251       1 pmd-lvm.go:361] &quot;LVM-New/setupNS: Create fsdax namespace&quot; size=&quot;32Gi&quot;</span>
+<span class="go">I0623 07:15:19.041186       1 region.go:282] &quot;LVM-New/setupNS/CreateNamespace: Namespace created&quot; region=&quot;region0&quot; namespace=&quot;namespace0.1&quot; usable-size=&quot;32254Mi&quot; raw-size=&quot;32Gi&quot; uuid=&quot;c3e6fe52-d3f2-11eb-b33e-c2b1549139a7&quot;</span>
+<span class="go">I0623 07:15:19.079791       1 pmd-lvm.go:422] &quot;LVM-New/setupVG/setupVGForNamespace: Creating new volume group&quot; vg=&quot;ndbus0region0fsdax&quot;</span>
+<span class="go">I0623 07:15:19.130041       1 mount_linux.go:163] Detected OS without systemd</span>
+<span class="go">I0623 07:15:19.130661       1 server.go:54] &quot;GRPC Server: Listening for connections&quot; endpoint=&quot;unix:///csi/csi.sock&quot;</span>
+<span class="go">I0623 07:15:19.180760       1 pmem-csi-driver.go:305] &quot;PMEM-CSI ready.&quot; capacity=&quot;32252Mi maximum volume size, 32252Mi available, 32252Mi managed, 64Gi total&quot;</span>
+</pre></div>
+</div>
+<p>In a production environment, the <a class="reference external" href="#metrics-support">metrics support</a>
+could be used to monitor available PMEM per node.</p>
+</section>
+</section>
+<section id="automatic-node-setup">
+<h3>Automatic node setup<a class="headerlink" href="#automatic-node-setup" title="Permalink to this headline"></a></h3>
+<p>The expectation is that the scripts which bring up nodes can be
+adapted to prepare the PMEM for usage by PMEM-CSI as explained
+earlier. But this might not always be easy.</p>
+<p>For the case of converting an existing “raw” namespace to “fsdax” mode
+there is a possibility to do the conversion through a deployed
+PMEM-CSI driver:</p>
+<ol class="simple">
+<li><p>Install PMEM-CSI in LVM mode without preparing nodes. At this point
+only the central controller pod will run.</p></li>
+<li><p>For each node that has one or more raw namespaces that all need
+to be converted, set the <code class="docutils literal notranslate"><span class="pre">&lt;driver</span> <span class="pre">name&gt;/convert-raw-namespaces</span></code> label (usually
+<code class="docutils literal notranslate"><span class="pre">pmem-csi.intel.com/convert-raw-namespaces</span></code>) to <code class="docutils literal notranslate"><span class="pre">force</span></code>.</p></li>
+<li><p>This will cause the pods of the <code class="docutils literal notranslate"><span class="pre">pmem-csi-intel-com-node-setup</span></code>
+DaemonSet to run on those nodes. Those pods then will
+convert the namespaces, create the LVM volume group,
+remove the <code class="docutils literal notranslate"><span class="pre">convert-raw-namespaces</span></code> label
+(i.e. the pods will only run once) and add the normal label
+that enables the PMEM-CSI node driver pods to run.</p></li>
+<li><p>The normal node driver pods start up and then are
+ready to provision volumes.</p></li>
+</ol>
+<p><strong>WARNING</strong>: the raw namespaces will be converted even when they are
+active. If data was stored on them, it will be lost after the
+conversion.</p>
+<p>The output of a successful conversion will look like this:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">I0623</span> <span class="mi">07</span><span class="p">:</span><span class="mi">32</span><span class="p">:</span><span class="mf">52.773207</span>       <span class="mi">1</span> <span class="n">main</span><span class="o">.</span><span class="n">go</span><span class="p">:</span><span class="mi">73</span><span class="p">]</span> <span class="s2">&quot;PMEM-CSI started.&quot;</span> <span class="n">version</span><span class="o">=</span><span class="s2">&quot;v0.9.0-188-gd451ec6f3-dirty&quot;</span>
+<span class="n">I0623</span> <span class="mi">07</span><span class="p">:</span><span class="mi">32</span><span class="p">:</span><span class="mf">52.774386</span>       <span class="mi">1</span> <span class="n">convert</span><span class="o">.</span><span class="n">go</span><span class="p">:</span><span class="mi">79</span><span class="p">]</span> <span class="s2">&quot;ForceConvertRawNamespaces/convert: checking for namespaces&quot;</span>
+<span class="n">I0623</span> <span class="mi">07</span><span class="p">:</span><span class="mi">32</span><span class="p">:</span><span class="mf">52.774871</span>       <span class="mi">1</span> <span class="n">convert</span><span class="o">.</span><span class="n">go</span><span class="p">:</span><span class="mi">81</span><span class="p">]</span> <span class="s2">&quot;ForceConvertRawNamespaces/convert: checking&quot;</span> <span class="n">bus</span><span class="o">=</span><span class="s2">&quot;{</span><span class="se">\&quot;</span><span class="s2">dev</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">ndbus0</span><span class="se">\&quot;</span><span class="s2">,</span><span class="se">\&quot;</span><span class="s2">dimms</span><span class="se">\&quot;</span><span class="s2">:[</span><span class="si">{}</span><span class="s2">],</span><span class="se">\&quot;</span><span class="s2">provider</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">ACPI.NFIT</span><span class="se">\&quot;</span><span class="s2">,</span><span class="se">\&quot;</span><span class="s2">regions</span><span class="se">\&quot;</span><span class="s2">:[</span><span class="si">{}</span><span class="s2">]}&quot;</span>
+<span class="n">I0623</span> <span class="mi">07</span><span class="p">:</span><span class="mi">32</span><span class="p">:</span><span class="mf">52.775316</span>       <span class="mi">1</span> <span class="n">convert</span><span class="o">.</span><span class="n">go</span><span class="p">:</span><span class="mi">83</span><span class="p">]</span> <span class="s2">&quot;ForceConvertRawNamespaces/convert: checking&quot;</span> <span class="n">region</span><span class="o">=</span><span class="s2">&quot;{</span><span class="se">\&quot;</span><span class="s2">available_size</span><span class="se">\&quot;</span><span class="s2">:0,</span><span class="se">\&quot;</span><span class="s2">dev</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">region0</span><span class="se">\&quot;</span><span class="s2">,</span><span class="se">\&quot;</span><span class="s2">mappings</span><span class="se">\&quot;</span><span class="s2">:[</span><span class="si">{}</span><span class="s2">],</span><span class="se">\&quot;</span><span class="s2">max_available_extent</span><span class="se">\&quot;</span><span class="s2">:0,</span><span class="se">\&quot;</span><span class="s2">namespaces</span><span class="se">\&quot;</span><span class="s2">:[</span><span class="si">{}</span><span class="s2">],</span><span class="se">\&quot;</span><span class="s2">size</span><span class="se">\&quot;</span><span class="s2">:68719476736,</span><span class="se">\&quot;</span><span class="s2">type</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">pmem</span><span class="se">\&quot;</span><span class="s2">}&quot;</span>
+<span class="n">I0623</span> <span class="mi">07</span><span class="p">:</span><span class="mi">32</span><span class="p">:</span><span class="mf">52.775444</span>       <span class="mi">1</span> <span class="n">convert</span><span class="o">.</span><span class="n">go</span><span class="p">:</span><span class="mi">90</span><span class="p">]</span> <span class="s2">&quot;ForceConvertRawNamespaces/convert: checking&quot;</span> <span class="n">namespace</span><span class="o">=</span><span class="s2">&quot;{</span><span class="se">\&quot;</span><span class="s2">blockdev</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">pmem0</span><span class="se">\&quot;</span><span class="s2">,</span><span class="se">\&quot;</span><span class="s2">dev</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">namespace0.0</span><span class="se">\&quot;</span><span class="s2">,</span><span class="se">\&quot;</span><span class="s2">enabled</span><span class="se">\&quot;</span><span class="s2">:true,</span><span class="se">\&quot;</span><span class="s2">id</span><span class="se">\&quot;</span><span class="s2">:0,</span><span class="se">\&quot;</span><span class="s2">mode</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">raw</span><span class="se">\&quot;</span><span class="s2">,</span><span class="se">\&quot;</span><span class="s2">name</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;\&quot;</span><span class="s2">,</span><span class="se">\&quot;</span><span class="s2">size</span><span class="se">\&quot;</span><span class="s2">:68719476736,</span><span class="se">\&quot;</span><span class="s2">uuid</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">1711a2a0-358d-4b14-a43c-8efa1a9f7154</span><span class="se">\&quot;</span><span class="s2">}&quot;</span>
+<span class="n">I0623</span> <span class="mi">07</span><span class="p">:</span><span class="mi">32</span><span class="p">:</span><span class="mf">52.775550</span>       <span class="mi">1</span> <span class="n">convert</span><span class="o">.</span><span class="n">go</span><span class="p">:</span><span class="mi">99</span><span class="p">]</span> <span class="s2">&quot;ForceConvertRawNamespaces/convert: converting raw namespace&quot;</span> <span class="n">namespace</span><span class="o">=</span><span class="s2">&quot;{</span><span class="se">\&quot;</span><span class="s2">blockdev</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">pmem0</span><span class="se">\&quot;</span><span class="s2">,</span><span class="se">\&quot;</span><span class="s2">dev</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">namespace0.0</span><span class="se">\&quot;</span><span class="s2">,</span><span class="se">\&quot;</span><span class="s2">enabled</span><span class="se">\&quot;</span><span class="s2">:true,</span><span class="se">\&quot;</span><span class="s2">id</span><span class="se">\&quot;</span><span class="s2">:0,</span><span class="se">\&quot;</span><span class="s2">mode</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">raw</span><span class="se">\&quot;</span><span class="s2">,</span><span class="se">\&quot;</span><span class="s2">name</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;\&quot;</span><span class="s2">,</span><span class="se">\&quot;</span><span class="s2">size</span><span class="se">\&quot;</span><span class="s2">:68719476736,</span><span class="se">\&quot;</span><span class="s2">uuid</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">1711a2a0-358d-4b14-a43c-8efa1a9f7154</span><span class="se">\&quot;</span><span class="s2">}&quot;</span>
+<span class="n">I0623</span> <span class="mi">07</span><span class="p">:</span><span class="mi">32</span><span class="p">:</span><span class="mf">53.397897</span>       <span class="mi">1</span> <span class="n">convert</span><span class="o">.</span><span class="n">go</span><span class="p">:</span><span class="mi">127</span><span class="p">]</span> <span class="s2">&quot;ForceConvertRawNamespaces/convert: setting up volume group&quot;</span> <span class="n">namespace</span><span class="o">=</span><span class="s2">&quot;{</span><span class="se">\&quot;</span><span class="s2">blockdev</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">pmem0</span><span class="se">\&quot;</span><span class="s2">,</span><span class="se">\&quot;</span><span class="s2">dev</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">namespace0.0</span><span class="se">\&quot;</span><span class="s2">,</span><span class="se">\&quot;</span><span class="s2">enabled</span><span class="se">\&quot;</span><span class="s2">:false,</span><span class="se">\&quot;</span><span class="s2">id</span><span class="se">\&quot;</span><span class="s2">:0,</span><span class="se">\&quot;</span><span class="s2">mode</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">fsdax</span><span class="se">\&quot;</span><span class="s2">,</span><span class="se">\&quot;</span><span class="s2">name</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;\&quot;</span><span class="s2">,</span><span class="se">\&quot;</span><span class="s2">size</span><span class="se">\&quot;</span><span class="s2">:18446744073709551615,</span><span class="se">\&quot;</span><span class="s2">uuid</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">00000000-0000-0000-0000-000000000000</span><span class="se">\&quot;</span><span class="s2">}&quot;</span> <span class="n">vg</span><span class="o">=</span><span class="s2">&quot;ndbus0region0fsdax&quot;</span>
+<span class="n">I0623</span> <span class="mi">07</span><span class="p">:</span><span class="mi">32</span><span class="p">:</span><span class="mf">53.434094</span>       <span class="mi">1</span> <span class="n">pmd</span><span class="o">-</span><span class="n">lvm</span><span class="o">.</span><span class="n">go</span><span class="p">:</span><span class="mi">422</span><span class="p">]</span> <span class="s2">&quot;ForceConvertRawNamespaces/convert/setupVGForNamespace: Creating new volume group&quot;</span> <span class="n">vg</span><span class="o">=</span><span class="s2">&quot;ndbus0region0fsdax&quot;</span>
+<span class="n">I0623</span> <span class="mi">07</span><span class="p">:</span><span class="mi">32</span><span class="p">:</span><span class="mf">53.457108</span>       <span class="mi">1</span> <span class="n">convert</span><span class="o">.</span><span class="n">go</span><span class="p">:</span><span class="mi">133</span><span class="p">]</span> <span class="s2">&quot;ForceConvertRawNamespaces/convert: converted to fsdax namespace&quot;</span> <span class="n">namespace</span><span class="o">=</span><span class="s2">&quot;{</span><span class="se">\&quot;</span><span class="s2">blockdev</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">pmem0</span><span class="se">\&quot;</span><span class="s2">,</span><span class="se">\&quot;</span><span class="s2">dev</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">namespace0.0</span><span class="se">\&quot;</span><span class="s2">,</span><span class="se">\&quot;</span><span class="s2">enabled</span><span class="se">\&quot;</span><span class="s2">:false,</span><span class="se">\&quot;</span><span class="s2">id</span><span class="se">\&quot;</span><span class="s2">:0,</span><span class="se">\&quot;</span><span class="s2">mode</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">fsdax</span><span class="se">\&quot;</span><span class="s2">,</span><span class="se">\&quot;</span><span class="s2">name</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;\&quot;</span><span class="s2">,</span><span class="se">\&quot;</span><span class="s2">size</span><span class="se">\&quot;</span><span class="s2">:18446744073709551615,</span><span class="se">\&quot;</span><span class="s2">uuid</span><span class="se">\&quot;</span><span class="s2">:</span><span class="se">\&quot;</span><span class="s2">00000000-0000-0000-0000-000000000000</span><span class="se">\&quot;</span><span class="s2">}&quot;</span> <span class="n">vg</span><span class="o">=</span><span class="s2">&quot;ndbus0region0fsdax&quot;</span>
+<span class="n">I0623</span> <span class="mi">07</span><span class="p">:</span><span class="mi">32</span><span class="p">:</span><span class="mf">53.457148</span>       <span class="mi">1</span> <span class="n">convert</span><span class="o">.</span><span class="n">go</span><span class="p">:</span><span class="mi">75</span><span class="p">]</span> <span class="s2">&quot;ForceConvertRawNamespaces/convert: successful&quot;</span> <span class="n">converted</span><span class="o">=</span><span class="mi">1</span>
+<span class="n">I0623</span> <span class="mi">07</span><span class="p">:</span><span class="mi">32</span><span class="p">:</span><span class="mf">53.479512</span>       <span class="mi">1</span> <span class="n">convert</span><span class="o">.</span><span class="n">go</span><span class="p">:</span><span class="mi">172</span><span class="p">]</span> <span class="s2">&quot;ForceConvertRawNamespaces/havePMEM: Volume group will be used by PMEM-CSI in LVM mode&quot;</span> <span class="n">vg</span><span class="o">=</span><span class="s2">&quot;ndbus0region0fsdax&quot;</span>
+<span class="n">I0623</span> <span class="mi">07</span><span class="p">:</span><span class="mi">32</span><span class="p">:</span><span class="mf">53.523412</span>       <span class="mi">1</span> <span class="n">convert</span><span class="o">.</span><span class="n">go</span><span class="p">:</span><span class="mi">200</span><span class="p">]</span> <span class="s2">&quot;ForceConvertRawNamespaces/relabel: Change node labels&quot;</span> <span class="n">node</span><span class="o">=</span><span class="s2">&quot;pmem-csi-pmem-govm-master&quot;</span> <span class="n">patch</span><span class="o">=</span><span class="s2">&quot;{</span><span class="se">\&quot;</span><span class="s2">metadata</span><span class="se">\&quot;</span><span class="s2">:{</span><span class="se">\&quot;</span><span class="s2">labels</span><span class="se">\&quot;</span><span class="s2">:{</span><span class="se">\&quot;</span><span class="s2">pmem-csi.intel.com/convert-raw-namespaces</span><span class="se">\&quot;</span><span class="s2">: null, </span><span class="se">\&quot;</span><span class="s2">feature.node.kubernetes.io/memory-nv.dax</span><span class="se">\&quot;</span><span class="s2">: </span><span class="se">\&quot;</span><span class="s2">true</span><span class="se">\&quot;</span><span class="s2">}}}&quot;</span>
+<span class="n">I0623</span> <span class="mi">07</span><span class="p">:</span><span class="mi">32</span><span class="p">:</span><span class="mf">53.523605</span>       <span class="mi">1</span> <span class="n">pmem</span><span class="o">-</span><span class="n">csi</span><span class="o">-</span><span class="n">driver</span><span class="o">.</span><span class="n">go</span><span class="p">:</span><span class="mi">326</span><span class="p">]</span> <span class="s2">&quot;Raw namespace conversion is done, waiting for termination signal.&quot;</span>
+<span class="n">I0623</span> <span class="mi">07</span><span class="p">:</span><span class="mi">33</span><span class="p">:</span><span class="mf">03.954098</span>       <span class="mi">1</span> <span class="n">pmem</span><span class="o">-</span><span class="n">csi</span><span class="o">-</span><span class="n">driver</span><span class="o">.</span><span class="n">go</span><span class="p">:</span><span class="mi">344</span><span class="p">]</span> <span class="s2">&quot;Caught signal, terminating.&quot;</span> <span class="n">signal</span><span class="o">=</span><span class="s2">&quot;terminated&quot;</span>
+<span class="n">I0623</span> <span class="mi">07</span><span class="p">:</span><span class="mi">33</span><span class="p">:</span><span class="mf">05.016426</span>       <span class="mi">1</span> <span class="n">main</span><span class="o">.</span><span class="n">go</span><span class="p">:</span><span class="mi">93</span><span class="p">]</span> <span class="s2">&quot;PMEM-CSI stopped.&quot;</span>
+</pre></div>
+</div>
+<p>It terminates once Kubernetes notices that the pod is no longer
+needed. This usually happens quickly, so a log monitoring solution
+may be needed to see this output because <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">logs</span></code> does not work
+for pods that were already deleted.</p>
+<p>The DaemonSet contains some information which is available longer:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>describe<span class="w"> </span>daemonsets/pmem-csi-intel-com-node-setup
+<span class="go">Name:           pmem-csi-intel-com-node-setup</span>
+<span class="go">Selector:       app.kubernetes.io/instance=pmem-csi.intel.com,app.kubernetes.io/name=pmem-csi-node-setup,pmem-csi.intel.com/deployment=lvm-production</span>
+<span class="go">Node-Selector:  pmem-csi.intel.com/convert-raw-namespaces=force</span>
+<span class="go">Labels:         app.kubernetes.io/component=node-setup</span>
+<span class="go">                app.kubernetes.io/instance=pmem-csi.intel.com</span>
+<span class="go">                app.kubernetes.io/name=pmem-csi-node-setup</span>
+<span class="go">                app.kubernetes.io/part-of=pmem-csi</span>
+<span class="go">                pmem-csi.intel.com/deployment=lvm-production</span>
+<span class="go">Annotations:    deprecated.daemonset.template.generation: 1</span>
+<span class="go">Desired Number of Nodes Scheduled: 0</span>
+<span class="go">Current Number of Nodes Scheduled: 0</span>
+<span class="go">Number of Nodes Scheduled with Up-to-date Pods: 0</span>
+<span class="go">Number of Nodes Scheduled with Available Pods: 0</span>
+<span class="go">Number of Nodes Misscheduled: 0</span>
+<span class="go">Pods Status:  0 Running / 0 Waiting / 0 Succeeded / 0 Failed</span>
+<span class="go">Pod Template:</span>
+<span class="go">  Labels:           app.kubernetes.io/component=node-setup</span>
+<span class="go">                    app.kubernetes.io/instance=pmem-csi.intel.com</span>
+<span class="go">                    app.kubernetes.io/name=pmem-csi-node-setup</span>
+<span class="go">                    app.kubernetes.io/part-of=pmem-csi</span>
+<span class="go">                    pmem-csi.intel.com/deployment=lvm-production</span>
+<span class="go">                    pmem-csi.intel.com/webhook=ignore</span>
+<span class="go">  Service Account:  pmem-csi-intel-com-node-setup</span>
+<span class="go">  Containers:</span>
+<span class="go">   pmem-driver:</span>
+<span class="go">    Image:      172.17.42.1:5001/pmem-csi-driver:v1.0.2</span>
+<span class="go">    Port:       &lt;none&gt;</span>
+<span class="go">    Host Port:  &lt;none&gt;</span>
+<span class="go">    Command:</span>
+<span class="go">      /usr/local/bin/pmem-csi-driver</span>
+<span class="go">      -v=3</span>
+<span class="go">      -logging-format=text</span>
+<span class="go">      -mode=force-convert-raw-namespaces</span>
+<span class="go">      -nodeSelector={&quot;storage&quot;:&quot;pmem&quot;}</span>
+<span class="go">      -nodeid=$(KUBE_NODE_NAME)</span>
+<span class="go">...</span>
+<span class="go">Events:</span>
+<span class="go">  Type    Reason            Age    From                  Message</span>
+<span class="go">  ----    ------            ----   ----                  -------</span>
+<span class="go">  Normal  SuccessfulCreate  5m47s  daemonset-controller  Created pod: pmem-csi-intel-com-node-setup-fr9b8</span>
+<span class="go">  Normal  SuccessfulDelete  5m45s  daemonset-controller  Deleted pod: pmem-csi-intel-com-node-setup-fr9b8</span>
+</pre></div>
+</div>
+<p>If conversion fails, the pod will exit with an error and then get
+restarted automatically by Kubernetes to retry the conversion until it
+succeeds.</p>
+<p>It is considered a user error if conversion is requested for a node
+which has nothing to convert. To make that obvious, the pod will print
+an error and then exist with an error. That way, the pod continues to
+exist and the log can be inspected to identify the problem.</p>
+</section>
+<section id="kata-containers-support">
+<h3>Kata Containers support<a class="headerlink" href="#kata-containers-support" title="Permalink to this headline"></a></h3>
+<p><a class="reference external" href="design.html#kata-containers-support">Kata Containers support</a> gets enabled via
+the <code class="docutils literal notranslate"><span class="pre">kataContainers</span></code> storage class parameter. PMEM-CSI then
+creates a filesystem inside a partition inside a file. When such a volume
+is used inside Kata Containers, the Kata Containers runtime makes sure that
+the filesystem is mounted on an emulated NVDIMM device with full DAX support.</p>
+<p>On the host, PMEM-CSI will try to mount through a loop device with <code class="docutils literal notranslate"><span class="pre">-o</span> <span class="pre">dax</span></code> but proceed without <code class="docutils literal notranslate"><span class="pre">-o</span> <span class="pre">dax</span></code> when the kernel does not support
+that. Currently Linux up to and including 5.4 do not support it and it
+is unclear when that support will be added In other words, on the host
+such volumes are usable, but only without DAX.</p>
+<p>When disabled, volumes support DAX on the host and are usable without
+DAX inside Kata Containers.</p>
+<p><a class="reference external" href="#raw-block-volumes">Raw block volumes</a> are only supported with
+<code class="docutils literal notranslate"><span class="pre">kataContainers:</span> <span class="pre">false</span></code>. Attempts to create them with <code class="docutils literal notranslate"><span class="pre">kataContainers:</span> <span class="pre">true</span></code> are rejected.</p>
+<p>At the moment (= Kata Containers 1.11.0-rc0), only Kata Containers
+with QEMU enable the special support for such volumes. Without QEMU or
+with older releases of Kata Containers, the volume is still usable
+through the normal remote filesystem support (9p or virtio-fs). Support
+for Cloud Hypervisor is <a class="reference external" href="https://github.com/kata-containers/runtime/issues/2575">in
+progress</a>.</p>
+<p>With Kata Containers for QEMU, the VM must be configured appropriately
+to allow adding the PMEM volumes to their address space. This can be
+done globally by setting the <code class="docutils literal notranslate"><span class="pre">memory_offset</span></code> in the
+<a class="reference external" href="https://github.com/kata-containers/runtime/blob/ee985a608015d81772901c1d9999190495fc9a0a/cli/config/configuration-qemu.toml.in#L86-L91"><code class="docutils literal notranslate"><span class="pre">configuration-qemu.toml</span></code>
+file</a>
+or per-pod by setting the
+<a class="reference external" href="https://github.com/kata-containers/documentation/blob/master/how-to/how-to-set-sandbox-config-kata.md#hypervisor-options"><code class="docutils literal notranslate"><span class="pre">io.katacontainers.config.hypervisor.memory_offset</span></code>
+annotation</a>
+in the pod meta data. In both cases, the value has to be large enough
+for all PMEM volumes used by the pod, otherwise pod creation will fail
+with an error similar to this:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">Error: container create failed: QMP command failed: not enough space, currently 0x8000000 in use of total space for memory devices 0x3c100000</span>
+</pre></div>
+</div>
+<p><strong>Note</strong>:</p>
+<ul class="simple">
+<li><p>The offset is currently (= Kata Containers 2.1.0) limited to
+32 bit, which implies that volumes cannot be larger than 4GiB. An
+enhancement request for <a class="reference external" href="https://github.com/kata-containers/kata-containers/issues/2006">Kata Containers is
+pending</a>.</p></li>
+<li><p>A newer version is also needed for a fix of <a class="reference external" href="https://github.com/kata-containers/kata-containers/issues/2018">issue
+#2018</a>.</p></li>
+<li><p>kata-deploy, at least in Kata Containers 2.1.0, does <a class="reference external" href="https://github.com/kata-containers/kata-containers/issues/2088">not enable the
+<code class="docutils literal notranslate"><span class="pre">memory_offset</span></code> annotation</a>, leading to
+<code class="docutils literal notranslate"><span class="pre">failed</span> <span class="pre">to</span> <span class="pre">create</span> <span class="pre">containerd</span> <span class="pre">task:</span> <span class="pre">annotation</span> <span class="pre">io.katacontainers.config.hypervisor.memory_offset</span> <span class="pre">is</span> <span class="pre">not</span> <span class="pre">enabled</span></code>
+errors.</p></li>
+</ul>
+<p>The examples for usage of Kata Containers <a class="reference external" href="https://github.com/intel/pmem-csi/blob/8a22a3ed1b7041733cfef8433cd3f68b0346b347/deploy/common/pmem-kata-app-ephemeral.yaml">with
+ephemeral</a> and
+<a class="reference external" href="https://github.com/intel/pmem-csi/blob/8a22a3ed1b7041733cfef8433cd3f68b0346b347/deploy/common/pmem-kata-app.yaml">persistent</a> volumes use the pod
+label. They assume that the <code class="docutils literal notranslate"><span class="pre">kata-qemu</span></code> runtime class <a class="reference external" href="https://github.com/kata-containers/kata-containers/tree/2.1.0/tools/packaging/kata-deploy#run-a-sample-workload">is
+installed</a>.</p>
+<p>For the QEMU test cluster,
+<a class="reference external" href="https://github.com/intel/pmem-csi/blob/8a22a3ed1b7041733cfef8433cd3f68b0346b347/test/setup-kata-containers.sh"><code class="docutils literal notranslate"><span class="pre">setup-kata-containers.sh</span></code></a> can be
+used to install Kata Containers. However, this currently only works on
+Clear Linux because on Fedora, the Docker container runtime is used
+and Kata Containers does not support that one.</p>
+</section>
+<section id="ephemeral-inline-volumes">
+<h3>Ephemeral inline volumes<a class="headerlink" href="#ephemeral-inline-volumes" title="Permalink to this headline"></a></h3>
+<section id="kubernetes-csi-specific">
+<h4>Kubernetes CSI specific<a class="headerlink" href="#kubernetes-csi-specific" title="Permalink to this headline"></a></h4>
+<p>This is the original implementation of ephemeral inline volumes for
+CSI drivers in Kubernetes. It is currently available as a beta feature
+in Kubernetes.</p>
+<p>Volume requests <a class="reference external" href="https://kubernetes-csi.github.io/docs/ephemeral-local-volumes.html">embedded in the pod spec with the <code class="docutils literal notranslate"><span class="pre">csi</span></code> field</a> are provisioned as
+ephemeral volumes. The volume request could use below fields as
+<a class="reference external" href="https://kubernetes.io/docs/concepts/storage/volumes/#csi"><code class="docutils literal notranslate"><span class="pre">volumeAttributes</span></code></a>:</p>
+<table border="1" class="docutils">
+<thead>
+<tr>
+<th>key</th>
+<th>meaning</th>
+<th>optional</th>
+<th>values</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>size</code></td>
+<td>Size of the requested ephemeral volume as <a href="https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-memory">Kubernetes memory string</a> ("1Mi" = 1024*1024 bytes, "1e3K = 1000000 bytes)</td>
+<td>No</td>
+<td></td>
+</tr>
+<tr>
+<td><code>eraseAfter</code></td>
+<td>Clear all data by overwriting with zeroes after use and before deleting the volume</td>
+<td>Yes</td>
+<td><code>true</code> (default), <code>false</code></td>
+</tr>
+<tr>
+<td><code>kataContainers</code></td>
+<td>Prepare volume for use in Kata Containers.</td>
+<td>Yes</td>
+<td><code>false/0/f/FALSE</code> (default), <code>true/1/t/TRUE</code></td>
+</tr>
+</tbody>
+</table><p>Try out ephemeral volume usage with the provided <a class="reference external" href="https://github.com/intel/pmem-csi/blob/8a22a3ed1b7041733cfef8433cd3f68b0346b347/deploy/common/pmem-app-ephemeral.yaml">example
+application</a>.</p>
+</section>
+<section id="generic">
+<h4>Generic<a class="headerlink" href="#generic" title="Permalink to this headline"></a></h4>
+<p>This approach was introduced in <a class="reference external" href="https://kubernetes.io/blog/2020/09/01/ephemeral-volumes-with-storage-capacity-tracking/">Kubernetes
+1.19</a>
+with the goal of using them for PMEM-CSI instead of the older
+approach. In contrast CSI ephemeral inline volumes, no changes are
+needed in CSI drivers, so PMEM-CSI already fully supports this if the
+cluster has the feature enabled. See
+<a class="reference external" href="https://github.com/intel/pmem-csi/blob/8a22a3ed1b7041733cfef8433cd3f68b0346b347/deploy/common/pmem-app-generic-ephemeral.yaml"><code class="docutils literal notranslate"><span class="pre">pmem-app-generic-ephemeral.yaml</span></code></a>
+for an example.</p>
+<p>When using generic ephemeral inline volumes together with <a class="reference external" href="#storage-capacity-tracking">storage
+capacity tracking</a>, the <a class="reference external" href="#enable-scheduler-extensions">PMEM-CSI
+scheduler extensions</a> are not needed
+anymore.</p>
+</section>
+</section>
+<section id="raw-block-volumes">
+<h3>Raw block volumes<a class="headerlink" href="#raw-block-volumes" title="Permalink to this headline"></a></h3>
+<p>Applications can use volumes provisioned by PMEM-CSI as <a class="reference external" href="https://kubernetes.io/blog/2019/03/07/raw-block-volume-support-to-beta/">raw block
+devices</a>. Such
+volumes use the same “fsdax” namespace mode as filesystem volumes
+and therefore are block devices. That mode only supports dax (=
+<code class="docutils literal notranslate"><span class="pre">mmap(MAP_SYNC)</span></code>) through a filesystem. Pages mapped on the raw block
+device go through the Linux page cache. Applications have to format
+and mount the raw block volume themselves if they want dax. The
+advantage then is that they have full control over that part.</p>
+<p>For provisioning a PMEM volume as raw block device, one has to create a
+<code class="docutils literal notranslate"><span class="pre">PersistentVolumeClaim</span></code> with <code class="docutils literal notranslate"><span class="pre">volumeMode:</span> <span class="pre">Block</span></code>. See example <a class="reference external" href="https://github.com/intel/pmem-csi/blob/8a22a3ed1b7041733cfef8433cd3f68b0346b347/deploy/common/pmem-pvc-block-volume.yaml">PVC</a> and
+<a class="reference external" href="https://github.com/intel/pmem-csi/blob/8a22a3ed1b7041733cfef8433cd3f68b0346b347/deploy/common/pmem-app-block-volume.yaml">application</a> for usage reference.</p>
+<p>That example demonstrates how to handle some details:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">mkfs.ext4</span></code> needs <code class="docutils literal notranslate"><span class="pre">-b</span> <span class="pre">4096</span></code> to produce volumes that support dax;
+without it, the automatic block size detection may end up choosing
+an unsuitable value depending on the volume size.</p></li>
+<li><p><a class="reference external" href="https://github.com/kubernetes/kubernetes/issues/85624">Kubernetes bug #85624</a>
+must be worked around to format and mount the raw block device.</p></li>
+</ul>
+</section>
+<section id="enable-scheduler-extensions">
+<h3>Enable scheduler extensions<a class="headerlink" href="#enable-scheduler-extensions" title="Permalink to this headline"></a></h3>
+<section id="manual-scheduler-configuration">
+<h4>Manual scheduler configuration<a class="headerlink" href="#manual-scheduler-configuration" title="Permalink to this headline"></a></h4>
+<p><strong>NOTE</strong>: this sections provides an in-depth explanation that makes no
+assumptions about how the cluster works. For simpler install
+instructions on OpenShift see <a class="reference external" href="#openshift-scheduler-configuration">below</a>.</p>
+<p>The PMEM-CSI scheduler extender and admission webhook are provided by
+the PMEM-CSI controller. They need to be enabled during deployment via
+the <code class="docutils literal notranslate"><span class="pre">--schedulerListen=[&lt;listen</span> <span class="pre">address&gt;]:&lt;port&gt;</span></code> parameter. The
+listen address is optional and can be left out. The port is where a
+HTTPS server will run. The YAML files already enable this. The
+operator has the <code class="docutils literal notranslate"><span class="pre">controllerTLSSecret</span></code> and <code class="docutils literal notranslate"><span class="pre">mutatePods</span></code> properties in
+the <a class="reference external" href="#deploymentspec"><code class="docutils literal notranslate"><span class="pre">DeploymentSpec</span></code></a>.</p>
+<p>The controller needs TLS certificates which must be created in
+advance. The YAML files expects them in a secret called
+<code class="docutils literal notranslate"><span class="pre">pmem-csi-intel-com-controller-secret</span></code> and will not work without one.
+The operator is more flexible and creates a driver without the
+controller by default. This can be changed by setting the
+<code class="docutils literal notranslate"><span class="pre">controllerTLSSecret</span></code> field in the <code class="docutils literal notranslate"><span class="pre">PmemCSIDeployment</span></code> API.</p>
+<p>That secret must contain the following data items:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ca.crt</span></code>: root CA certificate</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tls.key</span></code>: secret key of the webhook</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tls.crt</span></code>: public key of the webhook</p></li>
+</ul>
+<p>The webhook certificate must include host names that match how the
+webhooks are going to be called by the <code class="docutils literal notranslate"><span class="pre">kube-apiserver</span></code>
+(i.e. <code class="docutils literal notranslate"><span class="pre">pmem-csi-intel-com-scheduler.pmem-csi.svc</span></code> for a
+deployment with the <code class="docutils literal notranslate"><span class="pre">pmem-csi.intel.com</span></code> driver name in the <code class="docutils literal notranslate"><span class="pre">pmem-csi</span></code>
+namespace) and by the <code class="docutils literal notranslate"><span class="pre">kube-scheduler</span></code> (might be the same service name, through some external
+load balancer or <code class="docutils literal notranslate"><span class="pre">127.0.0.1</span></code> when using the node port workaround
+described below).</p>
+<p>To enable the PMEM-CSI scheduler extender, a configuration file and an
+additional <code class="docutils literal notranslate"><span class="pre">--config</span></code> parameter for <code class="docutils literal notranslate"><span class="pre">kube-scheduler</span></code> must be added to
+the cluster control plane, or, if there is already such a
+configuration file, one new entry must be added to the <code class="docutils literal notranslate"><span class="pre">extenders</span></code>
+array. A full example is presented below.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">kube-scheduler</span></code> must be able to connect to the PMEM-CSI
+controller via the <code class="docutils literal notranslate"><span class="pre">urlPrefix</span></code> in its configuration. In some clusters
+it is possible to use cluster DNS and thus a symbolic service name. If
+that is the case, then deploy the <a class="reference external" href="https://github.com/intel/pmem-csi/blob/8a22a3ed1b7041733cfef8433cd3f68b0346b347/deploy/kustomize/scheduler/scheduler-service.yaml">scheduler
+service</a> as-is
+and use <code class="docutils literal notranslate"><span class="pre">https://pmem-csi-scheduler.default.svc</span></code> as <code class="docutils literal notranslate"><span class="pre">urlPrefix</span></code>. If
+the PMEM-CSI driver is deployed in a namespace, replace <code class="docutils literal notranslate"><span class="pre">default</span></code> with
+the name of that namespace.</p>
+<p>In a cluster created with kubeadm, <code class="docutils literal notranslate"><span class="pre">kube-scheduler</span></code> is unable to use
+cluster DNS because the pod it runs in is configured with
+<code class="docutils literal notranslate"><span class="pre">hostNetwork:</span> <span class="pre">true</span></code> and without <code class="docutils literal notranslate"><span class="pre">dnsPolicy</span></code>. Therefore the cluster DNS
+servers are ignored. There also is no special dialer as in other
+clusters. As a workaround, the PMEM-CSI service can be exposed via a
+fixed node port like 32000 on all nodes. Then
+<code class="docutils literal notranslate"><span class="pre">https://127.0.0.1:32000</span></code> needs to be used as <code class="docutils literal notranslate"><span class="pre">urlPrefix</span></code>. Here’s how
+the service can be created with that node port:</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>mkdir<span class="w"> </span>my-scheduler
+
+<span class="gp">$ </span>cat<span class="w"> </span>&gt;my-scheduler/kustomization.yaml<span class="w"> </span>&lt;&lt;EOF
+<span class="go">bases:</span>
+<span class="go">  - ../deploy/kustomize/scheduler</span>
+<span class="go">patchesJson6902:</span>
+<span class="go">  - target:</span>
+<span class="go">      version: v1</span>
+<span class="go">      kind: Service</span>
+<span class="go">      name: pmem-csi-intel-com-scheduler</span>
+<span class="go">      namespace: pmem-csi</span>
+<span class="go">    path: node-port-patch.yaml</span>
+<span class="go">EOF</span>
+
+<span class="gp">$ </span>cat<span class="w"> </span>&gt;my-scheduler/node-port-patch.yaml<span class="w"> </span>&lt;&lt;EOF
+<span class="go">- op: add</span>
+<span class="go">  path: /spec/ports/0/nodePort</span>
+<span class="go">  value: 32000</span>
+<span class="go">- op: add</span>
+<span class="go">  path: /spec/type</span>
+<span class="go">  value: NodePort</span>
+<span class="go">EOF</span>
+
+<span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>--kustomize<span class="w"> </span>my-scheduler
+</pre></div>
+</div>
+<p>When the node port is not needed, the scheduler service can be
+created directly with:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">kubectl create --kustomize deploy/kustomize/scheduler</span>
+</pre></div>
+</div>
+<p>How to (re)configure <code class="docutils literal notranslate"><span class="pre">kube-scheduler</span></code> depends on the cluster. With
+kubeadm it is possible to set all necessary options in advance before
+creating the master node with <code class="docutils literal notranslate"><span class="pre">kubeadm</span> <span class="pre">init</span></code>. A running cluster can
+be modified with <code class="docutils literal notranslate"><span class="pre">kubeadm</span> <span class="pre">upgrade</span></code>.</p>
+<p>One additional
+complication with kubeadm is that <code class="docutils literal notranslate"><span class="pre">kube-scheduler</span></code> by default doesn’t
+trust any root CA. The following kubeadm config file solves
+this together with enabling the scheduler configuration by
+bind-mounting the root certificate that was used to sign the certificate used
+by the scheduler extender into the location where the Go
+runtime will find it. It works for Kubernetes &lt;= 1.18:</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>sudo<span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span>/var/lib/scheduler/
+<span class="gp">$ </span>sudo<span class="w"> </span>cp<span class="w"> </span>_work/pmem-ca/ca.pem<span class="w"> </span>/var/lib/scheduler/ca.crt
+
+<span class="gp"># </span>https://github.com/kubernetes/kubernetes/blob/52d7614a8ca5b8aebc45333b6dc8fbf86a5e7ddf/staging/src/k8s.io/kube-scheduler/config/v1alpha1/types.go#L38-L107
+<span class="gp">$ </span>sudo<span class="w"> </span>sh<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;cat &gt;/var/lib/scheduler/scheduler-policy.cfg&#39;</span><span class="w"> </span>&lt;&lt;EOF
+<span class="go">{</span>
+<span class="go">  &quot;kind&quot; : &quot;Policy&quot;,</span>
+<span class="go">  &quot;apiVersion&quot; : &quot;v1&quot;,</span>
+<span class="go">  &quot;extenders&quot; :</span>
+<span class="go">    [{</span>
+<span class="go">      &quot;urlPrefix&quot;: &quot;https://&lt;service name or IP&gt;:&lt;port&gt;&quot;,</span>
+<span class="go">      &quot;filterVerb&quot;: &quot;filter&quot;,</span>
+<span class="go">      &quot;prioritizeVerb&quot;: &quot;prioritize&quot;,</span>
+<span class="go">      &quot;nodeCacheCapable&quot;: true,</span>
+<span class="go">      &quot;weight&quot;: 1,</span>
+<span class="go">      &quot;managedResources&quot;:</span>
+<span class="go">      [{</span>
+<span class="go">        &quot;name&quot;: &quot;pmem-csi.intel.com/scheduler&quot;,</span>
+<span class="go">        &quot;ignoredByScheduler&quot;: true</span>
+<span class="go">      }]</span>
+<span class="go">    }]</span>
+<span class="go">}</span>
+<span class="go">EOF</span>
+
+<span class="gp"># </span>https://github.com/kubernetes/kubernetes/blob/52d7614a8ca5b8aebc45333b6dc8fbf86a5e7ddf/staging/src/k8s.io/kube-scheduler/config/v1alpha1/types.go#L38-L107
+<span class="gp">$ </span>sudo<span class="w"> </span>sh<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;cat &gt;/var/lib/scheduler/scheduler-config.yaml&#39;</span><span class="w"> </span>&lt;&lt;EOF
+<span class="go">apiVersion: kubescheduler.config.k8s.io/v1alpha1</span>
+<span class="go">kind: KubeSchedulerConfiguration</span>
+<span class="go">schedulerName: default-scheduler</span>
+<span class="go">algorithmSource:</span>
+<span class="go">  policy:</span>
+<span class="go">    file:</span>
+<span class="go">      path: /var/lib/scheduler/scheduler-policy.cfg</span>
+<span class="go">clientConnection:</span>
+<span class="gp">  # </span>This<span class="w"> </span>is<span class="w"> </span>where<span class="w"> </span>kubeadm<span class="w"> </span>puts<span class="w"> </span>it.
+<span class="go">  kubeconfig: /etc/kubernetes/scheduler.conf</span>
+<span class="go">EOF</span>
+
+<span class="gp">$ </span>cat<span class="w"> </span>&gt;kubeadm.config<span class="w"> </span>&lt;&lt;EOF
+<span class="go">apiVersion: kubeadm.k8s.io/v1beta1</span>
+<span class="go">kind: ClusterConfiguration</span>
+<span class="go">scheduler:</span>
+<span class="go">  extraVolumes:</span>
+<span class="go">    - name: config</span>
+<span class="go">      hostPath: /var/lib/scheduler</span>
+<span class="go">      mountPath: /var/lib/scheduler</span>
+<span class="go">      readOnly: true</span>
+<span class="go">    - name: cluster-root-ca</span>
+<span class="go">      hostPath: /var/lib/scheduler/ca.crt</span>
+<span class="go">      mountPath: /etc/ssl/certs/ca.crt</span>
+<span class="go">      readOnly: true</span>
+<span class="go">  extraArgs:</span>
+<span class="go">    config: /var/lib/scheduler/scheduler-config.yaml</span>
+<span class="go">EOF</span>
+
+<span class="gp">$ </span>kubeadm<span class="w"> </span>init<span class="w"> </span>--config<span class="o">=</span>kubeadm.config
+</pre></div>
+</div>
+<p>In Kubernetes 1.19, the configuration API of the scheduler
+changed. The corresponding command for Kubernetes &gt;= 1.19 are:</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>sudo<span class="w"> </span>mkdir<span class="w"> </span>-p<span class="w"> </span>/var/lib/scheduler/
+<span class="gp">$ </span>sudo<span class="w"> </span>cp<span class="w"> </span>_work/pmem-ca/ca.pem<span class="w"> </span>/var/lib/scheduler/ca.crt
+
+<span class="gp"># </span>https://github.com/kubernetes/kubernetes/blob/1afc53514032a44d091ae4a9f6e092171db9fe10/staging/src/k8s.io/kube-scheduler/config/v1beta1/types.go#L44-L96
+<span class="gp">$ </span>sudo<span class="w"> </span>sh<span class="w"> </span>-c<span class="w"> </span><span class="s1">&#39;cat &gt;/var/lib/scheduler/scheduler-config.yaml&#39;</span><span class="w"> </span>&lt;&lt;EOF
+<span class="go">apiVersion: kubescheduler.config.k8s.io/v1beta1</span>
+<span class="go">kind: KubeSchedulerConfiguration</span>
+<span class="go">clientConnection:</span>
+<span class="gp">  # </span>This<span class="w"> </span>is<span class="w"> </span>where<span class="w"> </span>kubeadm<span class="w"> </span>puts<span class="w"> </span>it.
+<span class="go">  kubeconfig: /etc/kubernetes/scheduler.conf</span>
+<span class="go">extenders:</span>
+<span class="go">- urlPrefix: https://127.0.0.1:&lt;service name or IP&gt;:&lt;port&gt;</span>
+<span class="go">  filterVerb: filter</span>
+<span class="go">  prioritizeVerb: prioritize</span>
+<span class="go">  nodeCacheCapable: true</span>
+<span class="go">  weight: 1</span>
+<span class="go">  managedResources:</span>
+<span class="go">  - name: pmem-csi.intel.com/scheduler</span>
+<span class="go">    ignoredByScheduler: true</span>
+<span class="go">EOF</span>
+
+<span class="gp">$ </span>cat<span class="w"> </span>&gt;kubeadm.config<span class="w"> </span>&lt;&lt;EOF
+<span class="go">apiVersion: kubeadm.k8s.io/v1beta1</span>
+<span class="go">kind: ClusterConfiguration</span>
+<span class="go">scheduler:</span>
+<span class="go">  extraVolumes:</span>
+<span class="go">    - name: config</span>
+<span class="go">      hostPath: /var/lib/scheduler</span>
+<span class="go">      mountPath: /var/lib/scheduler</span>
+<span class="go">      readOnly: true</span>
+<span class="go">    - name: cluster-root-ca</span>
+<span class="go">      hostPath: /var/lib/scheduler/ca.crt</span>
+<span class="go">      mountPath: /etc/ssl/certs/ca.crt</span>
+<span class="go">      readOnly: true</span>
+<span class="go">  extraArgs:</span>
+<span class="go">    config: /var/lib/scheduler/scheduler-config.yaml</span>
+<span class="go">EOF</span>
+
+<span class="gp">$ </span>kubeadm<span class="w"> </span>init<span class="w"> </span>--config<span class="o">=</span>kubeadm.config
+</pre></div>
+</div>
+<p>It is possible to stop here without enabling the pod admission webhook.
+To enable also that, continue as follows.</p>
+<p>First of all, it is recommended to exclude all system pods from
+passing through the web hook. This ensures that they can still be
+created even when PMEM-CSI is down:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>label<span class="w"> </span>ns<span class="w"> </span>kube-system<span class="w"> </span>pmem-csi.intel.com/webhook<span class="o">=</span>ignore
+</pre></div>
+</div>
+<p>This special label is configured in <a class="reference external" href="https://github.com/intel/pmem-csi/blob/8a22a3ed1b7041733cfef8433cd3f68b0346b347/deploy/kustomize/webhook/webhook.yaml">the provided web hook
+definition</a>. On Kubernetes &gt;=
+1.15, it can also be used to let individual pods bypass the webhook by
+adding that label. The CA gets configured explicitly, which is
+supported for webhooks.</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>mkdir<span class="w"> </span>my-webhook
+
+<span class="gp">$ </span>cat<span class="w"> </span>&gt;my-webhook/kustomization.yaml<span class="w"> </span>&lt;&lt;EOF
+<span class="go">bases:</span>
+<span class="go">  - ../deploy/kustomize/webhook</span>
+<span class="go">patchesJson6902:</span>
+<span class="go">  - target:</span>
+<span class="go">      group: admissionregistration.k8s.io</span>
+<span class="go">      version: v1</span>
+<span class="go">      kind: MutatingWebhookConfiguration</span>
+<span class="go">      name: pmem-csi-intel-com-hook</span>
+<span class="go">    path: webhook-patch.yaml</span>
+<span class="go">EOF</span>
+
+<span class="gp">$ </span>cat<span class="w"> </span>&gt;my-webhook/webhook-patch.yaml<span class="w"> </span>&lt;&lt;EOF
+<span class="go">- op: replace</span>
+<span class="go">  path: /webhooks/0/clientConfig/caBundle</span>
+<span class="go">  value: $(base64 -w 0 _work/pmem-ca/ca.pem)</span>
+<span class="go">EOF</span>
+
+<span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>--kustomize<span class="w"> </span>my-webhook
+</pre></div>
+</div>
+</section>
+<section id="openshift-scheduler-configuration">
+<h4>OpenShift scheduler configuration<a class="headerlink" href="#openshift-scheduler-configuration" title="Permalink to this headline"></a></h4>
+<p><strong>NOTE</strong>: The scheduler extensions are only needed on OpenShift 4.6
+and 4.7. On OpenShift 4.8, <a class="reference external" href="#storage-capacity-tracking">storage capacity
+tracking</a> can and should be used instead.</p>
+<p>The operator should be used on OpenShift. When creating the
+deployment, set <code class="docutils literal notranslate"><span class="pre">controllerTLSSecret</span></code> to the special string
+<code class="docutils literal notranslate"><span class="pre">-openshift-</span></code>:</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>-<span class="w"> </span>&lt;&lt;EOF
+<span class="go">apiVersion: pmem-csi.intel.com/v1beta1</span>
+<span class="go">kind: PmemCSIDeployment</span>
+<span class="go">metadata:</span>
+<span class="go">  name: pmem-csi.intel.com</span>
+<span class="go">spec:</span>
+<span class="go">  deviceMode: lvm</span>
+<span class="go">  nodeSelector:</span>
+<span class="go">    feature.node.kubernetes.io/memory-nv.dax: &quot;true&quot;</span>
+<span class="go">  controllerTLSSecret: -openshift-</span>
+<span class="go">EOF</span>
+</pre></div>
+</div>
+<p>The webhook and the API server then get configured by the operator
+with <a class="reference external" href="https://docs.openshift.com/container-platform/4.6/security/certificates/service-serving-certificate.html">certificates created automatically by
+OpenShift</a>.</p>
+<p>The scheduler must be configured manually, using the same API as for
+<a class="reference external" href="https://docs.openshift.com/container-platform/4.6/nodes/scheduling/nodes-scheduler-default.html#nodes-scheduler-default-modifying_nodes-scheduler-default">configuring scheduler
+policies</a>. This
+can be done before or after deploying the PMEM-CSI driver. The
+configuration change can be left in place after removing a PMEM-CSI
+because it will then be ignored. However, without this step pods that
+use PMEM-CSI volumes will not get scheduled.</p>
+<p>Communication between the kube-scheduler and PMEM-CSI will be done via
+http and a service that listens on a dynamically allocated host
+port. This approach is necessary because:</p>
+<ul class="simple">
+<li><p>kube-scheduler uses the host network and thus cannot connect to a
+service that is only available inside the cluster and</p></li>
+<li><p>There is no API for configuring TLS certificates.</p></li>
+</ul>
+<p>First, define the service inside the namespace where the PMEM-CSI
+operator runs:</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="go">oc apply -f - &lt;&lt;EOF</span>
+<span class="go">apiVersion: v1</span>
+<span class="go">kind: Service</span>
+<span class="go">metadata:</span>
+<span class="go">  name: pmem-csi-intel-com-http-scheduler</span>
+<span class="go">  namespace: pmem-csi</span>
+<span class="go">spec:</span>
+<span class="go">  selector:</span>
+<span class="go">    app.kubernetes.io/name: pmem-csi-controller</span>
+<span class="go">    app.kubernetes.io/instance: pmem-csi.intel.com # This must be the name of the PMEM-CSI deployment.</span>
+<span class="go">  type: NodePort</span>
+<span class="go">  ports:</span>
+<span class="go">  - targetPort: 8001</span>
+<span class="go">    port: 80</span>
+<span class="go">EOF</span>
+</pre></div>
+</div>
+<p>Then create a scheduler policy. If such a policy already exists, the
+<code class="docutils literal notranslate"><span class="pre">extenders</span></code> section below must be added to it.</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="go">oc create -f - &lt;&lt;EOF</span>
+<span class="go">apiVersion: v1</span>
+<span class="go">kind: ConfigMap</span>
+<span class="go">metadata:</span>
+<span class="go">  name: scheduler-policy</span>
+<span class="go">  namespace: openshift-config</span>
+<span class="go">data:</span>
+<span class="go">  policy.cfg: |</span>
+<span class="go">    {</span>
+<span class="go">      &quot;kind&quot; : &quot;Policy&quot;,</span>
+<span class="go">      &quot;apiVersion&quot; : &quot;v1&quot;,</span>
+<span class="go">      &quot;extenders&quot; : [</span>
+<span class="go">        { &quot;urlPrefix&quot;: &quot;http://127.0.0.1:$(oc get service/pmem-csi-intel-com-http-scheduler -n pmem-csi -o jsonpath={.spec.ports[*].nodePort})&quot;,</span>
+<span class="go">          &quot;filterVerb&quot;: &quot;filter&quot;,</span>
+<span class="go">          &quot;prioritizeVerb&quot;: &quot;prioritize&quot;,</span>
+<span class="go">          &quot;nodeCacheCapable&quot;: true,</span>
+<span class="go">          &quot;weight&quot;: 1,</span>
+<span class="go">          &quot;managedResources&quot;: [</span>
+<span class="go">            { &quot;name&quot;: &quot;pmem-csi.intel.com/scheduler&quot;,</span>
+<span class="go">              &quot;ignoredByScheduler&quot;: true</span>
+<span class="go">            }</span>
+<span class="go">          ]</span>
+<span class="go">        }</span>
+<span class="go">      ]</span>
+<span class="go">    }</span>
+<span class="go">EOF</span>
+</pre></div>
+</div>
+<p>Finally, activate the usage of that policy by updating the existing
+<code class="docutils literal notranslate"><span class="pre">scheduler/cluster</span></code> object. If a policy was set already, this command
+will fail with <code class="docutils literal notranslate"><span class="pre">The</span> <span class="pre">request</span> <span class="pre">is</span> <span class="pre">invalid</span></code>, in which case the existing
+policy config map must be edited.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>oc<span class="w"> </span>patch<span class="w"> </span>scheduler/cluster<span class="w"> </span>--type<span class="w"> </span>json<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>--patch<span class="w"> </span><span class="s1">&#39;[{&quot;op&quot;:&quot;test&quot;,&quot;path&quot;:&quot;/spec/policy/name&quot;,&quot;value&quot;:&quot;&quot;}, {&quot;op&quot;:&quot;replace&quot;,&quot;path&quot;:&quot;/spec/policy/name&quot;,&quot;value&quot;:&quot;scheduler-policy&quot;}]&#39;</span>
+<span class="go">scheduler.config.openshift.io/cluster patched</span>
+</pre></div>
+</div>
+<p>This causes schedulers to be restarted with a new configuration:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>oc<span class="w"> </span>get<span class="w"> </span>events<span class="w"> </span>-n<span class="w"> </span>openshift-kube-scheduler-operator
+<span class="go">...</span>
+<span class="go">14m         Normal    ConfigMapCreated                    deployment/openshift-kube-scheduler-operator               Created ConfigMap/policy-configmap -n openshift-kube-scheduler because it was missing</span>
+<span class="go">14m         Normal    RevisionTriggered                   deployment/openshift-kube-scheduler-operator               new revision 7 triggered by &quot;configmap/policy-configmap has changed&quot;</span>
+<span class="go">14m         Normal    ConfigMapCreated                    deployment/openshift-kube-scheduler-operator               Created ConfigMap/revision-status-7 -n openshift-kube-scheduler because it was missing</span>
+<span class="go">14m         Normal    ConfigMapCreated                    deployment/openshift-kube-scheduler-operator               Created ConfigMap/kube-scheduler-pod-7 -n openshift-kube-scheduler because it was missing</span>
+<span class="go">...</span>
+<span class="go">13m         Normal    OperatorStatusChanged               deployment/openshift-kube-scheduler-operator               Status for clusteroperator/kube-scheduler changed: Progressing changed from True to False (&quot;NodeInstallerProgressing: 1 nodes are at revision 8&quot;),Available message changed from &quot;StaticPodsAvailable: 1 nodes are active; 1 nodes are at revision 6; 0 nodes have achieved new revision 8&quot; to &quot;StaticPodsAvailable: 1 nodes are active; 1 nodes are at revision 8&quot;</span>
+<span class="go">13m         Normal    ConfigMapUpdated                    deployment/openshift-kube-scheduler-operator               Updated ConfigMap/revision-status-8 -n openshift-kube-scheduler:</span>
+<span class="go">cause by changes in data.status</span>
+<span class="go">13m         Normal    PodCreated                          deployment/openshift-kube-scheduler-operator               Created Pod/revision-pruner-8-tt-87fkd-master-0 -n openshift-kube-scheduler because it was missing</span>
+
+<span class="gp">$ </span>oc<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>openshift-kube-scheduler<span class="w"> </span>-l<span class="w"> </span><span class="nv">app</span><span class="o">=</span>openshift-kube-scheduler
+<span class="go">NAME                                         READY   STATUS    RESTARTS   AGE</span>
+<span class="go">openshift-kube-scheduler-tt-87fkd-master-0   3/3     Running   0          11m</span>
+
+<span class="gp">$ </span>oc<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-ti<span class="w"> </span>-n<span class="w"> </span>openshift-kube-scheduler<span class="w"> </span>openshift-kube-scheduler-tt-87fkd-master-0<span class="w"> </span>-c<span class="w"> </span>kube-scheduler<span class="w"> </span>--<span class="w"> </span>cat<span class="w"> </span>/etc/kubernetes/static-pod-resources/configmaps/policy-configmap/policy.cfg
+<span class="go">{</span>
+<span class="go">  &quot;kind&quot; : &quot;Policy&quot;,</span>
+<span class="go">  &quot;apiVersion&quot; : &quot;v1&quot;,</span>
+<span class="go">  &quot;extenders&quot; : [</span>
+<span class="go">    { &quot;urlPrefix&quot;: &quot;https://127.0.0.1:30674&quot;,</span>
+<span class="go">      &quot;filterVerb&quot;: &quot;filter&quot;,</span>
+<span class="go">      &quot;prioritizeVerb&quot;: &quot;prioritize&quot;,</span>
+<span class="go">      &quot;nodeCacheCapable&quot;: true,</span>
+<span class="go">      &quot;weight&quot;: 1,</span>
+<span class="go">      &quot;managedResources&quot;: [</span>
+<span class="go">        { &quot;name&quot;: &quot;pmem-csi.intel.com/scheduler&quot;,</span>
+<span class="go">          &quot;ignoredByScheduler&quot;: true</span>
+<span class="go">        }</span>
+<span class="go">      ]</span>
+<span class="go">    }</span>
+<span class="go">  ]</span>
+<span class="go">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="storage-capacity-tracking">
+<h3>Storage capacity tracking<a class="headerlink" href="#storage-capacity-tracking" title="Permalink to this headline"></a></h3>
+<p><a class="reference external" href="https://kubernetes.io/blog/2020/09/01/ephemeral-volumes-with-storage-capacity-tracking/">Kubernetes
+1.19</a>
+introduces support for publishing and using storage capacity
+information for pod scheduling. It became beta in 1.21. PMEM-CSI must be deployed
+differently to use this feature:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">external-provisioner</span></code> must be told to publish storage capacity
+information via command line arguments.</p></li>
+<li><p>A flag in the CSI driver information must be set for the Kubernetes
+scheduler, otherwise it ignores that information when considering
+pods with unbound volume.</p></li>
+</ul>
+<p>The deployments for Kubernetes &gt;= 1.21 do this automatically. The
+alpha API in 1.19 and 1.20 is no longer supported.</p>
+</section>
+<section id="metrics-support">
+<h3>Metrics support<a class="headerlink" href="#metrics-support" title="Permalink to this headline"></a></h3>
+<p>Metrics support is controlled by command line options of the PMEM-CSI
+driver binary and of the CSI sidecars. Annotations and named container
+ports make it possible to discover these data scraping endpoints. The
+<a class="reference external" href="https://github.com/intel/pmem-csi/blob/8a22a3ed1b7041733cfef8433cd3f68b0346b347/deploy/kustomize/kubernetes-with-metrics/kustomization.yaml">metrics kustomize
+base</a>
+adds all of that to the pre-generated deployment files. The operator
+also enables the metrics support.</p>
+<p>Access to metrics data is not restricted (no TLS, no client
+authorization) because the metrics data is not considered confidential
+and access control would just make client configuration unnecessarily
+complex.</p>
+<section id="metrics-data">
+<h4>Metrics data<a class="headerlink" href="#metrics-data" title="Permalink to this headline"></a></h4>
+<p>PMEM-CSI exposes metrics data about the Go runtime, Prometheus, CSI
+method calls, and PMEM-CSI:</p>
+<table border="1" class="docutils">
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Explanation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>build_info</code></td>
+<td>gauge</td>
+<td>A metric with a constant '1' value labeled by version.</td>
+</tr>
+<tr>
+<td><code>scheduler_request_duration_seconds</code></td>
+<td>histogram</td>
+<td>Latencies for PMEM-CSI scheduler HTTP requests by operation ("mutate", "filter", "status") and method ("post").</td>
+</tr>
+<tr>
+<td><code>scheduler_in_flight_requests</code></td>
+<td>gauge</td>
+<td>Currently pending PMEM-CSI scheduler HTTP requests.</td>
+</tr>
+<tr>
+<td><code>scheduler_requests_total</code></td>
+<td>counter</td>
+<td>Number of HTTP requests to the PMEM-CSI scheduler, regardless of operation and method.</td>
+</tr>
+<tr>
+<td><code>scheduler_response_size_bytes</code></td>
+<td>histogram</td>
+<td>Histogram of response sizes for PMEM-CSI scheduler requests, regardless of operation and method.</td>
+</tr>
+<tr>
+<td><code>csi_[sidecar\|plugin]_operations_seconds</code></td>
+<td>histogram</td>
+<td>gRPC call duration and error code, for sidecar to driver (aka plugin) communication.</td>
+</tr>
+<tr>
+<td><code>go_*</code></td>
+<td></td>
+<td><a href="https://github.com/prometheus/client_golang/blob/master/prometheus/go_collector.go">Go runtime information</a></td>
+</tr>
+<tr>
+<td><code>pmem_amount_available</code></td>
+<td>gauge</td>
+<td>Remaining amount of PMEM on the host that can be used for new volumes.</td>
+</tr>
+<tr>
+<td><code>pmem_amount_managed</code></td>
+<td>gauge</td>
+<td>Amount of PMEM on the host that is managed by PMEM-CSI.</td>
+</tr>
+<tr>
+<td><code>pmem_amount_max_volume_size</code></td>
+<td>gauge</td>
+<td>The size of the largest PMEM volume that can be created.</td>
+</tr>
+<tr>
+<td><code>pmem_amount_total</code></td>
+<td>gauge</td>
+<td>Total amount of PMEM on the host.</td>
+</tr>
+<tr>
+<td><code>process_*</code></td>
+<td></td>
+<td><a href="https://github.com/prometheus/client_golang/blob/master/prometheus/process_collector.go">Process information</a></td>
+</tr>
+<tr>
+<td><code>promhttp_metric_handler_requests_in_flight</code></td>
+<td>gauge</td>
+<td>Current number of scrapes being served.</td>
+</tr>
+<tr>
+<td><code>promhttp_metric_handler_requests_total</code></td>
+<td>counter</td>
+<td>Total number of scrapes by HTTP status code.</td>
+</tr>
+</tbody>
+</table><p>This list is tentative and may still change as long as metrics support
+is alpha. To see all available data, query a container. Different
+containers provide different data. For example, the controller
+provides:</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>port-forward<span class="w"> </span>-n<span class="w"> </span>pmem-csi<span class="w"> </span><span class="k">$(</span>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-n<span class="w"> </span>pmem-csi<span class="w"> </span>-o<span class="w"> </span>name<span class="w"> </span>-l<span class="w"> </span>app.kubernetes.io/name<span class="o">=</span>pmem-csi-controller<span class="k">)</span><span class="w"> </span><span class="m">10010</span>
+<span class="go">Forwarding from 127.0.0.1:10010 -&gt; 10010</span>
+<span class="go">Forwarding from [::1]:10010 -&gt; 10010</span>
+</pre></div>
+</div>
+<p>And in another shell:</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>curl<span class="w"> </span>--silent<span class="w"> </span>http://localhost:10010/metrics<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s1">&#39;# &#39;</span>
+<span class="gp"># </span>HELP<span class="w"> </span>build_info<span class="w"> </span>A<span class="w"> </span>metric<span class="w"> </span>with<span class="w"> </span>a<span class="w"> </span>constant<span class="w"> </span><span class="s1">&#39;1&#39;</span><span class="w"> </span>value<span class="w"> </span>labeled<span class="w"> </span>by<span class="w"> </span>version.
+<span class="gp"># </span>TYPE<span class="w"> </span>build_info<span class="w"> </span>gauge
+<span class="go">...</span>
+</pre></div>
+</div>
+</section>
+<section id="prometheus-example">
+<h4>Prometheus example<a class="headerlink" href="#prometheus-example" title="Permalink to this headline"></a></h4>
+<p>An <a class="reference external" href="https://github.com/intel/pmem-csi/blob/8a22a3ed1b7041733cfef8433cd3f68b0346b347/deploy/prometheus.yaml">extension of the scrape config</a> is
+necessary for <a class="reference external" href="https://prometheus.io/">Prometheus</a>. When deploying
+<a class="reference external" href="https://hub.helm.sh/charts/stable/prometheus">Prometheus via Helm</a>,
+that file can be added to the default configuration with the <code class="docutils literal notranslate"><span class="pre">-f</span></code>
+parameter. The following example works for the <a class="reference external" href="autotest.html#qemu-and-kubernetes">QEMU-based
+cluster</a> and Helm v3.1.2. In a real
+production deployment, some kind of persistent storage should be
+provided. The <a class="reference external" href="https://github.com/intel/pmem-csi/blob/8a22a3ed1b7041733cfef8433cd3f68b0346b347/deploy/prometheus.yaml">URL</a> can be used instead of
+the file name, too.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>helm<span class="w"> </span>install<span class="w"> </span>prometheus<span class="w"> </span>stable/prometheus<span class="w"> </span><span class="se">\</span>
+<span class="w">     </span>--set<span class="w"> </span>alertmanager.persistentVolume.enabled<span class="o">=</span>false,server.persistentVolume.enabled<span class="o">=</span><span class="nb">false</span><span class="w"> </span><span class="se">\</span>
+<span class="w">     </span>-f<span class="w"> </span>deploy/prometheus.yaml
+<span class="go">NAME: prometheus</span>
+<span class="go">LAST DEPLOYED: Tue Aug 18 18:04:27 2020</span>
+<span class="go">NAMESPACE: default</span>
+<span class="go">STATUS: deployed</span>
+<span class="go">REVISION: 1</span>
+<span class="go">TEST SUITE: None</span>
+<span class="go">NOTES:</span>
+<span class="go">The Prometheus server can be accessed via port 80 on the following DNS name from within your cluster:</span>
+<span class="go">prometheus-server.default.svc.cluster.local</span>
+
+
+<span class="go">Get the Prometheus server URL by running these commands in the same shell:</span>
+<span class="go">  export POD_NAME=$(kubectl get pods --namespace default -l &quot;app=prometheus,component=server&quot; -o jsonpath=&quot;{.items[0].metadata.name}&quot;)</span>
+<span class="go">  kubectl --namespace default port-forward $POD_NAME 9090</span>
+<span class="gp">#</span><span class="c1">################################################################################</span>
+<span class="gp">#</span><span class="c1">#####   WARNING: Persistence is disabled!!! You will lose your data when   #####</span>
+<span class="gp">#</span><span class="c1">#####            the Server pod is terminated.                             #####</span>
+<span class="gp">#</span><span class="c1">################################################################################</span>
+
+<span class="go">...</span>
+</pre></div>
+</div>
+<p>After running this <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">port-forward</span></code> command, it is possible to
+access the <a class="reference external" href="https://prometheus.io/docs/prometheus/latest/getting_started/#using-the-expression-browser">Prometheus web
+interface</a>
+and run some queries there. Here are some examples for the QEMU test
+cluster with two volumes created on node <code class="docutils literal notranslate"><span class="pre">pmem-csi-pmem-govm-worker2</span></code>.</p>
+<p>Available PMEM as percentage:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pmem_amount_available</span> <span class="o">/</span> <span class="n">pmem_amount_managed</span>
+</pre></div>
+</div>
+<table border="1" class="docutils">
+<thead>
+<tr>
+<th>Result variable</th>
+<th>Value</th>
+<th>Tags</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>none</td>
+<td>0.7332986065893997</td>
+<td>instance = 10.42.0.1:10010</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>job = pmem-csi-containers</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>kubernetes_namespace = default</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>kubernetes_pod_container_name = pmem-driver</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>kubernetes_pod_name = pmem-csi-node-dfkrw</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>kubernetes_pod_node_name = pmem-csi-pmem-govm-worker2</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>node = pmem-csi-pmem-govm-worker2</td>
+</tr>
+<tr>
+<td></td>
+<td>1</td>
+<td>instance = 10.36.0.1:10010</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>job = pmem-csi-containers</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>kubernetes_namespace = default</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>kubernetes_pod_container_name = pmem-driver</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>kubernetes_pod_name = pmem-csi-node-z5vnp</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>kubernetes_pod_node_name pmem-csi-pmem-govm-worker3</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>node = pmem-csi-pmem-govm-worker3</td>
+</tr>
+<tr>
+<td></td>
+<td>1</td>
+<td>instance = 10.44.0.1:10010</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>job = pmem-csi-containers</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>kubernetes_namespace = default</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>kubernetes_pod_container_name = pmem-driver</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>kubernetes_pod_name = pmem-csi-node-zzmsd</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>kubernetes_pod_node_name = pmem-csi-pmem-govm-worker1</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>node = pmem-csi-pmem-govm-worker1</td>
+</tr>
+</tbody>
+</table><p>Number of <code class="docutils literal notranslate"><span class="pre">CreateVolume</span></code> calls in nodes:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">pmem_csi_node_operations_seconds_count</span><span class="p">{</span><span class="n">method_name</span><span class="o">=</span><span class="s2">&quot;/csi.v1.Controller/CreateVolume&quot;</span><span class="p">}</span>
+</pre></div>
+</div>
+<table border="1" class="docutils">
+<thead>
+<tr>
+<th>Result variable</th>
+<th>Value</th>
+<th>Tags</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pmem_csi_node_operations_seconds_count</code></td>
+<td>2</td>
+<td>driver_name = pmem-csi.intel.com</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>grpc_status_code = OK</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>instance = 10.42.0.1:10010</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>job = pmem-csi-containers</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>kubernetes_namespace = default</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>kubernetes_pod_container_name = pmem-driver</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>kubernetes_pod_name = pmem-csi-node-dfkrw</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>kubernetes_pod_node_name = pmem-csi-pmem-govm-worker2</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>method_name = /csi.v1.Controller/CreateVolume</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td>node = pmem-csi-pmem-govm-worker2</td>
+</tr>
+</tbody>
+</table></section>
+</section>
+</section>
+<section id="pmem-csi-deployment-crd">
+<h2>PMEM-CSI Deployment CRD<a class="headerlink" href="#pmem-csi-deployment-crd" title="Permalink to this headline"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">PmemCSIDeployment</span></code> is a cluster-scoped Kubernetes resource in the
+<code class="docutils literal notranslate"><span class="pre">pmem-csi.intel.com</span></code> API group. It describes how a PMEM-CSI driver
+instance is to be created.</p>
+<p>The operator will create objects in the namespace in which the
+operator itself runs if the object type is namespaced.</p>
+<p>The name of the deployment object is also used as CSI driver
+name. This ensures that the name is unique and immutable. However,
+name clashes with other CSI drivers are still possible, so the name
+should meet the <a class="reference external" href="https://github.com/container-storage-interface/spec/blob/master/spec.md#getplugininfo">CSI
+requirements</a>:</p>
+<ul class="simple">
+<li><p>domain name notation format, including a unique top-level domain</p></li>
+<li><p>63 characters or less, beginning and ending with an alphanumeric
+character ([a-z0-9A-Z]) with dashes (-), dots (.), and
+alphanumerics between.</p></li>
+</ul>
+<p>The name is also used as prefix for the names of all objects created
+for the deployment and for the local <code class="docutils literal notranslate"><span class="pre">/var/lib/&lt;name&gt;</span></code> state directory
+on each node.</p>
+<p>Although the operator allows running multiple PMEM-CSI driver deployments, one
+has to take extreme care of such deployments by ensuring that not more than
+one driver ends up running on the same node(s). Nodes on which a PMEM-CSI
+driver could run can be configured by using the <code class="docutils literal notranslate"><span class="pre">nodeSelector</span></code> property of
+the <code class="docutils literal notranslate"><span class="pre">DeploymentSpec</span></code>.</p>
+<p><strong>NOTE</strong>: Starting from release v0.9.0 reconciling of the <code class="docutils literal notranslate"><span class="pre">Deployment</span></code>
+CRD in <code class="docutils literal notranslate"><span class="pre">pmem-csi.intel.com/v1alpha1</span></code> API group is not supported by the
+PMEM-CSI operator anymore. Such resources in the cluster must be migrated
+manually to new the <code class="docutils literal notranslate"><span class="pre">PmemCSIDeployment</span></code> API.</p>
+<p>The current API for <code class="docutils literal notranslate"><span class="pre">PmemCSIDeployment</span></code> resources is:</p>
+<table border="1" class="docutils">
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>apiVersion</td>
+<td>string</td>
+<td><code>pmem-csi.intel.com/v1beta1</code></td>
+</tr>
+<tr>
+<td>kind</td>
+<td>string</td>
+<td><code>PmemCSIDeployment</code></td>
+</tr>
+<tr>
+<td>metadata</td>
+<td><a href="https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#metadata">ObjectMeta</a></td>
+<td>Object metadata, name used for CSI driver and as prefix for sub-objects</td>
+</tr>
+<tr>
+<td>spec</td>
+<td><a href="#deployment-spec">DeploymentSpec</a></td>
+<td>Specification of the desired behavior of the deployment</td>
+</tr>
+</tbody>
+</table><section id="deploymentspec">
+<h3>DeploymentSpec<a class="headerlink" href="#deploymentspec" title="Permalink to this headline"></a></h3>
+<p>Below specification fields are valid in all API versions unless noted otherwise in the description.</p>
+<p>The default values are used by the operator when no value is set for a
+field explicitly. Those defaults can change over time and are not part
+of the API specification.</p>
+<table border="1" class="docutils">
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+<th>Default Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>image</td>
+<td>string</td>
+<td>PMEM-CSI docker image name used for the deployment</td>
+<td>the same image as the operator<sup>1</sup></td>
+</tr>
+<tr>
+<td>provisionerImage</td>
+<td>string</td>
+<td><a href="https://kubernetes-csi.github.io/docs/external-provisioner.html">CSI provisioner</a> docker image name</td>
+<td>latest <a href="https://kubernetes-csi.github.io/docs/external-provisioner.html">external provisioner</a> stable release image<sup>2</sup></td>
+</tr>
+<tr>
+<td>nodeRegistrarImage</td>
+<td>string</td>
+<td><a href="https://github.com/kubernetes-csi/node-driver-registrar">CSI node driver registrar</a> docker image name</td>
+<td>latest <a href="https://kubernetes-csi.github.io/docs/node-driver-registrar.html">node driver registrar</a> stable release image<sup>2</sup></td>
+</tr>
+<tr>
+<td>pullPolicy</td>
+<td>string</td>
+<td>Docker image pull policy. either one of <code>Always</code>, <code>Never</code>, <code>IfNotPresent</code></td>
+<td><code>IfNotPresent</code></td>
+</tr>
+<tr>
+<td>logLevel</td>
+<td>integer</td>
+<td>PMEM-CSI driver logging level</td>
+<td>3</td>
+</tr>
+<tr>
+<td>logFormat</td>
+<td>text</td>
+<td>log output format</td>
+<td>"text" or "json" <sup>3</sup></td>
+</tr>
+<tr>
+<td>deviceMode</td>
+<td>string</td>
+<td>Device management mode to use. Supports one of <code>lvm</code> or <code>direct</code></td>
+<td><code>lvm</code></td>
+</tr>
+<tr>
+<td>controllerTLSSecret</td>
+<td>string</td>
+<td>Name of an existing secret in the driver's namespace which contains ca.crt, tls.crt and tls.key data for the scheduler extender and pod mutation webhook. A controller is started if (and only if) this secret is specified. <br> Alternatively, the special string <code>-openshift-</code> can be used on OpenShift to let OpenShift create the necessary secrets.</td>
+<td>empty</td>
+</tr>
+<tr>
+<td>controllerReplicas</td>
+<td>int</td>
+<td>Number of concurrently running controller pods.</td>
+<td>1</td>
+</tr>
+<tr>
+<td>mutatePods</td>
+<td>Always/Try/Never</td>
+<td>Defines how a mutating pod webhook is configured if a controller is started. The field is ignored if the controller is not enabled. "Never" disables pod mutation. "Try" configured it so that pod creation is allowed to proceed even when the webhook fails. "Always" requires that the webhook gets invoked successfully before creating a pod.</td>
+<td>Try</td>
+</tr>
+<tr>
+<td>schedulerNodePort</td>
+<td>int or string</td>
+<td>If non-zero, the scheduler service is created as a NodeService with that fixed port number. Otherwise that service is created as a cluster service. The number must be from the range reserved by Kubernetes for node ports. This is useful if the kube-scheduler cannot reach the scheduler extender via a cluster service.</td>
+<td>0</td>
+</tr>
+<tr>
+<td>controllerResources</td>
+<td><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core">ResourceRequirements</a></td>
+<td>Describes the compute resource requirements for controller pod. <br/><sup>4</sup><em>Deprecated and only available in <code>v1alpha1</code>.</em></td>
+<td></td>
+</tr>
+<tr>
+<td>nodeResources</td>
+<td><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core">ResourceRequirements</a></td>
+<td>Describes the compute resource requirements for the pods running on node(s). <br/><em><sup>4</sup>Deprecated and only available in <code>v1alpha1</code>.</em></td>
+<td></td>
+</tr>
+<tr>
+<td>controllerDriverResources</td>
+<td><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core">ResourceRequirements</a></td>
+<td>Describes the compute resource requirements for controller driver container running on master node. Available since <code>v1beta1</code>.</td>
+<td></td>
+</tr>
+<tr>
+<td>nodeDriverResources</td>
+<td><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core">ResourceRequirements</a></td>
+<td>Describes the compute resource requirements for the driver container running on worker node(s). <br/><em>Available since <code>v1beta1</code>.</em></td>
+<td></td>
+</tr>
+<tr>
+<td>provisionerResources</td>
+<td><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core">ResourceRequirements</a></td>
+<td>Describes the compute resource requirements for the <a href="https://kubernetes-csi.github.io/docs/external-provisioner.html">external provisioner</a> sidecar container. <em>Available since <code>v1beta1</code>.</em></td>
+<td></td>
+</tr>
+<tr>
+<td>nodeRegistrarResources</td>
+<td><a href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.12/#resourcerequirements-v1-core">ResourceRequirements</a></td>
+<td>Describes the compute resource requirements for the <a href="https://kubernetes-csi.github.io/docs/node-driver-registrar.html">driver registrar</a> sidecar container running on worker node(s). <br/><em>Available since <code>v1beta1</code>.</em></td>
+<td></td>
+</tr>
+<tr>
+<td>registryCert</td>
+<td>string</td>
+<td>Encoded tls certificate signed by a certificate authority used for driver's controller registry server</td>
+<td>generated by operator self-signed CA</td>
+</tr>
+<tr>
+<td>nodeControllerCert</td>
+<td>string</td>
+<td>Encoded tls certificate signed by a certificate authority used for driver's node controllers</td>
+<td>generated by operator self-signed CA</td>
+</tr>
+<tr>
+<td>registryKey</td>
+<td>string</td>
+<td>Encoded RSA private key used for signing by <code>registryCert</code></td>
+<td>generated by the operator</td>
+</tr>
+<tr>
+<td>nodeControllerKey</td>
+<td>string</td>
+<td>Encoded RSA private key used for signing by <code>nodeControllerCert</code></td>
+<td>generated by the operator</td>
+</tr>
+<tr>
+<td>caCert</td>
+<td>string</td>
+<td>Certificate of the CA by which the <code>registryCert</code> and <code>controllerCert</code> are signed</td>
+<td>self-signed certificate generated by the operator</td>
+</tr>
+<tr>
+<td>nodeSelector</td>
+<td>string map</td>
+<td>Labels to use for selecting Nodes on which PMEM-CSI driver should run.</td>
+<td><code>{ "storage": "pmem" }</code></td>
+</tr>
+<tr>
+<td>pmemPercentage</td>
+<td>integer</td>
+<td>Percentage of PMEM space to be used by the driver on each node. This is only valid for a driver deployed in <code>lvm</code> mode. This field can be modified, but by that time the old value may have been used already. Reducing the percentage is not supported.</td>
+<td>100</td>
+</tr>
+<tr>
+<td>labels</td>
+<td>string map</td>
+<td>Additional labels for all objects created by the operator. Can be modified after the initial creation, but removed labels will not be removed from existing objects because the operator cannot know which labels it needs to remove and which it has to leave in place.</td>
+<td></td>
+</tr>
+<tr>
+<td>kubeletDir</td>
+<td>string</td>
+<td>Kubelet's root directory path</td>
+<td>/var/lib/kubelet</td>
+</tr>
+<tr>
+<td>maxUnavailable</td>
+<td>int or string</td>
+<td>maximum number of node drivers that are allowed to be down during a rolling update, given as absolute number or percentage of the total number of nodes with the driver</td>
+<td>1</td>
+</tr>
+</tbody>
+</table><p><sup>1</sup> To use the same container image as default driver image
+the operator pod must set with below environment variables with
+appropriate values:</p>
+<ul class="simple">
+<li><p>POD_NAME: Name of the operator pod. Namespace of the pod could be figured out by the operator.</p></li>
+<li><p>OPERATOR_NAME: Name of the operator container. If not set, defaults to “pmem-csi-operator”</p></li>
+</ul>
+<p><sup>2</sup> Image versions depend on the Kubernetes release. The
+operator dynamically chooses suitable image versions. Users have to
+take care of that themselves when overriding the values.</p>
+<p><sup>3</sup> In PMEM-CSI 0.9.0, “json” output is only available for
+the PMEM-CSI container. The sidecars are still producing plain text
+messages. This may change in the future. Also, the migration from
+formatted log messages (= printf style) to structured log messages
+(message plus key/value pairs) is not complete.</p>
+<p><sup>4</sup> Pod level resource requirements (<code class="docutils literal notranslate"><span class="pre">nodeResources</span></code> and <code class="docutils literal notranslate"><span class="pre">controllerResources</span></code>)
+are deprecated in favor of per-container resource requirements (<code class="docutils literal notranslate"><span class="pre">nodeDriverResources</span></code>, <code class="docutils literal notranslate"><span class="pre">nodeRegistrarResources</span></code>,
+<code class="docutils literal notranslate"><span class="pre">controllerDriverResources</span></code> and <code class="docutils literal notranslate"><span class="pre">provisionerResources</span></code>).</p>
+<p><strong>WARNING</strong>: although all fields can be modified and changes will be
+propagated to the deployed driver, not all changes are safe. In
+particular, changing the <code class="docutils literal notranslate"><span class="pre">deviceMode</span></code> will not work when there are
+active volumes.</p>
+</section>
+<section id="deploymentstatus">
+<h3>DeploymentStatus<a class="headerlink" href="#deploymentstatus" title="Permalink to this headline"></a></h3>
+<p>A PMEM-CSI Deployment’s <code class="docutils literal notranslate"><span class="pre">status</span></code> field is a <code class="docutils literal notranslate"><span class="pre">DeploymentStatus</span></code> object, which
+carries the detailed state of the driver deployment. It is comprised of <a class="reference external" href="#deployment-conditions">deployment
+conditions</a>, <a class="reference external" href="#driver-component-status">driver component status</a>,
+and a <code class="docutils literal notranslate"><span class="pre">phase</span></code> field. The phase of a PMEM-CSI deployment is a high-level summary
+of where the the PmemCSIDployment is in its lifecycle.</p>
+<p>The possible <code class="docutils literal notranslate"><span class="pre">phase</span></code> values and their meaning are as below:</p>
+<table border="1" class="docutils">
+<thead>
+<tr>
+<th>Value</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>empty string</td>
+<td>A new deployment.</td>
+</tr>
+<tr>
+<td>Running</td>
+<td>The operator has determined that the driver is usable<sup>1</sup>.</td>
+</tr>
+<tr>
+<td>Failed</td>
+<td>For some reason, the <code>PmemCSIDeployment</code> failed and cannot be progressed. The failure reason is placed in the <code>DeploymentStatus.Reason</code> field.</td>
+</tr>
+</tbody>
+</table><p><sup>1</sup> This check has not been implemented yet. Instead, the deployment goes straight to <code class="docutils literal notranslate"><span class="pre">Running</span></code> after creating sub-resources.</p>
+</section>
+<section id="deployment-conditions">
+<h3>Deployment Conditions<a class="headerlink" href="#deployment-conditions" title="Permalink to this headline"></a></h3>
+<p>PMEM-CSI <code class="docutils literal notranslate"><span class="pre">DeploymentStatus</span></code> has an array of <code class="docutils literal notranslate"><span class="pre">conditions</span></code> through which the
+PMEM-CSI Deployment has or has not passed. Below are the possible condition
+types and their meanings:</p>
+<table border="1" class="docutils">
+<thead>
+<tr>
+<th>Condition type</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CertsReady</td>
+<td>Driver certificates/secrets are available.</td>
+</tr>
+<tr>
+<td>CertsVerified</td>
+<td>Verified that the provided certificates are valid.</td>
+</tr>
+<tr>
+<td>DriverDeployed</td>
+<td>All the componentes required for the PMEM-CSI deployment have been deployed.</td>
+</tr>
+</tbody>
+</table></section>
+<section id="driver-component-status">
+<h3>Driver component status<a class="headerlink" href="#driver-component-status" title="Permalink to this headline"></a></h3>
+<p>PMEM-CSI <code class="docutils literal notranslate"><span class="pre">DeploymentStatus</span></code> has an array of <code class="docutils literal notranslate"><span class="pre">components</span></code> of type <code class="docutils literal notranslate"><span class="pre">DriverStatus</span></code>
+in which the operator records the brief driver components status. This is
+useful to know if all the driver instances of a deployment are ready.
+Below are the fields and their meanings of <code class="docutils literal notranslate"><span class="pre">DriverStatus</span></code>:</p>
+<table border="1" class="docutils">
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>component</td>
+<td>Represents the driver component type; one of <code>Controller</code> or <code>Node</code>.</td>
+</tr>
+<tr>
+<td>status</td>
+<td>Represents the state of the component; one of <code>Ready</code> or <code>NotReady</code>. Component becomes <code>Ready</code> if all the instances of the driver component are running. Otherwise, <code>NotReady</code>.</td>
+</tr>
+<tr>
+<td>reason</td>
+<td>A brief message that explains why the component is in this state.</td>
+</tr>
+<tr>
+<td>lastUpdateTime</td>
+<td>Time at which the status updated.</td>
+</tr>
+</tbody>
+</table></section>
+<section id="deployment-events">
+<h3>Deployment Events<a class="headerlink" href="#deployment-events" title="Permalink to this headline"></a></h3>
+<p>The PMEM-CSI operator posts events on the progress of a <code class="docutils literal notranslate"><span class="pre">PmemCSIDeployment</span></code>. If the
+deployment is in the <code class="docutils literal notranslate"><span class="pre">Failed</span></code> state, then one can look into the event(s) using
+<code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">describe</span></code> on that deployment for the detailed failure reason.</p>
+</section>
+<section id="operator-metrics-data">
+<h3>Operator metrics data<a class="headerlink" href="#operator-metrics-data" title="Permalink to this headline"></a></h3>
+<p>PMEM-CSI operator exposes below metrics data about active PmemCSIDeployment
+custom resources and it’s sub-object in addition to the
+<a class="reference external" href="https://book-v1.book.kubebuilder.io/beyond_basics/controller_metrics.html">metrics data provided by the controller-runtime</a>:</p>
+<table border="1" class="docutils">
+<thead>
+<tr>
+<th>Name</th>
+<th>Type</th>
+<th>Explanation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pmem_csi_deployment_reconcile</code></td>
+<td>counter</td>
+<td>Counter that gets incremented on each time a PmemCSIDeployment CR gone through a reconcile loop, labeled with the deployment name and uid.</td>
+</tr>
+<tr>
+<td><code>pmem_csi_deployment_sub_resource_created_at</code></td>
+<td>gauge</td>
+<td>Timestamp at which a sub resource of the PmemCSIDeployment CR was created  by the operator. Labeled by resource details ("name, "namespace", "group", "version", "kind", "uid", "ownedBy").</td>
+</tr>
+<tr>
+<td><code>pmem_csi_deployment_sub_resource_updated_at</code></td>
+<td>gauge</td>
+<td>Timestamp at which a sub resource of the PmemCSIDeployment CR was updated by the operator. Labeled by resource details ("name, "namespace", "group", "version", "kind", "uid", "ownedBy").</td>
+</tr>
+</tbody>
+</table></section>
+</section>
+<section id="filing-issues-and-contributing">
+<h2>Filing issues and contributing<a class="headerlink" href="#filing-issues-and-contributing" title="Permalink to this headline"></a></h2>
+<p>Report a bug by <a class="reference external" href="https://github.com/intel/pmem-csi/issues">filing a new issue</a>.</p>
+<p>Before making your first contribution, be sure to read the <a class="reference internal" href="DEVELOPMENT.html"><span class="doc">development documentation</span></a>
+for guidance on code quality and branches.</p>
+<p>Contribute by <a class="reference external" href="https://github.com/intel/pmem-csi/pulls">opening a pull request</a>.</p>
+<p>Learn <a class="reference external" href="https://help.github.com/articles/using-pull-requests/">about pull requests</a>.</p>
+<p><strong>Reporting a Potential Security Vulnerability:</strong> If you have discovered potential security vulnerability in PMEM-CSI, please send an e-mail to secure&#64;intel.com. For issues related to Intel Products, please visit <a class="reference external" href="https://security-center.intel.com">Intel Security Center</a>.</p>
+<p>It is important to include the following details:</p>
+<ul class="simple">
+<li><p>The projects and versions affected</p></li>
+<li><p>Detailed description of the vulnerability</p></li>
+<li><p>Information on known exploits</p></li>
+</ul>
+<p>Vulnerability information is extremely sensitive. Please encrypt all security vulnerability reports using our <a class="reference external" href="https://www.intel.com/content/www/us/en/security-center/pgp-public-key.html">PGP key</a>.</p>
+<p>A member of the Intel Product Security Team will review your e-mail and contact you to collaborate on resolving the issue. For more information on how Intel works to resolve security issues, see: <a class="reference external" href="https://www.intel.com/content/www/us/en/security-center/vulnerability-handling-guidelines.html">vulnerability handling guidelines</a>.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="design.html" class="btn btn-neutral float-left" title="Design and architecture" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="DEVELOPMENT.html" class="btn btn-neutral float-right" title="Develop and Contribute" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Intel Corporation.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

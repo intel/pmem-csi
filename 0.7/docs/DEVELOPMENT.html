@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Develop and contribute &mdash; PMEM-CSI v0.7 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/copybutton.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+        <script src="../_static/clipboard.min.js"></script>
+        <script src="../_static/copybutton.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Automated testing" href="autotest.html" />
+    <link rel="prev" title="Installation and Usage" href="install.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            PMEM-CSI
+          </a>
+              <div class="version">
+                v0.7
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../README.html">Introduction to PMEM-CSI for Kubernetes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="design.html">Design and architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation and Usage</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Develop and contribute</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#setup">Setup</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#build-pmem-csi">Build PMEM-CSI</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#code-quality">Code quality</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#coding-style">Coding style</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#input-validation">Input validation</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#release-management">Release management</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#branching">Branching</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#tagging">Tagging</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#release-checklist">Release checklist</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#apis">APIs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#csi-api">CSI API</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#network-ports">Network ports</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#local-sockets">Local sockets</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#command-line-arguments">Command line arguments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#common-arguments">Common arguments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#specific-arguments-to-pmem-ns-init">Specific arguments to pmem-ns-init</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#specific-arguments-to-pmem-vgm">Specific arguments to pmem-vgm</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#specific-arguments-to-pmem-csi-driver">Specific arguments to pmem-csi-driver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#environment-variables">Environment variables</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#logging">Logging</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#switching-device-mode">Switching device mode</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#going-from-lvm-device-mode-to-direct-device-mode">Going from LVM device mode to direct device mode</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#going-from-direct-device-mode-to-lvm-device-mode">Going from direct device mode to LVM device mode</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#accessing-system-directories-in-a-container">Accessing system directories in a container</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#read-only-access-to-sys">Read-only access to /sys</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#access-to-dev-of-host">Access to /dev of host</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#repository-elements-which-are-generated-or-created-separately">Repository elements which are generated or created separately</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#top-level-readme-diagrams-describing-lvm-and-direct-device-modes">Top-level README diagrams describing LVM and Direct device modes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#top-level-readme-diagram-describing-communication-channels">Top-level README diagram describing communication channels</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#diagrams-describing-provisioning-sequence">Diagrams describing provisioning sequence</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#registryserver-spec">RegistryServer spec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#table-of-contents-in-readme-and-development">Table of Contents in README and DEVELOPMENT</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#build-edit-and-deploy-the-read-the-docs-site">Build, edit, and deploy the Read the Docs site</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#build">Build</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#edit">Edit</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#custom-link-handling">Custom link handling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#deploying-with-github-actions">Deploying with GitHub actions</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="autotest.html">Automated testing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/readme.html">Application examples</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://github.com/intel/pmem-csi">Project GitHub repository</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">PMEM-CSI</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Develop and contribute</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="develop-and-contribute">
+<h1>Develop and contribute<a class="headerlink" href="#develop-and-contribute" title="Permalink to this heading"></a></h1>
+<ul class="simple">
+<li><p><a class="reference external" href="#setup">Setup</a></p>
+<ul>
+<li><p><a class="reference external" href="#build-pmem-csi">Build PMEM-CSI</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference external" href="#code-quality">Code quality</a></p>
+<ul>
+<li><p><a class="reference external" href="#coding-style">Coding style</a></p></li>
+<li><p><a class="reference external" href="#input-validation">Input validation</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference external" href="#release-management">Release management</a></p>
+<ul>
+<li><p><a class="reference external" href="#branching">Branching</a></p></li>
+<li><p><a class="reference external" href="#tagging">Tagging</a></p></li>
+<li><p><a class="reference external" href="#release-checklist">Release checklist</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference external" href="#apis">APIs</a></p>
+<ul>
+<li><p><a class="reference external" href="#csi-api">CSI API</a></p></li>
+<li><p><a class="reference external" href="#network-ports">Network ports</a></p></li>
+<li><p><a class="reference external" href="#local-sockets">Local sockets</a></p></li>
+<li><p><a class="reference external" href="#command-line-arguments">Command line arguments</a></p></li>
+<li><p><a class="reference external" href="#common-arguments">Common arguments</a></p></li>
+<li><p><a class="reference external" href="#specific-arguments-to-pmem-ns-init">Specific arguments to pmem-ns-init</a></p></li>
+<li><p><a class="reference external" href="#specific-arguments-to-pmem-vgm">Specific arguments to pmem-vgm</a></p></li>
+<li><p><a class="reference external" href="#specific-arguments-to-pmem-csi-driver">Specific arguments to pmem-csi-driver</a></p></li>
+<li><p><a class="reference external" href="#environment-variables">Environment variables</a></p></li>
+<li><p><a class="reference external" href="#logging">Logging</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference external" href="#switching-device-mode">Switching device mode</a></p>
+<ul>
+<li><p><a class="reference external" href="#going-from-lvm-device-mode-to-direct-device-mode">Going from LVM device mode to direct device mode</a></p></li>
+<li><p><a class="reference external" href="#going-from-direct-device-mode-to-lvm-device-mode">Going from direct device mode to LVM device mode</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference external" href="#accessing-system-directories-in-a-container">Accessing system directories in a container</a></p>
+<ul>
+<li><p><a class="reference external" href="#read-only-access-to-sys">Read-only access to /sys</a></p></li>
+<li><p><a class="reference external" href="#access-to-dev-of-host">Access to /dev of host</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference external" href="#repository-elements-which-are-generated-or-created-separately">Repository elements which are generated or created separately</a></p>
+<ul>
+<li><p><a class="reference external" href="#top-level-readme-diagrams-describing-lvm-and-direct-device-modes">Top-level README diagrams describing LVM and Direct device modes</a></p></li>
+<li><p><a class="reference external" href="#top-level-readme-diagram-describing-communication-channels">Top-level README diagram describing communication channels</a></p></li>
+<li><p><a class="reference external" href="#diagrams-describing-provisioning-sequence">Diagrams describing provisioning sequence</a></p></li>
+<li><p><a class="reference external" href="#registryserver-spec">RegistryServer spec</a></p></li>
+<li><p><a class="reference external" href="#table-of-contents-in-readme-and-development">Table of Contents in README and DEVELOPMENT</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference external" href="#build-edit-and-deploy-the-read-the-docs-site">Edit, build, and deploy the Read the Docs site</a></p></li>
+</ul>
+<section id="setup">
+<h2>Setup<a class="headerlink" href="#setup" title="Permalink to this heading"></a></h2>
+<section id="build-pmem-csi">
+<h3>Build PMEM-CSI<a class="headerlink" href="#build-pmem-csi" title="Permalink to this heading"></a></h3>
+<ol class="simple">
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">build-images</span></code> to produce Docker container images.</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">push-images</span></code> to push Docker container images to a Docker image registry. The
+default is to push to a local <a class="reference external" href="https://docs.docker.com/registry/deploying/">Docker registry</a>.
+Some other registry can be configured by setting the variables described in
+in the <a class="reference external" href="https://github.com/intel/pmem-csi/blob/dd6e468dbffaf8d56d079ba90ae8fc253e603fa7/test/test-config.sh">test-config.sh</a> file, see the <a class="reference external" href="autotest.html#configuration-options">configuration options</a>
+section below. Alternatively, the registry can also be set with a make variable:
+<code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">push-images</span> <span class="pre">REGISTRY_NAME=my-registry:5000</span></code></p></li>
+</ol>
+<p>See the <a class="reference external" href="https://github.com/intel/pmem-csi/blob/dd6e468dbffaf8d56d079ba90ae8fc253e603fa7/Makefile">Makefile</a> for additional make targets and possible make variables.</p>
+<p>The source code gets developed and tested using the version of Go that
+is set with <code class="docutils literal notranslate"><span class="pre">GO_VERSION</span></code> in the <a class="reference external" href="https://github.com/intel/pmem-csi/blob/dd6e468dbffaf8d56d079ba90ae8fc253e603fa7/Dockerfile">Dockerfile</a>. Some other
+version may or may not work. In particular, <code class="docutils literal notranslate"><span class="pre">test_fmt</span></code> and
+<code class="docutils literal notranslate"><span class="pre">test_vendor</span></code> are known to be sensitive to the version of Go.</p>
+</section>
+</section>
+<section id="code-quality">
+<h2>Code quality<a class="headerlink" href="#code-quality" title="Permalink to this heading"></a></h2>
+<section id="coding-style">
+<h3>Coding style<a class="headerlink" href="#coding-style" title="Permalink to this heading"></a></h3>
+<p>The normal Go style guide applies. It is enforced by <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">test</span></code>, which calls <code class="docutils literal notranslate"><span class="pre">gofmt</span></code>.</p>
+</section>
+<section id="input-validation">
+<h3>Input validation<a class="headerlink" href="#input-validation" title="Permalink to this heading"></a></h3>
+<p>In all cases, input comes from a trusted source because network
+communication is protected by mutual TLS and the <code class="docutils literal notranslate"><span class="pre">kubectl</span></code> binaries
+runs with the same privileges as the user invoking it.</p>
+<p>Nonetheless, input needs to be validated to catch mistakes:</p>
+<ul class="simple">
+<li><p>detect incorrect parameters for <code class="docutils literal notranslate"><span class="pre">kubectl</span></code></p></li>
+<li><p>ensure that messages passed to gRPC API implementations
+in registry, controller and driver have all required
+fields</p></li>
+<li><p>the gRPC implementation rejects incoming messages that are too large
+(https://godoc.org/google.golang.org/grpc#MaxRecvMsgSize) and
+refuses to send messages that are larger
+(https://godoc.org/google.golang.org/grpc#MaxSendMsgSize)</p></li>
+</ul>
+</section>
+</section>
+<section id="release-management">
+<h2>Release management<a class="headerlink" href="#release-management" title="Permalink to this heading"></a></h2>
+<section id="branching">
+<h3>Branching<a class="headerlink" href="#branching" title="Permalink to this heading"></a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">master</span></code> branch is the main branch. It is guaranteed to have
+passed full CI testing. However, it always uses the latest Clear Linux
+for building container images, so changes in Clear Linux can break the
+building of older revisions.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">devel</span></code> branch contains additional commits on top of <code class="docutils literal notranslate"><span class="pre">master</span></code>
+which might not have been tested in that combination yet. Therefore it
+may be a bit less stable than <code class="docutils literal notranslate"><span class="pre">master</span></code>. The <code class="docutils literal notranslate"><span class="pre">master</span></code> branch gets
+advanced via a fast-forward merge after successful testing by the CI job
+that rebuilds and tests the <code class="docutils literal notranslate"><span class="pre">devel</span></code> branch.</p>
+<p>Code changes are made via pull requests against <code class="docutils literal notranslate"><span class="pre">devel</span></code>. Each of them
+will get tested separately by the CI system before merging, but only a
+subset of the tests can be run due to time constraints.</p>
+<p>Beware that after merging one PR, the existing pre-merge tests results
+for other PRs become stale because they were based on the old <code class="docutils literal notranslate"><span class="pre">devel</span></code>
+branch. Because <code class="docutils literal notranslate"><span class="pre">devel</span></code> is allowed to be less stable than <code class="docutils literal notranslate"><span class="pre">master</span></code>, it
+is okay to merge two PRs quickly after one another without
+retesting. If two PRs that merged that don’t have code conflicts
+(which would get detected by GitHub) but which nonetheless don’t work
+together, the combined testing in the <code class="docutils literal notranslate"><span class="pre">devel</span></code> branch will find
+that. This will block updating <code class="docutils literal notranslate"><span class="pre">master</span></code> and thus needs to be dealt
+quickly.</p>
+<p>Releases are created by branching <code class="docutils literal notranslate"><span class="pre">release-x.y</span></code> from <code class="docutils literal notranslate"><span class="pre">master</span></code> or some
+older, stable revision. On that new branch, the base image is locked
+onto a certain Clear Linux version with the
+<code class="docutils literal notranslate"><span class="pre">hack/update-clear-linux-base.sh</span></code> script. Those <code class="docutils literal notranslate"><span class="pre">release-x.y</span></code> branches
+are then fully reproducible. The actual <code class="docutils literal notranslate"><span class="pre">vx.y.z</span></code> release tags are set
+on revisions in the corresponding <code class="docutils literal notranslate"><span class="pre">release-x.y</span></code> branch.</p>
+<p>Releases and the corresponding images are never changed. If something
+goes wrong after setting a tag (like detecting a bug while testing the
+release images), a new release is created.</p>
+<p>Container images reference a fixed base image. To ensure that the base
+image remains secure, <code class="docutils literal notranslate"><span class="pre">hack/update-clear-linux-base.sh</span></code> gets run
+periodically to update a <code class="docutils literal notranslate"><span class="pre">release-x.y</span></code> branch and a new release with
+<code class="docutils literal notranslate"><span class="pre">z</span></code> increased by one is created. Other bug fixed might be added to
+that release by merging into the branch.</p>
+</section>
+<section id="tagging">
+<h3>Tagging<a class="headerlink" href="#tagging" title="Permalink to this heading"></a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">devel</span></code> and <code class="docutils literal notranslate"><span class="pre">master</span></code> branch build and use the <code class="docutils literal notranslate"><span class="pre">canary</span></code> version of
+the PMEM-CSI driver images. Before tagging a release, all of those
+version strings need to be replaced by the upcoming version. All
+tagged releases then use the image that corresponds to that release.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">hack/set-version.sh</span></code> script can be used to set these versions.
+The modified files then need to be committed. Merging such a commit
+triggers a rebuild of the <code class="docutils literal notranslate"><span class="pre">devel</span></code> branch, but does not yet produce a
+release: the actual image only gets pushed when there is a tag that
+corresponds to the version embedded in the source code. The
+Jenkinsfile ensures that.</p>
+</section>
+<section id="release-checklist">
+<h3>Release checklist<a class="headerlink" href="#release-checklist" title="Permalink to this heading"></a></h3>
+<ul class="simple">
+<li><p>Create a new <code class="docutils literal notranslate"><span class="pre">release-x.y</span></code> branch.</p></li>
+<li><p>Run <code class="docutils literal notranslate"><span class="pre">hack/update-clear-linux-base.sh</span></code>.</p></li>
+<li><p>Run <code class="docutils literal notranslate"><span class="pre">hack/set-version.sh</span> <span class="pre">vx.y.z</span></code> and commit the modified files.</p></li>
+<li><p>Push to <code class="docutils literal notranslate"><span class="pre">origin</span></code>.</p></li>
+<li><p><a class="reference external" href="https://github.com/intel/pmem-csi/releases/new">Create a draft
+release</a> for that
+new branch, including a change log gathered from new commits.</p></li>
+<li><p>Review the change log.</p></li>
+<li><p>Tag <code class="docutils literal notranslate"><span class="pre">vx.y.z</span></code> manually and push to origin.</p></li>
+<li><p>Wait for a successful CI <a class="reference external" href="https://cloudnative-k8sci.southcentralus.cloudapp.azure.com/view/pmem-csi/job/pmem-csi/view/tags/">build for that
+tag</a>
+and promotion of the resulting images to <a class="reference external" href="https://hub.docker.com/r/intel/pmem-csi-driver/tags?page=1&amp;ordering=last_updated">Docker
+Hub</a>.</p></li>
+<li><p>Publish the GitHub release.</p></li>
+</ul>
+</section>
+</section>
+<section id="apis">
+<h2>APIs<a class="headerlink" href="#apis" title="Permalink to this heading"></a></h2>
+<section id="csi-api">
+<h3>CSI API<a class="headerlink" href="#csi-api" title="Permalink to this heading"></a></h3>
+<p>Kubernetes CSI API is exposed over Unix domain socket. CSI operations
+are executed as gRPC calls. Input data is allowed as permitted by CSI
+specification. Output data is formatted as gRPC response.</p>
+<p>Following CSI operations are supported, with arguments as specified by
+CSI specification: CreateVolume, DeleteVolume, StageVolume,
+UnstageVolume, PublishVolume, UnpublishVolume, ListVolumes,
+GetCapacity, GetCapabilities, GetPluginInfo, GetPluginCapabilities.</p>
+</section>
+<section id="network-ports">
+<h3>Network ports<a class="headerlink" href="#network-ports" title="Permalink to this heading"></a></h3>
+<p>Network ports are opened as configured in manifest files:</p>
+<ul class="simple">
+<li><p>registry endpoint: typical port value 10000, used for PMEM-CSI internal communication</p></li>
+<li><p>controller endpoint: typical port value 10001, used for serving CSI API</p></li>
+<li><p>webhook endpoint: disabled by default, port chosen when <a class="reference external" href="../README.html#enable-scheduler-extensions">enabling the scheduler extensions</a></p></li>
+</ul>
+</section>
+<section id="local-sockets">
+<h3>Local sockets<a class="headerlink" href="#local-sockets" title="Permalink to this heading"></a></h3>
+<p>Kubernetes CSI API used over local socket inside same host.</p>
+<ul class="simple">
+<li><p>unix:///var/lib/kubelet/plugins/pmem-csi-reg.sock</p></li>
+<li><p>unix:///var/lib/kubelet/plugins/pmem-csi/csi.sock</p></li>
+<li><p>unix:///var/lib/kubelet/plugins/pmem-csi/csi-controller.sock</p></li>
+</ul>
+</section>
+<section id="command-line-arguments">
+<h3>Command line arguments<a class="headerlink" href="#command-line-arguments" title="Permalink to this heading"></a></h3>
+<p>Note that different set of programs is used in different
+device modes. Three stages: <em>pmem-ns-init</em>, <em>pmem-vgm</em>,
+<em>pmem-csi-driver</em> run in LVM device mode. Only <em>pmem-csi-driver</em> runs
+in direct device mode.</p>
+</section>
+<section id="common-arguments">
+<h3>Common arguments<a class="headerlink" href="#common-arguments" title="Permalink to this heading"></a></h3>
+<table border="1" class="docutils">
+<thead>
+<tr>
+<th>argument name</th>
+<th>meaning</th>
+<th>type</th>
+<th>range</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>-alsologtostderr</td>
+<td>log to standard error as well as files</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>-log_backtrace_at value</td>
+<td>when logging hits line file:N, emit a stack trace</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>-log_dir string</td>
+<td>If non-empty, write log files in this directory</td>
+<td>string</td>
+<td></td>
+</tr>
+<tr>
+<td>-log_file string</td>
+<td>If non-empty, use this log file</td>
+<td>string</td>
+<td></td>
+</tr>
+<tr>
+<td>-logtostderr</td>
+<td>log to standard error instead of files</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>-skip_headers</td>
+<td>avoid header prefixes in the log messages</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>-stderrthreshold value</td>
+<td>logs at or above this threshold go to stderr (default 2)</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>-v value</td>
+<td>log level for V logs</td>
+<td>int</td>
+<td></td>
+</tr>
+<tr>
+<td>-vmodule value</td>
+<td>comma-separated list of pattern=N settings for file-filtered logging</td>
+<td>string</td>
+<td></td>
+</tr>
+</tbody>
+</table></section>
+<section id="specific-arguments-to-pmem-ns-init">
+<h3>Specific arguments to pmem-ns-init<a class="headerlink" href="#specific-arguments-to-pmem-ns-init" title="Permalink to this heading"></a></h3>
+<table border="1" class="docutils">
+<thead>
+<tr>
+<th>argument name</th>
+<th>meaning</th>
+<th>type</th>
+<th>range</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>-useforfsdax int</td>
+<td>Percentage of total to use in Fsdax mode (default 100)</td>
+<td>int</td>
+<td>0..100</td>
+</tr>
+</tbody>
+</table></section>
+<section id="specific-arguments-to-pmem-vgm">
+<h3>Specific arguments to pmem-vgm<a class="headerlink" href="#specific-arguments-to-pmem-vgm" title="Permalink to this heading"></a></h3>
+<p>NO SPECIFIC arguments</p>
+</section>
+<section id="specific-arguments-to-pmem-csi-driver">
+<h3>Specific arguments to pmem-csi-driver<a class="headerlink" href="#specific-arguments-to-pmem-csi-driver" title="Permalink to this heading"></a></h3>
+<table border="1" class="docutils">
+<thead>
+<tr>
+<th>argument name</th>
+<th>meaning</th>
+<th>type</th>
+<th>allowed</th>
+<th>default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>-caFile string</td>
+<td>Root CA certificate file to use for verifying connections</td>
+<td>string</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>-certFile string</td>
+<td>SSL certificate file to use for authenticating client connections(RegistryServer/NodeControllerServer)</td>
+<td>string</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>-clientCertFile string</td>
+<td>Client SSL certificate file to use for authenticating peer connections</td>
+<td>string</td>
+<td></td>
+<td>certFile</td>
+</tr>
+<tr>
+<td>-clientKeyFile string</td>
+<td>Client private key associated to client certificate</td>
+<td>string</td>
+<td></td>
+<td>keyFile</td>
+</tr>
+<tr>
+<td>-controllerEndpoint string</td>
+<td>internal node controller endpoint</td>
+<td>string</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>-deviceManager string</td>
+<td>device mode to use. ndctl selects mode which is described as direct mode in documentation.</td>
+<td>string</td>
+<td>lvm or ndctl</td>
+<td>lvm</td>
+</tr>
+<tr>
+<td>-drivername string</td>
+<td>name of the driver</td>
+<td>string</td>
+<td></td>
+<td>pmem-csi</td>
+</tr>
+<tr>
+<td>-endpoint string</td>
+<td>PMEM CSI endpoint</td>
+<td>string</td>
+<td></td>
+<td>unix:///tmp/pmem-csi.sock</td>
+</tr>
+<tr>
+<td>-keyFile string</td>
+<td>Private key file associated to certificate</td>
+<td>string</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>-mode string</td>
+<td>driver run mode</td>
+<td>string</td>
+<td>controller, node</td>
+<td></td>
+</tr>
+<tr>
+<td>-nodeid string</td>
+<td>node id</td>
+<td>string</td>
+<td></td>
+<td>nodeid</td>
+</tr>
+<tr>
+<td>-registryEndpoint string</td>
+<td>endpoint to connect/listen registry server</td>
+<td>string</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>-statePath</td>
+<td>Directory path where to persist the state of the driver running on a node</td>
+<td>string</td>
+<td>absolute directory path on node</td>
+<td>/var/lib/<drivername></td>
+</tr>
+<tr>
+<td>-schedulerListen</td>
+<td>listen address for scheduler extender and mutating webhook</td>
+<td><a href="https://golang.org/pkg/net/#Listen">address string</a></td>
+<td>controller</td>
+<td>empty (= disabled)</td>
+</tr>
+</tbody>
+</table></section>
+<section id="environment-variables">
+<h3>Environment variables<a class="headerlink" href="#environment-variables" title="Permalink to this heading"></a></h3>
+<p>TEST_WORK is used by registry server unit-test code to specify path to certificates in test system.
+Note, THIS IS NOT USED IN PRODUCTION</p>
+</section>
+<section id="logging">
+<h3>Logging<a class="headerlink" href="#logging" title="Permalink to this heading"></a></h3>
+<p>The klog.Info statements are used via the verbosity checker using the following levels:</p>
+<ul class="simple">
+<li><p>klog.V(3) - Generic information. Level 3 is the default Info log level in pmem-csi, and example deployment files set this level for production configuration.</p></li>
+<li><p>klog.V(4) - Elevated verbosity messages.</p></li>
+<li><p>klog.V(5) - Even more verbose messages, useful for debugging and issue resolving. This level is used in testing type of deployment examples.</p></li>
+</ul>
+<p>There are also messages using klog.Warning, klog.Error and klog.Fatal, and their formatted counterparts.</p>
+</section>
+</section>
+<section id="switching-device-mode">
+<h2>Switching device mode<a class="headerlink" href="#switching-device-mode" title="Permalink to this heading"></a></h2>
+<p>If device mode is switched between LVM and direct(aka ndctl), please keep
+in mind that PMEM-CSI driver does not clean up or reclaim namespaces,
+therefore namespaces plus other related context (LVM state)
+created in previous mode will remain stored on device and most likely
+will create trouble in another device mode.</p>
+<section id="going-from-lvm-device-mode-to-direct-device-mode">
+<h3>Going from LVM device mode to direct device mode<a class="headerlink" href="#going-from-lvm-device-mode-to-direct-device-mode" title="Permalink to this heading"></a></h3>
+<ul class="simple">
+<li><p>examine LV groups state on a node: <code class="docutils literal notranslate"><span class="pre">vgs</span></code></p></li>
+<li><p>examine LV physical volumes state on a node: <code class="docutils literal notranslate"><span class="pre">pvs</span></code></p></li>
+<li><p>delete LV groups before deleting namespaces to avoid orphaned volume groups: <code class="docutils literal notranslate"><span class="pre">vgremove</span> <span class="pre">VGNAME</span></code></p></li>
+</ul>
+<p>NOTE: The following <strong>WILL DELETE ALL NAMESPACES</strong> so be careful!</p>
+<ul class="simple">
+<li><p>Delete namespaces on a node using CLI: <code class="docutils literal notranslate"><span class="pre">ndctl</span> <span class="pre">destroy-namespace</span> <span class="pre">all</span> <span class="pre">--force</span></code></p></li>
+</ul>
+</section>
+<section id="going-from-direct-device-mode-to-lvm-device-mode">
+<h3>Going from direct device mode to LVM device mode<a class="headerlink" href="#going-from-direct-device-mode-to-lvm-device-mode" title="Permalink to this heading"></a></h3>
+<p>No special steps are needed to clean up namespaces state.</p>
+<p>If PMEM-CSI driver has been operating correctly, there should not be
+existing namespaces as CSI volume lifecycle should have been deleted
+those after end of life of volume. If there are, you can either keep
+those (LVM device mode does honor “foreign” namespaces and leaves those
+alone) if you have enough space, or you can choose to delete those
+using <code class="docutils literal notranslate"><span class="pre">ndctl</span></code> on node.</p>
+</section>
+</section>
+<section id="accessing-system-directories-in-a-container">
+<h2>Accessing system directories in a container<a class="headerlink" href="#accessing-system-directories-in-a-container" title="Permalink to this heading"></a></h2>
+<p>The PMEM-CSI driver will run as container, but it needs access to
+system directories /sys and /dev. Two related potential problems have
+been diagnosed so far.</p>
+<section id="read-only-access-to-sys">
+<h3>Read-only access to /sys<a class="headerlink" href="#read-only-access-to-sys" title="Permalink to this heading"></a></h3>
+<p>In some deployment schemes /sys remains mounted read-only in the
+container running pmsm-csi-driver. This creates problem for the
+driver which needs write access to /sys for namespaces management
+operations. There is start-time check for read-write mount of /sys in
+the code. An error in pod log <code class="docutils literal notranslate"><span class="pre">pmem-driver:</span> <span class="pre">Failed</span> <span class="pre">to</span> <span class="pre">run</span> <span class="pre">driver:</span> <span class="pre">FATAL:</span> <span class="pre">/sys</span> <span class="pre">mounted</span> <span class="pre">read-only,</span> <span class="pre">can</span> <span class="pre">not</span> <span class="pre">operate</span></code> is the sign of such
+state.</p>
+</section>
+<section id="access-to-dev-of-host">
+<h3>Access to /dev of host<a class="headerlink" href="#access-to-dev-of-host" title="Permalink to this heading"></a></h3>
+<p>Containers runtime may not pass /dev from host into the
+container. If the /dev/ of the host is not accessible in the PMEM-CSI container, there will be
+failure in accessing of newly created block device /dev/pmemX.Y which
+will not be visible inside container. The driver does not detect the
+root cause of that problem during start-up, but only when a volume
+creation has failed. This problem can be avoided by specifying
+explicit mount of /dev in the PMEM-CSI manifest.</p>
+</section>
+</section>
+<section id="repository-elements-which-are-generated-or-created-separately">
+<h2>Repository elements which are generated or created separately<a class="headerlink" href="#repository-elements-which-are-generated-or-created-separately" title="Permalink to this heading"></a></h2>
+<p>Here are creation and update notes for these elements in the repository
+which are not hand-edited</p>
+<section id="top-level-readme-diagrams-describing-lvm-and-direct-device-modes">
+<h3>Top-level README diagrams describing LVM and Direct device modes<a class="headerlink" href="#top-level-readme-diagrams-describing-lvm-and-direct-device-modes" title="Permalink to this heading"></a></h3>
+<p>Two diagrams are created with <a class="reference external" href="https://en.wikipedia.org/wiki/Dia_(software)"><em>dia</em> drawing program</a>.
+The <a class="reference external" href="https://github.com/intel/pmem-csi/blob/dd6e468dbffaf8d56d079ba90ae8fc253e603fa7/docs/diagrams/pmem-csi.dia">single source file</a> has
+layers: {common, lvm, direct} so that two diagram variants can be produced from single source.
+Image files are produced by saving in PNG format with correct set of layers visible.
+The PNG files are committed as repository elements in docs/images/devicemodes/.</p>
+</section>
+<section id="top-level-readme-diagram-describing-communication-channels">
+<h3>Top-level README diagram describing communication channels<a class="headerlink" href="#top-level-readme-diagram-describing-communication-channels" title="Permalink to this heading"></a></h3>
+<p>This diagram was created with the <a class="reference external" href="https://en.wikipedia.org/wiki/Dia_(software)"><em>dia</em> drawing program</a> using <a class="reference external" href="https://github.com/intel/pmem-csi/blob/dd6e468dbffaf8d56d079ba90ae8fc253e603fa7/docs/diagrams/pmem-csi-communication-diagram.dia">source file</a>.</p>
+<p>Image file is produced by saving in PNG format.
+The PNG file is committed as a <a class="reference external" href="https://github.com/intel/pmem-csi/blob/dd6e468dbffaf8d56d079ba90ae8fc253e603fa7/docs/images/communication/pmem-csi-communication-diagram.png">repository element</a>.</p>
+</section>
+<section id="diagrams-describing-provisioning-sequence">
+<h3>Diagrams describing provisioning sequence<a class="headerlink" href="#diagrams-describing-provisioning-sequence" title="Permalink to this heading"></a></h3>
+<p>Two diagrams are generated using <a class="reference external" href="http://plantuml.com/">plantuml program</a>.
+Source files:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/intel/pmem-csi/blob/dd6e468dbffaf8d56d079ba90ae8fc253e603fa7/docs/diagrams/sequence.wsd">source file for regular sequence</a></p></li>
+<li><p><a class="reference external" href="https://github.com/intel/pmem-csi/blob/dd6e468dbffaf8d56d079ba90ae8fc253e603fa7/docs/diagrams/sequence-cache.wsd">source file for cache sequence</a></p></li>
+</ul>
+<p>The PNG files are committed as repository elements in docs/images/sequence/.</p>
+</section>
+<section id="registryserver-spec">
+<h3>RegistryServer spec<a class="headerlink" href="#registryserver-spec" title="Permalink to this heading"></a></h3>
+<p>pkg/pmem-registry/pmem-registry.pb.go is generated from pkg/pmem-registry/pmem-registry.proto</p>
+<p>protoc comes from package <em>protobuf-compiler</em> on Ubuntu 18.04</p>
+<ul class="simple">
+<li><p>get protobuf for Go:</p></li>
+</ul>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/golang/protobuf.git<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>protobuf
+<span class="gp">$ </span>make<span class="w"> </span><span class="c1"># installs needed binary in $GOPATH/bin/protoc-gen-go</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>generate by running in ~/go/src/github.com/intel/pmem-csi/pkg/pmem-registry:</p></li>
+</ul>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>protoc<span class="w"> </span>--plugin<span class="o">=</span>protoc-gen-go<span class="o">=</span><span class="nv">$GOPATH</span>/bin/protoc-gen-go<span class="w"> </span>--go_out<span class="o">=</span><span class="nv">plugins</span><span class="o">=</span>grpc:./<span class="w"> </span>pmem-registry.proto
+</pre></div>
+</div>
+</section>
+<section id="table-of-contents-in-readme-and-development">
+<h3>Table of Contents in README and DEVELOPMENT<a class="headerlink" href="#table-of-contents-in-readme-and-development" title="Permalink to this heading"></a></h3>
+<p>Table of Contents can be generated using multiple methods.</p>
+<ul class="simple">
+<li><p>One possibility is to use <a class="reference external" href="https://pandoc.org/">pandoc</a></p></li>
+</ul>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>pandoc<span class="w"> </span>-s<span class="w"> </span>-t<span class="w"> </span>markdown_github<span class="w"> </span>--toc<span class="w"> </span>README.md<span class="w"> </span>-o<span class="w"> </span>/tmp/temp.md
+</pre></div>
+</div>
+<p>Then check and hand-pick generated TOC part(s) from /tmp/temp.md and insert in desired location.
+Note that pandoc is known to produce incorrect TOC entries if headers contain special characters,
+means TOC generation will be more reliable if we avoid non-letter-or-number characters in the headers.</p>
+<ul class="simple">
+<li><p>Another method is to use emacs command markdown-toc-generate-toc and manually check and edit the generated part: we do not show generated 3rd-level headings in README.md.</p></li>
+</ul>
+</section>
+</section>
+<section id="build-edit-and-deploy-the-read-the-docs-site">
+<h2>Build, edit, and deploy the Read the Docs site<a class="headerlink" href="#build-edit-and-deploy-the-read-the-docs-site" title="Permalink to this heading"></a></h2>
+<p>The PMEM-CSI documentation is available as in-repo READMEs and as a GitHub*
+hosted <a class="reference external" href="https://intel.github.io/pmem-csi">website</a>. The website is created
+using the <a class="reference external" href="https://www.sphinx-doc.org/">Sphinx</a> documentation generator and
+the well-known <a class="reference external" href="https://sphinx-rtd-theme.readthedocs.io/">Read the Docs</a>
+theme.</p>
+<section id="build">
+<h3>Build<a class="headerlink" href="#build" title="Permalink to this heading"></a></h3>
+<p>Building the documentation requires Python 3.x and venv.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>make<span class="w"> </span>vhtml
+</pre></div>
+</div>
+</section>
+<section id="edit">
+<h3>Edit<a class="headerlink" href="#edit" title="Permalink to this heading"></a></h3>
+<p>Sphinx uses <a class="reference external" href="https://docutils.sourceforge.io/docs/ref/rst/restructuredtext.html">reStructuredText</a> (reST) as the primary document source type but can be
+extended to use Markdown by adding the <code class="docutils literal notranslate"><span class="pre">recommonmark</span></code> and
+<code class="docutils literal notranslate"><span class="pre">sphinx_markdown_tables</span></code> extensions (see <a class="reference external" href="https://github.com/intel/pmem-csi/blob/dd6e468dbffaf8d56d079ba90ae8fc253e603fa7/conf.json">conf.json</a>).</p>
+<p>Change the navigation tree or add documents by updating the <code class="docutils literal notranslate"><span class="pre">toctree</span></code>. The
+main <code class="docutils literal notranslate"><span class="pre">toctree</span></code> is in <code class="docutils literal notranslate"><span class="pre">index.rst</span></code>:</p>
+<div class="highlight-rst notranslate"><div class="highlight"><pre><span></span><span class="p">..</span> <span class="ow">toctree</span><span class="p">::</span>
+   <span class="nc">:maxdepth:</span> 2
+
+   README.md
+   docs/design.md
+   docs/install.md
+   docs/DEVELOPMENT.md
+   docs/autotest.md
+   examples/readme.rst
+   Project GitHub repository &lt;https://github.com/intel/pmem-csi&gt;
+</pre></div>
+</div>
+<p>reST files, Markdown files, and URLs can be added to a <code class="docutils literal notranslate"><span class="pre">toctree</span></code>. The
+<code class="docutils literal notranslate"><span class="pre">:maxdepth:</span></code> argument dictates the number of header levels that will be
+displayed on that page. This website replaces the <code class="docutils literal notranslate"><span class="pre">index.html</span></code> output of
+this project with a redirect to <code class="docutils literal notranslate"><span class="pre">README.html</span></code> (the conversion of the top
+level README) to closer match the in-repo documentation.</p>
+<p>Any reST or Markdown file not referenced by a <code class="docutils literal notranslate"><span class="pre">toctree</span></code> will generate a
+warning in the build. This document has a <code class="docutils literal notranslate"><span class="pre">toctree</span></code> in:</p>
+<ol class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">index.rst</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">examples/readme.rst</span></code></p></li>
+</ol>
+<p>Files or directories that are intentionally not referenced can be excluded
+in <a class="reference external" href="https://github.com/intel/pmem-csi/blob/dd6e468dbffaf8d56d079ba90ae8fc253e603fa7/conf.json"><code class="docutils literal notranslate"><span class="pre">conf.json</span></code></a>.</p>
+<p>NOTE: Though GitHub can parse reST files, the <code class="docutils literal notranslate"><span class="pre">toctree</span></code> directive is Sphinx
+specific, so it is not understood by GitHub. <code class="docutils literal notranslate"><span class="pre">examples/readme.rst</span></code> is a good
+example. Adding the <code class="docutils literal notranslate"><span class="pre">:hidden:</span></code> argument to the <code class="docutils literal notranslate"><span class="pre">toctree</span></code> directive means
+that the <code class="docutils literal notranslate"><span class="pre">toctree</span></code> is not displayed in the Sphinx built version of the page.</p>
+</section>
+<section id="custom-link-handling">
+<h3>Custom link handling<a class="headerlink" href="#custom-link-handling" title="Permalink to this heading"></a></h3>
+<p>This project has some custom capabilities added to the <a class="reference external" href="https://github.com/intel/pmem-csi/blob/dd6e468dbffaf8d56d079ba90ae8fc253e603fa7/conf.py">conf.py</a> to
+fix or improve how Sphinx generates the HTML site.</p>
+<ol>
+<li><p>Markdown files: Converts references to Markdown files that include anchors.</p>
+<div class="highlight-md notranslate"><div class="highlight"><pre><span></span>[<span class="nt">configuration options</span>](<span class="na">autotest.md#configuration-options</span>)
+</pre></div>
+</div>
+</li>
+<li><p>reST files: Fixes explicit links to Markdown files.</p>
+<div class="highlight-rst notranslate"><div class="highlight"><pre><span></span><span class="s">`Google Cloud Engine </span><span class="si">&lt;gce.md&gt;</span><span class="s">`__</span>
+</pre></div>
+</div>
+</li>
+<li><p>Markdown files: Fixes references to reST files.</p>
+<div class="highlight-md notranslate"><div class="highlight"><pre><span></span>[<span class="nt">Application examples</span>](<span class="na">examples/readme.rst</span>)
+</pre></div>
+</div>
+</li>
+<li><p>Markdown files: Fixes links to files and directories within the GitHub repo.</p>
+<div class="highlight-md notranslate"><div class="highlight"><pre><span></span>[<span class="nt">Makefile</span>](<span class="na">/Makefile</span>)
+[<span class="nt">deploy/kustomize</span>](<span class="na">/deploy/kustomize</span>)
+</pre></div>
+</div>
+<p>Links to files can be fixed one of two ways, which can be set in the
+<a class="reference external" href="https://github.com/intel/pmem-csi/blob/dd6e468dbffaf8d56d079ba90ae8fc253e603fa7/conf.py">conf.py</a>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">baseBranch</span> <span class="o">=</span> <span class="s2">&quot;devel&quot;</span>
+<span class="n">useGitHubURL</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="n">commitSHA</span> <span class="o">=</span> <span class="n">getenv</span><span class="p">(</span><span class="s1">&#39;GITHUB_SHA&#39;</span><span class="p">)</span>
+<span class="n">githubBaseURL</span> <span class="o">=</span> <span class="s2">&quot;https://github.com/intelkevinputnam/pmem-csi/&quot;</span>
+</pre></div>
+</div>
+<p>If <code class="docutils literal notranslate"><span class="pre">useGitHubURL</span></code> is set to True, it will try to create links based on
+your <code class="docutils literal notranslate"><span class="pre">githubBaseURL</span></code> and the SHA for the commit to the GitHub repo
+determined by the GitHub workflow on merge). If there is no SHA available,
+it will use the value of <code class="docutils literal notranslate"><span class="pre">baseBranch</span></code>.</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">useGitHubURL</span></code> is set to False, it will copy the files to the HTML
+output directory and provide links to that location.</p>
+<p>NOTE: Links to files and directories should use absolute paths relative to
+the repo (see Makefile and deploy/kustomize above). This will work both for
+the Sphinx build and when viewing in the GitHub repo.</p>
+<p>Links to directories are always converted to links to the GitHub repository.</p>
+</li>
+</ol>
+</section>
+<section id="deploying-with-github-actions">
+<h3>Deploying with GitHub actions<a class="headerlink" href="#deploying-with-github-actions" title="Permalink to this heading"></a></h3>
+<p>The publish
+<a class="reference external" href="https://github.com/intel/pmem-csi/blob/devel/.github/workflows/publish.yml">workflow</a>
+is run each time a commit is made to the branches references by that file and pushes
+the rendered HTML to the gh-pages branch. Other rules can be created
+for other branches.</p>
+<p>NOTE: Create a secret called <code class="docutils literal notranslate"><span class="pre">ACCESS_TOKEN</span></code> in repo&gt;settings&gt;secrets with a <a class="reference external" href="https://help.github.com/en/articles/creating-a-personal-access-token-for-the-command-line">token</a> generated by a user with write privileges to enable the automated push to the gh-pages branch.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="install.html" class="btn btn-neutral float-left" title="Installation and Usage" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="autotest.html" class="btn btn-neutral float-right" title="Automated testing" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2019,.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

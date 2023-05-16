@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Google Cloud Engine &mdash; PMEM-CSI v0.9 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/copybutton.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/override.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/clipboard.min.js"></script>
+        <script src="../_static/copybutton.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="memcached" href="memcached.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> PMEM-CSI
+          </a>
+              <div class="version">
+                v0.9
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../README.html">Introduction to PMEM-CSI for Kubernetes*</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../docs/design.html">Design and architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../docs/install.html">Installation and Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../docs/DEVELOPMENT.html">Develop and Contribute</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../docs/autotest.html">Automated testing</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="readme.html">Application examples</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="redis-operator.html">Redis-pmem operator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="memcached.html">memcached</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Google Cloud Engine</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#configure-and-start">Configure and Start</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#testing-pmem-without-kubernetes">Testing PMEM without Kubernetes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#preparing-the-machine-image">Preparing the machine image</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#starting-and-stopping-kubernetes">Starting and stopping Kubernetes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#installing-pmem-csi">Installing PMEM-CSI</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#testing-pmem-csi">Testing PMEM-CSI</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#open-issues">Open issues</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#extend-kernel-config-for-cos">Extend kernel config for COS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#support-alpha-instance-templates-in-gcloud">Support alpha instance-templates in gcloud</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#merge-support-for-pmem-into-kubernetes-scripts">Merge support for PMEM into Kubernetes scripts</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#avoid-the-need-to-check-out-pmem-csi-source-code">Avoid the need to check out PMEM-CSI source code</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#avoid-manual-lvm-and-ndctl-commands">Avoid manual LVM and ndctl commands</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#debian-10-and-others">Debian 10 and others</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#debugging-and-development">Debugging and development</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#running-ndctl">Running ndctl</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference external" href="https://github.com/intel/pmem-csi">Project GitHub repository</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">PMEM-CSI</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="readme.html">Application examples</a> &raquo;</li>
+      <li>Google Cloud Engine</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="google-cloud-engine">
+<h1>Google Cloud Engine<a class="headerlink" href="#google-cloud-engine" title="Permalink to this headline"></a></h1>
+<p>Google Cloud Compute Engine (GCE) offers VMs with Intel® Optane™ DC
+persistent memory as part of an alpha program.  Request to get
+whitelisted for this program and get information on how to bring up
+these VMs by filling out <a class="reference external" href="https://docs.google.com/forms/d/e/1FAIpQLSeX1tN6Qt-aQUK2iVVioClFX5N-061jqO46vzpHzAPHkjwzVw/viewform">this
+form</a>.</p>
+<p>This document explains how to bring up Kubernetes on those machines
+with the <a class="reference external" href="https://github.com/kubernetes/kubernetes/blob/master/cluster/kube-up.sh">scripts from
+Kubernetes</a>
+and how to install PMEM-CSI.</p>
+<p>It was written for and tested with the v0.5.0 release of PMEM-CSI, but
+should also work for other versions.</p>
+<section id="configure-and-start">
+<h2>Configure and Start<a class="headerlink" href="#configure-and-start" title="Permalink to this headline"></a></h2>
+<section id="testing-pmem-without-kubernetes">
+<h3>Testing PMEM without Kubernetes<a class="headerlink" href="#testing-pmem-without-kubernetes" title="Permalink to this headline"></a></h3>
+<p>Of the existing machine images, <code class="docutils literal notranslate"><span class="pre">debian-9</span></code> is known to support
+PMEM. When booting up that image on a suitable machine configuration,
+a <code class="docutils literal notranslate"><span class="pre">/dev/pmem0</span></code> device is created:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>gcloud<span class="w"> </span>alpha<span class="w"> </span>compute<span class="w"> </span>instances<span class="w"> </span>create<span class="w"> </span>pmem-debian-9<span class="w"> </span>--machine-type<span class="w"> </span>n1-highmem-96-aep<span class="w">  </span>--local-nvdimm<span class="w"> </span><span class="nv">size</span><span class="o">=</span><span class="m">1600</span><span class="w"> </span>--zone<span class="w"> </span>us-central1-f
+</pre></div>
+</div>
+</section>
+<section id="preparing-the-machine-image">
+<h3>Preparing the machine image<a class="headerlink" href="#preparing-the-machine-image" title="Permalink to this headline"></a></h3>
+<p>But the Kubernetes scripts expect to run with <a class="reference external" href="https://cloud.google.com/container-optimized-os/docs/">Container Optimized
+OS</a>. Those
+images currently do not support PMEM because the necessary kernel
+options are not set.</p>
+<p>A custom image must be compiled from source. For that, follow these
+<a class="reference external" href="https://cloud.google.com/container-optimized-os/docs/how-to/building-from-open-source">instructions</a>
+and check out the source code with <code class="docutils literal notranslate"><span class="pre">repo</span> <span class="pre">sync</span></code>.</p>
+<p>Before proceeding, apply the following patch:</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nb">cd</span><span class="w"> </span>src/overlays
+<span class="gp">$ </span>patch<span class="w"> </span>-p1<span class="w"> </span>&lt;&lt;EOF
+<span class="go">commit 148e1095ba56fcf626d184fd2c427bd192e53a28</span>
+<span class="go">Author: Patrick Ohly &lt;patrick.ohly@intel.com&gt;</span>
+<span class="go">Date:   Fri Aug 2 10:46:30 2019 +0200</span>
+
+<span class="go">    lakitu: kernel: enable PMEM support</span>
+<span class="go">    </span>
+<span class="go">    Some alpha machine types in GCE support persistent memory (aka</span>
+<span class="go">    nvdimm). These kernel changes are necessary to use that hardware</span>
+<span class="go">    and/or experiment with PMEM on normal machine types.</span>
+<span class="go">    </span>
+<span class="go">    Change-Id: I1682e6293f492128994ed7635bcc44368009db59</span>
+
+<span class="go">diff --git a/overlay-lakitu/sys-kernel/lakitu-kernel-4_19/files/base.config b/overlay-lakitu/sys-kernel/lakitu-kernel-4_19/files/base.config</span>
+<span class="go">index 117772d9ad..a48263de3d 100644</span>
+<span class="go">--- a/overlay-lakitu/sys-kernel/lakitu-kernel-4_19/files/base.config</span>
+<span class="go">+++ b/overlay-lakitu/sys-kernel/lakitu-kernel-4_19/files/base.config</span>
+<span class="go">@@ -357,7 +357,6 @@ CONFIG_ARCH_SPARSEMEM_DEFAULT=y</span>
+<span class="go"> CONFIG_ARCH_SELECT_MEMORY_MODEL=y</span>
+<span class="go"> CONFIG_ARCH_PROC_KCORE_TEXT=y</span>
+<span class="go"> CONFIG_ILLEGAL_POINTER_VALUE=0xdead000000000000</span>
+<span class="go">-# CONFIG_X86_PMEM_LEGACY is not set</span>
+<span class="go"> CONFIG_X86_CHECK_BIOS_CORRUPTION=y</span>
+<span class="go"> CONFIG_X86_BOOTPARAM_MEMORY_CORRUPTION_CHECK=y</span>
+<span class="go"> CONFIG_X86_RESERVE_LOW=64</span>
+<span class="go">@@ -467,7 +466,6 @@ CONFIG_ACPI_HOTPLUG_IOAPIC=y</span>
+<span class="gp"> # </span>CONFIG_ACPI_CUSTOM_METHOD<span class="w"> </span>is<span class="w"> </span>not<span class="w"> </span><span class="nb">set</span>
+<span class="gp"> # </span>CONFIG_ACPI_BGRT<span class="w"> </span>is<span class="w"> </span>not<span class="w"> </span><span class="nb">set</span>
+<span class="gp"> # </span>CONFIG_ACPI_REDUCED_HARDWARE_ONLY<span class="w"> </span>is<span class="w"> </span>not<span class="w"> </span><span class="nb">set</span>
+<span class="go">-# CONFIG_ACPI_NFIT is not set</span>
+<span class="go"> CONFIG_HAVE_ACPI_APEI=y</span>
+<span class="go"> CONFIG_HAVE_ACPI_APEI_NMI=y</span>
+<span class="gp"> # </span>CONFIG_ACPI_APEI<span class="w"> </span>is<span class="w"> </span>not<span class="w"> </span><span class="nb">set</span>
+<span class="go">@@ -842,7 +840,6 @@ CONFIG_SPARSEMEM_VMEMMAP=y</span>
+<span class="go"> CONFIG_HAVE_MEMBLOCK=y</span>
+<span class="go"> CONFIG_HAVE_MEMBLOCK_NODE_MAP=y</span>
+<span class="go"> CONFIG_ARCH_DISCARD_MEMBLOCK=y</span>
+<span class="go">-# CONFIG_MEMORY_HOTPLUG is not set</span>
+<span class="go"> CONFIG_SPLIT_PTLOCK_CPUS=4</span>
+<span class="go"> CONFIG_COMPACTION=y</span>
+<span class="go"> CONFIG_MIGRATION=y</span>
+<span class="go">@@ -2532,11 +2529,29 @@ CONFIG_RAS=y</span>
+<span class="gp"> # </span>Android
+<span class="gp"> #</span>
+<span class="gp"> # </span>CONFIG_ANDROID<span class="w"> </span>is<span class="w"> </span>not<span class="w"> </span><span class="nb">set</span>
+<span class="go">-# CONFIG_LIBNVDIMM is not set</span>
+<span class="go">-CONFIG_DAX=y</span>
+<span class="go">-# CONFIG_DEV_DAX is not set</span>
+<span class="go"> CONFIG_NVMEM=y</span>
+<span class="go"> </span>
+<span class="go">+# Base on https://nvdimm.wiki.kernel.org/?#quick_setup_guide</span>
+<span class="go">+# Only options not already set as intended elsewhere are here.</span>
+<span class="go">+CONFIG_ZONE_DEVICE=y</span>
+<span class="go">+CONFIG_MEMORY_HOTPLUG=y</span>
+<span class="go">+CONFIG_MEMORY_HOTREMOVE=y</span>
+<span class="go">+CONFIG_ACPI_NFIT=m</span>
+<span class="go">+CONFIG_X86_PMEM_LEGACY=m</span>
+<span class="go">+CONFIG_OF_PMEM=m</span>
+<span class="go">+CONFIG_LIBNVDIMM=m</span>
+<span class="go">+CONFIG_BLK_DEV_PMEM=m</span>
+<span class="go">+CONFIG_BTT=y</span>
+<span class="go">+CONFIG_NVDIMM_PFN=y</span>
+<span class="go">+CONFIG_NVDIMM_DAX=y</span>
+<span class="go">+CONFIG_DAX=y</span>
+<span class="go">+CONFIG_DEV_DAX=m</span>
+<span class="go">+CONFIG_DEV_DAX_PMEM=m</span>
+<span class="go">+CONFIG_DEV_DAX_KMEM=m</span>
+<span class="go">+</span>
+<span class="go">+# Needed for &quot;mount -o dax&quot;.</span>
+<span class="go">+CONFIG_FS_DAX=y</span>
+<span class="go">+</span>
+<span class="gp"> #</span>
+<span class="gp"> # </span>HW<span class="w"> </span>tracing<span class="w"> </span>support
+<span class="gp"> #</span>
+<span class="go">@@ -2573,7 +2588,6 @@ CONFIG_FS_MBCACHE=y</span>
+<span class="gp"> # </span>CONFIG_BTRFS_FS<span class="w"> </span>is<span class="w"> </span>not<span class="w"> </span><span class="nb">set</span>
+<span class="gp"> # </span>CONFIG_NILFS2_FS<span class="w"> </span>is<span class="w"> </span>not<span class="w"> </span><span class="nb">set</span>
+<span class="gp"> # </span>CONFIG_F2FS_FS<span class="w"> </span>is<span class="w"> </span>not<span class="w"> </span><span class="nb">set</span>
+<span class="go">-# CONFIG_FS_DAX is not set</span>
+<span class="go"> CONFIG_FS_POSIX_ACL=y</span>
+<span class="go"> CONFIG_EXPORTFS=y</span>
+<span class="gp"> # </span>CONFIG_EXPORTFS_BLOCK_OPS<span class="w"> </span>is<span class="w"> </span>not<span class="w"> </span><span class="nb">set</span>
+<span class="go">diff --git a/overlay-lakitu/sys-kernel/lakitu-kernel-4_19/lakitu-kernel-4_19-4.19.58-r305.ebuild b/overlay-lakitu/sys-kernel/lakitu-kernel-4_19/lakitu-kernel-4_19-4.19.58-r305.ebuild</span>
+<span class="go">index 5337c40fc5..781ac11d94 100644</span>
+<span class="go">--- a/overlay-lakitu/sys-kernel/lakitu-kernel-4_19/lakitu-kernel-4_19-4.19.58-r305.ebuild</span>
+<span class="go">+++ b/overlay-lakitu/sys-kernel/lakitu-kernel-4_19/lakitu-kernel-4_19-4.19.58-r305.ebuild</span>
+<span class="go">@@ -92,4 +92,4 @@ src_install() {</span>
+<span class="gp"> # </span>NOTE:<span class="w"> </span>There<span class="err">&#39;</span>s<span class="w"> </span>nothing<span class="w"> </span>magic<span class="w"> </span>keeping<span class="w"> </span>this<span class="w"> </span>number<span class="w"> </span>prime<span class="w"> </span>but<span class="w"> </span>you<span class="w"> </span>just<span class="w"> </span>need<span class="w"> </span>to
+<span class="gp"> # </span>make<span class="w"> </span>_any_<span class="w"> </span>change<span class="w"> </span>to<span class="w"> </span>this<span class="w"> </span>file.<span class="w">  </span>...so<span class="w"> </span>why<span class="w"> </span>not<span class="w"> </span>keep<span class="w"> </span>it<span class="w"> </span>prime?
+<span class="gp"> #</span>
+<span class="go">-# The coolest prime number is: 7</span>
+<span class="go">+# The coolest prime number is: 11</span>
+<span class="go">EOF</span>
+</pre></div>
+</div>
+<p>This patch is also available <a class="reference external" href="https://github.com/pohly/chromiumos-overlays-board-overlays/commits/lakita-4-19-pmem">on
+GitHub</a>.</p>
+<p>Now <a class="reference external" href="https://cloud.google.com/container-optimized-os/docs/how-to/building-from-open-source#building_a_image">build packages and a “test” image</a>.</p>
+<p>That test image allows root access with “test0000” as password, which
+can be used to verify that PMEM support is active by booting the image
+under QEMU:</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>qemu-system-x86_64<span class="w"> </span>-enable-kvm<span class="w"> </span>-machine<span class="w"> </span><span class="nv">accel</span><span class="o">=</span>kvm,usb<span class="o">=</span>off<span class="w">  </span>-nographic<span class="w"> </span><span class="se">\</span>
+<span class="w">                   </span>-net<span class="w"> </span>nic,model<span class="o">=</span>virtio<span class="w"> </span>-net<span class="w"> </span>user,hostfwd<span class="o">=</span>tcp:127.0.0.1:9223-:22<span class="w"> </span><span class="se">\</span>
+<span class="w">                   </span>-hda<span class="w"> </span>./src/build/images/lakitu/latest/chromiumos_test_image.bin<span class="w"> </span><span class="se">\</span>
+<span class="w">                   </span>-m<span class="w"> </span>2G,slots<span class="o">=</span><span class="m">2</span>,maxmem<span class="o">=</span>34G<span class="w"> </span>-smp<span class="w"> </span><span class="m">4</span><span class="w"> </span>-machine<span class="w"> </span>pc,accel<span class="o">=</span>kvm,nvdimm<span class="o">=</span>on<span class="w"> </span><span class="se">\</span>
+<span class="w">                   </span>-object<span class="w"> </span>memory-backend-file,id<span class="o">=</span>mem1,share<span class="o">=</span>on,mem-path<span class="o">=</span>/tmp/nvdimm1,size<span class="o">=</span>32768M<span class="w"> </span><span class="se">\</span>
+<span class="w">                   </span>-device<span class="w"> </span>nvdimm,id<span class="o">=</span>nvdimm1,memdev<span class="o">=</span>mem1,label-size<span class="o">=</span><span class="m">2097152</span>
+</pre></div>
+</div>
+<p>As for the <code class="docutils literal notranslate"><span class="pre">debian-9</span></code> image on a GCE VM, this machine will have a <code class="docutils literal notranslate"><span class="pre">/dev/pmem0</span></code>.</p>
+<p>Now build a normal image (”base” or “dev”) and <a class="reference external" href="https://cloud.google.com/container-optimized-os/docs/how-to/building-from-open-source">create a GCE image
+from it</a>.</p>
+</section>
+<section id="starting-and-stopping-kubernetes">
+<h3>Starting and stopping Kubernetes<a class="headerlink" href="#starting-and-stopping-kubernetes" title="Permalink to this headline"></a></h3>
+<p>A modified version of the Kubernetes scripts are required. Get those with:</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>git<span class="w"> </span>clone<span class="w"> </span>--branch<span class="w"> </span>gce-node-nvdimm<span class="w"> </span>https://github.com/pohly/kubernetes.git
+</pre></div>
+</div>
+<p>These scripts are normally packaged as part of a release. To call them
+from that branch, one has to download one additional file:</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nb">cd</span><span class="w"> </span>kubernetes
+<span class="gp">$ </span>mkdir<span class="w"> </span>server
+<span class="gp">$ </span>curl<span class="w"> </span>-L<span class="w"> </span>https://dl.k8s.io/v1.15.1/kubernetes.tar.gz<span class="w"> </span><span class="p">|</span><span class="w"> </span>tar<span class="w"> </span>-zxf<span class="w"> </span>-<span class="w"> </span>-O<span class="w"> </span>kubernetes/server/kubernetes-manifests.tar.gz<span class="w">  </span>&gt;server/kubernetes-manifests.tar.gz
+</pre></div>
+</div>
+<p>Then create a cluster with one master and three worker nodes:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span><span class="nv">NUM_NODES</span><span class="o">=</span><span class="m">3</span><span class="w"> </span><span class="se">\</span>
+<span class="nv">KUBE_GCE_ZONE</span><span class="o">=</span>us-central1-f<span class="w"> </span><span class="se">\</span>
+<span class="nv">KUBE_GCE_NODE_IMAGE</span><span class="o">=</span>&lt;your<span class="w"> </span>image<span class="w"> </span>name<span class="w"> </span>from<span class="w"> </span>the<span class="w"> </span>previous<span class="w"> </span>step&gt;<span class="w"> </span><span class="se">\</span>
+<span class="nv">KUBE_GCE_NODE_PROJECT</span><span class="o">=</span>&lt;your<span class="w"> </span>project<span class="w"> </span>ID&gt;<span class="w"> </span><span class="se">\</span>
+<span class="nv">PROJECT</span><span class="o">=</span>&lt;your<span class="w"> </span>project<span class="w"> </span>ID&gt;<span class="w"> </span><span class="se">\</span>
+<span class="nv">NODE_NVDIMM</span><span class="o">=</span><span class="nv">size</span><span class="o">=</span><span class="m">1600</span><span class="w"> </span><span class="se">\</span>
+<span class="nv">NODE_SIZE</span><span class="o">=</span>n1-highmem-96-aep<span class="w"> </span><span class="se">\</span>
+<span class="nv">KUBE_VERSION</span><span class="o">=</span>v1.15.1<span class="w"> </span><span class="se">\</span>
+<span class="w">   </span>cluster/kube-up.sh
+</pre></div>
+</div>
+<p>Accept when the script asks to download artifacts.</p>
+<p>The advantage of this script over a manual approach (like manually
+creating machine instances and then calling <code class="docutils literal notranslate"><span class="pre">kubeadm</span></code>) is that it also
+handles firewall, logging and etcd configuration. For additional
+parameters, see
+https://github.com/pohly/kubernetes/blob/gce-node-nvdimm/cluster/gce/config-default.sh</p>
+<p>To stop the cluster, use the same env variables for the
+<code class="docutils literal notranslate"><span class="pre">cluster/kube-down.sh</span></code> script.</p>
+</section>
+<section id="installing-pmem-csi">
+<h3>Installing PMEM-CSI<a class="headerlink" href="#installing-pmem-csi" title="Permalink to this headline"></a></h3>
+<p>After the previous step, <code class="docutils literal notranslate"><span class="pre">kubectl</span></code> works and is configured to use the
+new cluster. What follows next are the steps explained in more details
+in the top-level README’s <a class="reference external" href="../docs/install.html#install-pmem-csi-driver">Run PMEM-CSI on
+Kubernetes</a> section.</p>
+<p>First the worker nodes need to be labeled:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span><span class="nv">NUM_NODES</span><span class="o">=</span><span class="m">3</span>
+<span class="k">for</span><span class="w"> </span>i<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="k">$(</span><span class="w"> </span>seq<span class="w"> </span><span class="m">0</span><span class="w"> </span><span class="k">$((</span><span class="nv">$NUM_NODES</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="m">1</span><span class="k">))</span><span class="w"> </span><span class="k">)</span><span class="p">;</span><span class="w"> </span><span class="k">do</span><span class="w"> </span>kubectl<span class="w"> </span>label<span class="w"> </span>node<span class="w"> </span>kubernetes-minion-node-<span class="nv">$i</span><span class="w"> </span><span class="nv">storage</span><span class="o">=</span>pmem<span class="p">;</span><span class="w"> </span><span class="k">done</span>
+</pre></div>
+</div>
+<p>Then certificates need to be created. This currently works best with
+scripts from the pmem-csi repo:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>git<span class="w"> </span>clone<span class="w"> </span>--branch<span class="w"> </span>release-0.5<span class="w"> </span>https://github.com/intel/pmem-csi
+<span class="gp">$ </span><span class="nb">cd</span><span class="w"> </span>pmem-csi
+<span class="gp">$ </span>curl<span class="w"> </span>-L<span class="w"> </span>https://pkg.cfssl.org/R1.2/cfssl_linux-amd64<span class="w"> </span>-o<span class="w"> </span>_work/bin/cfssl<span class="w"> </span>--create-dirs
+<span class="gp">$ </span>curl<span class="w"> </span>-L<span class="w"> </span>https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64<span class="w"> </span>-o<span class="w"> </span>_work/bin/cfssljson<span class="w"> </span>--create-dirs
+<span class="gp">$ </span>chmod<span class="w"> </span>a+x<span class="w"> </span>_work/bin/cfssl<span class="w"> </span>_work/bin/cfssljson
+<span class="gp">$ </span><span class="nv">PATH</span><span class="o">=</span><span class="s2">&quot;</span><span class="nv">$PATH</span><span class="s2">:</span><span class="nv">$PWD</span><span class="s2">/_work/bin&quot;</span><span class="w"> </span>./test/setup-ca-kubernetes.sh
+</pre></div>
+</div>
+<p>As in QEMU, the GCE VMs come up with the entire PMEM already set up
+for usage as <code class="docutils literal notranslate"><span class="pre">/dev/pmem0</span></code>. PMEM-CSI v0.5.0 will not use space that
+looks like it is reserved for some other purpose already. However,
+under GCE the commands for making that space available for
+PMEM-CSI (<code class="docutils literal notranslate"><span class="pre">ndctl</span> <span class="pre">disable-region</span> <span class="pre">region0</span></code>, <code class="docutils literal notranslate"><span class="pre">ndctl</span> <span class="pre">init-labels</span> <span class="pre">nmem0</span></code>,
+<code class="docutils literal notranslate"><span class="pre">ndctl</span> <span class="pre">enable-region</span> <span class="pre">region0</span></code>) do not work because the PMEM that
+is available under GCE does not support labels.</p>
+<p>That rules out running PMEM-CSI in direct mode where it creates
+namespaces for volumes. But LVM mode works, we just need to create a
+suitable volume group manually on top of the existing
+<code class="docutils literal notranslate"><span class="pre">/dev/pmem0</span></code>. Because COS does not contain the LVM commands, we do
+that in the PMEM-CSI image:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span><span class="nv">NUM_NODES</span><span class="o">=</span><span class="m">3</span>
+<span class="k">for</span><span class="w"> </span>i<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="k">$(</span><span class="w"> </span>seq<span class="w"> </span><span class="m">0</span><span class="w"> </span><span class="k">$((</span><span class="nv">$NUM_NODES</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="m">1</span><span class="k">))</span><span class="w"> </span><span class="k">)</span><span class="p">;</span><span class="w"> </span><span class="k">do</span>
+<span class="w">    </span>gcloud<span class="w"> </span>compute<span class="w"> </span>ssh<span class="w"> </span>--zone<span class="w"> </span>us-central1-f<span class="w"> </span>kubernetes-minion-node-<span class="nv">$i</span><span class="w"> </span>--<span class="w"> </span>docker<span class="w"> </span>run<span class="w"> </span>--privileged<span class="w"> </span>--rm<span class="w"> </span>-i<span class="w"> </span>--entrypoint<span class="w"> </span>/bin/sh<span class="w"> </span>intel/pmem-csi-driver:v0.5.0<span class="w"> </span><span class="s">&lt;&lt;EOF</span>
+<span class="s">vgcreate --force ndbus0region0fsdax /dev/pmem0 &amp;&amp; vgchange --addtag fsdax ndbus0region0fsdax</span>
+<span class="s">EOF</span>
+<span class="k">done</span>
+</pre></div>
+</div>
+<p>With the nodes set up like that, we can proceed to deploy PMEM-CSI:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>https://raw.githubusercontent.com/intel/pmem-csi/v0.5.0/deploy/kubernetes-1.14/pmem-csi-lvm.yaml
+<span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>https://raw.githubusercontent.com/intel/pmem-csi/v0.5.0/deploy/common/pmem-storageclass-ext4.yaml
+<span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>https://raw.githubusercontent.com/intel/pmem-csi/v0.5.0/deploy/common/pmem-storageclass-xfs.yaml
+</pre></div>
+</div>
+</section>
+<section id="testing-pmem-csi">
+<h3>Testing PMEM-CSI<a class="headerlink" href="#testing-pmem-csi" title="Permalink to this headline"></a></h3>
+<p>This brings up the example apps, one using <code class="docutils literal notranslate"><span class="pre">ext4</span></code>, the other <code class="docutils literal notranslate"><span class="pre">xfs</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>https://raw.githubusercontent.com/intel/pmem-csi/v0.5.0/deploy/common/pmem-pvc.yaml
+<span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>https://raw.githubusercontent.com/intel/pmem-csi/v0.5.0/deploy/common/pmem-app.yaml
+</pre></div>
+</div>
+<p>It is expected that <code class="docutils literal notranslate"><span class="pre">my-csi-app-2</span></code> will never start because the COS
+kernel lacks support for xfs. But <code class="docutils literal notranslate"><span class="pre">my-csi-app-1</span></code> comes up:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>get<span class="w"> </span>pv
+<span class="go">NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                       STORAGECLASS       REASON   AGE</span>
+<span class="go">pvc-0c2ebc68-cd77-4c08-9fbb-f8a5d33440b9   4Gi        RWO            Delete           Bound    default/pmem-csi-pvc-ext4   pmem-csi-sc-ext4            2m52s</span>
+<span class="go">pvc-c04c27a9-4b9e-4a28-9374-e9e6c5cbf18c   4Gi        RWO            Delete           Bound    default/pmem-csi-pvc-xfs    pmem-csi-sc-xfs             2m52s</span>
+
+<span class="gp">$ </span>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-o<span class="w"> </span>wide
+<span class="go">NAME                    READY   STATUS              RESTARTS   AGE   IP            NODE                       NOMINATED NODE   READINESS GATES</span>
+<span class="go">my-csi-app-1            1/1     Running             0          13s   10.64.2.3     kubernetes-minion-node-1   &lt;none&gt;           &lt;none&gt;</span>
+<span class="go">my-csi-app-2            0/1     ContainerCreating   0          13s   &lt;none&gt;        kubernetes-minion-node-1   &lt;none&gt;           &lt;none&gt;</span>
+<span class="go">pmem-csi-controller-0   2/2     Running             0          33s   10.64.1.12    kubernetes-minion-node-2   &lt;none&gt;           &lt;none&gt;</span>
+<span class="go">pmem-csi-node-9gfzv     2/2     Running             0          33s   10.128.0.40   kubernetes-minion-node-2   &lt;none&gt;           &lt;none&gt;</span>
+<span class="go">pmem-csi-node-9ltng     2/2     Running             0          33s   10.128.0.41   kubernetes-minion-node-0   &lt;none&gt;           &lt;none&gt;</span>
+<span class="go">pmem-csi-node-ftd8c     2/2     Running             0          33s   10.128.0.39   kubernetes-minion-node-1   &lt;none&gt;           &lt;none&gt;</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="open-issues">
+<h2>Open issues<a class="headerlink" href="#open-issues" title="Permalink to this headline"></a></h2>
+<section id="extend-kernel-config-for-cos">
+<h3>Extend kernel config for COS<a class="headerlink" href="#extend-kernel-config-for-cos" title="Permalink to this headline"></a></h3>
+<p>The patch from
+https://github.com/pohly/chromiumos-overlays-board-overlays/commits/lakita-4-19-pmem
+needs to be merged by Google. Then building a custom COS image is no
+longer necessary.</p>
+</section>
+<section id="support-alpha-instance-templates-in-gcloud">
+<h3>Support alpha instance-templates in gcloud<a class="headerlink" href="#support-alpha-instance-templates-in-gcloud" title="Permalink to this headline"></a></h3>
+<p>It is possible to define an instance template that uses the alpha machines:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>gcloud<span class="w"> </span>alpha<span class="w"> </span>compute<span class="w"> </span>instance-templates<span class="w"> </span>create<span class="w"> </span>kubernetes-minion-template<span class="w"> </span>--machine-type<span class="w"> </span>n1-highmem-96-aep<span class="w"> </span>--local-nvdimm<span class="w"> </span><span class="nv">size</span><span class="o">=</span><span class="m">1600</span><span class="w"> </span>--region<span class="w"> </span>us-central1
+</pre></div>
+</div>
+<p>But then using that template fails (regardless whether <code class="docutils literal notranslate"><span class="pre">alpha</span></code> is used or not):</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>gcloud<span class="w"> </span>alpha<span class="w"> </span>compute<span class="w"> </span>instance-groups<span class="w"> </span>managed<span class="w"> </span>create<span class="w"> </span>kubernetes-minion-group<span class="w"> </span>--zone<span class="w"> </span>us-central1-b<span class="w"> </span>--base-instance-name<span class="w"> </span>kubernetes-minion-group<span class="w"> </span>--size<span class="w"> </span><span class="m">3</span><span class="w"> </span>--template<span class="w"> </span>kubernetes-minion-template
+<span class="go">ERROR: (gcloud.alpha.compute.instance-groups.managed.create) Could not fetch resource:</span>
+<span class="go"> - Internal error. Please try again or contact Google Support. (Code: &#39;58F5F51C192A0.A2E8610.8D038E81&#39;)</span>
+</pre></div>
+</div>
+<p>If this was supported, the Kubernetes script changes would become
+cleaner and may have a chance of getting merged upstream.</p>
+</section>
+<section id="merge-support-for-pmem-into-kubernetes-scripts">
+<h3>Merge support for PMEM into Kubernetes scripts<a class="headerlink" href="#merge-support-for-pmem-into-kubernetes-scripts" title="Permalink to this headline"></a></h3>
+<p>No PR has been created for
+https://github.com/pohly/kubernetes/commits/gce-node-nvdimm at this
+time. First gcloud should be enhanced and these instructions should be
+made public.</p>
+</section>
+<section id="avoid-the-need-to-check-out-pmem-csi-source-code">
+<h3>Avoid the need to check out PMEM-CSI source code<a class="headerlink" href="#avoid-the-need-to-check-out-pmem-csi-source-code" title="Permalink to this headline"></a></h3>
+<p>PMEM-CSI can be deployed almost without using its source code. The
+only exception is the creation of certificates.
+https://github.com/intel/pmem-csi/issues/321 is open regarding that.</p>
+</section>
+<section id="avoid-manual-lvm-and-ndctl-commands">
+<h3>Avoid manual LVM and ndctl commands<a class="headerlink" href="#avoid-manual-lvm-and-ndctl-commands" title="Permalink to this headline"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">pmem-csi-driver</span></code> already contains code for this, it just doesn’t work on GCE
+because it ignores the existing <code class="docutils literal notranslate"><span class="pre">/dev/pmem0</span></code>. We should simplify the
+work of the admin and support configuring in Kubernetes how PMEM is to
+be used, then have PMEM-CSI do the necessary initialization. This
+probably fits into the upcoming <a class="reference external" href="https://github.com/intel/pmem-csi/issues/376">installation via
+operator</a>.</p>
+</section>
+<section id="debian-10-and-others">
+<h3>Debian 10 and others<a class="headerlink" href="#debian-10-and-others" title="Permalink to this headline"></a></h3>
+<p>Someone needs to investigate whether Debian 10 works with PMEM under
+QEMU (may or may not work) and change the GCE image so that it also
+works under GCE.</p>
+<p>The same would be useful for other images that users of GCE may want
+to use with PMEM.</p>
+</section>
+</section>
+<section id="debugging-and-development">
+<h2>Debugging and development<a class="headerlink" href="#debugging-and-development" title="Permalink to this headline"></a></h2>
+<section id="running-ndctl">
+<h3>Running ndctl<a class="headerlink" href="#running-ndctl" title="Permalink to this headline"></a></h3>
+<p>The COS image does not have <code class="docutils literal notranslate"><span class="pre">ndctl</span></code>. The following <code class="docutils literal notranslate"><span class="pre">DaemonSet</span></code> instead
+runs commands inside the <code class="docutils literal notranslate"><span class="pre">pmem-csi-driver</span></code> image. This is an
+alternative to running inside Docker.</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>-<span class="w"> </span>&lt;&lt;EOF
+<span class="go">apiVersion: apps/v1beta2</span>
+<span class="go">kind: DaemonSet</span>
+<span class="go">metadata:</span>
+<span class="go">  name: pmem-csi-init</span>
+<span class="go">spec:</span>
+<span class="go">  selector:</span>
+<span class="go">    matchLabels:</span>
+<span class="go">      app: pmem-csi-node</span>
+<span class="go">  template:</span>
+<span class="go">    metadata:</span>
+<span class="go">      labels:</span>
+<span class="go">        app: pmem-csi-node</span>
+<span class="go">    spec:</span>
+<span class="go">      containers:</span>
+<span class="go">      - command:</span>
+<span class="go">        - /bin/sh</span>
+<span class="go">        - -c</span>
+<span class="go">        - set -x; ls -l /dev/pmem*; ndctl list -RN &amp;&amp; ndctl disable-region region0 &amp;&amp; ndctl init-labels nmem0 &amp;&amp; ndctl enable-region region0 &amp;&amp; ndctl list -RN &amp;&amp; (ls -l /dev/pmem* || true) &amp;&amp; sleep 10000</span>
+<span class="go">        image: intel/pmem-csi-driver:v0.5.0-rc4</span>
+<span class="go">        name: ndctl</span>
+<span class="go">        securityContext:</span>
+<span class="go">          privileged: true</span>
+<span class="go">        volumeMounts:</span>
+<span class="go">        - mountPath: /dev</span>
+<span class="go">          name: dev-dir</span>
+<span class="go">        - mountPath: /sys</span>
+<span class="go">          name: sys-dir</span>
+<span class="go">      nodeSelector:</span>
+<span class="go">        storage: pmem</span>
+<span class="go">      volumes:</span>
+<span class="go">      - hostPath:</span>
+<span class="go">          path: /dev</span>
+<span class="go">          type: DirectoryOrCreate</span>
+<span class="go">        name: dev-dir</span>
+<span class="go">      - hostPath:</span>
+<span class="go">          path: /sys</span>
+<span class="go">          type: DirectoryOrCreate</span>
+<span class="go">        name: sys-dir</span>
+<span class="go">EOF</span>
+</pre></div>
+</div>
+<p>The expected result is that the pods keep running, so the output can be checked:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>get<span class="w"> </span>pods<span class="w"> </span>-o<span class="w"> </span>wide
+<span class="go">NAME                  READY   STATUS    RESTARTS   AGE   IP           NODE                       NOMINATED NODE   READINESS GATES</span>
+<span class="go">pmem-csi-init-5dswq   1/1     Running   0          12m   10.64.1.16   kubernetes-minion-node-0   &lt;none&gt;           &lt;none&gt;</span>
+<span class="go">pmem-csi-init-gb5k5   1/1     Running   0          12m   10.64.2.5    kubernetes-minion-node-2   &lt;none&gt;           &lt;none&gt;</span>
+<span class="go">pmem-csi-init-tqpjl   1/1     Running   0          12m   10.64.3.7    kubernetes-minion-node-1   &lt;none&gt;           &lt;none&gt;</span>
+
+<span class="gp">$ </span>kubectl<span class="w"> </span>logs<span class="w"> </span>pmem-csi-init-5dswq
+<span class="go">+ ls -l /dev/pmem0</span>
+<span class="go">brw-rw---- 1 root disk 259, 0 Aug  2 18:49 /dev/pmem0</span>
+<span class="go">+ ndctl list -RN</span>
+<span class="go">{</span>
+<span class="go">  &quot;regions&quot;:[</span>
+<span class="go">    {</span>
+<span class="go">      &quot;dev&quot;:&quot;region0&quot;,</span>
+<span class="go">      &quot;size&quot;:1717986918400,</span>
+<span class="go">      &quot;available_size&quot;:0,</span>
+<span class="go">      &quot;max_available_extent&quot;:0,</span>
+<span class="go">      &quot;type&quot;:&quot;pmem&quot;,</span>
+<span class="go">      &quot;persistence_domain&quot;:&quot;unknown&quot;,</span>
+<span class="go">      &quot;namespaces&quot;:[</span>
+<span class="go">        {</span>
+<span class="go">          &quot;dev&quot;:&quot;namespace0.0&quot;,</span>
+<span class="go">          &quot;mode&quot;:&quot;fsdax&quot;,</span>
+<span class="go">          &quot;map&quot;:&quot;mem&quot;,</span>
+<span class="go">          &quot;size&quot;:1717986918400,</span>
+<span class="go">          &quot;sector_size&quot;:512,</span>
+<span class="go">          &quot;blockdev&quot;:&quot;pmem0&quot;</span>
+<span class="go">        }</span>
+<span class="go">      ]</span>
+<span class="go">    }</span>
+<span class="go">  ]</span>
+<span class="go">}</span>
+<span class="go">+ ndctl disable-region region0</span>
+<span class="go">disabled 1 region</span>
+<span class="go">+ ndctl init-labels nmem0</span>
+<span class="go">initialized 0 nmem</span>
+<span class="go">+ ndctl enable-region region0</span>
+<span class="go">enabled 1 region</span>
+<span class="go">+ ndctl list -RN</span>
+<span class="go">{</span>
+<span class="go">  &quot;regions&quot;:[</span>
+<span class="go">    {</span>
+<span class="go">      &quot;dev&quot;:&quot;region0&quot;,</span>
+<span class="go">      &quot;size&quot;:1717986918400,</span>
+<span class="go">      &quot;available_size&quot;:0,</span>
+<span class="go">      &quot;max_available_extent&quot;:0,</span>
+<span class="go">      &quot;type&quot;:&quot;pmem&quot;,</span>
+<span class="go">      &quot;persistence_domain&quot;:&quot;unknown&quot;,</span>
+<span class="go">      &quot;namespaces&quot;:[</span>
+<span class="go">        {</span>
+<span class="go">          &quot;dev&quot;:&quot;namespace0.0&quot;,</span>
+<span class="go">          &quot;mode&quot;:&quot;fsdax&quot;,</span>
+<span class="go">          &quot;map&quot;:&quot;mem&quot;,</span>
+<span class="go">          &quot;size&quot;:1717986918400,</span>
+<span class="go">          &quot;sector_size&quot;:512,</span>
+<span class="go">          &quot;blockdev&quot;:&quot;pmem0&quot;</span>
+<span class="go">        }</span>
+<span class="go">      ]</span>
+<span class="go">    }</span>
+<span class="go">  ]</span>
+<span class="go">}</span>
+<span class="go">+ ls -l /dev/pmem0</span>
+<span class="go">brw-rw---- 1 root disk 259, 0 Aug  2 18:53 /dev/pmem0</span>
+<span class="go">+ sleep 10000</span>
+</pre></div>
+</div>
+<p>The output above shows that <code class="docutils literal notranslate"><span class="pre">ndctl</span> <span class="pre">init-labels</span></code> doesn’t do anything.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="memcached.html" class="btn btn-neutral float-left" title="memcached" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Intel Corporation.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

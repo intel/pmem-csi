@@ -1,0 +1,9 @@
+docs/DEVELOPMENT.md:317: [redirected permanently] http://plantuml.com/ to https://plantuml.com/
+docs/design.md:406: [redirected permanently] http://github.com/intel/pmem-csi/tree/release-0.9/pkg/scheduler to https://github.com/intel/pmem-csi/tree/release-0.9/pkg/scheduler
+README.md:13: [redirected with Found] https://github.com/intel/pmem-csi/releases/latest to https://github.com/intel/pmem-csi/releases/tag/v1.1.0
+docs/DEVELOPMENT.md:114: [redirected with Found] https://github.com/intel/pmem-csi/releases/new to https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fintel%2Fpmem-csi%2Freleases%2Fnew
+docs/install.md:1292: [redirected permanently] https://hub.helm.sh/charts/stable/prometheus to https://artifacthub.io:443/packages/helm/stable/prometheus
+docs/design.md:367: [redirected permanently] https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#extended-resources to https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#extended-resources
+docs/DEVELOPMENT.md:346: [redirected with Found] https://sphinx-rtd-theme.readthedocs.io/ to https://sphinx-rtd-theme.readthedocs.io/en/stable/
+docs/DEVELOPMENT.md:346: [redirected with Found] https://www.sphinx-doc.org/ to https://www.sphinx-doc.org/en/master/
+docs/install.md:1910: [redirected permanently] https://security-center.intel.com to https://www.intel.com/content/www/us/en/security-center/default.html

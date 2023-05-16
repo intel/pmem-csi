@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redis-pmem operator &mdash; PMEM-CSI devel documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/copybutton.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/override.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/clipboard.min.js"></script>
+        <script src="../_static/copybutton.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="memcached" href="memcached.html" />
+    <link rel="prev" title="Application examples" href="readme.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> PMEM-CSI
+          </a>
+              <div class="version">
+                devel
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../README.html">Introduction to PMEM-CSI for Kubernetes*</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../docs/design.html">Design and architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../docs/install.html">Installation and Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../docs/DEVELOPMENT.html">Develop and Contribute</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../docs/autotest.html">Automated testing</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="readme.html">Application examples</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Redis-pmem operator</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#prerequisites">Prerequisites</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#pmem-csi-installation">PMEM-CSI installation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#redis-operator-installation-and-redis-cluster-deployment">Redis operator installation and Redis cluster deployment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#verify-that-the-redis-instances-are-using-the-volumes-provided">Verify that the Redis instances are using the volumes provided</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#playing-around-with-redis-operator">Playing around with Redis operator</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#high-availability-for-redis-instances">High availability for Redis instances</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="memcached.html">memcached</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gce.html">Google Cloud Engine</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference external" href="https://github.com/intel/pmem-csi">Project GitHub repository</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">PMEM-CSI</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="readme.html">Application examples</a> &raquo;</li>
+      <li>Redis-pmem operator</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="redis-pmem-operator">
+<h1>Redis-pmem operator<a class="headerlink" href="#redis-pmem-operator" title="Permalink to this headline"></a></h1>
+<p>This readme describes a complete example to deploy a Redis cluster through the <a class="reference external" href="https://github.com/spotahome/redis-operator">redis-operator</a> using QEMU-emulated persistent memory devices.</p>
+<section id="prerequisites">
+<h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Permalink to this headline"></a></h2>
+<ul class="simple">
+<li><p>Docker-ce: version 18.06.1</p></li>
+<li><p><a class="reference external" href="https://docs.docker.com/registry/deploying/">Docker registry</a>.</p></li>
+</ul>
+</section>
+<section id="pmem-csi-installation">
+<h2>PMEM-CSI installation<a class="headerlink" href="#pmem-csi-installation" title="Permalink to this headline"></a></h2>
+<p><a class="reference internal" href="../docs/install.html"><span class="doc">Install PMEM-CSI</span></a> using one of the supported install
+methods. The next steps assume that there is a <code class="docutils literal notranslate"><span class="pre">pmem-csi-sc-ext4</span></code> storage
+class.</p>
+</section>
+<section id="redis-operator-installation-and-redis-cluster-deployment">
+<h2>Redis operator installation and Redis cluster deployment<a class="headerlink" href="#redis-operator-installation-and-redis-cluster-deployment" title="Permalink to this headline"></a></h2>
+<p>The steps to install the Redis operator by Spotahome are listed below:</p>
+<ol>
+<li><p>Install the Redis operator and validate that the <code class="docutils literal notranslate"><span class="pre">CRD</span></code> was properly defined:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>https://raw.githubusercontent.com/spotahome/redis-operator/master/example/operator/all-redis-operator-resources.yaml
+
+<span class="gp">$ </span>kubectl<span class="w"> </span>get<span class="w"> </span>po
+<span class="go">NAME                             READY   STATUS    RESTARTS   AGE</span>
+<span class="go">pmem-csi-controller-0            3/3     Running   0          134m</span>
+<span class="go">pmem-csi-node-c82p5              2/2     Running   0          133m</span>
+<span class="go">pmem-csi-node-dwws2              2/2     Running   0          134m</span>
+<span class="go">pmem-csi-node-kj7gs              2/2     Running   0          134m</span>
+<span class="go">redisoperator-688f6f4fcc-lv5h5   1/1     Running   0          7m29s</span>
+
+<span class="gp">$ </span>kubectl<span class="w"> </span>get<span class="w"> </span>crd
+<span class="go">NAME                                     CREATED AT</span>
+<span class="go">csidrivers.csi.storage.k8s.io            2019-06-21T16:55:46Z</span>
+<span class="go">csinodeinfos.csi.storage.k8s.io          2019-06-21T16:55:47Z</span>
+<span class="go">redisfailovers.databases.spotahome.com   2019-06-21T19:03:36Z</span>
+</pre></div>
+</div>
+</li>
+<li><p>Deploy a Redis cluster that uses PMEM-CSI:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>https://raw.githubusercontent.com/spotahome/redis-operator/master/example/redisfailover/pmem.yaml
+
+<span class="gp">$ </span>kubectl<span class="w"> </span>get<span class="w"> </span>po
+<span class="go">NAME                                      READY   STATUS    RESTARTS   AGE</span>
+<span class="go">pmem-csi-controller-0                     3/3     Running   0          145m</span>
+<span class="go">pmem-csi-node-c82p5                       2/2     Running   0          144m</span>
+<span class="go">pmem-csi-node-dwws2                       2/2     Running   0          145m</span>
+<span class="go">pmem-csi-node-kj7gs                       2/2     Running   0          145m</span>
+<span class="go">redisoperator-688f6f4fcc-lv5h5            1/1     Running   0          18m</span>
+<span class="go">rfr-redisfailover-pmem-0                  1/1     Running   0          9m37s</span>
+<span class="go">rfr-redisfailover-pmem-1                  1/1     Running   0          6m28s</span>
+<span class="go">rfr-redisfailover-pmem-2                  1/1     Running   0          3m15s</span>
+<span class="go">rfs-redisfailover-pmem-7595857d4c-56mmz   1/1     Running   0          9m37s</span>
+<span class="go">rfs-redisfailover-pmem-7595857d4c-c69xg   1/1     Running   0          9m37s</span>
+<span class="go">rfs-redisfailover-pmem-7595857d4c-cqx4p   1/1     Running   0          9m37s</span>
+</pre></div>
+</div>
+<p><strong>Note</strong>: These steps deploy a Redis cluster with three Redis and three sentinel instances as it is shown when executing <code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">get</span> <span class="pre">po</span></code> command. The provided persistent volumes use the specifications in the <code class="docutils literal notranslate"><span class="pre">persistentVolumeClaim</span></code> section of <code class="docutils literal notranslate"><span class="pre">example/redisfailover/pmem.yaml</span></code>, i.e.: 100Mi of storage. Feel free to play around with the numbers of instances to be deployed at <code class="docutils literal notranslate"><span class="pre">example/redisfailover/pmem.yaml</span></code>.</p>
+</li>
+</ol>
+</section>
+<section id="verify-that-the-redis-instances-are-using-the-volumes-provided">
+<h2>Verify that the Redis instances are using the volumes provided<a class="headerlink" href="#verify-that-the-redis-instances-are-using-the-volumes-provided" title="Permalink to this headline"></a></h2>
+<p>First, match the volumes claim name used by each Redis instance to the current <code class="docutils literal notranslate"><span class="pre">pvc</span></code> which is provisioned by <code class="docutils literal notranslate"><span class="pre">pmem-csi-sc-ext4</span></code>. Both items must be properly bound.
+Next, check the block devices in the worker nodes of your Kubernetes cluster and match the ones under the pmem <code class="docutils literal notranslate"><span class="pre">block</span></code> device, as shown below.</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>get<span class="w"> </span>pvc
+<span class="go">NAME                                               STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS       AGE</span>
+<span class="go">redisfailover-pmem-data-rfr-redisfailover-pmem-0   Bound    pvc-82ee55fc-9458-11e9-bec2-0242ac110004   100Mi      RWO            pmem-csi-sc-ext4   19m</span>
+<span class="go">redisfailover-pmem-data-rfr-redisfailover-pmem-1   Bound    pvc-f3a04c91-9458-11e9-bec2-0242ac110004   100Mi      RWO            pmem-csi-sc-ext4   16m</span>
+<span class="go">redisfailover-pmem-data-rfr-redisfailover-pmem-2   Bound    pvc-668ec3c6-9459-11e9-bec2-0242ac110004   100Mi      RWO            pmem-csi-sc-ext4   13m</span>
+
+<span class="gp">$ </span>kubectl<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>rfr-redisfailover-pmem-0<span class="w"> </span>--<span class="w"> </span>df<span class="w"> </span>/data
+<span class="go">Filesystem                                                   1K-blocks  Used Available Use% Mounted on</span>
+<span class="go">/dev/ndbus0region0fsdax/8999c281-9458-11e9-8866-a611eaeb0cd9     95088    72     87848   1% /data</span>
+
+<span class="gp">$ </span>kubectl<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>rfr-redisfailover-pmem-0<span class="w"> </span>--<span class="w"> </span>mount<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>/data
+<span class="go">/dev/ndbus0region0fsdax/8999c281-9458-11e9-8866-a611eaeb0cd9 on /data type ext4 (rw,relatime,dax,stripe=256)</span>
+</pre></div>
+</div>
+</section>
+<section id="playing-around-with-redis-operator">
+<h2>Playing around with Redis operator<a class="headerlink" href="#playing-around-with-redis-operator" title="Permalink to this headline"></a></h2>
+<p>The steps to start playing around with Redis cluster <em>through sentinel instances</em> managed by the operator, are listed below:</p>
+<ol>
+<li><p>Get the network information of the Redis node working as a master. You can use any sentinel instance, i.e.:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-it<span class="w"> </span>rfs-redisfailover-pmem-7595857d4c-56mmz<span class="w"> </span>--<span class="w"> </span>redis-cli<span class="w"> </span>-p<span class="w"> </span><span class="m">26379</span><span class="w"> </span>SENTINEL<span class="w"> </span>get-master-addr-by-name<span class="w"> </span>mymaster
+<span class="go">1) &quot;10.244.3.4&quot;</span>
+<span class="go">2) &quot;6379&quot;</span>
+</pre></div>
+</div>
+</li>
+<li><p>Set a <code class="docutils literal notranslate"><span class="pre">key:value</span></code> pair into Redis master:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-it<span class="w"> </span>rfs-redisfailover-pmem-7595857d4c-c69xg<span class="w"> </span>--<span class="w"> </span>redis-cli<span class="w"> </span>-h<span class="w"> </span><span class="m">10</span>.244.3.4<span class="w"> </span>-p<span class="w"> </span><span class="m">6379</span><span class="w"> </span>SET<span class="w"> </span>hello<span class="w"> </span>world!
+<span class="go">OK</span>
+</pre></div>
+</div>
+</li>
+<li><p>Get <code class="docutils literal notranslate"><span class="pre">value</span></code> from <code class="docutils literal notranslate"><span class="pre">key</span></code>:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>-it<span class="w"> </span>rfs-redisfailover-pmem-7595857d4c-c69xg<span class="w"> </span>--<span class="w"> </span>redis-cli<span class="w"> </span>-h<span class="w"> </span><span class="m">10</span>.244.3.4<span class="w"> </span>-p<span class="w"> </span><span class="m">6379</span><span class="w"> </span>GET<span class="w"> </span>hello
+<span class="go">&quot;world!&quot;</span>
+</pre></div>
+</div>
+</li>
+<li><p>Feel free to play around with the Redis cluster.</p></li>
+</ol>
+</section>
+<section id="high-availability-for-redis-instances">
+<h2>High availability for Redis instances<a class="headerlink" href="#high-availability-for-redis-instances" title="Permalink to this headline"></a></h2>
+<p>In order to ensure high availability for Redis instances, it’s required to use <code class="docutils literal notranslate"><span class="pre">hardAntiAffinity:</span> <span class="pre">True</span></code> and <code class="docutils literal notranslate"><span class="pre">storageClassName:</span> <span class="pre">pmem-csi-sc-late-binding</span></code> under Redis deployment specification, i.e.:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">apiVersion</span><span class="p">:</span> <span class="n">databases</span><span class="o">.</span><span class="n">spotahome</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">v1</span>
+<span class="n">kind</span><span class="p">:</span> <span class="n">RedisFailover</span>
+<span class="n">metadata</span><span class="p">:</span>
+  <span class="n">name</span><span class="p">:</span> <span class="n">redisfailover</span><span class="o">-</span><span class="n">pmem</span><span class="o">-</span><span class="n">lb</span>
+<span class="n">spec</span><span class="p">:</span>
+  <span class="n">sentinel</span><span class="p">:</span>
+    <span class="n">replicas</span><span class="p">:</span> <span class="mi">3</span>
+    <span class="o">...</span>
+  <span class="n">redis</span><span class="p">:</span>
+    <span class="n">hardAntiAffinity</span><span class="p">:</span> <span class="kc">True</span>
+    <span class="n">replicas</span><span class="p">:</span> <span class="mi">3</span>
+    <span class="o">...</span>
+    <span class="n">storage</span><span class="p">:</span>
+      <span class="n">persistentVolumeClaim</span><span class="p">:</span>
+        <span class="n">metadata</span><span class="p">:</span>
+          <span class="n">name</span><span class="p">:</span> <span class="n">redisfailover</span><span class="o">-</span><span class="n">pmem</span><span class="o">-</span><span class="n">data</span>
+        <span class="n">spec</span><span class="p">:</span>
+          <span class="n">accessModes</span><span class="p">:</span>
+            <span class="o">-</span> <span class="n">ReadWriteOnce</span>
+          <span class="n">resources</span><span class="p">:</span>
+            <span class="n">requests</span><span class="p">:</span>
+              <span class="n">storage</span><span class="p">:</span> <span class="mi">100</span><span class="n">Mi</span>
+          <span class="n">storageClassName</span><span class="p">:</span> <span class="n">pmem</span><span class="o">-</span><span class="n">csi</span><span class="o">-</span><span class="n">sc</span><span class="o">-</span><span class="n">late</span><span class="o">-</span><span class="n">binding</span>
+</pre></div>
+</div>
+<p>The deployment can be done in the same way as mentioned before, i.e.:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>kubectl<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>/path/to/pmem-lb.yaml
+<span class="go">redisfailover.databases.spotahome.com/redisfailover-pmem-lb created</span>
+
+<span class="gp">$ </span>kubectl<span class="w"> </span>get<span class="w"> </span>po<span class="w"> </span>-o<span class="w"> </span>custom-columns<span class="o">=</span>NAME:.metadata.name,STATUS:.status.phase,NODE:.spec.nodeName,IP:.status.podIP
+<span class="go">NAME                                         STATUS    NODE                          IP</span>
+<span class="go">pmem-csi-controller-0                        Running   pmem-csi-clear-govm-worker3   10.244.3.2</span>
+<span class="go">pmem-csi-node-l8d58                          Running   pmem-csi-clear-govm-worker3   172.17.0.5</span>
+<span class="go">pmem-csi-node-v8cb4                          Running   pmem-csi-clear-govm-worker2   172.17.0.4</span>
+<span class="go">pmem-csi-node-xwk2l                          Running   pmem-csi-clear-govm-worker1   172.17.0.3</span>
+<span class="go">redisoperator-688f6f4fcc-l6p4f               Running   pmem-csi-clear-govm-worker1   10.244.2.2</span>
+<span class="go">rfr-redisfailover-pmem-lb-0                  Running   pmem-csi-clear-govm-worker2   10.244.1.3</span>
+<span class="go">rfr-redisfailover-pmem-lb-1                  Running   pmem-csi-clear-govm-worker1   10.244.2.4</span>
+<span class="go">rfr-redisfailover-pmem-lb-2                  Running   pmem-csi-clear-govm-worker3   10.244.3.4</span>
+<span class="go">rfs-redisfailover-pmem-lb-5c455d7974-9twjz   Running   pmem-csi-clear-govm-worker1   10.244.2.3</span>
+<span class="go">rfs-redisfailover-pmem-lb-5c455d7974-dscmx   Running   pmem-csi-clear-govm-worker2   10.244.1.2</span>
+<span class="go">rfs-redisfailover-pmem-lb-5c455d7974-jtznn   Running   pmem-csi-clear-govm-worker3   10.244.3.3</span>
+</pre></div>
+</div>
+<p>As it is shown, each <code class="docutils literal notranslate"><span class="pre">rfr-redisfailover-pmem-lb-X</span></code> gets assigned to a different Kubernetes cluster node <code class="docutils literal notranslate"><span class="pre">pmem-csi-clear-govm-workerX</span></code>, where <code class="docutils literal notranslate"><span class="pre">X</span></code> ∈ {1,2,3}.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="readme.html" class="btn btn-neutral float-left" title="Application examples" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="memcached.html" class="btn btn-neutral float-right" title="memcached" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Intel Corporation.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,9 @@
+docs/DEVELOPMENT.md:322: [redirected permanently] http://plantuml.com/ to https://plantuml.com/
+README.md:201: [redirected with Found] https://asciinema.org/a/Bz0KrHGgwHMSokekheZazDR2m to https://asciinema.org/a/455975
+docs/DEVELOPMENT.md:114: [redirected with Found] https://github.com/intel/pmem-csi/releases/new to https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fintel%2Fpmem-csi%2Freleases%2Fnew
+README.md:13: [redirected with Found] https://github.com/intel/pmem-csi/releases/latest to https://github.com/intel/pmem-csi/releases/tag/v1.1.0
+docs/install.md:1107: [redirected permanently] https://hub.helm.sh/charts/stable/prometheus to https://artifacthub.io:443/packages/helm/stable/prometheus
+docs/DEVELOPMENT.md:351: [redirected with Found] https://sphinx-rtd-theme.readthedocs.io/ to https://sphinx-rtd-theme.readthedocs.io/en/stable/
+docs/DEVELOPMENT.md:351: [redirected with Found] https://www.sphinx-doc.org/ to https://www.sphinx-doc.org/en/master/
+docs/design.md:247: [redirected with Found] https://www.openshift.com/blog/a-guide-to-openshift-and-uids to https://cloud.redhat.com/blog/a-guide-to-openshift-and-uids
+docs/install.md:1748: [redirected permanently] https://security-center.intel.com to https://www.intel.com/content/www/us/en/security-center/default.html

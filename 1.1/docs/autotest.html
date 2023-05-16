@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Automated testing &mdash; PMEM-CSI v1.1 documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/copybutton.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/override.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/clipboard.min.js"></script>
+        <script src="../_static/copybutton.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Application examples" href="../examples/readme.html" />
+    <link rel="prev" title="Develop and Contribute" href="DEVELOPMENT.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> PMEM-CSI
+          </a>
+              <div class="version">
+                v1.1
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../README.html">Introduction to PMEM-CSI for Kubernetes*</a></li>
+<li class="toctree-l1"><a class="reference internal" href="design.html">Design and architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation and Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="DEVELOPMENT.html">Develop and Contribute</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Automated testing</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#unit-testing-and-code-quality">Unit testing and code quality</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#qemu-and-kubernetes">QEMU and Kubernetes*</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#starting-and-stopping-a-test-cluster">Starting and stopping a test cluster</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#running-commands-on-test-cluster-nodes-over-ssh">Running commands on test cluster nodes over ssh</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#deploying-pmem-csi-on-a-test-cluster">Deploying PMEM-CSI on a test cluster</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#configuration-options">Configuration options</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#running-e2e-tests">Running E2E tests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#testing-on-an-existing-cluster">Testing on an existing cluster</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#using-ndctl-on-an-os-which-does-not-provide-it">Using ndctl on an OS which does not provide it</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../examples/readme.html">Application examples</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://github.com/intel/pmem-csi">Project GitHub repository</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">PMEM-CSI</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>Automated testing</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="automated-testing">
+<h1>Automated testing<a class="headerlink" href="#automated-testing" title="Permalink to this headline"></a></h1>
+<section id="unit-testing-and-code-quality">
+<h2>Unit testing and code quality<a class="headerlink" href="#unit-testing-and-code-quality" title="Permalink to this headline"></a></h2>
+<p>Use the <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">test</span></code> command.</p>
+</section>
+<section id="qemu-and-kubernetes">
+<h2>QEMU and Kubernetes*<a class="headerlink" href="#qemu-and-kubernetes" title="Permalink to this headline"></a></h2>
+<p>E2E testing relies on a cluster running inside multiple QEMU virtual
+machines deployed by <a class="reference external" href="https://github.com/govm-project/govm">GoVM</a>. The
+same cluster can also be used interactively when real hardware is not
+available.</p>
+<p>E2E testing is known to work on a Linux development host system. The user
+must be allowed to use Docker*.</p>
+<p>KVM must be enabled. Usually this is the case when <code class="docutils literal notranslate"><span class="pre">/dev/kvm</span></code> exists.
+The current user does not need the privileges to use KVM and QEMU
+doesn’t have to be installed because GoVM will run QEMU inside a
+container with root privileges.</p>
+<p>Note that cloud providers often don’t offer KVM support on their
+regular machines. Search for “nested virtualization” for your provider
+to determine whether and how it supports KVM.</p>
+<p>Nested virtualization is also needed when using Kata Containers* inside
+the cluster. On Intel-based machines it can be enabled by loading the
+<code class="docutils literal notranslate"><span class="pre">kvm_intel</span></code> module with <code class="docutils literal notranslate"><span class="pre">nested=1</span></code> (see
+https://wiki.archlinux.org/index.php/KVM#Nested_virtualization). At
+this time, Kata Containers up to and including 1.9.1 is <a class="reference external" href="https://github.com/intel/pmem-csi/issues/303">not
+compatible with
+PMEM-CSI</a> because
+volumes are not passed in as PMEM, but Kata Containers <a class="reference external" href="https://github.com/kata-containers/packaging/tree/master/kata-deploy#kubernetes-quick-start">can be
+installed</a>
+and used for applications that are not using PMEM.</p>
+<p>PMEM-CSI images must have been created and published in some Docker
+registry, as described earlier in <a class="reference external" href="DEVELOPMENT.html#build-pmem-csi">build PMEM-CSI</a>.
+In addition, that registry must be accessible from inside the
+cluster. That works for the default (a local registry in the build
+host) but may require setting additional <a class="reference external" href="#configuration-options">configuration
+options</a> for other scenarios.</p>
+</section>
+<section id="starting-and-stopping-a-test-cluster">
+<h2>Starting and stopping a test cluster<a class="headerlink" href="#starting-and-stopping-a-test-cluster" title="Permalink to this headline"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">start</span></code> will bring up a Kubernetes test cluster inside four QEMU
+virtual machines.
+The first node is the Kubernetes master without
+persistent memory.
+The other three nodes are worker nodes with one emulated 32GB NVDIMM each.
+After the cluster has been formed, <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">start</span></code> installs <a class="reference external" href="https://kubernetes-sigs.github.io/node-feature-discovery/stable/get-started/index.html">NFD</a> to label
+the worker nodes. The PMEM-CSI driver can be installed with
+<code class="docutils literal notranslate"><span class="pre">test/setup-deployment.sh</span></code>, but will also be installed as needed by
+the E2E test suite.</p>
+<p>Once <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">start</span></code> completes, the cluster is ready for interactive use via
+<code class="docutils literal notranslate"><span class="pre">kubectl</span></code> inside the virtual machine. Alternatively, you can also
+set <code class="docutils literal notranslate"><span class="pre">KUBECONFIG</span></code> as shown at the end of the <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">start</span></code> output
+and use <code class="docutils literal notranslate"><span class="pre">kubectl</span></code> binary on the host running VMs.</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">stop</span></code> to stop and remove the virtual machines.</p>
+<p><code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">restart</span></code> can be used to cleanly reboot all virtual
+machines. This is useful during development after a <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">push-images</span></code>
+to ensure that the cluster runs those rebuilt images. However, for
+that to work the image pull policy has to be changed from the default
+“if not present” to “always” by setting the <code class="docutils literal notranslate"><span class="pre">TEST_IMAGE_PULL_POLICY</span></code>
+environment variable to <code class="docutils literal notranslate"><span class="pre">Always</span></code>.</p>
+</section>
+<section id="running-commands-on-test-cluster-nodes-over-ssh">
+<h2>Running commands on test cluster nodes over ssh<a class="headerlink" href="#running-commands-on-test-cluster-nodes-over-ssh" title="Permalink to this headline"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">start</span></code> generates ssh wrapper scripts <code class="docutils literal notranslate"><span class="pre">_work/pmem-govm/ssh.N</span></code> for each
+test cluster node which are handy for running a single command or to
+start an interactive shell. Examples:</p>
+<p><code class="docutils literal notranslate"><span class="pre">_work/pmem-govm/ssh.0</span> <span class="pre">kubectl</span> <span class="pre">get</span> <span class="pre">pods</span></code> runs a kubectl command on
+the master node.</p>
+<p><code class="docutils literal notranslate"><span class="pre">_work/pmem-govm/ssh.1</span></code> starts a shell on the first worker node.</p>
+</section>
+<section id="deploying-pmem-csi-on-a-test-cluster">
+<h2>Deploying PMEM-CSI on a test cluster<a class="headerlink" href="#deploying-pmem-csi-on-a-test-cluster" title="Permalink to this headline"></a></h2>
+<p>After <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">start</span></code>, PMEM-CSI is <em>not</em> installed yet. Either install
+manually as <a class="reference external" href="install.html#installation-and-setup">described for a normal
+cluster</a> or use the
+<a class="reference external" href="https://github.com/intel/pmem-csi/blob/fdf305057a84de6d82c9556473f09081d78715a5/test/setup-deployment.sh">setup-deployment.sh</a> script.</p>
+</section>
+<section id="configuration-options">
+<h2>Configuration options<a class="headerlink" href="#configuration-options" title="Permalink to this headline"></a></h2>
+<p>Several aspects of the cluster and build setup can be configured by overriding
+the settings in the <a class="reference external" href="https://github.com/intel/pmem-csi/blob/fdf305057a84de6d82c9556473f09081d78715a5/test/test-config.sh">test-config.sh</a> file. See
+that file for a description of all options. Options can be set as
+environment variables of <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">start</span></code> on a case-by-case basis or
+permanently by creating a file like <code class="docutils literal notranslate"><span class="pre">test/test-config.d/my-config.sh</span></code>.</p>
+<p>Multiple different clusters can be brought up in parallel by changing
+the default <code class="docutils literal notranslate"><span class="pre">pmem-govm</span></code> cluster name via the <code class="docutils literal notranslate"><span class="pre">CLUSTER</span></code> env variable.</p>
+<p>For example, this invocation sets up a cluster using an older release
+of Kubernetes:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">TEST_KUBERNETES_VERSION</span><span class="o">=</span><span class="mf">1.18</span> <span class="n">CLUSTER</span><span class="o">=</span><span class="n">kubernetes</span><span class="o">-</span><span class="mf">1.18</span> <span class="n">make</span> <span class="n">start</span>
+</pre></div>
+</div>
+<p>See additional details in <a class="reference external" href="https://github.com/intel/pmem-csi/tree/fdf305057a84de6d82c9556473f09081d78715a5/test/test-config.d">test/test-config.d</a>.</p>
+</section>
+<section id="running-e2e-tests">
+<h2>Running E2E tests<a class="headerlink" href="#running-e2e-tests" title="Permalink to this headline"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">test_e2e</span></code> will run <a class="reference external" href="https://github.com/kubernetes-csi/csi-test/tree/master/pkg/sanity">csi-test
+sanity</a>
+tests and some <a class="reference external" href="https://github.com/kubernetes/kubernetes/tree/master/test/e2e/storage/testsuites">Kubernetes storage
+tests</a>
+against the PMEM-CSI driver.</p>
+<p>When <a class="reference external" href="https://onsi.github.io/ginkgo/">ginkgo</a> is installed, then it
+can be used to run individual tests and to control additional aspects
+of the test run. For example, to run just the E2E provisioning test
+(create PVC, write data in one pod, read it in another) in verbose mode:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nv">KUBECONFIG</span><span class="o">=</span><span class="k">$(</span><span class="nb">pwd</span><span class="k">)</span>/_work/pmem-govm/kube.config<span class="w"> </span><span class="nv">REPO_ROOT</span><span class="o">=</span><span class="k">$(</span><span class="nb">pwd</span><span class="k">)</span><span class="w"> </span>ginkgo<span class="w"> </span>-v<span class="w"> </span>-focus<span class="o">=</span>pmem-csi.*should.provision.storage.with.defaults<span class="w"> </span>./test/e2e/
+<span class="go">Nov 26 11:21:28.805: INFO: The --provider flag is not set.  Treating as a conformance test.  Some tests may not be run.</span>
+<span class="go">Running Suite: PMEM E2E suite</span>
+<span class="go">=============================</span>
+<span class="go">Random Seed: 1543227683 - Will randomize all specs</span>
+<span class="go">Will run 1 of 61 specs</span>
+
+<span class="go">Nov 26 11:21:28.812: INFO: checking config</span>
+<span class="go">Nov 26 11:21:28.812: INFO: &gt;&gt;&gt; kubeConfig: /nvme/gopath/src/github.com/intel/pmem-csi/_work/pmem-govm/kube.config</span>
+<span class="go">Nov 26 11:21:28.817: INFO: Waiting up to 30m0s for all (but 0) nodes to be schedulable</span>
+<span class="go">...</span>
+<span class="go">Ran 1 of 61 Specs in 58.465 seconds</span>
+<span class="go">SUCCESS! -- 1 Passed | 0 Failed | 0 Pending | 60 Skipped</span>
+<span class="go">PASS</span>
+
+<span class="go">Ginkgo ran 1 suite in 1m3.850672246s</span>
+<span class="go">Test Suite Passed</span>
+</pre></div>
+</div>
+<p>It is also possible to run just the sanity tests until one of them fails:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span><span class="nv">REPO_ROOT</span><span class="o">=</span><span class="sb">`</span><span class="nb">pwd</span><span class="sb">`</span><span class="w"> </span>ginkgo<span class="w"> </span><span class="s1">&#39;-focus=sanity&#39;</span><span class="w"> </span>-failFast<span class="w"> </span>./test/e2e/
+<span class="go">...</span>
+</pre></div>
+</div>
+</section>
+<section id="testing-on-an-existing-cluster">
+<h2>Testing on an existing cluster<a class="headerlink" href="#testing-on-an-existing-cluster" title="Permalink to this headline"></a></h2>
+<p>This can be done by emulating what <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">start</span></code> does when setting up a
+QEMU-based cluster. Here is a (not necessarily complete) list:</p>
+<ul class="simple">
+<li><p>Prepare a directory outside of <code class="docutils literal notranslate"><span class="pre">_work</span></code> with the following files.</p></li>
+<li><p>Create <code class="docutils literal notranslate"><span class="pre">ssh.&lt;0</span> <span class="pre">to</span> <span class="pre">number</span> <span class="pre">of</span> <span class="pre">nodes</span> <span class="pre">-1&gt;</span></code> scripts such that each script
+logs into the corresponding node or executes commands. For example:</p></li>
+</ul>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>cat<span class="w"> </span>igk/ssh.0
+<span class="gp">#</span>!/bin/sh
+
+<span class="go">ssh igk-1 &quot;$@&quot;</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>Create <code class="docutils literal notranslate"><span class="pre">ssh.&lt;host</span> <span class="pre">name&gt;</span></code> symlinks to the corresponding <code class="docutils literal notranslate"><span class="pre">ssh.&lt;number&gt;</span></code> file.</p></li>
+<li><p>Create a <code class="docutils literal notranslate"><span class="pre">kubernetes.version</span></code> file with <code class="docutils literal notranslate"><span class="pre">&lt;major&gt;.&lt;minor&gt;</span></code> versions, for example 1.19.</p></li>
+<li><p>Create <code class="docutils literal notranslate"><span class="pre">kube.config</span></code> and ensure that a local kubectl command can use it
+to connect to the cluster. SSH portforwarding may be necessary for remote
+clusters. The config must grant admin permissions.</p></li>
+<li><p>Ensure that <code class="docutils literal notranslate"><span class="pre">ssh.&lt;number&gt;</span> <span class="pre">&lt;command&gt;</span></code> works for the following commands:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">kubectl</span> <span class="pre">get</span> <span class="pre">nodes</span></code> (only needed for <code class="docutils literal notranslate"><span class="pre">ssh.0</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">pvs</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">ndctl</span> <span class="pre">list</span> <span class="pre">-NR</span></code></p></li>
+</ul>
+</li>
+<li><p>Label all worker nodes with PMEM with <code class="docutils literal notranslate"><span class="pre">storage=pmem</span></code> and
+<code class="docutils literal notranslate"><span class="pre">feature.node.kubernetes.io/memory-nv.dax=true</span></code>.</p></li>
+<li><p>Delete all namespaces.</p></li>
+<li><p>Symlink <code class="docutils literal notranslate"><span class="pre">_work/&lt;cluster&gt;</span></code> to the directory.</p></li>
+<li><p>Push a pmem-csi-driver image to a registry that the cluster can pull from.
+The normal <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">push-images</span></code> and <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">test_e2e</span></code> work when overriding the test config
+with a <code class="docutils literal notranslate"><span class="pre">test/test-config.d/xxx_external-cluster.sh</span></code> file that has the following content.
+This is just an example, quay.io also works.</p></li>
+</ul>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">TEST_LOCAL_REGISTRY</span><span class="o">=</span><span class="n">docker</span><span class="o">.</span><span class="n">io</span><span class="o">/</span><span class="n">pohly</span>
+<span class="n">TEST_PMEM_REGISTRY</span><span class="o">=</span><span class="n">docker</span><span class="o">.</span><span class="n">io</span><span class="o">/</span><span class="n">pohly</span>
+<span class="n">TEST_BUILD_PMEM_REGISTRY</span><span class="o">=</span><span class="n">docker</span><span class="o">.</span><span class="n">io</span><span class="o">/</span><span class="n">pohly</span>
+<span class="n">TEST_LOCAL_REGISTRY_SKIP_TLS</span><span class="o">=</span><span class="n">false</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>Run <code class="docutils literal notranslate"><span class="pre">CLUSTER=&lt;cluster&gt;</span> <span class="pre">TEST_HAVE_OLM=false</span> <span class="pre">make</span> <span class="pre">test_e2e</span> <span class="pre">TEST_E2E_SKIP=&quot;raw.conversion&quot;</span></code>. On OpenShift,
+use <code class="docutils literal notranslate"><span class="pre">TEST_HAVE_OLM=true</span></code>. The only direct TCP connection is the one for the API server,
+so with port forwarding a single developer machine can test multiple different remote
+clusters.</p></li>
+</ul>
+</section>
+<section id="using-ndctl-on-an-os-which-does-not-provide-it">
+<h2>Using ndctl on an OS which does not provide it<a class="headerlink" href="#using-ndctl-on-an-os-which-does-not-provide-it" title="Permalink to this headline"></a></h2>
+<p>If <code class="docutils literal notranslate"><span class="pre">ndctl</span></code> is not available for the OS but containers can be run, then
+the following workaround is possible. Create a wrapper script:</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="go">sudo tee /usr/local/bin/ndctl &lt;&lt;EOF</span>
+<span class="gp">#</span>!/bin/sh
+
+<span class="go">podman run --privileged -u 0:0 --rm docker.io/intel/pmem-csi-driver:v1.1.0 ndctl &quot;\$@&quot;</span>
+<span class="go">EOF</span>
+<span class="go">sudo chmod a+rx /usr/local/bin/ndctl</span>
+</pre></div>
+</div>
+<p>Then ensure that <code class="docutils literal notranslate"><span class="pre">sudo</span> <span class="pre">ndctl</span></code> finds the wrapper there:</p>
+<div class="highlight-ShellSession notranslate"><div class="highlight"><pre><span></span><span class="go">sudo sed -i -e &#39;s;\(secure_path.*\);\1:/usr/local/bin;&#39; /etc/sudoers</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="DEVELOPMENT.html" class="btn btn-neutral float-left" title="Develop and Contribute" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../examples/readme.html" class="btn btn-neutral float-right" title="Application examples" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Intel Corporation.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
