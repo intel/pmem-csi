@@ -112,7 +112,7 @@ func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error
 	}
 
 	// Watch for changes to primary resource Deployment
-	if err := c.Watch(&source.Kind{Type: &api.PmemCSIDeployment{}}, &handler.InstrumentedEnqueueRequestForObject{}, p); err != nil {
+	if err := c.Watch(source.Kind(mgr.GetCache(), &api.PmemCSIDeployment{}), &handler.InstrumentedEnqueueRequestForObject{}, p); err != nil {
 		return fmt.Errorf("watch: %v", err)
 	}
 
@@ -169,10 +169,8 @@ func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error
 	}
 
 	for _, resource := range currentObjects {
-		if err := c.Watch(&source.Kind{Type: resource}, &crhandler.EnqueueRequestForOwner{
-			IsController: true,
-			OwnerType:    &api.PmemCSIDeployment{},
-		}, sop); err != nil {
+		owner := crhandler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &api.PmemCSIDeployment{}, crhandler.OnlyControllerOwner())
+		if err := c.Watch(source.Kind(mgr.GetCache(), resource), owner, sop); err != nil {
 			return fmt.Errorf("create watch: %v", err)
 		}
 	}

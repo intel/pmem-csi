@@ -187,7 +187,7 @@ var _ = deploy.DescribeForSome("sanity", func(d *deploy.Deployment) bool {
 			socat := getSocatPod()
 
 			for {
-				stdout, stderr, err := f.ExecCommandInContainerWithFullOutput(socat.Name, "socat", args...)
+				stdout, stderr, err := e2epod.ExecCommandInContainerWithFullOutput(f, socat.Name, "socat", args...)
 				if err != nil {
 					exitErr, ok := err.(clientexec.ExitError)
 					if ok && exitErr.ExitStatus() == 126 {
@@ -333,20 +333,20 @@ fi
 			}
 		})
 
-		deleteTestNodeDriver := func() error {
-			nodeDriverPod, err := cluster.GetAppInstance(context.Background(), labels.Set{
+		deleteTestNodeDriver := func(ctx context.Context) error {
+			nodeDriverPod, err := cluster.GetAppInstance(ctx, labels.Set{
 				"app.kubernetes.io/name": "pmem-csi-node",
 			}, cluster.NodeIP(testNode), d.Namespace)
 			if err != nil {
 				return fmt.Errorf("node driver pod not found on node %d: %v", testNode, err)
 			}
-			if err := e2epod.DeletePodWithWaitByName(f.ClientSet, nodeDriverPod.Name, nodeDriverPod.Namespace); err != nil {
+			if err := e2epod.DeletePodWithWaitByName(ctx, f.ClientSet, nodeDriverPod.Name, nodeDriverPod.Namespace); err != nil {
 				return fmt.Errorf("delete driver pod on node %d: %v", testNode, err)
 			}
 			return nil
 		}
 
-		It("stores state across reboots for single volume", func() {
+		It("stores state across reboots for single volume", func(ctx context.Context) {
 			canRestartNode(nodeID)
 
 			execOnTestNode("sync")
@@ -401,7 +401,7 @@ fi
 			v.remove(vol, name)
 		})
 
-		It("can publish volume after a node driver restart", func() {
+		It("can publish volume after a node driver restart", func(ctx context.Context) {
 			var err error
 			v.namePrefix = "mount-volume"
 
@@ -415,7 +415,7 @@ fi
 			framework.ExpectNoError(err, "get capacity before restart")
 
 			// delete driver on node
-			err = deleteTestNodeDriver()
+			err = deleteTestNodeDriver(ctx)
 			framework.ExpectNoError(err)
 
 			// Eventually a different pod will be created and listing volumes will
@@ -433,7 +433,7 @@ fi
 			v.publish(name, vol)
 		})
 
-		It("LVM volume group expands during restart", func() {
+		It("LVM volume group expands during restart", func(ctx context.Context) {
 			// We cannot reconfigure the driver. But we can destroy the volume group and namespace,
 			// create a smaller namespace, then restart the driver. The result should be a volume
 			// group containing two namespaces.
@@ -453,7 +453,7 @@ fi
 				}
 
 				// We need to delete the pod to ensure that it detects those changes.
-				if err := deleteTestNodeDriver(); err != nil {
+				if err := deleteTestNodeDriver(ctx); err != nil {
 					framework.Logf("deleting test node driver during cleanup failed: %v", err)
 				}
 			}()
@@ -487,7 +487,7 @@ fi
 				dump()
 
 				// Force it to restart.
-				err = deleteTestNodeDriver()
+				err = deleteTestNodeDriver(ctx)
 				framework.ExpectNoError(err, "delete node driver during iteration #%d", i)
 
 				// Once the driver restarts, it should extend that existing volume group
@@ -510,9 +510,9 @@ fi
 			}
 		})
 
-		It("capacity is restored after controller restart", func() {
+		It("capacity is restored after controller restart", func(ctx context.Context) {
 			By("Fetching pmem-csi-controller pod name")
-			pods, err := e2epod.WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,
+			pods, err := e2epod.WaitForPodsWithLabelRunningReady(ctx, f.ClientSet, d.Namespace,
 				labels.Set{"app.kubernetes.io/name": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, time.Minute)
 			framework.ExpectNoError(err, "PMEM-CSI controller running with one replica")
 			controllerNode := pods.Items[0].Spec.NodeName
@@ -525,7 +525,7 @@ fi
 			rebooted = true
 			restartNode(f.ClientSet, controllerNode, sc)
 
-			_, err = e2epod.WaitForPodsWithLabelRunningReady(f.ClientSet, d.Namespace,
+			_, err = e2epod.WaitForPodsWithLabelRunningReady(ctx, f.ClientSet, d.Namespace,
 				labels.Set{"app.kubernetes.io/name": "pmem-csi-controller"}.AsSelector(), 1 /* one replica */, 5*time.Minute)
 			framework.ExpectNoError(err, "PMEM-CSI controller running again with one replica")
 

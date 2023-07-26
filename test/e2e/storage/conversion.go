@@ -52,13 +52,12 @@ var _ = deploy.DescribeForSome("raw-conversion", func(d *deploy.Deployment) bool
 	// Several pods needs privileges.
 	f.NamespacePodSecurityEnforceLevel = admissionapi.LevelPrivileged
 
-	It("works", func() {
-		testRawNamespaceConversion(f, d.DriverName, d.Namespace)
+	It("works", func(ctx context.Context) {
+		testRawNamespaceConversion(ctx, f, d.DriverName, d.Namespace)
 	})
 })
 
-func testRawNamespaceConversion(f *framework.Framework, driverName, namespace string) {
-	ctx := context.Background()
+func testRawNamespaceConversion(ctx context.Context, f *framework.Framework, driverName, namespace string) {
 	var err error
 	var out []byte
 
@@ -157,7 +156,7 @@ func testRawNamespaceConversion(f *framework.Framework, driverName, namespace st
 			return errors.New("not exactly one pod running on master node")
 		}
 		pod := pods.Items[0]
-		output, err := e2epod.GetPodLogs(f.ClientSet, pod.Namespace, pod.Name, "pmem-driver")
+		output, err := e2epod.GetPodLogs(ctx, f.ClientSet, pod.Namespace, pod.Name, "pmem-driver")
 		if err != nil {
 			return fmt.Errorf("get pmem-driver output on master node: %v", err)
 		}

@@ -120,16 +120,14 @@ var _ = deploy.DescribeForSome("E2E", deploy.RunAllTests, func(d *deploy.Deploym
 func DefineLateBindingTests(d *deploy.Deployment, f *framework.Framework) {
 	Context("late binding", func() {
 		var (
-			cleanup func()
-			sc      *storagev1.StorageClass
-			claim   v1.PersistentVolumeClaim
+			sc    *storagev1.StorageClass
+			claim v1.PersistentVolumeClaim
 		)
 
-		BeforeEach(func() {
+		BeforeEach(func(ctx context.Context) {
 			csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil, nil)
-			config, cl := csiTestDriver.PrepareTest(f)
-			cleanup = cl
-			sc = csiTestDriver.(storageframework.DynamicPVTestDriver).GetDynamicProvisionStorageClass(config, "ext4")
+			config := csiTestDriver.PrepareTest(ctx, f)
+			sc = csiTestDriver.(storageframework.DynamicPVTestDriver).GetDynamicProvisionStorageClass(ctx, config, "ext4")
 			lateBindingMode := storagev1.VolumeBindingWaitForFirstConsumer
 			sc.VolumeBindingMode = &lateBindingMode
 
@@ -143,24 +141,21 @@ func DefineLateBindingTests(d *deploy.Deployment, f *framework.Framework) {
 			claim = CreateClaim(f.Namespace.Name, sc.Name)
 		})
 
-		AfterEach(func() {
-			err := f.ClientSet.StorageV1().StorageClasses().Delete(context.Background(), sc.Name, metav1.DeleteOptions{})
+		AfterEach(func(ctx context.Context) {
+			err := f.ClientSet.StorageV1().StorageClasses().Delete(ctx, sc.Name, metav1.DeleteOptions{})
 			framework.ExpectNoError(err, "delete old storage class %s", sc.Name)
-			if cleanup != nil {
-				cleanup()
-			}
 		})
 
-		It("works", func() {
-			TestDynamicProvisioning(f.ClientSet, f.Timeouts, &claim, *sc.VolumeBindingMode, "latebinding")
+		It("works", func(ctx context.Context) {
+			TestDynamicProvisioning(ctx, f.ClientSet, f.Timeouts, &claim, *sc.VolumeBindingMode, "latebinding")
 		})
 
 		Context("unsets unsuitable selected node", func() {
-			It("with defaults", func() {
-				TestReschedule(f.ClientSet, f.Timeouts, &claim, d.DriverName, "latebinding")
+			It("with defaults", func(ctx context.Context) {
+				TestReschedule(ctx, f.ClientSet, f.Timeouts, &claim, d.DriverName, "latebinding")
 			})
 
-			It("with three replicas", func() {
+			It("with three replicas", func(ctx context.Context) {
 				if !d.HasOperator {
 					skipper.Skipf("need PMEM-CSI operator to reconfigure driver")
 				}
@@ -186,11 +181,11 @@ func DefineLateBindingTests(d *deploy.Deployment, f *framework.Framework) {
 					deploy.WaitForPMEMDriver(c, d, int32(oldReplicas))
 				}()
 
-				TestReschedule(f.ClientSet, f.Timeouts, &claim, d.DriverName, "latebinding")
+				TestReschedule(ctx, f.ClientSet, f.Timeouts, &claim, d.DriverName, "latebinding")
 			})
 		})
 
-		It("stress test [Slow]", func() {
+		It("stress test [Slow]", func(ctx context.Context) {
 			// We cannot test directly whether pod and
 			// volume were created on the same node by
 			// chance or because the code enforces it.
@@ -204,8 +199,6 @@ func DefineLateBindingTests(d *deploy.Deployment, f *framework.Framework) {
 
 			// Because this test creates a lot of pods, it is useful to
 			// log their progress.
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
 			to := podlogs.LogOutput{
 				StatusWriter: GinkgoWriter,
 				LogWriter:    GinkgoWriter,
@@ -228,7 +221,7 @@ func DefineLateBindingTests(d *deploy.Deployment, f *framework.Framework) {
 							return
 						}
 						id := fmt.Sprintf("worker-%d-volume-%d", i, volume)
-						TestDynamicProvisioning(f.ClientSet, f.Timeouts, &claim, *sc.VolumeBindingMode, id)
+						TestDynamicProvisioning(ctx, f.ClientSet, f.Timeouts, &claim, *sc.VolumeBindingMode, id)
 					}
 				}()
 			}

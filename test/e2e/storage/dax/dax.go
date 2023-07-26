@@ -81,9 +81,7 @@ func (p *daxTestSuite) SkipUnsupportedTests(driver storageframework.TestDriver, 
 }
 
 type local struct {
-	config      *storageframework.PerTestConfig
-	testCleanup func()
-
+	config   *storageframework.PerTestConfig
 	resource *storageframework.VolumeResource
 	root     string
 }
@@ -96,23 +94,18 @@ func (p *daxTestSuite) DefineTests(driver storageframework.TestDriver, pattern s
 	// Several pods needs privileges.
 	f.NamespacePodSecurityEnforceLevel = admissionapi.LevelPrivileged
 
-	init := func() {
+	init := func(ctx context.Context) {
 		l = local{}
 
 		// Now do the more expensive test initialization.
-		l.config, l.testCleanup = driver.PrepareTest(f)
-		l.resource = storageframework.CreateVolumeResource(driver, l.config, pattern, volume.SizeRange{})
+		l.config = driver.PrepareTest(ctx, f)
+		l.resource = storageframework.CreateVolumeResource(ctx, driver, l.config, pattern, volume.SizeRange{})
 	}
 
-	cleanup := func() {
+	cleanup := func(ctx context.Context) {
 		if l.resource != nil {
-			_ = l.resource.CleanupResource()
+			_ = l.resource.CleanupResource(ctx)
 			l.resource = nil
-		}
-
-		if l.testCleanup != nil {
-			l.testCleanup()
-			l.testCleanup = nil
 		}
 	}
 
@@ -123,15 +116,16 @@ func (p *daxTestSuite) DefineTests(driver storageframework.TestDriver, pattern s
 		testName = "should not support MAP_SYNC"
 	}
 
-	It(testName, func() {
-		init()
-		defer cleanup()
+	It(testName, func(ctx context.Context) {
+		init(ctx)
+		defer cleanup(ctx)
 
-		testDaxInPod(f, l.root, l.resource.Pattern.VolMode, l.resource.VolSource, l.config, withKataContainers, p.daxSupported, l.resource.Pattern.FsType)
+		testDaxInPod(ctx, f, l.root, l.resource.Pattern.VolMode, l.resource.VolSource, l.config, withKataContainers, p.daxSupported, l.resource.Pattern.FsType)
 	})
 }
 
 func testDaxInPod(
+	ctx context.Context,
 	f *framework.Framework,
 	root string,
 	volumeMode v1.PersistentVolumeMode,
@@ -164,14 +158,14 @@ func testDaxInPod(
 		source.CSI.FSType = &fstype
 	}
 
-	pod := CreatePod(f, "dax-volume-test", volumeMode, source, config, withKataContainers)
+	pod := CreatePod(ctx, f, "dax-volume-test", volumeMode, source, config, withKataContainers)
 	defer func() {
-		DeletePod(f, pod)
+		DeletePod(ctx, f, pod)
 	}()
-	checkWithNormalRuntime := testDax(f, pod, root, volumeMode, source, withKataContainers, expectDax, fstype)
-	DeletePod(f, pod)
+	checkWithNormalRuntime := testDax(ctx, f, pod, root, volumeMode, source, withKataContainers, expectDax, fstype)
+	DeletePod(ctx, f, pod)
 	if checkWithNormalRuntime {
-		testDaxOutside(f, pod, root)
+		testDaxOutside(ctx, f, pod, root)
 	}
 }
 
@@ -313,7 +307,9 @@ func getPod(
 	return pod
 }
 
-func CreatePod(f *framework.Framework,
+func CreatePod(
+	ctx context.Context,
+	f *framework.Framework,
 	name string,
 	volumeMode v1.PersistentVolumeMode,
 	source *v1.VolumeSource,
@@ -324,24 +320,25 @@ func CreatePod(f *framework.Framework,
 
 	By(fmt.Sprintf("Creating pod %s", pod.Name))
 	ns := f.Namespace.Name
-	podClient := f.PodClientNS(ns)
-	createdPod := podClient.Create(pod)
+	podClient := e2epod.PodClientNS(f, ns)
+	createdPod := podClient.Create(ctx, pod)
 	defer func() {
 		if r := recover(); r != nil {
 			// Delete pod before raising the panic again,
 			// because the caller will not do it when this
 			// function doesn't return normally.
-			DeletePod(f, createdPod)
+			DeletePod(ctx, f, createdPod)
 			panic(r)
 		}
 	}()
-	podErr := e2epod.WaitForPodRunningInNamespace(f.ClientSet, createdPod)
+	podErr := e2epod.WaitForPodRunningInNamespace(ctx, f.ClientSet, createdPod)
 	framework.ExpectNoError(podErr, "running pod")
 
 	return createdPod
 }
 
 func testDax(
+	ctx context.Context,
 	f *framework.Framework,
 	pod *v1.Pod,
 	root string,
@@ -485,15 +482,17 @@ func testDax(
 }
 
 func DeletePod(
+	ctx context.Context,
 	f *framework.Framework,
 	pod *v1.Pod,
 ) {
 	By(fmt.Sprintf("Deleting pod %s", pod.Name))
-	err := e2epod.DeletePodWithWait(f.ClientSet, pod)
+	err := e2epod.DeletePodWithWait(ctx, f.ClientSet, pod)
 	framework.ExpectNoError(err, "while deleting pod")
 }
 
 func testDaxOutside(
+	ctx context.Context,
 	f *framework.Framework,
 	pod *v1.Pod,
 	root string,
@@ -504,16 +503,16 @@ func testDaxOutside(
 
 	By(fmt.Sprintf("Creating pod %s", pod.Name))
 	ns := f.Namespace.Name
-	podClient := f.PodClientNS(ns)
-	pod = podClient.Create(pod)
-	podErr := e2epod.WaitForPodRunningInNamespace(f.ClientSet, pod)
+	podClient := e2epod.PodClientNS(f, ns)
+	pod = podClient.Create(ctx, pod)
+	podErr := e2epod.WaitForPodRunningInNamespace(ctx, f.ClientSet, pod)
 	framework.ExpectNoError(podErr, "running second pod")
 	By("checking for previously created file under normal pod")
 	containerName := pod.Spec.Containers[0].Name
 	pmempod.RunInPod(f, root, nil, "ls -l /mnt/hello-world", ns, pod.Name, containerName)
 
 	By(fmt.Sprintf("Deleting pod %s", pod.Name))
-	err := e2epod.DeletePodWithWait(f.ClientSet, pod)
+	err := e2epod.DeletePodWithWait(ctx, f.ClientSet, pod)
 	framework.ExpectNoError(err, "while deleting pod")
 }
 
@@ -562,9 +561,9 @@ var _ = deploy.DescribeForSome("dax", func(d *deploy.Deployment) bool {
 			},
 		},
 	}
-	It("should cause hugepage paging event with default fs", func() {
+	It("should cause hugepage paging event with default fs", func(ctx context.Context) {
 		init()
-		testHugepageInPod(f, l.root, &vsource, config)
+		testHugepageInPod(ctx, f, l.root, &vsource, config)
 	})
 	/* there is issue in kubelet causing panic and retry loop when fsType is set to ext4 or xfs.
 		   The following 2 items can be enabled after that gets fixed.
@@ -584,20 +583,22 @@ var _ = deploy.DescribeForSome("dax", func(d *deploy.Deployment) bool {
 })
 
 func testHugepageInPod(
+	ctx context.Context,
 	f *framework.Framework,
 	root string,
 	source *v1.VolumeSource,
 	config *storageframework.PerTestConfig,
 ) {
-	pod := CreatePod(f, "hugepage-test", v1.PersistentVolumeFilesystem, source, config, false)
+	pod := CreatePod(ctx, f, "hugepage-test", v1.PersistentVolumeFilesystem, source, config, false)
 	defer func() {
-		DeletePod(f, pod)
+		DeletePod(ctx, f, pod)
 	}()
-	testHugepage(f, pod, root, source)
-	DeletePod(f, pod)
+	testHugepage(ctx, f, pod, root, source)
+	DeletePod(ctx, f, pod)
 }
 
 func testHugepage(
+	ctx context.Context,
 	f *framework.Framework,
 	pod *v1.Pod,
 	root string,

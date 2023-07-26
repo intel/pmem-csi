@@ -17,6 +17,7 @@ limitations under the License.
 package driver
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -115,7 +116,7 @@ func (m *manifestDriver) SkipUnsupportedTest(pattern storageframework.TestPatter
 	}
 }
 
-func (m *manifestDriver) GetDynamicProvisionStorageClass(config *storageframework.PerTestConfig, fsType string) *storagev1.StorageClass {
+func (m *manifestDriver) GetDynamicProvisionStorageClass(ctx context.Context, config *storageframework.PerTestConfig, fsType string) *storagev1.StorageClass {
 	f := config.Framework
 
 	scManifest, ok := m.scManifest[fsType]
@@ -147,7 +148,7 @@ func (m *manifestDriver) GetDynamicProvisionStorageClass(config *storageframewor
 	return sc
 }
 
-func (m *manifestDriver) PrepareTest(f *framework.Framework) (*storageframework.PerTestConfig, func()) {
+func (m *manifestDriver) PrepareTest(ctx context.Context, f *framework.Framework) *storageframework.PerTestConfig {
 	config := &storageframework.PerTestConfig{
 		Driver:    m,
 		Prefix:    "pmem",
@@ -155,20 +156,15 @@ func (m *manifestDriver) PrepareTest(f *framework.Framework) (*storageframework.
 	}
 	if len(m.manifests) == 0 {
 		// Nothing todo.
-		return config, func() {}
+		return nil
 	}
 
 	By(fmt.Sprintf("deploying %s driver", m.driverInfo.Name))
-	cleanup, err := utils.CreateFromManifests(f, f.Namespace, func(item interface{}) error {
+	err := utils.CreateFromManifests(ctx, f, f.Namespace, func(item interface{}) error {
 		return utils.PatchCSIDeployment(f, m.finalPatchOptions(f), item)
-	},
-		m.manifests...,
-	)
+	}, m.manifests...)
 	framework.ExpectNoError(err, "deploying driver %s", m.driverInfo.Name)
-	return config, func() {
-		By(fmt.Sprintf("uninstalling %s driver", m.driverInfo.Name))
-		cleanup()
-	}
+	return config
 }
 
 func (m *manifestDriver) finalPatchOptions(f *framework.Framework) utils.PatchCSIOptions {

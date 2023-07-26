@@ -19,7 +19,7 @@ import (
 // It is okay if the pod does not exist yet.
 func Logs(ctx context.Context, client kubernetes.Interface, namespace, pod, container string) (output string, err error) {
 	for {
-		output, err = e2epod.GetPodLogs(client, namespace, pod, container)
+		output, err = e2epod.GetPodLogs(ctx, client, namespace, pod, container)
 		if err == nil {
 			return
 		}
