@@ -145,8 +145,7 @@ func (p *skewTestSuite) SkipUnsupportedTests(driver storageframework.TestDriver,
 }
 
 type local struct {
-	config      *storageframework.PerTestConfig
-	testCleanup func()
+	config *storageframework.PerTestConfig
 
 	unused, usedBefore, usedAfter *storageframework.VolumeResource
 }
@@ -174,56 +173,51 @@ func (p *skewTestSuite) DefineTests(driver storageframework.TestDriver, pattern 
 		}
 	})
 
-	init := func(all bool) {
+	init := func(ctx context.Context, all bool) {
 		l = local{}
-		l.config, l.testCleanup = driver.PrepareTest(f)
+		l.config = driver.PrepareTest(ctx, f)
 
 		// Now do the more expensive test initialization. We potentially create more than one
 		// storage class, so each resource needs a different prefix.
-		l.unused = createVolumeResource(driver, l.config, "-unused", pattern)
+		l.unused = createVolumeResource(ctx, driver, l.config, "-unused", pattern)
 		if all {
-			l.usedBefore = createVolumeResource(driver, l.config, "-before", pattern)
-			l.usedAfter = createVolumeResource(driver, l.config, "-after", pattern)
+			l.usedBefore = createVolumeResource(ctx, driver, l.config, "-before", pattern)
+			l.usedAfter = createVolumeResource(ctx, driver, l.config, "-after", pattern)
 		}
 	}
 
-	cleanup := func() {
+	cleanup := func(ctx context.Context) {
 		var cleanUpErrs []error
 
 		if l.unused != nil {
-			cleanUpErrs = append(cleanUpErrs, l.unused.CleanupResource())
+			cleanUpErrs = append(cleanUpErrs, l.unused.CleanupResource(ctx))
 			l.unused = nil
 		}
 
 		if l.usedBefore != nil {
-			cleanUpErrs = append(cleanUpErrs, l.usedBefore.CleanupResource())
+			cleanUpErrs = append(cleanUpErrs, l.usedBefore.CleanupResource(ctx))
 			l.usedBefore = nil
 		}
 
 		if l.usedAfter != nil {
-			cleanUpErrs = append(cleanUpErrs, l.usedAfter.CleanupResource())
+			cleanUpErrs = append(cleanUpErrs, l.usedAfter.CleanupResource(ctx))
 			l.usedAfter = nil
-		}
-
-		if l.testCleanup != nil {
-			l.testCleanup()
-			l.testCleanup = nil
 		}
 
 		err := utilerrors.NewAggregate(cleanUpErrs)
 		framework.ExpectNoError(err, "clean up volumes")
 	}
 
-	testVersionChange := func(otherName string) {
+	testVersionChange := func(ctx context.Context, otherName string) {
 		withKataContainers := false
 
 		// Create volumes.
-		init(true)
-		defer cleanup()
+		init(ctx, true)
+		defer cleanup(ctx)
 
 		// Use some volume before the up- or downgrade
 		By(fmt.Sprintf("creating pod before switching driver to %s", otherName))
-		podBefore := dax.CreatePod(f, "pod-before-test", l.usedBefore.Pattern.VolMode, l.usedBefore.VolSource, l.config, withKataContainers)
+		podBefore := dax.CreatePod(ctx, f, "pod-before-test", l.usedBefore.Pattern.VolMode, l.usedBefore.VolSource, l.config, withKataContainers)
 
 		// Change driver releases.
 		By(fmt.Sprintf("switch driver to %s", otherName))
@@ -235,26 +229,26 @@ func (p *skewTestSuite) DefineTests(driver storageframework.TestDriver, pattern 
 
 		// Use some other volume.
 		By(fmt.Sprintf("creating pod after switching driver to %s", otherName))
-		podAfter := dax.CreatePod(f, "pod-after-test", l.usedAfter.Pattern.VolMode, l.usedAfter.VolSource, l.config, withKataContainers)
+		podAfter := dax.CreatePod(ctx, f, "pod-after-test", l.usedAfter.Pattern.VolMode, l.usedAfter.VolSource, l.config, withKataContainers)
 
 		// Remove everything.
 		By("cleaning up")
-		dax.DeletePod(f, podBefore)
-		dax.DeletePod(f, podAfter)
-		cleanup()
+		dax.DeletePod(ctx, f, podBefore)
+		dax.DeletePod(ctx, f, podAfter)
+		cleanup(ctx)
 	}
 
 	// This changes controller and node versions at the same time.
-	It("everything [Slow]", func() {
+	It("everything [Slow]", func(ctx context.Context) {
 		// First try the downgrade direction.
 		currentName := d.Name()
 		oldName := currentName + "-" + base
-		testVersionChange(oldName)
+		testVersionChange(ctx, oldName)
 
 		// Now that older driver is running, do the same for
 		// an upgrade. When the test is done, the cluster is
 		// back in the same state as before.
-		testVersionChange(currentName)
+		testVersionChange(ctx, currentName)
 	})
 
 	// This test combines controller and node from different releases
@@ -267,7 +261,7 @@ func (p *skewTestSuite) DefineTests(driver storageframework.TestDriver, pattern 
 	// (old nodes, new controller) because that direction is more likely
 	// and if there compatibility issues, then hopefully the direction
 	// of the skew won't matter.
-	It("controller [Slow]", func() {
+	It("controller [Slow]", func(ctx context.Context) {
 		if d.HasOperator {
 			skipper.Skipf("cannot change image of the PMEM-CSI controller because it is managed by the operator")
 		}
@@ -352,18 +346,18 @@ func (p *skewTestSuite) DefineTests(driver storageframework.TestDriver, pattern 
 		// Now that we are in a version skewed state, try some simple interaction between
 		// controller and node by creating a volume and using it. This makes sense
 		// even for CSI inline volumes because those may invoke the scheduler extensions.
-		init(false)
-		defer cleanup()
-		pod := dax.CreatePod(f, "pod-skew-test", l.unused.Pattern.VolMode, l.unused.VolSource, l.config, withKataContainers)
-		dax.DeletePod(f, pod)
+		init(ctx, false)
+		defer cleanup(ctx)
+		pod := dax.CreatePod(ctx, f, "pod-skew-test", l.unused.Pattern.VolMode, l.unused.VolSource, l.config, withKataContainers)
+		dax.DeletePod(ctx, f, pod)
 	})
 }
 
 // createVolumeResource takes one of the test patterns prepared by InitSkewTestSuite and
 // creates a volume for it.
-func createVolumeResource(pmemDriver storageframework.TestDriver, config *storageframework.PerTestConfig, suffix string, pattern storageframework.TestPattern) *storageframework.VolumeResource {
+func createVolumeResource(ctx context.Context, pmemDriver storageframework.TestDriver, config *storageframework.PerTestConfig, suffix string, pattern storageframework.TestPattern) *storageframework.VolumeResource {
 	_, _, scp, err := driver.DecodeTestPatternName(pattern.Name)
 	Expect(err).NotTo(HaveOccurred(), "decode test pattern name")
 	pmemDriver = pmemDriver.(driver.DynamicDriver).WithStorageClassNameSuffix(suffix).WithParameters(scp.Parameters)
-	return storageframework.CreateVolumeResource(pmemDriver, config, pattern, e2evolume.SizeRange{})
+	return storageframework.CreateVolumeResource(ctx, pmemDriver, config, pattern, e2evolume.SizeRange{})
 }

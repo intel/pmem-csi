@@ -29,7 +29,9 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/flowcontrol"
 	"k8s.io/kubernetes/test/e2e/framework"
+	e2edebug "k8s.io/kubernetes/test/e2e/framework/debug"
 	e2ekubectl "k8s.io/kubernetes/test/e2e/framework/kubectl"
+	e2enode "k8s.io/kubernetes/test/e2e/framework/node"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	"k8s.io/kubernetes/test/e2e/storage/podlogs"
 )
@@ -42,7 +44,7 @@ import (
 // This function takes two parameters: one function which runs on only the first Ginkgo node,
 // returning an opaque byte array, and then a second function which runs on all Ginkgo nodes,
 // accepting the byte array.
-var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
+var _ = ginkgo.SynchronizedBeforeSuite(func(ctx context.Context) []byte {
 	// Run only on Ginkgo node 1
 	var data []byte
 
@@ -69,7 +71,7 @@ var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 	// Delete any namespaces except those created by the system. This ensures no
 	// lingering resources are left over from a previous test run.
 	if framework.TestContext.CleanStart {
-		deleted, err := framework.DeleteNamespaces(c, nil, /* deleteFilter */
+		deleted, err := framework.DeleteNamespaces(ctx, c, nil, /* deleteFilter */
 			[]string{
 				metav1.NamespaceSystem,
 				metav1.NamespaceDefault,
@@ -79,28 +81,30 @@ var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 			framework.Failf("Error deleting orphaned namespaces: %v", err)
 		}
 		framework.Logf("Waiting for deletion of the following namespaces: %v", deleted)
-		if err := framework.WaitForNamespacesDeleted(c, deleted, 15*time.Minute); err != nil {
+		if err := framework.WaitForNamespacesDeleted(ctx, c, deleted, 15*time.Minute); err != nil {
 			framework.Failf("Failed to delete orphaned namespaces %v: %v", deleted, err)
 		}
 	}
 
+	timeouts := framework.NewTimeoutContext()
+
 	// In large clusters we may get to this point but still have a bunch
 	// of nodes without Routes created. Since this would make a node
 	// unschedulable, we need to wait until all of them are schedulable.
-	framework.ExpectNoError(framework.WaitForAllNodesSchedulable(c, framework.TestContext.NodeSchedulableTimeout))
+	framework.ExpectNoError(e2enode.WaitForAllNodesSchedulable(ctx, c, timeouts.NodeSchedulable))
 
 	// Ensure all pods are running and ready before starting tests (otherwise,
 	// cluster infrastructure pods that are being pulled or started can block
 	// test pods from running, and tests that ensure all pods are running and
 	// ready will fail).
-	podStartupTimeout := framework.TestContext.SystemPodsStartupTimeout
+	podStartupTimeout := timeouts.SystemPodsStartup
 	// TODO: In large clusters, we often observe a non-starting pods due to
 	// #41007. To avoid those pods preventing the whole test runs (and just
 	// wasting the whole run), we allow for some not-ready pods (with the
 	// number equal to the number of allowed not-ready nodes).
-	if err := e2epod.WaitForPodsRunningReady(c, metav1.NamespaceSystem, int32(framework.TestContext.MinStartupPods), int32(framework.TestContext.AllowedNotReadyNodes), podStartupTimeout, map[string]string{}); err != nil {
-		framework.DumpAllNamespaceInfo(c, metav1.NamespaceSystem)
-		e2ekubectl.LogFailedContainers(c, metav1.NamespaceSystem, framework.Logf)
+	if err := e2epod.WaitForPodsRunningReady(ctx, c, metav1.NamespaceSystem, int32(framework.TestContext.MinStartupPods), int32(framework.TestContext.AllowedNotReadyNodes), podStartupTimeout); err != nil {
+		e2edebug.DumpAllNamespaceInfo(ctx, c, metav1.NamespaceSystem)
+		e2ekubectl.LogFailedContainers(ctx, c, metav1.NamespaceSystem, framework.Logf)
 		framework.Failf("Error waiting for all pods to be running and ready: %v", err)
 	}
 
@@ -109,7 +113,7 @@ var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 	// what the pods are doing while the test runs. This isn't
 	// perfect because we will get a dump also of log output from
 	// before the E2E test run, but better than nothing.
-	ctx := context.Background()
+	ctx = context.Background()
 	to := podlogs.LogOutput{
 		StatusWriter: ginkgo.GinkgoWriter,
 		LogWriter:    ginkgo.GinkgoWriter,
@@ -147,8 +151,6 @@ var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 // and then the function that only runs on the first Ginkgo node.
 var _ = ginkgo.SynchronizedAfterSuite(func() {
 	// Run on all Ginkgo nodes
-	framework.Logf("Running AfterSuite actions on all node")
-	framework.RunCleanupActions()
 }, func() {
 	// Run only Ginkgo on node 1
 })

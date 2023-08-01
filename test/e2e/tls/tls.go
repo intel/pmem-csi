@@ -49,7 +49,7 @@ var _ = deploy.DescribeForAll("TLS", func(d *deploy.Deployment) {
 	})
 
 	Context("controller", func() {
-		It("is secure", func() {
+		It("is secure", func(ctx context.Context) {
 			if !d.HasController {
 				skipper.Skipf("has no controller")
 			}
@@ -60,17 +60,17 @@ var _ = deploy.DescribeForAll("TLS", func(d *deploy.Deployment) {
 			framework.ExpectNoError(err, "create cluster")
 			controller, err := cluster.GetAppInstance(context.Background(), labels.Set{"app.kubernetes.io/name": "pmem-csi-controller"}, "", d.Namespace)
 			framework.ExpectNoError(err, "find controller")
-			checkTLS(f, controller.Status.PodIP)
+			checkTLS(ctx, f, controller.Status.PodIP)
 		})
 	})
 	Context("node", func() {
-		It("is secure", func() {
-			checkTLS(f, nodePod.Status.PodIP)
+		It("is secure", func(ctx context.Context) {
+			checkTLS(ctx, f, nodePod.Status.PodIP)
 		})
 	})
 })
 
-func checkTLS(f *framework.Framework, server string) {
+func checkTLS(ctx context.Context, f *framework.Framework, server string) {
 	containerName := "nmap"
 	root := int64(0)
 	pod := &v1.Pod{
@@ -97,13 +97,13 @@ func checkTLS(f *framework.Framework, server string) {
 
 	By(fmt.Sprintf("Creating pod %s", pod.Name))
 	ns := f.Namespace.Name
-	podClient := f.PodClientNS(ns)
-	createdPod := podClient.Create(pod)
+	podClient := e2epod.PodClientNS(f, ns)
+	createdPod := podClient.Create(ctx, pod)
 	defer func() {
 		By("delete the pod")
-		podClient.DeleteSync(createdPod.Name, metav1.DeleteOptions{}, framework.DefaultPodDeletionTimeout)
+		podClient.DeleteSync(ctx, createdPod.Name, metav1.DeleteOptions{}, e2epod.DefaultPodDeletionTimeout)
 	}()
-	podErr := e2epod.WaitForPodRunningInNamespace(f.ClientSet, createdPod)
+	podErr := e2epod.WaitForPodRunningInNamespace(ctx, f.ClientSet, createdPod)
 	framework.ExpectNoError(podErr, "running pod")
 
 	// Install and patch nmap.

@@ -39,16 +39,14 @@ import (
 func DefineImmediateBindingTests(d *deploy.Deployment, f *framework.Framework) {
 	Context("immediate binding", func() {
 		var (
-			cleanup func()
-			sc      *storagev1.StorageClass
-			claim   v1.PersistentVolumeClaim
+			sc    *storagev1.StorageClass
+			claim v1.PersistentVolumeClaim
 		)
 
-		BeforeEach(func() {
+		BeforeEach(func(ctx context.Context) {
 			csiTestDriver := driver.New(d.Name(), d.DriverName, nil, nil, nil)
-			config, cl := csiTestDriver.PrepareTest(f)
-			cleanup = cl
-			sc = csiTestDriver.(storageframework.DynamicPVTestDriver).GetDynamicProvisionStorageClass(config, "ext4")
+			config := csiTestDriver.PrepareTest(ctx, f)
+			sc = csiTestDriver.(storageframework.DynamicPVTestDriver).GetDynamicProvisionStorageClass(ctx, config, "ext4")
 			immediateBindingMode := storagev1.VolumeBindingImmediate
 			sc.VolumeBindingMode = &immediateBindingMode
 
@@ -82,16 +80,13 @@ func DefineImmediateBindingTests(d *deploy.Deployment, f *framework.Framework) {
 		AfterEach(func() {
 			err := f.ClientSet.StorageV1().StorageClasses().Delete(context.Background(), sc.Name, metav1.DeleteOptions{})
 			framework.ExpectNoError(err, "delete old storage class %s", sc.Name)
-			if cleanup != nil {
-				cleanup()
-			}
 		})
 
-		It("works", func() {
-			TestDynamicProvisioning(f.ClientSet, f.Timeouts, &claim, *sc.VolumeBindingMode, "immediatebinding")
+		It("works", func(ctx context.Context) {
+			TestDynamicProvisioning(ctx, f.ClientSet, f.Timeouts, &claim, *sc.VolumeBindingMode, "immediatebinding")
 		})
 
-		It("stress test [Slow]", func() {
+		It("stress test [Slow]", func(ctx context.Context) {
 			wg := sync.WaitGroup{}
 			volumes := int64(0)
 			wg.Add(*numWorkers)
@@ -107,7 +102,7 @@ func DefineImmediateBindingTests(d *deploy.Deployment, f *framework.Framework) {
 							return
 						}
 						id := fmt.Sprintf("worker-%d-volume-%d", i, volume)
-						TestDynamicProvisioning(f.ClientSet, f.Timeouts, &claim, *sc.VolumeBindingMode, id)
+						TestDynamicProvisioning(ctx, f.ClientSet, f.Timeouts, &claim, *sc.VolumeBindingMode, id)
 					}
 				}()
 			}

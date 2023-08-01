@@ -596,13 +596,13 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 			},
 		}
 
-		defineSwitchModeTests := func(ctx string, from, to api.DeviceMode) {
+		defineSwitchModeTests := func(testCtx string, from, to api.DeviceMode) {
 			for name, postSwitch := range postSwitchFuncs {
-				Context(ctx, func() {
+				Context(testCtx, func() {
 					name := name
 					postSwitch := postSwitch
-					It(name, func() {
-						driverName := ctx + "-" + strings.Replace(name, " ", "-", -1)
+					It(name, func(ctx context.Context) {
+						driverName := testCtx + "-" + strings.Replace(name, " ", "-", -1)
 						percent100 := intstr.FromString("100%")
 						deployment := api.PmemCSIDeployment{
 							ObjectMeta: metav1.ObjectMeta{
@@ -639,7 +639,8 @@ var _ = deploy.DescribeForSome("API", func(d *deploy.Deployment) bool {
 						defer deletePVC(f, pvc.Namespace, pvc.Name)
 
 						// Wait till a volume get provisioned for this claim
-						err := e2epv.WaitForPersistentVolumeClaimPhase(corev1.ClaimBound, f.ClientSet, pvc.Namespace, pvc.Name, framework.Poll, framework.ClaimProvisionTimeout)
+						timeouts := framework.NewTimeoutContext()
+						err := e2epv.WaitForPersistentVolumeClaimPhase(ctx, corev1.ClaimBound, f.ClientSet, pvc.Namespace, pvc.Name, framework.Poll, timeouts.ClaimProvision)
 						Expect(err).NotTo(HaveOccurred(), "Persistent volume claim bound failure")
 
 						pvc, err = f.ClientSet.CoreV1().PersistentVolumeClaims(pvc.Namespace).Get(context.Background(), pvc.Name, metav1.GetOptions{})

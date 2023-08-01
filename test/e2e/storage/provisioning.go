@@ -59,7 +59,7 @@ func CreateClaim(namespace, scName string) v1.PersistentVolumeClaim {
 	}
 }
 
-func TestReschedule(client clientset.Interface, timeouts *framework.TimeoutContext, claim *v1.PersistentVolumeClaim, driverName, id string) {
+func TestReschedule(ctx context.Context, client clientset.Interface, timeouts *framework.TimeoutContext, claim *v1.PersistentVolumeClaim, driverName, id string) {
 	nodes, err := client.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
 	framework.ExpectNoError(err, "list nodes")
 	selectedNode := ""
@@ -75,12 +75,12 @@ func TestReschedule(client clientset.Interface, timeouts *framework.TimeoutConte
 		"volume.kubernetes.io/selected-node":            selectedNode,
 		"volume.beta.kubernetes.io/storage-provisioner": driverName,
 	}
-	TestDynamicProvisioning(client, timeouts, claim, storagev1.VolumeBindingWaitForFirstConsumer, id)
+	TestDynamicProvisioning(ctx, client, timeouts, claim, storagev1.VolumeBindingWaitForFirstConsumer, id)
 }
 
 // TestDynamicLateBindingProvisioning is a variant of k8s.io/kubernetes/test/e2e/storage/testsuites/provisioning.go
 // which works with late and immediate binding and can be invoked in parallel with different IDs.
-func TestDynamicProvisioning(client clientset.Interface, timeouts *framework.TimeoutContext, claim *v1.PersistentVolumeClaim, mode storagev1.VolumeBindingMode, id string) {
+func TestDynamicProvisioning(ctx context.Context, client clientset.Interface, timeouts *framework.TimeoutContext, claim *v1.PersistentVolumeClaim, mode storagev1.VolumeBindingMode, id string) {
 	var err error
 
 	By(fmt.Sprintf("%s: creating a claim", id))
@@ -97,10 +97,10 @@ func TestDynamicProvisioning(client clientset.Interface, timeouts *framework.Tim
 
 	if mode == storagev1.VolumeBindingWaitForFirstConsumer {
 		// Schedule a pod, otherwise there's not going to be a PV.
-		PVWriteReadSingleNodeCheck(client, timeouts, claim, id)
+		PVWriteReadSingleNodeCheck(ctx, client, timeouts, claim, id)
 	}
 
-	err = e2epv.WaitForPersistentVolumeClaimPhase(v1.ClaimBound, client, claim.Namespace, claim.Name, framework.Poll, framework.ClaimProvisionTimeout)
+	err = e2epv.WaitForPersistentVolumeClaimPhase(ctx, v1.ClaimBound, client, claim.Namespace, claim.Name, framework.Poll, framework.ClaimProvisionTimeout)
 	Expect(err).NotTo(HaveOccurred())
 
 	By(fmt.Sprintf("%s: checking the claim", id))
@@ -132,7 +132,7 @@ func TestDynamicProvisioning(client clientset.Interface, timeouts *framework.Tim
 	// hiccups.
 	if pv.Spec.PersistentVolumeReclaimPolicy == v1.PersistentVolumeReclaimDelete {
 		By(fmt.Sprintf("%s: deleting the claim's PV %q", id, pv.Name))
-		framework.ExpectNoError(e2epv.WaitForPersistentVolumeDeleted(client, pv.Name, 5*time.Second, 20*time.Minute))
+		framework.ExpectNoError(e2epv.WaitForPersistentVolumeDeleted(ctx, client, pv.Name, 5*time.Second, 20*time.Minute))
 	}
 }
 
@@ -149,22 +149,22 @@ func TestDynamicProvisioning(client clientset.Interface, timeouts *framework.Tim
 // persistent across pods.
 //
 // This is a common test that can be called from a StorageClassTest.PvCheck.
-func PVWriteReadSingleNodeCheck(client clientset.Interface, timeouts *framework.TimeoutContext, claim *v1.PersistentVolumeClaim, id string) {
+func PVWriteReadSingleNodeCheck(ctx context.Context, client clientset.Interface, timeouts *framework.TimeoutContext, claim *v1.PersistentVolumeClaim, id string) {
 	By(fmt.Sprintf("%s: checking the created volume is writable", id))
 	command := "echo 'hello world' > /mnt/test/data || (mount | grep 'on /mnt/test'; false)"
-	pod := testsuites.StartInPodWithVolume(client, claim.Namespace, claim.Name, "pvc-volume-tester-writer-"+id, command, e2epod.NodeSelection{})
+	pod := testsuites.StartInPodWithVolume(ctx, client, claim.Namespace, claim.Name, "pvc-volume-tester-writer-"+id, command, e2epod.NodeSelection{})
 	defer func() {
 		// pod might be nil now.
-		testsuites.StopPod(client, pod)
+		testsuites.StopPod(ctx, client, pod)
 	}()
-	framework.ExpectNoError(e2epod.WaitForPodSuccessInNamespaceSlow(client, pod.Name, pod.Namespace))
+	framework.ExpectNoError(e2epod.WaitForPodSuccessInNamespaceSlow(ctx, client, pod.Name, pod.Namespace))
 	runningPod, err := client.CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, metav1.GetOptions{})
 	Expect(err).NotTo(HaveOccurred(), "get pod %s", id)
 	actualNodeName := runningPod.Spec.NodeName
-	testsuites.StopPod(client, pod)
+	testsuites.StopPod(ctx, client, pod)
 	pod = nil // Don't stop twice.
 
 	By(fmt.Sprintf("%s: checking the created volume is readable and retains data on the same node %q", id, actualNodeName))
 	command = "grep 'hello world' /mnt/test/data"
-	testsuites.RunInPodWithVolume(client, timeouts, claim.Namespace, claim.Name, "pvc-volume-tester-reader-"+id, command, e2epod.NodeSelection{Name: actualNodeName})
+	testsuites.RunInPodWithVolume(ctx, client, timeouts, claim.Namespace, claim.Name, "pvc-volume-tester-reader-"+id, command, e2epod.NodeSelection{Name: actualNodeName})
 }
