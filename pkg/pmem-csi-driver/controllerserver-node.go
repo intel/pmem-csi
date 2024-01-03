@@ -203,6 +203,10 @@ func (cs *nodeControllerServer) CreateVolume(ctx context.Context, req *csi.Creat
 	return resp, nil
 }
 
+func (cs *nodeControllerServer) ControllerModifyVolume(ctx context.Context, req *csi.ControllerModifyVolumeRequest) (*csi.ControllerModifyVolumeResponse, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (cs *nodeControllerServer) createVolumeInternal(ctx context.Context,
 	p parameters.Volume,
 	volumeName string,

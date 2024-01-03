@@ -4,9 +4,10 @@ github.com/cespare/xxhash/v2,MIT
 github.com/container-storage-interface/spec/lib/go/csi,Apache-2.0
 github.com/davecgh/go-spew/spew,ISC
 github.com/emicklei/go-restful/v3,MIT
-github.com/evanphx/json-patch,BSD-3-Clause
+github.com/evanphx/json-patch/v5,BSD-3-Clause
 github.com/fsnotify/fsnotify,BSD-3-Clause
 github.com/go-logr/logr,Apache-2.0
+github.com/go-logr/stdr,Apache-2.0
 github.com/go-logr/zapr,Apache-2.0
 github.com/go-openapi/jsonpointer,Apache-2.0
 github.com/go-openapi/jsonreference,Apache-2.0
@@ -14,7 +15,7 @@ github.com/go-openapi/swag,Apache-2.0
 github.com/gogo/protobuf,BSD-3-Clause
 github.com/golang/groupcache/lru,Apache-2.0
 github.com/golang/protobuf,BSD-3-Clause
-github.com/google/gnostic,Apache-2.0
+github.com/google/gnostic-models,Apache-2.0
 github.com/google/go-cmp/cmp,BSD-3-Clause
 github.com/google/gofuzz,Apache-2.0
 github.com/google/uuid,BSD-3-Clause
@@ -23,12 +24,12 @@ github.com/josharian/intern,MIT
 github.com/json-iterator/go,MIT
 github.com/kubernetes-csi/csi-lib-utils,Apache-2.0
 github.com/mailru/easyjson,MIT
-github.com/matttproud/golang_protobuf_extensions/pbutil,Apache-2.0
+github.com/matttproud/golang_protobuf_extensions/v2/pbutil,Apache-2.0
 github.com/miekg/dns,BSD-3-Clause
 github.com/modern-go/concurrent,Apache-2.0
 github.com/modern-go/reflect2,Apache-2.0
 github.com/munnerz/goautoneg,BSD-3-Clause
-github.com/operator-framework/operator-lib/handler,Apache-2.0
+github.com/operator-framework/operator-lib,Apache-2.0
 github.com/pkg/errors,BSD-2-Clause
 github.com/prometheus/client_golang/prometheus,Apache-2.0
 github.com/prometheus/client_model/go,Apache-2.0
@@ -37,9 +38,13 @@ github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg,BSD-3-Clause
 github.com/prometheus/procfs,Apache-2.0
 github.com/spf13/cobra,Apache-2.0
 github.com/spf13/pflag,BSD-3-Clause
-go.uber.org/atomic,MIT
+go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc,Apache-2.0
+go.opentelemetry.io/otel,Apache-2.0
+go.opentelemetry.io/otel/metric,Apache-2.0
+go.opentelemetry.io/otel/trace,Apache-2.0
 go.uber.org/multierr,MIT
 go.uber.org/zap,MIT
+golang.org/x/exp/maps,BSD-3-Clause
 golang.org/x/net,BSD-3-Clause
 golang.org/x/oauth2,BSD-3-Clause
 golang.org/x/sys/unix,BSD-3-Clause
@@ -61,6 +66,7 @@ k8s.io/client-go,Apache-2.0
 k8s.io/component-base,Apache-2.0
 k8s.io/klog/v2,Apache-2.0
 k8s.io/kube-openapi/pkg,Apache-2.0
+k8s.io/kube-openapi/pkg/internal/third_party/go-json-experiment/json,BSD-3-Clause
 k8s.io/kube-openapi/pkg/validation/spec,Apache-2.0
 k8s.io/kubectl/pkg/scheme,Apache-2.0
 k8s.io/utils,Apache-2.0
@@ -69,4 +75,5 @@ sigs.k8s.io/controller-runtime/pkg,Apache-2.0
 sigs.k8s.io/json,Apache-2.0
 sigs.k8s.io/sig-storage-lib-external-provisioner/v6,Apache-2.0
 sigs.k8s.io/structured-merge-diff/v4,Apache-2.0
-sigs.k8s.io/yaml,MIT
+sigs.k8s.io/yaml,Apache-2.0
+sigs.k8s.io/yaml/goyaml.v2,Apache-2.0

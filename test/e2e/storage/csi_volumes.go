@@ -185,7 +185,7 @@ func DefineLateBindingTests(d *deploy.Deployment, f *framework.Framework) {
 			})
 		})
 
-		It("stress test [Slow]", func(ctx context.Context) {
+		f.It("stress test", f.WithSlow(), func(ctx context.Context) {
 			// We cannot test directly whether pod and
 			// volume were created on the same node by
 			// chance or because the code enforces it.
