@@ -67,7 +67,7 @@ func DefineImmediateBindingTests(d *deploy.Deployment, f *framework.Framework) {
 					AccessModes: []v1.PersistentVolumeAccessMode{
 						v1.ReadWriteOnce,
 					},
-					Resources: v1.ResourceRequirements{
+					Resources: v1.VolumeResourceRequirements{
 						Requests: v1.ResourceList{
 							v1.ResourceName(v1.ResourceStorage): resource.MustParse("1Mi"),
 						},
@@ -86,7 +86,7 @@ func DefineImmediateBindingTests(d *deploy.Deployment, f *framework.Framework) {
 			TestDynamicProvisioning(ctx, f.ClientSet, f.Timeouts, &claim, *sc.VolumeBindingMode, "immediatebinding")
 		})
 
-		It("stress test [Slow]", func(ctx context.Context) {
+		f.It("stress test", f.WithSlow(), func(ctx context.Context) {
 			wg := sync.WaitGroup{}
 			volumes := int64(0)
 			wg.Add(*numWorkers)

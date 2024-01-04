@@ -39,6 +39,7 @@ import (
 	pmempod "github.com/intel/pmem-csi/test/e2e/pod"
 
 	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 type daxTestSuite struct {
@@ -643,8 +644,8 @@ func testHugepage(
 					worker, strings.TrimSpace(string(faultType)), strings.TrimSpace(string(traceOutput))))
 
 				// Trace event NOPAGE means, hugepage fault happened. Trace event FALLBACK means, no page fault.
-				framework.ExpectEqual(strings.TrimSpace(string(faultType)), "NOPAGE", "page fault type has to be NOPAGE")
-				framework.ExpectEqual(accessOutput, strings.TrimSpace(string(traceOutput)), "mapped inode and addr must match traced values")
+				Expect(strings.TrimSpace(string(faultType))).To(Equal("NOPAGE"), "page fault type has to be NOPAGE")
+				Expect(accessOutput).To(Equal(strings.TrimSpace(string(traceOutput))), "mapped inode and addr must match traced values")
 				break
 			}
 		} else {

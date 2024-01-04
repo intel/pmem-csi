@@ -239,7 +239,7 @@ func (p *skewTestSuite) DefineTests(driver storageframework.TestDriver, pattern 
 	}
 
 	// This changes controller and node versions at the same time.
-	It("everything [Slow]", func(ctx context.Context) {
+	f.It("everything", f.WithSlow(), func(ctx context.Context) {
 		// First try the downgrade direction.
 		currentName := d.Name()
 		oldName := currentName + "-" + base
@@ -261,7 +261,7 @@ func (p *skewTestSuite) DefineTests(driver storageframework.TestDriver, pattern 
 	// (old nodes, new controller) because that direction is more likely
 	// and if there compatibility issues, then hopefully the direction
 	// of the skew won't matter.
-	It("controller [Slow]", func(ctx context.Context) {
+	f.It("controller", f.WithSlow(), func(ctx context.Context) {
 		if d.HasOperator {
 			skipper.Skipf("cannot change image of the PMEM-CSI controller because it is managed by the operator")
 		}
