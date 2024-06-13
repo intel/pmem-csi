@@ -157,7 +157,7 @@ func PVWriteReadSingleNodeCheck(ctx context.Context, client clientset.Interface,
 		// pod might be nil now.
 		testsuites.StopPod(ctx, client, pod)
 	}()
-	framework.ExpectNoError(e2epod.WaitForPodSuccessInNamespaceSlow(ctx, client, pod.Name, pod.Namespace))
+	framework.ExpectNoError(e2epod.WaitForPodSuccessInNamespaceTimeout(ctx, client, pod.Name, pod.Namespace, timeouts.PodStartSlow))
 	runningPod, err := client.CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, metav1.GetOptions{})
 	Expect(err).NotTo(HaveOccurred(), "get pod %s", id)
 	actualNodeName := runningPod.Spec.NodeName

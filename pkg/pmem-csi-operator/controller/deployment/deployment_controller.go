@@ -20,7 +20,6 @@ import (
 	pmemcontroller "github.com/intel/pmem-csi/pkg/pmem-csi-operator/controller"
 	"github.com/intel/pmem-csi/pkg/pmem-csi-operator/metrics"
 	"github.com/intel/pmem-csi/pkg/version"
-	"github.com/operator-framework/operator-lib/handler"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -65,8 +64,8 @@ func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error
 	}
 	l := klog.FromContext(ctx)
 
-	p := predicate.Funcs{
-		UpdateFunc: func(e event.UpdateEvent) bool {
+	p := predicate.TypedFuncs[*api.PmemCSIDeployment]{
+		UpdateFunc: func(e event.TypedUpdateEvent[*api.PmemCSIDeployment]) bool {
 			r.reconcileMutex.Lock()
 			defer r.reconcileMutex.Unlock()
 			l.V(3).Info("UPDATED", "object", logger.KObjWithType(e.ObjectOld), "generation", e.ObjectNew.GetGeneration())
@@ -98,7 +97,7 @@ func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error
 			l.V(3).Info("CR changes", "diff", string(res[1]))
 			return true
 		},
-		DeleteFunc: func(e event.DeleteEvent) bool {
+		DeleteFunc: func(e event.TypedDeleteEvent[*api.PmemCSIDeployment]) bool {
 			r.reconcileMutex.Lock()
 			defer r.reconcileMutex.Unlock()
 			l.V(3).Info("DELETED", "object", logger.KObjWithType(e.Object))
@@ -112,7 +111,7 @@ func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error
 	}
 
 	// Watch for changes to primary resource Deployment
-	if err := c.Watch(source.Kind(mgr.GetCache(), &api.PmemCSIDeployment{}), &handler.InstrumentedEnqueueRequestForObject{}, p); err != nil {
+	if err := c.Watch(source.Kind(mgr.GetCache(), &api.PmemCSIDeployment{}, nil, p)); err != nil {
 		return fmt.Errorf("watch: %v", err)
 	}
 
@@ -170,7 +169,7 @@ func add(ctx context.Context, mgr manager.Manager, r *ReconcileDeployment) error
 
 	for _, resource := range currentObjects {
 		owner := crhandler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &api.PmemCSIDeployment{}, crhandler.OnlyControllerOwner())
-		if err := c.Watch(source.Kind(mgr.GetCache(), resource), owner, sop); err != nil {
+		if err := c.Watch(source.Kind(mgr.GetCache(), resource, owner, sop)); err != nil {
 			return fmt.Errorf("create watch: %v", err)
 		}
 	}
