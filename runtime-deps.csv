@@ -24,12 +24,11 @@ github.com/josharian/intern,MIT
 github.com/json-iterator/go,MIT
 github.com/kubernetes-csi/csi-lib-utils,Apache-2.0
 github.com/mailru/easyjson,MIT
-github.com/matttproud/golang_protobuf_extensions/v2/pbutil,Apache-2.0
+github.com/matttproud/golang_protobuf_extensions/pbutil,Apache-2.0
 github.com/miekg/dns,BSD-3-Clause
 github.com/modern-go/concurrent,Apache-2.0
 github.com/modern-go/reflect2,Apache-2.0
 github.com/munnerz/goautoneg,BSD-3-Clause
-github.com/operator-framework/operator-lib,Apache-2.0
 github.com/pkg/errors,BSD-2-Clause
 github.com/prometheus/client_golang/prometheus,Apache-2.0
 github.com/prometheus/client_model/go,Apache-2.0
