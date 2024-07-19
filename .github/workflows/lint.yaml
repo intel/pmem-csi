@@ -6,6 +6,10 @@ on:
     branches:
       - "*"
   pull_request:
+
+# Declare default permissions as read only.
+permissions: read-all
+
 jobs:
   golangci:
     name: lint
